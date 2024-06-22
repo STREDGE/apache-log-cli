@@ -1,0 +1,46 @@
+version: "3"
+
+services:
+  cli:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    entrypoint: python -m src
+    environment:
+      TZ: Europe/Moscow
+    depends_on:
+      - db
+
+  scheduler:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    volumes:
+      - apache_logs:/app/logs
+    command: python -m src scheduler start
+    depends_on:
+      - apache
+      - db
+
+  apache:
+    image: httpd:2.4
+    ports:
+      - 8080:80
+    volumes:
+      - ./apache/httpd.conf:/usr/local/apache2/conf/httpd.conf
+      - apache_logs:/usr/local/apache2/logs/
+
+  db:
+    image: postgres:16
+    volumes:
+      - /var/logs_db:/var/lib/postgresql/data
+      - ./postgres/create_tables.sql:/docker-entrypoint-initdb.d/create_tables.sql
+    environment:
+      POSTGRES_DB: logs_db
+      POSTGRES_PASSWORD: logsdbpass
+      TZ: Europe/Moscow
+    ports:
+      - 5433:5432
+
+volumes:
+  apache_logs:

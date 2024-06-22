@@ -1,0 +1,6 @@
+[db]
+scheduler_dsn = "postgresql+asyncpg://postgres:logsdbpass@db/logs_db"
+dsn = "postgresql+asyncpg://postgres:logsdbpass@localhost:5433/logs_db"
+
+[files]
+log = "/app/logs/access.log"
