@@ -1,4 +1,7 @@
-HELICOVER v29 — ЭКСПЕРИМЕНТАЛЬНАЯ ОБЩАЯ СБОРКА GTA SA ANDROID
+HELICOVER v30 — ЭКСПЕРИМЕНТАЛЬНАЯ ОБЩАЯ СБОРКА GTA SA ANDROID
+
+ИЗМЕНЕНИЯ v30
+FLY TO MAP MARKER: метка читается оттуда, куда её на самом деле записывает мобильная карта, — gMobileMenu+0x68 (+0x8BE7E8 от начала libGTASA.so, 0 = метки нет). В v29 читалось поле ПК-меню FrontEndMenuManager, которое на Android всегда пустое, поэтому писалось «place a destination marker».
 
 ИЗМЕНЕНИЯ v29
 FLY TO MAP MARKER снова включён. Метка читается прямо из памяти игры командой CLEO Android 0DD8 (вместо 0AB6, которой на Android нет). Адреса взяты из вашего libGTASA.so (arm64): FrontEndMenuManager.waypoint_blip = +0xC1DE5C, CRadar::ms_RadarTrace = +0xC21728 (250 записей по 48 байт). Для другой версии игры адреса нужно пересчитать.
