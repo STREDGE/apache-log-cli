@@ -1,0 +1,6 @@
+Helicover_Core.csa: PASS, 3426 instructions, 840 jumps, 0 menu pointers, 32357 bytes.
+Helicover_Panel.csa: PASS, 1511 instructions, 610 jumps, 157 menu pointers, 26953 bytes.
+Helicover.csi: PASS, 12 instructions, 1 jumps, 0 menu pointers, 85 bytes.
+Helicover_Fire.csa: PASS, 7812 instructions, 1734 jumps, 0 menu pointers, 69597 bytes.
+Android runtime: NOT TESTED.
+Helicover_Ground.csa: PASS, 1389 instructions, 291 jumps, 0 menu pointers, 13627 bytes.

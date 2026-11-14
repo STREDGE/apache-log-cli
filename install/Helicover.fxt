@@ -1,0 +1,50 @@
+HCLOAD ~b~HELICOVER~w~: support inbound.
+HCFOLL ~g~HELICOVER~w~: following CJ.
+HCHOLD ~b~HELICOVER~w~: holding position.
+HCDEPT ~b~HELICOVER~w~: departing.
+HCFAIL ~r~HELICOVER~w~: model load failed. Try again.
+HCOUT ~y~HELICOVER~w~: move outdoors to call support.
+HCRWAIT ~y~EVAC~w~: unable to reach a safe hover. Move to open ground and retry.
+HCGCLMB ~y~EVAC~w~: cannot climb safely. Clear obstacles and retry.
+HCNOMAP ~y~EVAC~w~: place a destination marker on the map first.
+HCCHOS ~g~EVAC~w~: above destination. Choose LAND or ROPE EXIT.
+HCDWAIT ~y~EVAC~w~: wait until the helicopter reaches the destination.
+HCPAT ~b~HELICOVER~w~: patrolling around CJ.
+HCAVOID ~y~HELICOVER~w~: path blocked; holding for a clear route.
+HCROPE ~b~EVAC~w~: helicopter approaching for rope pickup.
+HCEVAC ~b~EVAC~w~: landing nearby. Choose open, level ground.
+HCTEAM ~g~EVAC~w~: flank team deployed. Use BOARD CJ when close.
+HCBOARD ~g~EVAC~w~: CJ aboard. GROVE STREET recalls the team, then takes off.
+HCGROVE ~g~EVAC~w~: team aboard. Heading to the Grove Street circle.
+HCHOME ~b~EVAC~w~: approaching Grove Street.
+HCARRIV ~g~EVAC~w~: landed. LEAVE HELICOPTER lets CJ out.
+HCDAMAG ~r~HELICOVER~w~: critical damage. Retreating.
+HCMUST ~b~EVAC~w~: team returning. Departure waits for living guards.
+HCEMERG ~r~EVAC~w~: critical damage. Attempting a nearby emergency landing.
+HCNOSEA ~y~EVAC~w~: Hunter has no passenger seat. Use Maverick or Police Maverick.
+HCNOSIT ~y~EVAC~w~: landing site is obstructed or uneven. Move to open ground and retry.
+HCFAR ~y~EVAC~w~: get within 12 metres of the landed helicopter.
+HCWAIT ~y~EVAC~w~: waiting for the flank team. Clear their path or repeat the command.
+HCIN ~y~EVAC~w~: CJ must be sitting in the helicopter before flying to Grove Street.
+HCOFF ~r~HELICOVER~w~: copy all four script files, then restart the game.
+HCTAP ~b~HELICOVER~w~: release, then tap the exact screen centre to open the panel.
+HCSWAP ~b~HELICOVER~w~: helicopter changed. Crew and CJ transferred.
+HCSNO ~y~HELICOVER~w~: Hunter has no passenger seat. CJ must leave first.
+HCSFAIL ~r~HELICOVER~w~: change failed; the current helicopter was kept.
+HCCREW ~g~HELICOVER~w~: crew changed in place.
+HCCFAIL ~r~HELICOVER~w~: crew change failed. Existing crew kept.
+HCBLOCK ~y~EVAC~w~: landing unavailable. Clear the area and retry or choose FOLLOW CJ.
+HCLOSE ~y~EVAC~w~: land first before boarding or leaving.
+HCEXIT ~y~EVAC~w~: exit the helicopter before TAKE OFF / FOLLOW.
+RGDEP SWAT: descending. Stay near the helicopter.
+RGDONE SWAT: ground team withdrawn.
+RGFAIL SWAT: model unavailable or heli moving.
+RGHOLD SWAT: use HOLD POSITION first.
+RGHIGH SWAT: heli must hover 12-22m above ground.
+RGMOVE SWAT: wait until the helicopter is nearly still.
+RGBLOCK SWAT: choose a clear open area.
+RGUP EVAC: ascending.
+RGABO EVAC: aboard. Team returning.
+RGSEAT EVAC: passenger seat unavailable.
+RGANIM EVAC: animation unavailable.
+RPDFAIL EVAC: rope descent unavailable here.
