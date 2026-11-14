@@ -14,8 +14,13 @@ WEAPON_SETTING=STATE+65
 ROPE_COMMAND=STATE+70;GROUND_PUB=STATE+71;GROUND_MOVE_NEXT=STATE+80;DROP_COMMAND=STATE+81;DEST_X=STATE+82;DEST_Y=STATE+83;DEST_Z=STATE+84;GUARD_TARGET=STATE+90;PATROL_STEP=STATE+97;PATROL_NEXT=STATE+98;FOLLOW_NEXT=STATE+99;AVOID_STAGE=STATE+110;AVOID_NEXT=STATE+111;AVOID_AT=STATE+112;AVOID_X=STATE+113;AVOID_Y=STATE+114;AVOID_Z=STATE+115
 GLIDE_C=STATE+116;STUCK_SINCE=STATE+117
 # 0AB6 GET_TARGET_BLIP_COORDS is a CLEO 4 PC opcode; CLEO Android crashes on it.
-# FLY TO MAP MARKER stays disabled until a marker source that works on Android exists.
-MAP_MARKER=False
+# v29 reads the waypoint straight from libGTASA memory with CLEO Android 0DD8 instead.
+# Offsets come from the user's arm64 libGTASA.so (DWARF + disassembly of
+# CRadar::GetActualBlipArrayIndex); another game version needs new offsets.
+MAP_MARKER=True
+WAYPOINT_OFS=0xC1DE40+28     # FrontEndMenuManager.waypoint_blip (int32, -1 = none)
+RADAR_TRACE_OFS=0xC21728     # CRadar::ms_RadarTrace[250], 48 bytes each
+
 GROVE_X=2492.0;GROVE_Y=-1666.0
 STATES={25:'MAP CLIMB',24:'PATROLLING',21:'TO MAP POINT',22:'DEST APPROACH',23:'AWAITING EXIT',20:'CLIMB TO GROVE',19:'ROPE APPROACH',17:'CHANGING CREW',18:'LANDING BLOCKED',16:'CHANGING HELI',0:'READY',1:'LOADING',2:'FOLLOWING',3:'HOLDING',4:'DEPARTING',5:'LOAD FAILED',6:'GO OUTDOORS',7:'EVAC INBOUND',8:'TEAM COVERING',9:'CJ ON BOARD',10:'TO GROVE STREET',11:'GROVE LANDING',12:'LANDED',13:'DAMAGED / RTB',14:'TEAM BOARDING',15:'EMERGENCY LAND'}
 MESSAGES={
@@ -201,12 +206,22 @@ c.label('LEAVE_CHECK_PHASE');c.eq(24,3,'LEAVE_GROUND_CHECK');c.eq(7,9,'NOT_LANDE
 c.label('LEAVE_GROUND_CHECK');c.eq(24,1,'NOT_LANDED')
 c.label('LEAVE_ALLOWED');c.check(0x00db,[V(18),V(5)],'TICK');a(0x05cd,V(18),V(5));c.go('TICK')
 c.label('REQUEST_MAP');c.set(AVOID_STAGE,0);c.check(0x0448,[V(18),V(5)],'NOT_ABOARD')
-if MAP_MARKER:c.check(0x0ab6,[V(26),V(27),V(28)],'NO_MAP')
+if MAP_MARKER:c.call('READ_WAYPOINT');c.eq(29,1,'NO_MAP')
 else:msg(c,'HCMAPOF');c.go('TICK')
 a(0xddc,I(DEST_X),V(26));a(0xddc,I(DEST_Y),V(27));a(0xddc,I(DEST_Z),V(28));c.set(GROVE_WAIT,0);c.set(GROVE_NEXT_SCAN,0);c.call('UNFREEZE');c.call('RESTORE_FLIGHT');a(0x00aa,V(5),V(9),V(10),V(11));a(0x0087,V(17),V(11));a(0x000b,V(17),F(80));a(0x02ce,V(9),V(10),V(17),V(17));a(0x000b,V(17),F(65));a(0x04df,V(5),I(0));a(0x04a2,V(5),V(9),V(10),V(17),F(45),V(17));a(0x00ad,V(5),F(30));a(0x01bd,V(21));state(c,25);c.go('TICK')
 c.label('MAP_CLIMB_TICK');a(0x0819,V(4),V(19));c.check(0x0021,[V(19),F(40)],'MAP_CLIMB_TIMEOUT');c.get(26,DEST_X);c.get(27,DEST_Y);c.get(28,DEST_Z);c.call('RESTORE_FLIGHT');a(0x0087,V(9),V(28));a(0x000b,V(9),F(80));a(0x04a2,V(5),V(26),V(27),V(9),F(45),V(9));a(0x00ad,V(5),F(30));state(c,21);c.go('TICK')
 c.label('MAP_CLIMB_TIMEOUT');a(0x0085,V(17),V(20));a(0x0062,V(17),V(21));c.check(0x0019,[V(17),I(30000)],'TICK');c.call('BLOCK_HOVER');state(c,18);msg(c,'HCGCLMB');c.go('TICK')
 c.label('NO_MAP');msg(c,'HCNOMAP');c.go('TICK')
+# Waypoint handle = index | counter<<16. Valid when index < 250, the trace's ReferenceIndex
+# (+20) equals the counter and bTrackingBlip (bit 1 of byte +41) is set; x/y at +8/+12.
+c.label('READ_WAYPOINT');a(6,V(29),I(0));a(0x0dd8,V(30),I(WAYPOINT_OFS),I(4),I(1));c.eq(30,-1,'WP_HANDLE');c.ret()
+c.label('WP_HANDLE');a(0x0dd8,V(30),I(WAYPOINT_OFS),I(2),I(1));c.check(0x0019,[V(30),I(249)],'WP_INDEX');c.ret()
+c.label('WP_INDEX');a(0x0dd8,V(31),I(WAYPOINT_OFS+2),I(2),I(1));a(0x0012,V(30),I(48));a(0x000a,V(30),I(RADAR_TRACE_OFS))
+a(0x0085,V(28),V(30));a(0x000a,V(28),I(20));a(0x0dd8,V(26),V(28),I(2),I(1));c.check(0x003b,[V(26),V(31)],'WP_STALE')
+a(0x0085,V(28),V(30));a(0x000a,V(28),I(41));a(0x0dd8,V(26),V(28),I(1),I(1));a(0x0016,V(26),I(2));a(0x0085,V(31),V(26));a(0x0016,V(31),I(2));a(0x0012,V(31),I(2));c.check(0x003b,[V(26),V(31)],'WP_ACTIVE');c.ret()
+c.label('WP_ACTIVE');a(0x0085,V(28),V(30));a(0x000a,V(28),I(8));a(0x0dd8,V(26),V(28),I(4),I(1));a(0x000a,V(28),I(4));a(0x0dd8,V(27),V(28),I(4),I(1))
+a(0x02ce,V(26),V(27),F(1000),V(28));a(6,V(29),I(1));c.ret()
+c.label('WP_STALE');c.ret()
 c.label('REQUEST_DEST_LAND');c.eq(7,23,'DEST_NOT_READY');c.get(26,DEST_X);c.get(27,DEST_Y);c.get(28,DEST_Z);c.call('CHECK_SITE');c.eq(17,1,'BAD_SITE');state(c,11);c.go('ISSUE_LANDING')
 c.label('REQUEST_DEST_ROPE');c.eq(7,23,'DEST_NOT_READY');c.check(0x0448,[V(18),V(5)],'NOT_ABOARD');c.set(DROP_COMMAND,1);c.go('TICK')
 c.label('DEST_NOT_READY');msg(c,'HCDWAIT');c.go('TICK')
