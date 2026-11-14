@@ -1053,17 +1053,38 @@ def scan_vehicles(cells,half,check,prefix):
  for index,(x,y) in enumerate(cells):
   nxt=prefix+'_CAR_NEXT_'+str(index);a(0x00a0,V(0),V(8),V(9),V(10));a(0x0087,V(11),V(8));a(0x0087,V(12),V(9));a(0x000b,V(8),F(x-half));a(0x000b,V(9),F(y-half));a(0x000b,V(11),F(x+half));a(0x000b,V(12),F(y+half));a(0x053e,V(8),V(9),V(11),V(12),I(-1),V(23));f.call(check);f.eq(30,1,nxt);f.ret();f.label(nxt)
 
-# Assign different eligible visible pedestrians when available; otherwise share the primary threat.
+# v40.2 gunner targeting: every door gunner picks a target nobody else has, on HIS side of the
+# helicopter (right door: 3/5, left door: 4/6) and with a clear line from his own seat. Candidates:
+# the primary threat, the ground squad's threats, then the scan cells. Without one on his side he
+# takes any free target, and only then shares the primary. FOLLOW CJ SHOTS keeps CJ's target.
+SCAN_CELLS=[(0,0),(-12,0),(12,0),(0,-12),(0,12),(-24,0),(24,0),(0,-24),(0,24),(-40,-40),(40,-40),(-40,40),(40,40)]
 for guard in [3,4,5,6]:
  f.label('SELECT_GUARD_TARGET_'+str(guard))
- if guard==3:f.get(29,FIRE_TASK_TARGET);f.ret()
- else:
-  f.eq(25,2,'SELECT_SCAN_'+str(guard));f.get(29,FIRE_TASK_TARGET);f.ret();f.label('SELECT_SCAN_'+str(guard))
-  for index,(x,y) in enumerate([(0,0),(-12,0),(12,0),(0,-12),(0,12),(-24,0),(24,0),(0,-24),(0,24),(-40,-40),(40,-40),(-40,40),(40,40)]):
-   nxt='SELECT_NEXT_'+str(guard)+'_'+str(index);a(0x00a0,V(0),V(8),V(9),V(10));a(0x000b,V(8),F(x));a(0x000b,V(9),F(y));a(0x0a3e,V(8),V(9),V(10),F(8),F(8),F(40),V(29));alive(f,29,nxt)
-   for prior in range(guard-3):f.get(31,GUARD_TARGET+prior);f.check(0x803b,[V(29),V(31)],nxt)
-   f.eq(25,3,'SELECT_ANY_'+str(guard)+'_'+str(index));f.call('CHECK_PROTECT_NPC');f.go('SELECT_VALID_'+str(guard)+'_'+str(index));f.label('SELECT_ANY_'+str(guard)+'_'+str(index));f.eq(25,4,'SELECT_ANY2_'+str(guard)+'_'+str(index));f.call('CHECK_ARMED_HOSTILE');f.go('SELECT_VALID_'+str(guard)+'_'+str(index));f.label('SELECT_ANY2_'+str(guard)+'_'+str(index));f.call('NOT_FRIEND');f.label('SELECT_VALID_'+str(guard)+'_'+str(index));f.eq(30,1,nxt);f.call('TARGET_IN_RANGE');f.eq(30,1,nxt);f.ret();f.label(nxt)
-  f.get(29,FIRE_TASK_TARGET);f.ret()
+ f.eq(25,2,'SG_SCAN_'+str(guard));f.get(29,FIRE_TASK_TARGET);f.ret();f.label('SG_SCAN_'+str(guard))
+ for side in [1,0]:
+  for n,key in enumerate([FIRE_TASK_TARGET]+[SQ_T+i for i in range(4)]):
+   nxt='SG_NEXT_%d_%d_%d'%(guard,side,n);f.get(29,key);f.call('GUNNER_OK_%d_%d'%(guard,side));f.eq(30,1,nxt);f.ret();f.label(nxt)
+  for index,(x,y) in enumerate(SCAN_CELLS):
+   nxt='SG_CELL_%d_%d_%d'%(guard,side,index);a(0x00a0,V(0),V(8),V(9),V(10));a(0x000b,V(8),F(x));a(0x000b,V(9),F(y));a(0x0a3e,V(8),V(9),V(10),F(8),F(8),F(40),V(29))
+   f.call('GUNNER_OK_%d_%d'%(guard,side));f.eq(30,1,nxt);f.ret();f.label(nxt)
+ f.get(29,FIRE_TASK_TARGET);f.ret()
+ for side in [1,0]:
+  P='GOK_%d_%d_'%(guard,side);fail=P+'FAIL'
+  f.label('GUNNER_OK_%d_%d'%(guard,side));a(6,V(30),I(0));alive(f,29,fail)
+  for prior in range(guard-3):f.get(31,GUARD_TARGET+prior);f.check(0x803b,[V(29),V(31)],fail)
+  f.eq(25,3,P+'NOT_PROTECT');f.call('CHECK_PROTECT_NPC');f.go(P+'MODE_DONE')
+  f.label(P+'NOT_PROTECT');f.eq(25,4,P+'NOT_OVERWATCH');f.call('CHECK_ARMED_HOSTILE');f.go(P+'MODE_DONE')
+  f.label(P+'NOT_OVERWATCH');f.call('NOT_FRIEND')
+  f.label(P+'MODE_DONE');f.eq(30,1,fail);f.call('TARGET_IN_RANGE');f.eq(30,1,fail)
+  if side:
+   # 11-13 = target (from TARGET_IN_RANGE); compare its distance to points 6 m right / left of the heli
+   a(0x0407,V(1),F(6),F(0),F(0),V(14),V(15),V(16));a(0x0407,V(1),F(-6),F(0),F(0),V(17),V(18),V(19))
+   a(0x050a,V(11),V(12),V(13),V(14),V(15),V(16),V(20));a(0x050a,V(11),V(12),V(13),V(17),V(18),V(19),V(21))
+   f.check(0x0025,[V(21),V(20)] if guard in (3,5) else [V(20),V(21)],fail)
+  a(0x00a0,V(guard),V(14),V(15),V(16));a(0x0087,V(17),V(13));a(0x000b,V(17),F(.5))
+  f.check(0x06bd,[V(14),V(15),V(16),V(11),V(12),V(17),I(1),I(0),I(0),I(0),I(0)],fail)
+  a(6,V(30),I(1));f.ret()
+  f.label(fail);a(6,V(30),I(0));f.ret()
 
 f.label('FIND_PROTECT_NPC');a(0x0085,V(24),V(29))
 scan_foot(near_cells,2.0,12,'CHECK_ATTACKER_NPC','NEAR_ATTACK')
