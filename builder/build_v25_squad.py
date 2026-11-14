@@ -19,6 +19,7 @@ Registers: 0 CJ, 1 heli, 2-5 guards, 6 CJ car/-1, 7 tactics, 8 fire mode, 9-11 C
 """
 from asm_v25 import *
 import build_v25 as b
+from threat_v41 import emit_score,emit_trace_scan,SHOOTER_FRESH_MS,SCORE_FOCUS
 s=Script();a=s.add
 FIELDS={'TASK':0,'NEXT':1,'TX':2,'TY':3,'LX':4,'LY':5,'LT':6,'DEAD':7,'TGT':8,'COVER':9}
 # TASK values: -1 not set up, 0 idle, 1 moving, 2 sector watch, 3 shooting, 4 entering car,
@@ -39,8 +40,8 @@ def reset_slots():
  for k in range(4):
   setk_lit(k,'TASK',-1);setk_lit(k,'NEXT',0);setk_lit(k,'DEAD',0);setk_lit(k,'TGT',-1);setk_lit(k,'LT',0);setk_lit(k,'COVER',0)
 def reset_threats():
- for i in range(4):s.set(b.SQ_T+i,-1)
- s.set(b.SQ_THREATS,0);s.set(b.SQ_CONTACT,0);s.set(b.SQ_CLEAR_AT,0)
+ for i in range(4):s.set(b.SQ_T+i,-1);s.set(b.SQ_SC+i,-10000);s.set(b.CV_T+i,0);s.set(b.CV_OK+i,0);s.set(b.ENG_T+i,0)
+ s.set(b.SQ_THREATS,0);s.set(b.SQ_CONTACT,0);s.set(b.SQ_CLEAR_AT,0);s.set(b.SQ_CALLED,-1);s.set(b.SQ_EVAC_NEXT,0);s.set(b.SQ_CV_TICK,-1);a(0xddc,I(b.SQ_QUIET_T),V(12))
 
 BG_FORM=[(0,3.2),(-2.4,.6),(2.4,.6),(0,-2.8)]
 AS_FORM=[(0,7.0),(-5.0,3.0),(5.0,3.0),(0,-4.5)]
@@ -92,7 +93,7 @@ for i in range(4):
 for j in range(4):
  keep=uid('CLEAR_TAIL');s.check(0x8019,[V(18),I(j)],keep);a(6,V(13+j),I(-1));s.label(keep)
 # whatever the door gunners are engaging is a candidate too (still checked against the rules)
-for key in [b.FIRE_TARGET]+[b.GUARD_TARGET+i for i in range(4)]:
+for key in [b.TB_SHOOTER,b.FIRE_TARGET]+[b.GUARD_TARGET+i for i in range(4)]:
  s.get(29,key);s.call('CONSIDER');s.check(0x8019,[V(18),I(3)],'PERCEIVE_STORE')
 for x in NEAR:
  for y in NEAR:
@@ -104,30 +105,72 @@ for ph,cells in [(1,MID_CELLS[:len(MID_CELLS)//2]),(2,MID_CELLS[len(MID_CELLS)//
  for x,y in cells:
   a(0x0087,V(26),V(9));a(0x000b,V(26),F(x));a(0x0087,V(27),V(10));a(0x000b,V(27),F(y));a(0x0a3e,V(26),V(27),V(11),F(4.6),F(4.6),F(10),V(29));s.call('CONSIDER');s.check(0x8019,[V(18),I(3)],'PERCEIVE_STORE')
  s.go('PERCEIVE_STORE')
-s.label('PH_3')
+s.label('PH_3');s.get(19,b.TRACE_SCAN_T);a(0x0085,V(20),V(12));a(0x0062,V(20),V(19));s.check(0x0019,[V(20),I(600)],'PH_3_CARS');s.call('SQ_TRACE_SCAN');s.label('PH_3_CARS')
 for dx,dy in [(-30,-30),(0,-30),(-30,0),(0,0)]:
  nxt=uid('CAR_NEXT');a(0x0087,V(26),V(9));a(0x000b,V(26),F(dx));a(0x0087,V(27),V(10));a(0x000b,V(27),F(dy));a(0x0087,V(28),V(26));a(0x000b,V(28),F(30));a(0x0087,V(31),V(27));a(0x000b,V(31),F(30))
  a(0x053e,V(26),V(27),V(28),V(31),I(-1),V(23));s.check(0x056e,[V(23)],nxt);s.check(0x803b,[V(23),V(1)],nxt);s.check(0x803b,[V(23),V(6)],nxt);a(0x046c,V(23),V(29));s.call('CONSIDER');s.check(0x8019,[V(18),I(3)],'PERCEIVE_STORE');s.label(nxt)
-s.label('PERCEIVE_STORE')
+s.label('PERCEIVE_STORE');s.eq(18,0,'PS_BUSY');s.go('PS_STORE');s.label('PS_BUSY');a(0xddc,I(b.SQ_QUIET_T),V(12));s.label('PS_STORE')
 for i in range(4):a(0xddc,I(b.SQ_T+i),V(13+i))
 a(0xddc,I(b.SQ_THREATS),V(18));s.get(19,b.SQ_SCAN_NEXT);a(0x000a,V(19),I(1));s.check(0x8019,[V(19),I(3)],'PH_WRAP');a(0xddc,I(b.SQ_SCAN_NEXT),V(19));s.ret()
 s.label('PH_WRAP');s.set(b.SQ_SCAN_NEXT,0)
-# radio calls: direction of the first contact relative to CJ, and "area secure" 3.5 s after the last
+# v41: rate the threats (threat_v41.THREAT_SCORE) and sort them, most dangerous first: guard 0 and
+# every guard without a threat of his own take the top one.
+for i in range(4):
+ none=uid('SC_NONE');done=uid('SC_DONE');a(0x0085,V(29),V(13+i));alive(29,none);s.call('SQ_SCORE');a(0xddc,I(b.SQ_SC+i),V(30));s.go(done)
+ s.label(none);s.set(b.SQ_SC+i,-10000);s.label(done)
+SREG=[27,28,31,19]
+for i in range(4):s.get(SREG[i],b.SQ_SC+i)
+for i,j in [(0,1),(2,3),(0,2),(1,3),(1,2)]:
+ keep=uid('SORT_KEEP');s.check(0x001d,[V(SREG[j]),V(SREG[i])],keep)
+ a(0x0085,V(29),V(SREG[i]));a(0x0085,V(SREG[i]),V(SREG[j]));a(0x0085,V(SREG[j]),V(29))
+ a(0x0085,V(29),V(13+i));a(0x0085,V(13+i),V(13+j));a(0x0085,V(13+j),V(29));s.label(keep)
+for i in range(4):a(0xddc,I(b.SQ_SC+i),V(SREG[i]));a(0xddc,I(b.SQ_T+i),V(13+i))
+# radio calls: kind and direction of the first contact, of every new top threat scoring 120+ (throttled),
+# and "area secure" 3.5 s after the last threat
 s.eq(18,0,'CALL_CONTACT')
 s.get(19,b.SQ_CONTACT);s.eq(19,1,'CALL_RET');s.get(19,b.SQ_CLEAR_AT);s.eq(19,0,'CALL_CLEAR_CHECK');a(0x0085,V(19),V(12));a(0x000a,V(19),I(3500));a(0xddc,I(b.SQ_CLEAR_AT),V(19));s.ret()
-s.label('CALL_CLEAR_CHECK');s.check(0x001d,[V(12),V(19)],'CALL_RET');s.set(b.SQ_CONTACT,0);s.set(b.SQ_CLEAR_AT,0);msg('SQCLR',False);s.ret()
-s.label('CALL_CONTACT');s.set(b.SQ_CLEAR_AT,0);s.get(19,b.SQ_CONTACT);s.eq(19,0,'CALL_RET');s.set(b.SQ_CONTACT,1)
-a(0x00a0,V(13),V(26),V(27),V(28));a(0x0063,V(26),V(9));a(0x0063,V(27),V(10));a(0x0604,V(26),V(27),V(29));a(0x0172,V(0),V(30));a(0x0063,V(29),V(30))
+s.label('CALL_CLEAR_CHECK');s.check(0x001d,[V(12),V(19)],'CALL_RET');s.set(b.SQ_CONTACT,0);s.set(b.SQ_CLEAR_AT,0);s.set(b.SQ_CALLED,-1);msg('SQCLR',False);s.ret()
+s.label('CALL_CONTACT');s.set(b.SQ_CLEAR_AT,0);s.get(19,b.SQ_CONTACT);s.eq(19,0,'CALL_NEW_TOP');s.set(b.SQ_CONTACT,1);a(6,V(26),I(0));s.go('CALL_ANNOUNCE')
+s.label('CALL_NEW_TOP');s.get(19,b.SQ_CALLED);s.check(0x803b,[V(13),V(19)],'CALL_RET');s.get(19,b.SQ_SC);s.check(0x0019,[V(19),I(SCORE_FOCUS-1)],'CALL_RET');s.get(19,b.SQ_MSG_NEXT);s.check(0x001d,[V(12),V(19)],'CALL_RET');a(6,V(26),I(1))
+s.label('CALL_ANNOUNCE');a(0xddc,I(b.SQ_CALLED),V(13))
+# kind (27@): 0 plain, 1 shooting at CJ, 2 sniper, 3 vehicle, 4 roof
+a(6,V(27),I(0));s.get(19,b.TB_SHOOTER);s.check(0x003b,[V(13),V(19)],'KIND_NOT_X');s.get(19,b.TB_SHOOTER_T);a(0x0085,V(20),V(12));a(0x0062,V(20),V(19));s.check(0x8019,[V(20),I(SHOOTER_FRESH_MS)],'KIND_NOT_X');a(6,V(27),I(1));s.go('KIND_DONE')
+s.label('KIND_NOT_X');a(0x0470,V(13),V(19));s.check(0x0019,[V(19),I(32)],'KIND_NOT_S');s.check(0x0019,[V(19),I(34)],'KIND_S');s.go('KIND_NOT_S');s.label('KIND_S');a(6,V(27),I(2));s.go('KIND_DONE')
+s.label('KIND_NOT_S');s.check(0x00df,[V(13)],'KIND_NOT_V');a(6,V(27),I(3));s.go('KIND_DONE')
+s.label('KIND_NOT_V');a(0x00a0,V(13),V(20),V(21),V(22));a(0x0063,V(22),V(11));s.check(0x0021,[V(22),F(6)],'KIND_DONE');a(6,V(27),I(4))
+s.label('KIND_DONE')
+# direction (28@) of the threat relative to CJ's heading: 0 front, 1 left, 2 rear, 3 right
+a(0x00a0,V(13),V(20),V(21),V(22));a(0x0063,V(20),V(9));a(0x0063,V(21),V(10));a(0x0604,V(20),V(21),V(29));a(0x0172,V(0),V(30));a(0x0063,V(29),V(30))
 s.check(0x0023,[F(0),V(29)],'DIR_POS');a(0x000b,V(29),F(360))
 s.label('DIR_POS');s.check(0x0023,[F(360),V(29)],'DIR_WRAP');s.go('DIR_READY')
 s.label('DIR_WRAP');a(0x000b,V(29),F(-360))
-s.label('DIR_READY')
-s.check(0x0023,[F(45),V(29)],'DIR_LEFT');s.eq(7,1,'DIR_BG_F');msg('SQAF',False);s.ret();s.label('DIR_BG_F');msg('SQCF',False);s.ret()
-s.label('DIR_LEFT');s.check(0x0023,[F(135),V(29)],'DIR_REAR');s.eq(7,1,'DIR_BG_L');msg('SQAL',False);s.ret();s.label('DIR_BG_L');msg('SQCL',False);s.ret()
-s.label('DIR_REAR');s.check(0x0023,[F(225),V(29)],'DIR_RIGHT');s.eq(7,1,'DIR_BG_B');msg('SQAB',False);s.ret();s.label('DIR_BG_B');msg('SQCB',False);s.ret()
-s.label('DIR_RIGHT');s.check(0x0023,[F(315),V(29)],'DIR_FRONT2');s.eq(7,1,'DIR_BG_R');msg('SQAR',False);s.ret();s.label('DIR_BG_R');msg('SQCR',False);s.ret()
-s.label('DIR_FRONT2');s.eq(7,1,'DIR_BG_F2');msg('SQAF',False);s.ret();s.label('DIR_BG_F2');msg('SQCF',False)
+s.label('DIR_READY');a(6,V(28),I(0))
+for lim,d in [(45,0),(135,1),(225,2),(315,3)]:
+ nxt=uid('DIR_NEXT');s.check(0x0023,[F(lim),V(29)],nxt);a(6,V(28),I(d));s.go('DIR_SET');s.label(nxt)
+s.label('DIR_SET')
+s.eq(26,0,'CALL_THROTTLED')
+def call_table(prefix,throttle):
+ for kind in range(5):
+  nk=uid(prefix+'K');s.eq(27,kind,nk)
+  for d,letter in enumerate('FLBR'):
+   nd=uid(prefix+'D');s.eq(28,d,nd)
+   if kind==0:
+    bg=uid(prefix+'BG');s.eq(7,1,bg);msg('SQA'+letter,throttle);s.ret();s.label(bg);msg('SQC'+letter,throttle);s.ret()
+   else:msg('SQ'+'XSVR'[kind-1]+letter,throttle);s.ret()
+   s.label(nd)
+  s.ret();s.label(nk)
+ s.ret()
+call_table('CT0_',False)
+s.label('CALL_THROTTLED');call_table('CT1_',True)
 s.label('CALL_RET');s.ret()
+emit_score(s,'SQ_SCORE',29,30,[0,2,3,4,5],dict(cx=9,cy=10,cz=11,tx=20,ty=21,tz=22,d=23,t1=24,t2=25,t3=26))
+# 30@ = 1 when 29@ is not CJ, the pilot, the crew or the team (uses 31@)
+s.label('SQ_NOT_FRIEND');a(6,V(30),I(0));s.check(0x803b,[V(29),V(0)],'SNF_RET');a(0x089f,V(29),V(31));s.eq(31,8,'SNF_OK')
+for i in range(2,7):s.get(31,b.PUB+i);s.check(0x803b,[V(29),V(31)],'SNF_RET')
+for i in range(5):s.get(31,b.GROUND_PUB+i);s.check(0x803b,[V(29),V(31)],'SNF_RET')
+s.label('SNF_OK');a(6,V(30),I(1))
+s.label('SNF_RET');s.ret()
+emit_trace_scan(s,'SQ_TRACE_SCAN',dict(cx=9,cy=10,cz=11,hx=19,hy=20,hz=21,x=22,y=23,z=24,d=25,n=26,now=27,bx=28,by=31),'SQ_NOT_FRIEND',cj=0,heli=1)
 
 # 29@ candidate: append to the threat list when it is new, there is room and CLASSIFY accepts it.
 s.label('CONSIDER');s.check(0x0019,[V(18),I(3)],'CON_ROOM');s.ret()
@@ -150,6 +193,7 @@ a(0x089f,V(29),V(23));s.eq(23,8,'CL_STRANGER')
 for i in range(2,7):s.get(19,b.PUB+i);s.check(0x803b,[V(29),V(19)],'CL_RET')
 for i in range(5):s.get(19,b.GROUND_PUB+i);s.check(0x803b,[V(29),V(19)],'CL_RET')
 s.label('CL_STRANGER')
+s.get(19,b.TB_SHOOTER);s.check(0x003b,[V(29),V(19)],'CL_NOT_SHOOTER');s.get(19,b.TB_SHOOTER_T);a(0x0085,V(25),V(12));a(0x0062,V(25),V(19));s.check(0x8019,[V(25),I(SHOOTER_FRESH_MS)],'CL_NOT_SHOOTER');s.go('CL_ACCEPT');s.label('CL_NOT_SHOOTER')
 # Anyone who hurt CJ or one of the team is hostile under every mode (self-defence).
 s.check(0x051a,[V(0),V(29)],'CL_NOT_ATTACKER_CJ');s.go('CL_ACCEPT');s.label('CL_NOT_ATTACKER_CJ')
 for k in range(4):
@@ -210,7 +254,35 @@ def shield(k,G,front,lateral):
  a(0x0087,V(27),V(30));a(0x0013,V(27),F(front));a(0x005b,V(27),V(10));a(0x0087,V(28),V(29));a(0x0013,V(28),F(lateral));a(0x005b,V(27),V(28))
  a(0x0087,V(28),V(11));a(0x0509,V(21),V(22),V(26),V(27),V(31));fire=uid('SHIELD_FIRE');s.check(0x0021,[V(31),F(1.4)],fire);shoot_move(k,G,1200)
  s.label(fire);issue=uid('SHIELD_ISSUE');same_order(k,3,25,issue);s.label(issue);a(0x074d,V(G),V(25),I(1500));order(k,3,25,1200)
-def engage_duck(k,G):
+COVER_DIRS=[(3.5,0),(2.5,2.5),(0,3.5),(-2.5,2.5),(-3.5,0),(-2.5,-2.5),(0,-3.5),(2.5,-2.5)]
+def take_cover(k,G,limit,duck):
+ """v41: under fire (the threat is shooting, or this guard is below 50 HP) look once for low cover
+ within 3.5 m - a spot where the threat's line to a crouching chest hits a wall or a car but a standing
+ head sees over it - and fight from there. One search per tick for the whole team; a spot (or the lack
+ of one) is kept 6 s for the same threat. Falls through to `duck` (crouched fire where he stands)."""
+ P=uid('CV%d'%k)+'_'
+ s.check(0x02e0,[V(25)],P+'HP');s.go(P+'NEED')
+ s.label(P+'HP');a(0x0226,V(G),V(31));s.check(0x0019,[V(31),I(49)],P+'NEED');s.go(duck)
+ s.label(P+'NEED');s.get(31,b.CV_T+k);s.check(0x001d,[V(31),V(12)],P+'SEARCH');s.get(31,b.CV_H+k);s.check(0x003b,[V(31),V(25)],P+'SEARCH');s.get(31,b.CV_OK+k);s.eq(31,1,duck);s.go(P+'GO')
+ s.label(P+'SEARCH');s.get(31,b.SQ_CV_TICK);s.check(0x803b,[V(31),V(12)],duck)
+ a(0xddc,I(b.SQ_CV_TICK),V(12));a(0xddc,I(b.CV_H+k),V(25));a(0x0085,V(31),V(12));a(0x000a,V(31),I(6000));a(0xddc,I(b.CV_T+k),V(31));s.set(b.CV_OK+k,0)
+ a(0x00a0,V(25),V(19),V(20),V(29));a(0x000b,V(29),F(.5))
+ for n,(dx,dy) in enumerate(COVER_DIRS):
+  nxt=P+'DIR%d'%n;blk=P+'BLK%d'%n
+  a(0x0087,V(26),V(21));a(0x000b,V(26),F(dx));a(0x0087,V(27),V(22));a(0x000b,V(27),F(dy))
+  a(0x0087,V(28),V(23));a(0x000b,V(28),F(2));a(0x02ce,V(26),V(27),V(28),V(28))
+  # walkable: the ground there is within 1.2 m of his feet (ped z is about 1 m above the feet)
+  a(0x0087,V(31),V(28));a(0x0063,V(31),V(23));a(0x000b,V(31),F(1));s.check(0x0021,[V(31),F(-1.2)],nxt);s.check(0x0023,[F(1.2),V(31)],nxt)
+  a(0x0509,V(26),V(27),V(9),V(10),V(31));s.check(0x0023,[F(limit),V(31)],nxt)
+  a(0x0087,V(30),V(28));a(0x000b,V(30),F(.6));s.check(0x06bd,[V(19),V(20),V(29),V(26),V(27),V(30),I(1),I(1),I(0),I(1),I(0)],blk);s.go(nxt)
+  s.label(blk);a(0x0087,V(30),V(28));a(0x000b,V(30),F(1.7));s.check(0x06bd,[V(19),V(20),V(29),V(26),V(27),V(30),I(1),I(1),I(0),I(1),I(0)],nxt)
+  a(0xddc,I(b.CV_X+k),V(26));a(0xddc,I(b.CV_Y+k),V(27));a(0x000b,V(28),F(1));a(0xddc,I(b.CV_Z+k),V(28));s.set(b.CV_OK+k,1);msg('SQCVR');s.go(P+'GO')
+  s.label(nxt)
+ s.go(duck)
+ s.label(P+'GO');s.get(26,b.CV_X+k);s.get(27,b.CV_Y+k);s.get(28,b.CV_Z+k);a(0x0509,V(21),V(22),V(26),V(27),V(31));s.check(0x0021,[V(31),F(1.0)],duck);shoot_move(k,G,2500)
+def engage_duck(k,G,limit=None):
+ if limit is not None:
+  duck=uid('DUCK_HERE');take_cover(k,G,limit,duck);s.label(duck)
  issue=uid('DUCK_ISSUE');same_order(k,8,25,issue);s.label(issue);a(0x0634,V(G),V(25),I(1),I(1000),I(60));order(k,8,25,3000)
 def engage_timed(k,G):
  issue=uid('TIMED_ISSUE');same_order(k,10,25,issue);s.label(issue);a(0x07a5,V(G),V(25),I(3000));order(k,10,25,2500)
@@ -270,6 +342,13 @@ def guard(k):
  s.label(P+'COMBAT');a(0x00a0,V(25),V(26),V(27),V(28));a(0x0087,V(29),V(26));a(0x0063,V(29),V(9));a(0x0087,V(30),V(27));a(0x0063,V(30),V(10))
  a(0x0509,V(9),V(10),V(26),V(27),V(31));s.check(0x0023,[F(.5),V(31)],P+'D_OK');a(0x0007,V(31),F(.5));s.label(P+'D_OK');a(0x0073,V(29),V(31));a(0x0073,V(30),V(31))
  a(0x0226,V(0),V(31));s.check(0x0019,[V(31),I(35)],P+'CRIT')
+ # v41 reload drill: after 10 s of fighting a guard drops into a crouch for 1.5 s (the others keep
+ # firing; the clocks are staggered 2.5 s per guard so they never all reload together)
+ s.get(31,b.ENG_T+k);a(0x0085,V(19),V(12));a(0x0062,V(19),V(31));s.check(0x0019,[V(19),I(10000)],P+'NO_RELOAD')
+ s.check(0x0019,[V(19),I(11500)],P+'RELOADING');a(0xddc,I(b.ENG_T+k),V(12));s.go(P+'NO_RELOAD')
+ s.label(P+'RELOADING');s.get(31,fk(k,'TASK'));s.eq(31,15,P+'RELOAD_ISSUE');s.ret()
+ s.label(P+'RELOAD_ISSUE');a(0x05c5,V(G),I(1500));setk_lit(k,'TASK',15);later(k,1500);msg('SQRLD');s.ret()
+ s.label(P+'NO_RELOAD')
  s.eq(7,1,P+'BODYGUARD')
  # ASSAULT: pair 0/1 advances crouched (leash 40 m), pair 2/3 flanks 9 m to the side of the threat
  if k in (0,1):
@@ -282,7 +361,7 @@ def guard(k):
   a(0x0087,V(29),V(26));a(0x0063,V(29),V(21));a(0x0073,V(29),V(31));a(0x006b,V(29),V(28));a(0x005b,V(29),V(21))
   a(0x0087,V(30),V(27));a(0x0063,V(30),V(22));a(0x0073,V(30),V(31));a(0x006b,V(30),V(28));a(0x005b,V(30),V(22))
   a(0x0087,V(26),V(29));a(0x0087,V(27),V(30));a(0x0087,V(28),V(23));shoot_move(k,G,2500)
-  s.label(cover);engage_duck(k,G)
+  s.label(cover);engage_duck(k,G,40)
  else:
   side=-1 if k==2 else 1;leash(k,G,40,7)
   a(0x0509,V(21),V(22),V(26),V(27),V(31));close=uid(P+'FLANK_CLOSE');s.check(0x0021,[V(31),F(10)],close)
@@ -292,14 +371,17 @@ def guard(k):
  # BODYGUARD: 1 and 2 are shields between CJ and the threat, 0 and 3 engage within 14 m of CJ
  s.label(P+'BODYGUARD')
  if k in (1,2):shield(k,G,2.0,-1.3 if k==1 else 1.3)
- else:leash(k,G,14,6);engage_duck(k,G)
+ else:leash(k,G,14,6);engage_duck(k,G,14)
  # CJ below 35 HP: everyone closes a ring around him and fires
  s.label(P+'CRIT')
  if k==0:
-  said=uid(P+'COVER_SAID');s.get(31,fk(k,'COVER'));s.eq(31,0,said);msg('SQCOV',False);setk_lit(k,'COVER',1);s.label(said)
+  said=uid(P+'COVER_SAID');done=uid(P+'COVER_DONE');s.get(31,fk(k,'COVER'));s.eq(31,0,said);msg('SQCOV',False);setk_lit(k,'COVER',1);s.go(done)
+  # still under fire from three or more: recommend the evacuation (every 30 s)
+  s.label(said);s.get(31,b.SQ_THREATS);s.check(0x0019,[V(31),I(2)],done);s.get(31,b.SQ_EVAC_NEXT);s.check(0x001d,[V(12),V(31)],done)
+  a(0x0085,V(31),V(12));a(0x000a,V(31),I(30000));a(0xddc,I(b.SQ_EVAC_NEXT),V(31));msg('SQEVAC',False);s.label(done)
  shield(k,G,*[(1.5,0),(.6,-1.2),(.6,1.2),(-1.2,0)][k])
  # ---- no threat: medic first (rear guard), then formation / sector watch
- s.label(P+'PEACE')
+ s.label(P+'PEACE');a(0x0085,V(31),V(12));a(0x000a,V(31),I(k*2500));a(0xddc,I(b.ENG_T+k),V(31))
  if k==0:setk_lit(k,'COVER',0)
  if k==3:
   s.get(25,fk(k,'TASK'));s.eq(25,9,P+'MEDIC_IDLE');s.get(25,fk(k,'NEXT'));s.check(0x001d,[V(12),V(25)],R)
@@ -322,9 +404,12 @@ def guard(k):
  s.label(P+'CLOSE');s.check(0x0021,[V(18),F(.5)],P+'WATCH')
  s.label(P+'MOVE');a(6,V(20),I(4));s.check(0x0021,[V(18),F(3)],P+'SPD_DIST');a(6,V(20),I(6))
  s.label(P+'SPD_DIST');s.check(0x0021,[V(31),F(3.5)],P+'SPD_SET');a(6,V(20),I(6));s.check(0x0021,[V(31),F(9)],P+'SPD_SET');a(6,V(20),I(7))
- s.label(P+'SPD_SET');move_to(k,G,V(20),2500,700)
+ s.label(P+'SPD_SET');s.check(0x0021,[V(18),F(6)],P+'SPD_GO');a(6,V(20),I(7));s.label(P+'SPD_GO');move_to(k,G,V(20),2500,700)
  # standing with CJ: weapons up on this guard's sector
- s.label(P+'WATCH');s.get(25,fk(k,'TASK'));s.eq(7,1,P+'WATCH_BG')
+ s.label(P+'WATCH');s.get(31,b.SQ_QUIET_T);a(0x0085,V(30),V(12));a(0x0062,V(30),V(31));s.check(0x0019,[V(30),I(20000)],P+'ALERT')
+ s.get(25,fk(k,'TASK'));s.eq(25,16,P+'RELAX');s.ret()
+ s.label(P+'RELAX');a(0x04eb,V(G),I(0));setk_lit(k,'TASK',16);later(k,5000);s.ret()
+ s.label(P+'ALERT');s.get(25,fk(k,'TASK'));s.eq(7,1,P+'WATCH_BG')
  s.eq(25,13,P+'AS_NOT_TURNING');s.get(25,fk(k,'NEXT'));s.check(0x001d,[V(12),V(25)],R);a(0x04eb,V(G),I(1));setk_lit(k,'TASK',2);later(k,6000);s.ret()
  s.label(P+'AS_NOT_TURNING');s.eq(25,2,P+'AS_AIM');s.get(25,fk(k,'NEXT'));s.check(0x001d,[V(12),V(25)],R)
  s.label(P+'AS_AIM');formation(k,AS_AIM,False);a(0x000b,V(28),F(.8));a(0x0667,V(G),V(26),V(27),V(28),I(1200));setk_lit(k,'TASK',13);later(k,1000);s.ret()
@@ -338,6 +423,22 @@ def guard(k):
 for k in range(4):guard(k)
 
 TEXTS={
+ 'SQXF':'~r~SHOTS AT CJ - FRONT!~w~ Covering CJ, returning fire.',
+ 'SQSF':'~r~SNIPER - FRONT!~w~ Keep CJ behind cover!',
+ 'SQVF':'~r~CAR INCOMING - FRONT!~w~ Taking out the driver.',
+ 'SQRF':'~r~SHOOTER ON THE ROOF - FRONT!~w~ Engaging high.',
+ 'SQXL':'~r~SHOTS AT CJ - LEFT!~w~ Covering CJ, returning fire.',
+ 'SQSL':'~r~SNIPER - LEFT!~w~ Keep CJ behind cover!',
+ 'SQVL':'~r~CAR INCOMING - LEFT!~w~ Taking out the driver.',
+ 'SQRL':'~r~SHOOTER ON THE ROOF - LEFT!~w~ Engaging high.',
+ 'SQXB':'~r~SHOTS AT CJ - REAR!~w~ Covering CJ, returning fire.',
+ 'SQSB':'~r~SNIPER - REAR!~w~ Keep CJ behind cover!',
+ 'SQVB':'~r~CAR INCOMING - REAR!~w~ Taking out the driver.',
+ 'SQRB':'~r~SHOOTER ON THE ROOF - REAR!~w~ Engaging high.',
+ 'SQXR':'~r~SHOTS AT CJ - RIGHT!~w~ Covering CJ, returning fire.',
+ 'SQSR':'~r~SNIPER - RIGHT!~w~ Keep CJ behind cover!',
+ 'SQVR':'~r~CAR INCOMING - RIGHT!~w~ Taking out the driver.',
+ 'SQRR':'~r~SHOOTER ON THE ROOF - RIGHT!~w~ Engaging high.',
  'SQCF':'~r~CONTACT FRONT!~w~ Squad engaging.','SQCL':'~r~CONTACT LEFT!~w~ Squad engaging.',
  'SQCR':'~r~CONTACT RIGHT!~w~ Squad engaging.','SQCB':'~r~CONTACT REAR!~w~ Squad engaging.',
  'SQAF':'~r~CONTACT FRONT!~w~ Assault: bounding forward, flankers moving.','SQAL':'~r~CONTACT LEFT!~w~ Assault: bounding forward, flankers moving.',
@@ -345,6 +446,8 @@ TEXTS={
  'SQCLR':'~g~AREA SECURE.~w~ Squad regrouping on CJ.','SQDOWN':'~r~MAN DOWN!~w~ We lost one of ours.',
  'SQCOV':'~r~CJ IS HIT!~w~ Shields up - covering CJ.','SQMED':'~g~MEDIC~w~: CJ patched up.',
  'SQMEDG':'~g~MEDIC~w~: wounded teammate patched up.','SQCAR':'~b~SQUAD~w~: mounting up with CJ.',
+ 'SQRLD':'~y~SQUAD~w~: reloading - cover me!','SQCVR':'~y~SQUAD~w~: taking cover, returning fire.',
+ 'SQEVAC':'~r~SQUAD~w~: too hot here, CJ is hurt - EVAC recommended!',
 }
 if __name__=='__main__':
  report=s.build('Helicover_Squad','csa');print(report)

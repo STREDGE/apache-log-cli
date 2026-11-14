@@ -61,7 +61,7 @@ o=last(w,0x5d3,team[0]);assert o[4]==4 and abs(o[2]-(BG[0][1]+1.26))<.01,o
 w.char_speed={1:5.};w.calls.clear();w.now+=1000;steps(w,V,3)
 o=last(w,0x5d3,team[0]);assert o[4]==6 and abs(o[2]-(BG[0][1]+4.5))<.01,o
 w.char_speed={1:9.};w.calls.clear();w.now+=1000;steps(w,V,3)
-o=last(w,0x5d3,team[0]);assert abs(o[2]-(BG[0][1]+6.))<.01,o
+o=last(w,0x5d3,team[0]);assert abs(o[2]-(BG[0][1]+6.))<.01 and o[4]==7,o
 w.char_speed={}
 passed('Moving with CJ: the formation leads him (capped at 6 m) and matches walking or running')
 # ------------------------------------------------------------------ contact (bodyguard)
@@ -318,14 +318,141 @@ w,c,f=gunner_world([(900,0.,0.),(901,-12.,0.),(902,12.,0.),(903,0.,12.)]);w.step
 gt=[w.shared[b.GUARD_TARGET+i] for i in range(4)];assert len(set(gt))==4,gt
 passed('With four threats around, the four gunners never double up')
 
-w,c,f=gunner_world([(930,-2.,0.),(931,12.,0.),(932,-12.,0.)]);w.weapons[931]=35;w.messages.clear();w.step(c,f,n=16)
-gt=[w.shared[b.GUARD_TARGET+i] for i in range(4)]
-assert gt.count(931)==2 and 'HCRPG' in w.messages,(gt,w.messages)
-passed('RPG: two gunners focus the rocket launcher at once, with an RPG! call')
+# ------------------------------------------------------------------ v41 threat board: door gunners
+def gs(w):return [(w.shared[b.GS_H+i],w.shared[b.GS_S+i]) for i in range(8) if w.shared[b.GS_H+i]!=-1]
+def gtargets(w):return [w.shared[b.GUARD_TARGET+i] for i in range(4)]
+w,c,f=gunner_world([(930,-12.,0.),(931,12.,0.),(932,0.,12.),(933,0.,-12.)]);w.messages.clear()
+for _ in range(34):w.traces=[{'start':[12.,0.,1.],'end':[1.5,1.,.5],'time':w.now}];w.step(c,f)
+assert w.shared[b.TB_SHOOTER]==931 and gs(w)[0][0]==931 and gs(w)[0][1]>=120,(w.shared[b.TB_SHOOTER],gs(w))
+assert gtargets(w).count(931)==2 and len(set(gtargets(w)))==3 and 'HCFOCUS' in w.messages,(gtargets(w),w.messages)
+passed('A round that lands at CJ names its shooter from the bullet trace: top of the board, two gunners on him, call-out')
+w,c,f=gunner_world([(933,-12.,0.)]);w.traces=[{'start':[-12.,0.,1.],'end':[30.,30.,0.],'time':0}]
+for _ in range(16):w.traces[0]['time']=w.now;w.step(c,f)
+assert w.shared[b.TB_SHOOTER]!=933,'a round that missed CJ by far names nobody'
+passed('Rounds that do not come down at CJ do not make anyone the shooter')
+w,c,f=gunner_world([(934,-20.,0.),(935,20.,0.),(936,0.,-20.)]);w.weapons.update({934:22,935:30,936:34})
+for n in (934,935,936):w.damage.add((1,n))
+w.step(c,f,n=16);order=[h for h,_ in gs(w)]
+assert order==[936,935,934],gs(w)
+w,c,f=gunner_world([(938,-20.,0.),(939,20.,0.)]);w.weapons.update({938:30,939:30});w.pos[939][2]=10.
+for n in (938,939):w.damage.add((1,n))
+w.step(c,f,n=16);assert [h for h,_ in gs(w)]==[939,938],gs(w)
+passed('Threats are ranked by weapon (sniper, then rifle, then pistol) and position (a rifleman on a roof above one on the street)')
+w,c,f=gunner_world([]);w.shared[b.FIRE]=1
+for n,typ in [(937,6),(938,7)]:w.exists.add(n);w.pos[n]=[20.,0.,0.] if n==937 else [0.,24.,0.];w.pedtype[n]=typ;w.skin[n]=280 if typ==6 else 20;w.civilians.append(n)
+w.step(c,f,n=16);order=[h for h,_ in gs(w)]
+assert order[0]==938 and dict(gs(w))[937]<dict(gs(w))[938]-30,gs(w)
+passed('A passive police officer ranks below a gang member (no wanted stars for nothing)')
+for heading,expect in [(90.,140),(270.,90)]:
+ w,c,f=gunner_world([]);drv,car=960,961;w.exists.update({drv,car});w.cars[car]={'pos':[30.,0.,0.],'heading':heading};w.model[car]=400;w.incar[drv]=car;w.traffic=[car];w.seats[(car,-1)]=drv
+ w.pedtype[drv]=7;w.skin[drv]=20;w.damage.add((1,drv));w.car_speeds={car:20.};w.shared[b.SQ_T]=drv;w.step(c,f,n=16)
+ assert dict(gs(w)).get(drv)==expect,(heading,gs(w))
+passed('A car racing at CJ scores +50 for its driver; one driving away does not')
+w,c,f=gunner_world([(970,24.,0.)]);w.step(c,f,n=16);assert gtargets(w)[0]==970,gtargets(w)
+seat=None
+def hide(a,z):return not(abs(z[0]-24.)<.6 and abs(z[1]-6.)<.6)
+w.pos[970]=[24.,6.,0.];w.los_fn=hide;w.calls.clear();w.step(c,f,n=22)
+assert w.shared[b.GT_SUPP]==1 and gtargets(w)[0]==970,(w.shared[b.GT_SUPP],gtargets(w))
+shots=[x[2] for x in w.calls if x[1]==0x6bc and x[0]>w.now-1000]
+assert any(abs(s[4])<1. and abs(s[3]-24.)<1.5 for s in shots),shots[-3:]
+passed('A target that ducks behind cover gets suppressive fire at his last seen position')
+w.step(c,f,n=50);assert w.shared[b.GT_SUPP]==0,'suppression ends after about 4 s'
+passed('Suppression stops after about 4 s instead of wasting rounds on a wall')
+# ------------------------------------------------------------------ v41 pilot
+w,c,f=gunner_world([]);w.messages.clear()
+for _ in range(4):w.traces=[{'start':[70.,0.,0.],'end':list(w.car),'time':w.now},{'start':[70.,5.,0.],'end':[w.car[0]+2,w.car[1],w.car[2]],'time':w.now}];w.step(c,f)
+assert w.shared[b.EVADE_UNTIL]>w.now and 'HCSHOT' in w.messages,(w.shared[b.EVADE_UNTIL],w.now,w.messages)
+passed('Rounds hitting the helicopter make the pilot break away at once, before the hull is damaged')
+w,c,f=gunner_world([]);w.traces=[{'start':list(w.car),'end':[w.car[0]+30,w.car[1],0.],'time':0}]
+for _ in range(4):w.traces[0]['time']=w.now;w.step(c,f)
+assert w.shared[b.EVADE_UNTIL]<=w.now,'our own gunners firing from the helicopter are not "taking fire"'
+passed('The gunners\' own rounds leaving the helicopter do not trigger evasion')
+fire_world,target=g['fire_world'],g['target']
+def orbit_steps(dead_left):
+ w,c,f=fire_world();npc=target(w,typ=7,skin=20);w.damage.add((1,npc));w.step(c,f,n=10)
+ if dead_left:
+  for i in (4,6):w.dead.add(w.shared[b.PUB+i])
+ seq=[]
+ for _ in range(60):
+  w.step(c,f);v=w.shared[b.ORBIT_I]
+  if not seq or seq[-1]!=v:seq.append(v)
+ return seq
+up=orbit_steps(False);down=orbit_steps(True)
+assert all((y-x)%8==1 for x,y in zip(up,up[1:])) and all((x-y)%8==1 for x,y in zip(down,down[1:])) and len(down)>=3,(up,down)
+passed('Combat orbit direction keeps the door with more living gunners towards the threat (left door by default, right when the left gunners are down)')
+w,c,f=fire_world();npc=target(w,typ=7,skin=20);w.pos[npc][2]=10.;w.damage.add((1,npc));w.step(c,f,n=12)
+m=calls(w,0x4a2)[-1][2];assert abs(m[3]-(10.+25.+15.))<.01,m
+passed('A shooter on a roof is circled 15 m higher')
 w,c,f=gunner_world([(911,-2.,0.),(940,12.,0.)]);w.step(c,f,n=16);first=w.shared[b.GUARD_TARGET]
 w.exists.add(941);w.pos[941]=[30.,-45.,0.];w.skin[941]=20;w.pedtype[941]=7;w.damage.add((1,941));w.shared[b.SQ_T]=941;w.step(c,f,n=30)
 assert first==940 and w.shared[b.GUARD_TARGET]==940,(first,[w.shared[b.GUARD_TARGET+i] for i in range(4)])
 passed('A gunner finishes the target he started instead of hopping to a newer one')
+# ------------------------------------------------------------------ v41 threat board: squad
+def squad_scene(npcs):
+ w,c,ground,sq,team=escort_world();V=(c,ground,sq)
+ for k,t in enumerate(team):w.pos[t]=[BG[k][0],BG[k][1],0.]
+ steps(w,V,3);w.civilians=[]
+ for n,x,y,wpn,hostile in npcs:
+  w.exists.add(n);w.pos[n]=[x,y,0.];w.pedtype[n]=7;w.skin[n]=20;w.weapons[n]=wpn;w.civilians.append(n)
+  if hostile:w.damage.add((1,n))
+ return w,V,team
+w,V,team=squad_scene([(980,20.,0.,30,True),(981,-40.,0.,22,False)]);w.messages.clear();steps(w,V,8)
+assert w.shared[b.SQ_T]==980 and 981 not in [w.shared[b.SQ_T+i] for i in range(4)] and 'SQCR' in w.messages,([w.shared[b.SQ_T+i] for i in range(4)],w.messages)
+for _ in range(45):w.traces=[{'start':[-40.,0.,1.],'end':[1.5,-1.,.5],'time':w.now}];steps(w,V,1)
+assert w.shared[b.TB_SHOOTER]==981 and w.shared[b.SQ_T]==981 and w.shared[b.SQ_T+1]==980,([w.shared[b.SQ_T+i] for i in range(4)],[w.shared[b.SQ_SC+i] for i in range(4)])
+assert 'SQXL' in w.messages and last(w,0x634,team[0])[1]==981,(w.messages,orders(w,0x634,team[0])[-2:])
+passed('Squad: the man firing at CJ from 40 m (found only through his bullet traces) jumps to the top of the list, guard 0 takes him, "Shots at CJ - left!"')
+w,V,team=squad_scene([(982,0.,-25.,34,True)]);w.messages.clear();steps(w,V,8)
+assert 'SQSB' in w.messages,w.messages
+w,V,team=squad_scene([(983,22.,0.,30,True)]);w.pos[983][2]=9.;w.messages.clear();steps(w,V,8)
+assert 'SQRR' in w.messages,w.messages
+passed('Squad call-outs name the kind of threat and where: "Sniper - rear!", "Shooter on the roof - right!"')
+w,V,team=squad_scene([(990,0.,20.,30,True)]);w.shooting_chars.add(990)
+def low_wall(a,z):return not(abs(z[0]-3.5)<.1 and abs(z[1]-3.2)<.1 and z[2]<1.)
+w.los_fn=low_wall;w.messages.clear();steps(w,V,10)
+o=last(w,0x637,team[0]);assert abs(o[1]-3.5)<.01 and abs(o[2]-3.2)<.01 and o[7]==990,o
+assert 'SQCVR' in w.messages,w.messages
+w.pos[team[0]]=[3.5,3.2,0.];w.calls.clear();steps(w,V,4)
+assert last(w,0x634,team[0])[1]==990
+passed('Under fire an engager moves to low cover (blocks the chest, not the head) and fights crouched from there')
+w,V,team=squad_scene([(991,0.,20.,30,True)]);w.shooting_chars.add(991);w.messages.clear();steps(w,V,10)
+assert last(w,0x634,team[0])[1]==991 and 'SQCVR' not in w.messages,'no cover nearby: fight crouched where he stands'
+passed('Without cover nearby the engager fights crouched where he stands')
+w.calls.clear();steps(w,V,130)
+ducks=[x for x in w.calls if x[1]==0x5c5];who={x[2][0] for x in ducks}
+assert ducks and 'SQRLD' in w.messages and len(who)>=2,(len(ducks),who)
+times=sorted((x[0],x[2][0]) for x in ducks);assert all(b2[0]-a2[0]>=1000 or a2[1]==b2[1] for a2,b2 in zip(times,times[1:])),times
+passed('Reload drill: after 10 s of fighting guards crouch 1.5 s to reload, staggered so the others keep firing')
+w,V,team=squad_scene([(992,20.,0.,30,True),(993,-20.,0.,30,True),(994,0.,-20.,30,True)]);w.health[1]=30;w.messages.clear();steps(w,V,30)
+assert 'SQCOV' in w.messages and 'SQEVAC' in w.messages and w.messages.index('SQCOV')<w.messages.index('SQEVAC'),w.messages
+passed('CJ badly hurt with three or more threats: shields up, then "EVAC recommended"')
+w,V,team=squad_scene([]);w.calls.clear();steps(w,V,30)
+assert any(orders(w,0x667,t) for t in team)
+w.now+=21000;w.calls.clear();steps(w,V,30)
+assert not any(orders(w,0x667,t) for t in team) and all(w.shared[sqb.fk(k,'TASK')]==16 for k in range(4)),[w.shared[sqb.fk(k,'TASK')] for k in range(4)]
+w.exists.add(995);w.pos[995]=[20.,0.,0.];w.pedtype[995]=7;w.weapons[995]=30;w.civilians=[995];w.damage.add((1,995));w.calls.clear();steps(w,V,8)
+assert orders(w,0x634,team[0]) and orders(w,0x634,team[0])[-1][1]==995
+passed('After 20 s of quiet the team lowers its weapons; the first threat puts them back on alert')
+
+# ------------------------------------------------------------------ v41 frame cost
+def peak_of(vm,fn):
+ orig=vm.run;box=[0]
+ def run():
+  n0=len(vm.w.calls);orig();box[0]=max(box[0],len(vm.w.calls)-n0)
+ vm.run=run;fn();vm.run=orig;return box[0]
+w,c,f=gunner_world([(900+i,x,y) for i,(x,y) in enumerate([(20,0),(-20,0),(0,20),(0,-20),(12,4),(-12,4),(4,12),(4,-12)])])
+for n in range(900,908):w.weapons[n]=30;w.damage.add((1,n))
+for i in range(4):w.shared[b.SQ_T+i]=904+i
+def fire_run():
+ for _ in range(200):w.traces=[{'start':[20.,0.,1.],'end':w.player.copy(),'time':w.now}];w.step(c,f)
+fpeak=peak_of(f,fire_run)
+w,V,team=squad_scene([(980+i,x,y,30,True) for i,(x,y) in enumerate([(20,0),(-20,0),(0,20),(0,-20),(14,14),(-14,-14)])])
+for n in range(980,986):w.shooting_chars.add(n)
+def squad_run():
+ for _ in range(200):w.traces=[{'start':[-20.,0.,1.],'end':w.player.copy(),'time':w.now}];steps(w,V,1)
+speak=peak_of(V[2],squad_run)
+assert fpeak<=3600 and speak<=2000,(fpeak,speak)
+passed('Frame cost in a busy fight (8 threats, rounds at CJ): fire worker peak %d, squad worker peak %d script instructions'%(fpeak,speak))
 
 text='\n'.join(results)+'\nMocked script execution only: real pathing, cover and gunfire are not tested.\n'
 (b.OUT/'squad_tests.txt').write_text(text);print(text)

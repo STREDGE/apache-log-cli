@@ -57,8 +57,9 @@ SQALR ~y~SQUAD~w~: the team is already on the ground.
 SQNONE ~y~SQUAD~w~: no team on the ground.
 SQFOOT ~y~SQUAD~w~: CJ must be on foot to receive the team.
 SQCREW ~y~SQUAD~w~: wait until the crew is back aboard.
-HCRPG ~r~RPG!~w~ Heavy weapon - gunners, take him down!
+HCFOCUS ~r~SHOOTER ON CJ!~w~ Gunners focusing fire on him.
 HCEVADE ~r~HELICOVER~w~: taking fire - evasive manoeuvre.
+HCSHOT ~r~HELICOVER~w~: rounds on the helicopter - breaking away.
 RGDEP SWAT: descending. Stay near the helicopter.
 RGDONE SWAT: ground team withdrawn.
 RGFAIL SWAT: model unavailable or heli moving.
@@ -75,6 +76,22 @@ SQIN ~g~SQUAD~w~: team on the ground. Escorting CJ.
 SQBACK ~g~SQUAD~w~: team back aboard.
 SQLOST ~r~SQUAD~w~: escort team lost.
 SQCOVER ~g~SQUAD~w~: team covering your extraction.
+SQXF ~r~SHOTS AT CJ - FRONT!~w~ Covering CJ, returning fire.
+SQSF ~r~SNIPER - FRONT!~w~ Keep CJ behind cover!
+SQVF ~r~CAR INCOMING - FRONT!~w~ Taking out the driver.
+SQRF ~r~SHOOTER ON THE ROOF - FRONT!~w~ Engaging high.
+SQXL ~r~SHOTS AT CJ - LEFT!~w~ Covering CJ, returning fire.
+SQSL ~r~SNIPER - LEFT!~w~ Keep CJ behind cover!
+SQVL ~r~CAR INCOMING - LEFT!~w~ Taking out the driver.
+SQRL ~r~SHOOTER ON THE ROOF - LEFT!~w~ Engaging high.
+SQXB ~r~SHOTS AT CJ - REAR!~w~ Covering CJ, returning fire.
+SQSB ~r~SNIPER - REAR!~w~ Keep CJ behind cover!
+SQVB ~r~CAR INCOMING - REAR!~w~ Taking out the driver.
+SQRB ~r~SHOOTER ON THE ROOF - REAR!~w~ Engaging high.
+SQXR ~r~SHOTS AT CJ - RIGHT!~w~ Covering CJ, returning fire.
+SQSR ~r~SNIPER - RIGHT!~w~ Keep CJ behind cover!
+SQVR ~r~CAR INCOMING - RIGHT!~w~ Taking out the driver.
+SQRR ~r~SHOOTER ON THE ROOF - RIGHT!~w~ Engaging high.
 SQCF ~r~CONTACT FRONT!~w~ Squad engaging.
 SQCL ~r~CONTACT LEFT!~w~ Squad engaging.
 SQCR ~r~CONTACT RIGHT!~w~ Squad engaging.
@@ -89,3 +106,6 @@ SQCOV ~r~CJ IS HIT!~w~ Shields up - covering CJ.
 SQMED ~g~MEDIC~w~: CJ patched up.
 SQMEDG ~g~MEDIC~w~: wounded teammate patched up.
 SQCAR ~b~SQUAD~w~: mounting up with CJ.
+SQRLD ~y~SQUAD~w~: reloading - cover me!
+SQCVR ~y~SQUAD~w~: taking cover, returning fire.
+SQEVAC ~r~SQUAD~w~: too hot here, CJ is hurt - EVAC recommended!

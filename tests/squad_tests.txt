@@ -52,6 +52,24 @@ PASS: Door gunners take a target on their own side: right door right, left door 
 PASS: A gunner without a clear line from his seat leaves that target to someone else
 PASS: Gunners also use the threats the ground squad has found
 PASS: With four threats around, the four gunners never double up
-PASS: RPG: two gunners focus the rocket launcher at once, with an RPG! call
+PASS: A round that lands at CJ names its shooter from the bullet trace: top of the board, two gunners on him, call-out
+PASS: Rounds that do not come down at CJ do not make anyone the shooter
+PASS: Threats are ranked by weapon (sniper, then rifle, then pistol) and position (a rifleman on a roof above one on the street)
+PASS: A passive police officer ranks below a gang member (no wanted stars for nothing)
+PASS: A car racing at CJ scores +50 for its driver; one driving away does not
+PASS: A target that ducks behind cover gets suppressive fire at his last seen position
+PASS: Suppression stops after about 4 s instead of wasting rounds on a wall
+PASS: Rounds hitting the helicopter make the pilot break away at once, before the hull is damaged
+PASS: The gunners' own rounds leaving the helicopter do not trigger evasion
+PASS: Combat orbit direction keeps the door with more living gunners towards the threat (left door by default, right when the left gunners are down)
+PASS: A shooter on a roof is circled 15 m higher
 PASS: A gunner finishes the target he started instead of hopping to a newer one
+PASS: Squad: the man firing at CJ from 40 m (found only through his bullet traces) jumps to the top of the list, guard 0 takes him, "Shots at CJ - left!"
+PASS: Squad call-outs name the kind of threat and where: "Sniper - rear!", "Shooter on the roof - right!"
+PASS: Under fire an engager moves to low cover (blocks the chest, not the head) and fights crouched from there
+PASS: Without cover nearby the engager fights crouched where he stands
+PASS: Reload drill: after 10 s of fighting guards crouch 1.5 s to reload, staggered so the others keep firing
+PASS: CJ badly hurt with three or more threats: shields up, then "EVAC recommended"
+PASS: After 20 s of quiet the team lowers its weapons; the first threat puts them back on alert
+PASS: Frame cost in a busy fight (8 threats, rounds at CJ): fire worker peak 2822, squad worker peak 1485 script instructions
 Mocked script execution only: real pathing, cover and gunfire are not tested.
