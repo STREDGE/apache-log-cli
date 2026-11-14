@@ -13,3 +13,10 @@ static const unsigned int MT2_PROLOGUE[4]={0xd101c3ffU,0xf90013f9U,0xa9035ff8U,0
 static const unsigned int PE_PROLOGUE[4]={0xd10203ffU,0xa9026ffcU,0xa90367faU,0xa9045ff8U};
 static const struct {unsigned long off;unsigned int expect,patch;} PATCHES[]={{0x320844UL,0x321f03e0U,0x52800080U},{0x320850UL,0x7100081fU,0x7100101fU},{0x326fecUL,0x7100041fU,0x71000c1fU},{0x327040UL,0x7100051fU,0x71000d1fU},{0x32706cUL,0x7100041fU,0x71000c1fU},{0x3270acUL,0x7100041fU,0x71000c1fU}};
 #define NPATCHES 6
+/* ProcessEvents' own 2-finger state (reset when the mod hands touches back to the game's 2-finger path) */
+#define OFF_LAST_ACTION 0x85dc60UL /* int[2], starts as {1,1} */
+#define OFF_LAST_X 0x8b4e9cUL      /* int[2] */
+#define OFF_LAST_Y 0x8b4ea4UL      /* int[2] */
+/* the ProcessEvents instructions that address them (adrp/add pairs) */
+static const struct {unsigned long off;unsigned int expect;} STATE_REFS[]={{0x31e7d8UL,0xf00029fbU},{0x31e7e0UL,0x9131837bU},{0x31e84cUL,0xd0002ca8U},{0x31e850UL,0x913a7108U},{0x31e858UL,0xd0002ca8U},{0x31e85cUL,0x913a9108U}};
+#define NSTATE_REFS 6
