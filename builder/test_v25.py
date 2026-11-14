@@ -926,7 +926,7 @@ w,c,f=fire_world();w.shared[b.FIRE]=4;w.step(c,f,n=3);npc=target(w,typ=6);w.weap
 w.wanted=2;w.step(c,f,n=15);assert attacks(w)
 passed('OVERWATCH leaves armed police alone unless CJ is wanted')
 # callouts: contact, kill counter, area clear, mode report
-w,c,f=fire_world();w.shared[b.FIRE]=1;npc=target(w,typ=7);w.step(c,f,n=15)
+w,c,f=fire_world();w.shared[b.FIRE]=1;w.step(c,f,n=3);w.shared[b.MSG_UNTIL]=0;npc=target(w,typ=7);w.step(c,f,n=15)
 assert 'HCCONT' in w.messages and w.messages.count('HCCONT')==1 and 'HCFM1' in w.messages,w.messages
 w.dead.add(npc);w.step(c,f,n=5);assert w.shared[b.KILLS]==1 and 1 in getattr(w,'debug',[]),(w.shared[b.KILLS],getattr(w,'debug',None))
 w.exists.discard(npc);w.step(c,f,n=40);assert 'HCCLEAR' in w.messages and w.shared[b.ENGAGED]==0,w.messages
@@ -956,5 +956,14 @@ for _ in range(80):
  assert abs(math.dist(m[1:3],w.pos[npc][:2])-b.ORBIT_RADIUS)<.5 and abs(m[3]-(w.pos[npc][2]+25.))<.01,m
 assert len(pts)>=3,pts
 passed('Combat orbit circles the threat at 28 m and 25 m above it')
+# 1.1: every on-screen text is short, coloured consistently and names no removed button
+import re as _re
+_old=['BOARD CJ','LEAVE HELICOPTER','CALL SUPPORT','TAKE OFF','SETUP','SWAT:','TEAM ON FOOT >','EXIT NOW','LAND AT DESTINATION','DESCEND BY ROPE']
+for _line in (b.OUT/'Helicover.fxt').read_text().splitlines():
+ _k,_v=_line.split(' ',1);_plain=_re.sub(r'~.~','',_v)
+ assert len(_plain)<=66,(_k,len(_plain),_plain)
+ assert not any(o in _v for o in _old),(_k,_v)
+ assert _k in ('HCDBG','HCKILL') or _re.match(r'~[rgbyp]~[A-Z0-9 .!-]+(:|!)?~w~ ',_v),(_k,_v)
+passed('All on-screen texts: radio style (coloured source or alert, then the message), at most 66 characters, no removed buttons')
 text='\n'.join(results)+'\nMocked script execution only: actual GTA flight, collisions, gunfire, animations and Android behavior are not tested.\n'
 (b.OUT/'scenario_tests.txt').write_text(text);print(text)

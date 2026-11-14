@@ -96,7 +96,7 @@ passed('AREA SECURE is called 3.5 s after the last threat is gone')
 # ------------------------------------------------------------------ medic
 w.health[1]=50;w.pos[team[3]]=[0.,-12.,0.];w.messages.clear();w.calls.clear();steps(w,V,3)
 o=last(w,0x5d3,team[3]);assert abs(o[1])<.01 and abs(o[2])<.01 and o[4]==6,o
-w.pos[team[3]]=[0.,-1.,0.];steps(w,V,3)
+w.pos[team[3]]=[0.,-1.,0.];w.shared[b.MSG_UNTIL]=0;steps(w,V,3)
 assert w.health[1]==85 and 'SQMED' in w.messages and last(w,0x4eb,team[3])[1]==1
 w.health[1]=50;steps(w,V,30);assert w.health[1]==50
 passed('Medic: the rear guard runs to a wounded CJ, kneels and patches him (+35 HP), then cools down')
@@ -360,7 +360,8 @@ assert w.shared[b.GT_SUPP]==1 and gtargets(w)[0]==970,(w.shared[b.GT_SUPP],gtarg
 shots=[x[2] for x in w.calls if x[1]==0x6bc and x[0]>w.now-1000]
 assert any(abs(s[4])<1. and abs(s[3]-24.)<1.5 for s in shots),shots[-3:]
 passed('A target that ducks behind cover gets suppressive fire at his last seen position')
-w.step(c,f,n=50);assert w.shared[b.GT_SUPP]==0,'suppression ends after about 4 s'
+for _ in range(50):w.health[970]-=1;w.step(c,f)  # someone else keeps hitting him, so this is not the 5 s hand-over
+assert w.shared[b.GT_SUPP]==0,'suppression ends after about 4 s'
 passed('Suppression stops after about 4 s instead of wasting rounds on a wall')
 # ------------------------------------------------------------------ v41 pilot
 w,c,f=gunner_world([]);w.messages.clear()
@@ -415,7 +416,7 @@ w,V,team=squad_scene([(990,0.,20.,30,True)]);w.shooting_chars.add(990)
 def low_wall(a,z):return not(abs(z[0]-3.5)<.1 and abs(z[1]-3.2)<.1 and z[2]<1.)
 w.los_fn=low_wall;w.messages.clear();steps(w,V,10)
 o=last(w,0x637,team[0]);assert abs(o[1]-3.5)<.01 and abs(o[2]-3.2)<.01 and o[7]==990,o
-assert 'SQCVR' in w.messages,w.messages
+assert w.shared[b.CV_OK]==1  # the 'taking cover' chatter itself is dropped while 'CONTACT' is on screen
 w.pos[team[0]]=[3.5,3.2,0.];w.calls.clear();steps(w,V,4)
 assert last(w,0x634,team[0])[1]==990
 passed('Under fire an engager moves to low cover (blocks the chest, not the head) and fights crouched from there')
@@ -438,6 +439,75 @@ w.exists.add(995);w.pos[995]=[20.,0.,0.];w.pedtype[995]=7;w.weapons[995]=30;w.ci
 assert orders(w,0x634,team[0]) and orders(w,0x634,team[0])[-1][1]==995
 passed('After 20 s of quiet the team lowers its weapons; the first threat puts them back on alert')
 
+# ------------------------------------------------------------------ 1.1: v41 details completed
+w,c,f=gunner_world([]);drv,car=962,963;w.exists.update({drv,car});w.cars[car]={'pos':[24.,0.,0.],'heading':90.};w.model[car]=400;w.incar[drv]=car
+w.traffic=[car];w.seats[(car,-1)]=drv;w.pedtype[drv]=7;w.skin[drv]=20;w.damage.add((1,drv));w.car_speeds={car:20.};w.shared[b.SQ_T]=drv;w.calls.clear();w.step(c,f,n=30)
+ends=[x[2][3:5] for x in calls(w,0x6bc)]
+engine=[e for e in ends if math.dist(e,[24.,1.8])<.9];cabin=[e for e in ends if math.dist(e,[24.,0.])<.9]
+assert engine and cabin,ends[-6:]
+passed('A car target: right-door gunners hit the engine, left-door gunners the driver')
+w,c,f=gunner_world([(940,-24.,0.),(941,24.,0.),(942,0.,24.),(943,0.,-24.)]);w.damage.add((1,941));w.targeting=940;w.step(c,f,n=30)
+assert gtargets(w).count(940)==2,(gtargets(w),gs(w))
+passed('CJ aiming at someone: two gunners join him on that target at once')
+for hit in (True,False):
+ w,c,f=gunner_world([(950,24.,0.),(952,-24.,0.)]);w.step(c,f,n=16);first=gtargets(w)[0]
+ for _ in range(80):
+  if hit:w.health[950]-=2
+  w.step(c,f)
+ assert first==950 and (gtargets(w)[0]==950)==hit,(hit,first,gtargets(w))
+passed('A gunner keeps a target he is hurting, and hands it over after 5 s without a hit')
+w,c,f=fire_world();npc=target(w,typ=7,skin=20);w.pos[npc]=[40.,0.,0.];w.damage.add((1,npc));w.step(c,f,n=12)
+for _ in range(20):
+ w.step(c,f);m=calls(w,0x4a2)[-1][2];assert abs(math.dist(m[1:3],[28.,0.])-b.ORBIT_RADIUS)<.5,m
+passed('Threat 40 m from CJ: the orbit centre moves 30% towards CJ so the gunners cover both')
+w,V,team=squad_scene([(997,0.,20.,30,True)]);steps(w,V,10)
+assert last(w,0x634,team[0])[1]==997
+def wall(a,z):return not(abs(z[0]-3.)<.6 and abs(z[1]-22.)<.6 and abs(a[0])<.1 and abs(a[1]-3.2)<.1)
+w.los_fn=wall;w.pos[997]=[3.,22.,0.];w.calls.clear();steps(w,V,40)
+o=orders(w,0x668,team[0]);assert o and abs(o[-1][1])<.01 and abs(o[-1][2]-20.)<.01,o
+w.calls.clear();steps(w,V,60);assert not orders(w,0x668,team[0]) and orders(w,0x634,team[0])
+passed('A threat that slips out of a guard\'s sight gets 4 s of suppressive fire at his last seen spot, then normal fighting')
+for hp,expect_back in [(100,False),(40,True)]:
+ w,V,team=squad_scene([(998,0.,25.,30,True)]);steps(w,V,8);w.pos[team[0]]=[0.,12.,0.];w.health[team[0]]=hp;w.calls.clear();steps(w,V,4)
+ back=bool(orders(w,0x5d3,team[0]));assert back==expect_back,(hp,back)
+passed('A wounded guard (below 50 HP) stays closer to CJ: 10 m leash instead of 14 m')
+# ------------------------------------------------------------------ 1.1 messages
+w,c,_=setup();w.step(c,n=80)
+assert w.messages.count('HCHELLO')==1,w.messages
+w.step(c,n=100);assert w.messages.count('HCHELLO')==1
+passed('Welcome message once, a few seconds after the game starts')
+w,c,p=setup(True);summon(w,c);ground=VM('Helicover_Ground',w);sq=VM('Helicover_Squad',w);w.health[1]=100;w.step(c,p,ground,sq,n=3)
+w.messages.clear();w.shared[b.CMD]=16;w.step(c,p,ground,sq,n=6)
+w.car=[c.v[26],c.v[27],c.v[28]+18.];w.speed=0.;w.step(c,p,ground,sq,n=30)
+assert 'HCRTEAM' in w.messages and 'SQIN' in w.messages and not {'HCROPE','HCHOLD','HCFOLL'}&set(w.messages),w.messages
+passed('Team drop notices say what really happens: "moving in to drop the team", "on the ground" - no false "rope pickup" / "holding"')
+def noisy_fight(level,secs=12):
+ w,V,team=squad_scene([(980+i,x,y,30,True) for i,(x,y) in enumerate([(20,0),(-20,0),(0,20),(0,-20)])])
+ for n in range(980,984):w.shooting_chars.add(n)
+ w.shared[b.HUD]=level;w.health[1]=60;w.messages.clear();n0=len(w.messages)
+ for _ in range(secs*10):w.traces=[{'start':[-20.,0.,1.],'end':[1.,1.,.5],'time':w.now}];steps(w,V,1)
+ return w,V,team
+w,V,team=noisy_fight(2)
+assert 2<=len(w.messages)<=6,w.messages
+passed('A 12 s fight with four shooters gives %d clear radio calls, not a stream (%s)'%(len(w.messages),', '.join(w.messages)))
+w,V,team=noisy_fight(1)
+assert w.messages and not {'SQRLD','SQCVR','SQMED','SQMEDG','SQCAR'}&set(w.messages),w.messages
+passed('MESSAGES: IMPORTANT keeps danger and tactical calls, drops the chatter')
+w,V,team=noisy_fight(0,6)
+assert not w.messages,w.messages
+w.shared[b.CMD]=16;steps(w,V,4);assert w.messages==['SQALR'],w.messages
+passed('MESSAGES: OFF is silent in a fight but still explains why a command was refused')
+w,c,ground,sq,team=escort_world();f=VM('Helicover_Fire',w);V=(c,ground,sq,f)
+for k,tm in enumerate(team):w.pos[tm]=[BG[k][0],BG[k][1],0.]
+hostile=996;w.exists.add(hostile);w.pos[hostile]=[20.,0.,0.];w.pedtype[hostile]=7;w.weapons[hostile]=30;w.civilians=[hostile];w.damage.add((1,hostile))
+w.messages.clear();w.shared[b.MSG_UNTIL]=0;steps(w,V,30)
+assert 'SQCR' in w.messages and 'HCCONT' not in w.messages,w.messages
+passed('With the team on the ground only the squad calls the contact (no double "CONTACT!")')
+w,c,p=setup(True);launch=VM('Helicover',w);w.step(c,p,launch,n=15);w.events.append(1);w.step(c,p,n=4)
+rows=[]
+for _ in range(4):rows.append(w.menu[7]);w.events.append(5);w.step(c,p,n=4)
+assert rows==[b'MESSAGES: ALL',b'MESSAGES: IMPORTANT',b'MESSAGES: OFF',b'MESSAGES: ALL'],rows
+passed('SETTINGS: one row cycles MESSAGES: ALL / IMPORTANT / OFF')
 # ------------------------------------------------------------------ v41 frame cost
 def peak_of(vm,fn):
  orig=vm.run;box=[0]

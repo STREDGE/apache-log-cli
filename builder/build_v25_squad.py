@@ -19,20 +19,24 @@ Registers: 0 CJ, 1 heli, 2-5 guards, 6 CJ car/-1, 7 tactics, 8 fire mode, 9-11 C
 """
 from asm_v25 import *
 import build_v25 as b
+from msg_v42 import say
 from threat_v41 import emit_score,emit_trace_scan,SHOOTER_FRESH_MS,SCORE_FOCUS
 s=Script();a=s.add
 FIELDS={'TASK':0,'NEXT':1,'TX':2,'TY':3,'LX':4,'LY':5,'LT':6,'DEAD':7,'TGT':8,'COVER':9}
 # TASK values: -1 not set up, 0 idle, 1 moving, 2 sector watch, 3 shooting, 4 entering car,
 # 5 riding, 6 leaving car, 7 path-node move, 8 crouched assault, 9 medic, 10 timed attack,
-# 11 climbing an obstacle, 12 moving while shooting, 13 turning to the sector (assault)
+# 11 climbing an obstacle, 12 moving while shooting, 13 turning to the sector (assault),
+# 15 reload drill, 16 relaxed (quiet), 17 suppressive fire at the last seen spot
 def fk(k,f):return b.SQ_SLOT+k*b.SQ_SLOT_SIZE+FIELDS[f]
 _n=[0]
 def uid(p):_n[0]+=1;return p+'_'+str(_n[0])
 def alive(var,fail):s.check(0x056d,[V(var)],fail);s.check(0x8118,[V(var)],fail)
 def msg(key,throttle=True):
- end=uid('MSG_END');s.get(19,b.HUD);s.eq(19,1,end)
+ """Squad radio call through the shared dispatcher (msg_v42); `throttle` also keeps the squad's
+ own calls at least 3.5 s apart."""
+ end=uid('MSG_END')
  if throttle:s.get(19,b.SQ_MSG_NEXT);s.check(0x001d,[V(12),V(19)],end)
- a(0x03e5,S(key));a(0x0085,V(19),V(12));a(0x000a,V(19),I(3500));a(0xddc,I(b.SQ_MSG_NEXT),V(19));s.label(end)
+ say(s,key);a(0x0085,V(19),V(12));a(0x000a,V(19),I(3500));a(0xddc,I(b.SQ_MSG_NEXT),V(19));s.label(end)
 def setk(k,f,var):a(0xddc,I(fk(k,f)),V(var))
 def setk_lit(k,f,val):s.set(fk(k,f),val)
 def later(k,ms):a(0x0085,V(31),V(12));a(0x000a,V(31),I(ms));setk(k,'NEXT',31)
@@ -281,14 +285,29 @@ def take_cover(k,G,limit,duck):
  s.go(duck)
  s.label(P+'GO');s.get(26,b.CV_X+k);s.get(27,b.CV_Y+k);s.get(28,b.CV_Z+k);a(0x0509,V(21),V(22),V(26),V(27),V(31));s.check(0x0021,[V(31),F(1.0)],duck);shoot_move(k,G,2500)
 def engage_duck(k,G,limit=None):
- if limit is not None:
-  duck=uid('DUCK_HERE');take_cover(k,G,limit,duck);s.label(duck)
- issue=uid('DUCK_ISSUE');same_order(k,8,25,issue);s.label(issue);a(0x0634,V(G),V(25),I(1),I(1000),I(60));order(k,8,25,3000)
+ if limit is None:
+  issue=uid('DUCK_ISSUE');same_order(k,8,25,issue);s.label(issue);a(0x0634,V(G),V(25),I(1),I(1000),I(60));order(k,8,25,3000);return
+ duck=uid('DUCK_HERE');take_cover(k,G,limit,duck);s.label(duck)
+ # v1.1: a threat that slipped out of sight gets 4 s of suppressive fire at the spot where this
+ # guard last saw him (TASK 17), while the flankers work around
+ sup=uid('SUP_KEEP');s.get(31,fk(k,'TASK'));s.eq(31,17,sup);s.get(31,fk(k,'TGT'));s.check(0x003b,[V(31),V(25)],sup);s.get(31,fk(k,'NEXT'));s.check(0x001d,[V(12),V(31)],'G%d_RET'%k);s.label(sup)
+ issue=uid('DUCK_ISSUE');same_order(k,8,25,issue);s.label(issue)
+ hidden=uid('SUP_HIDDEN');shoot=uid('SUP_DUCK')
+ a(0x00a0,V(25),V(26),V(27),V(28));a(0x000b,V(28),F(.5));a(0x0087,V(30),V(23));a(0x000b,V(30),F(.6))
+ s.check(0x06bd,[V(21),V(22),V(30),V(26),V(27),V(28),I(1),I(0),I(0),I(0),I(0)],hidden)
+ a(0xddc,I(b.LS_X+k),V(26));a(0xddc,I(b.LS_Y+k),V(27));a(0xddc,I(b.LS_Z+k),V(28));a(0xddc,I(b.LS_T+k),V(12));s.go(shoot)
+ s.label(hidden);s.get(31,b.LS_T+k);a(0x0085,V(30),V(12));a(0x0062,V(30),V(31));s.check(0x8019,[V(30),I(4000)],shoot)
+ s.get(26,b.LS_X+k);s.get(27,b.LS_Y+k);s.get(28,b.LS_Z+k);a(0x0668,V(G),V(26),V(27),V(28),I(1500));order(k,17,25,1500)
+ s.label(shoot);a(0x0634,V(G),V(25),I(1),I(1000),I(60));order(k,8,25,3000)
 def engage_timed(k,G):
  issue=uid('TIMED_ISSUE');same_order(k,10,25,issue);s.label(issue);a(0x07a5,V(G),V(25),I(3000));order(k,10,25,2500)
 def leash(k,G,limit,speed):
- """Further than `limit` from CJ: go back to the formation point instead of fighting."""
- ok=uid('LEASH_OK');s.check(0x0021,[V(24),F(limit)],ok);form_point(k);move_to(k,G,I(speed),2500,900);s.label(ok)
+ """Further than `limit` from CJ (70% of it when this guard is below 50 HP): go back to the
+ formation point instead of fighting."""
+ ok=uid('LEASH_OK');back=uid('LEASH_BACK');hurt=uid('LEASH_HURT')
+ a(0x0226,V(G),V(31));s.check(0x0019,[V(31),I(49)],hurt);s.check(0x0021,[V(24),F(limit)],ok);s.go(back)
+ s.label(hurt);s.check(0x0021,[V(24),F(limit*.7)],ok)
+ s.label(back);form_point(k);move_to(k,G,I(speed),2500,900);s.label(ok)
 
 def guard(k):
  G=2+k;P='G%d_'%k;R=P+'RET'
@@ -422,33 +441,39 @@ def guard(k):
  s.label(R);s.ret()
 for k in range(4):guard(k)
 
-TEXTS={
- 'SQXF':'~r~SHOTS AT CJ - FRONT!~w~ Covering CJ, returning fire.',
- 'SQSF':'~r~SNIPER - FRONT!~w~ Keep CJ behind cover!',
- 'SQVF':'~r~CAR INCOMING - FRONT!~w~ Taking out the driver.',
- 'SQRF':'~r~SHOOTER ON THE ROOF - FRONT!~w~ Engaging high.',
- 'SQXL':'~r~SHOTS AT CJ - LEFT!~w~ Covering CJ, returning fire.',
- 'SQSL':'~r~SNIPER - LEFT!~w~ Keep CJ behind cover!',
- 'SQVL':'~r~CAR INCOMING - LEFT!~w~ Taking out the driver.',
- 'SQRL':'~r~SHOOTER ON THE ROOF - LEFT!~w~ Engaging high.',
- 'SQXB':'~r~SHOTS AT CJ - REAR!~w~ Covering CJ, returning fire.',
- 'SQSB':'~r~SNIPER - REAR!~w~ Keep CJ behind cover!',
- 'SQVB':'~r~CAR INCOMING - REAR!~w~ Taking out the driver.',
- 'SQRB':'~r~SHOOTER ON THE ROOF - REAR!~w~ Engaging high.',
- 'SQXR':'~r~SHOTS AT CJ - RIGHT!~w~ Covering CJ, returning fire.',
- 'SQSR':'~r~SNIPER - RIGHT!~w~ Keep CJ behind cover!',
- 'SQVR':'~r~CAR INCOMING - RIGHT!~w~ Taking out the driver.',
- 'SQRR':'~r~SHOOTER ON THE ROOF - RIGHT!~w~ Engaging high.',
- 'SQCF':'~r~CONTACT FRONT!~w~ Squad engaging.','SQCL':'~r~CONTACT LEFT!~w~ Squad engaging.',
- 'SQCR':'~r~CONTACT RIGHT!~w~ Squad engaging.','SQCB':'~r~CONTACT REAR!~w~ Squad engaging.',
- 'SQAF':'~r~CONTACT FRONT!~w~ Assault: bounding forward, flankers moving.','SQAL':'~r~CONTACT LEFT!~w~ Assault: bounding forward, flankers moving.',
- 'SQAR':'~r~CONTACT RIGHT!~w~ Assault: bounding forward, flankers moving.','SQAB':'~r~CONTACT REAR!~w~ Assault: bounding forward, flankers moving.',
- 'SQCLR':'~g~AREA SECURE.~w~ Squad regrouping on CJ.','SQDOWN':'~r~MAN DOWN!~w~ We lost one of ours.',
- 'SQCOV':'~r~CJ IS HIT!~w~ Shields up - covering CJ.','SQMED':'~g~MEDIC~w~: CJ patched up.',
- 'SQMEDG':'~g~MEDIC~w~: wounded teammate patched up.','SQCAR':'~b~SQUAD~w~: mounting up with CJ.',
- 'SQRLD':'~y~SQUAD~w~: reloading - cover me!','SQCVR':'~y~SQUAD~w~: taking cover, returning fire.',
- 'SQEVAC':'~r~SQUAD~w~: too hot here, CJ is hurt - EVAC recommended!',
-}
+TEXTS={'SQXF': '~r~SHOTS AT CJ - FRONT!~w~ Covering him.',
+ 'SQSF': '~r~SNIPER - FRONT!~w~ Keep CJ in cover.',
+ 'SQVF': '~r~CAR INCOMING - FRONT!~w~ Hitting the driver.',
+ 'SQRF': '~r~ROOF - FRONT!~w~ Shooter up high.',
+ 'SQCF': '~r~CONTACT FRONT!~w~ Squad engaging.',
+ 'SQAF': '~r~CONTACT FRONT!~w~ Assault - moving up.',
+ 'SQXL': '~r~SHOTS AT CJ - LEFT!~w~ Covering him.',
+ 'SQSL': '~r~SNIPER - LEFT!~w~ Keep CJ in cover.',
+ 'SQVL': '~r~CAR INCOMING - LEFT!~w~ Hitting the driver.',
+ 'SQRL': '~r~ROOF - LEFT!~w~ Shooter up high.',
+ 'SQCL': '~r~CONTACT LEFT!~w~ Squad engaging.',
+ 'SQAL': '~r~CONTACT LEFT!~w~ Assault - moving up.',
+ 'SQXB': '~r~SHOTS AT CJ - REAR!~w~ Covering him.',
+ 'SQSB': '~r~SNIPER - REAR!~w~ Keep CJ in cover.',
+ 'SQVB': '~r~CAR INCOMING - REAR!~w~ Hitting the driver.',
+ 'SQRB': '~r~ROOF - REAR!~w~ Shooter up high.',
+ 'SQCB': '~r~CONTACT REAR!~w~ Squad engaging.',
+ 'SQAB': '~r~CONTACT REAR!~w~ Assault - moving up.',
+ 'SQXR': '~r~SHOTS AT CJ - RIGHT!~w~ Covering him.',
+ 'SQSR': '~r~SNIPER - RIGHT!~w~ Keep CJ in cover.',
+ 'SQVR': '~r~CAR INCOMING - RIGHT!~w~ Hitting the driver.',
+ 'SQRR': '~r~ROOF - RIGHT!~w~ Shooter up high.',
+ 'SQCR': '~r~CONTACT RIGHT!~w~ Squad engaging.',
+ 'SQAR': '~r~CONTACT RIGHT!~w~ Assault - moving up.',
+ 'SQCLR': '~g~SQUAD:~w~ area secure, regrouping on CJ.',
+ 'SQDOWN': '~r~MAN DOWN!~w~ We lost one.',
+ 'SQCOV': '~r~CJ IS HIT!~w~ Shields up.',
+ 'SQMED': '~g~MEDIC:~w~ CJ patched up.',
+ 'SQMEDG': '~g~MEDIC:~w~ teammate patched up.',
+ 'SQCAR': '~g~SQUAD:~w~ mounting up.',
+ 'SQRLD': '~g~SQUAD:~w~ reloading!',
+ 'SQCVR': '~g~SQUAD:~w~ taking cover.',
+ 'SQEVAC': '~r~TOO HOT!~w~ CJ is hurt - call ROPE PICKUP.'}
 if __name__=='__main__':
  report=s.build('Helicover_Squad','csa');print(report)
  with (OUT/'validation.txt').open('a') as validation:validation.write(report+'\n')

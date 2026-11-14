@@ -1,4 +1,4 @@
-HELICOVER 1.0 — support helicopter with a smart crew
+HELICOVER 1.1 — support helicopter with a smart crew
 GTA San Andreas (Android), CLEO mod
 
 WHAT IT IS
@@ -38,10 +38,24 @@ CJ on foot: MODE (tap to switch FOLLOW CJ / HOLD POSITION / PATROL AROUND CJ), G
 ROPE PICKUP, DEPLOY TEAM ON FOOT / RECALL TEAM, SETTINGS >, DISMISS HELICOPTER (asks first).
 CJ aboard: FLY TO MAP MARKER, FLY TO GROVE STREET, GET OUT HERE, EXIT BY: LANDING / ROPE.
 The vehicle exit button also works: the helicopter lands or lowers CJ by rope.
+SETTINGS: crew, helicopter, crew weapon, team tactics (BODYGUARD / ASSAULT), exit method,
+MESSAGES: ALL / IMPORTANT / OFF.
+
+MESSAGES
+Calls sound like radio traffic: PILOT (blue), GUNNERS, SQUAD and MEDIC (green), HELICOVER hints
+(yellow), alarms in red capitals ("SHOOTER ON CJ!", "SNIPER - REAR!", "MAYDAY!"). Important calls
+replace less important ones and chatter never covers an alarm, so a fight gives a few clear calls.
+ALL shows everything (reloading, cover, medic, kill counter); IMPORTANT only alarms and tactics;
+OFF is silent except for why a command was refused.
 
 TIPS
 - If it cannot land or hover, move to open, level ground.
 - The Hunter has no passenger seat: no boarding or evacuation with it.
 - Settings last until the game is restarted.
+
+KNOWN LIMITS
+- Running, aiming and small obstacles are handled by the game's own AI.
+- Mobile CLEO cannot tell when CJ crouches or is getting into a car, so the team does not react to that.
+- No lead when firing: GTA bullets hit instantly.
 
 Author: STREDGE. Made together with Claude (Anthropic).

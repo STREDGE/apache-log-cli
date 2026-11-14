@@ -1,111 +1,115 @@
-HCLOAD ~b~HELICOVER~w~: support inbound.
-HCFOLL ~g~HELICOVER~w~: following CJ.
-HCHOLD ~b~HELICOVER~w~: holding position.
-HCDEPT ~b~HELICOVER~w~: departing.
-HCFAIL ~r~HELICOVER~w~: model load failed. Try again.
-HCOUT ~y~HELICOVER~w~: move outdoors to call support.
-HCRWAIT ~y~EVAC~w~: unable to reach a safe hover. Move to open ground and retry.
-HCGCLMB ~y~EVAC~w~: cannot climb safely. Clear obstacles and retry.
-HCMAPOF ~y~EVAC~w~: map marker flight is disabled: it crashes CLEO Android.
+HCLOAD ~b~PILOT:~w~ inbound to your position.
+HCFOLL ~b~PILOT:~w~ following CJ.
+HCHOLD ~b~PILOT:~w~ holding position.
+HCDEPT ~b~PILOT:~w~ heading home. Call us any time.
+HCFAIL ~r~HELICOVER:~w~ could not load the helicopter. Try again.
+HCOUT ~y~HELICOVER:~w~ go outside to call the helicopter.
+HCRWAIT ~y~PILOT:~w~ no safe hover here. Move to open ground and retry.
+HCGCLMB ~y~PILOT:~w~ cannot climb safely here. Retry from open ground.
+HCMAPOF ~y~HELICOVER:~w~ map marker flight is not available.
 HCDBG DBG ~1~
-HCNEED ~y~HELICOVER~w~: call the helicopter first (menu > CALL HELICOPTER).
-HCVER ~y~HELICOVER~w~: map marker flight is not supported on this game version.
-HCNOMAP ~y~EVAC~w~: place a destination marker on the map first.
-HCCHOS ~g~EVAC~w~: above destination. Press the exit button to get out.
-HCAIR ~r~AIR THREAT!~w~ Returning fire on the police chopper.
-HCCONT ~r~CONTACT!~w~ Door gunners engaging.
-HCKILL ~g~TARGET DOWN~w~ - kills: ~1~
-HCCLEAR ~g~AREA CLEAR.~w~ Gunners holding.
-HCFM0 ~y~CEASE FIRE~w~: gunners stand down.
-HCFM1 ~r~WEAPONS FREE~w~: engage everything except the team.
-HCFM2 ~b~FOLLOW YOUR LEAD~w~: gunners fire on your targets.
-HCFM3 ~g~PROTECT CJ~w~: engaging threats to CJ.
-HCFM4 ~p~OVERWATCH~w~: precision fire on armed hostiles.
-HCXROPE ~y~EVAC~w~: no clear landing spot here - using the rope.
-HCNOPAD ~y~EVAC~w~: no flat landing spot - hovering for a rope exit.
-HCXHERE ~g~EVAC~w~: getting out here. Finding a clear spot below.
-HCXARR ~g~EVAC~w~: you will get out on arrival.
-HCXWAIT ~y~EVAC~w~: wait until the helicopter lands or hovers.
-HCDWAIT ~y~EVAC~w~: wait until the helicopter reaches the destination.
-HCPAT ~b~HELICOVER~w~: patrolling around CJ.
-HCAVOID ~y~HELICOVER~w~: path blocked; holding for a clear route.
-HCROPE ~b~EVAC~w~: helicopter approaching for rope pickup.
-HCEVAC ~b~EVAC~w~: landing nearby. Choose open, level ground.
-HCTEAM ~g~HELICOVER~w~: crew guarding the helicopter. Get in when you are ready to go.
-HCBOARD ~g~HELICOVER~w~: CJ aboard. Open the menu and choose where to fly.
-HCGROVE ~g~EVAC~w~: team aboard. Heading to the Grove Street circle.
-HCHOME ~b~EVAC~w~: approaching Grove Street.
-HCARRIV ~g~HELICOVER~w~: landed. Press the exit button to get out.
-HCDAMAG ~r~HELICOVER~w~: critical damage. Retreating.
-HCMUST ~b~EVAC~w~: team returning. Departure waits for living guards.
-HCEMERG ~r~EVAC~w~: critical damage. Attempting a nearby emergency landing.
-HCNOSEA ~y~EVAC~w~: Hunter has no passenger seat. Use Maverick or Police Maverick.
-HCNOSIT ~y~EVAC~w~: landing site is obstructed or uneven. Move to open ground and retry.
-HCFAR ~y~EVAC~w~: get within 12 metres of the landed helicopter.
-HCWAIT ~y~EVAC~w~: waiting for the flank team. Clear their path or repeat the command.
-HCIN ~y~HELICOVER~w~: get in the helicopter first.
-HCOFF ~r~HELICOVER~w~: files missing. Copy all 7 files to the CLEO folder and restart the game.
-HCSWAP ~b~HELICOVER~w~: helicopter changed. Crew and CJ transferred.
-HCSNO ~y~HELICOVER~w~: Hunter has no passenger seat. CJ must leave first.
-HCSFAIL ~r~HELICOVER~w~: change failed; the current helicopter was kept.
-HCCREW ~g~HELICOVER~w~: crew changed in place.
-HCCFAIL ~r~HELICOVER~w~: crew change failed. Existing crew kept.
-HCBLOCK ~y~EVAC~w~: landing unavailable. Clear the area and retry or choose FOLLOW CJ.
-HCLOSE ~y~EVAC~w~: land first before boarding or leaving.
-HCEXIT ~y~HELICOVER~w~: get out of the helicopter first.
-SQALR ~y~SQUAD~w~: the team is already on the ground.
-SQNONE ~y~SQUAD~w~: no team on the ground.
-SQFOOT ~y~SQUAD~w~: CJ must be on foot to receive the team.
-SQCREW ~y~SQUAD~w~: wait until the crew is back aboard.
-HCFOCUS ~r~SHOOTER ON CJ!~w~ Gunners focusing fire on him.
-HCEVADE ~r~HELICOVER~w~: taking fire - evasive manoeuvre.
-HCSHOT ~r~HELICOVER~w~: rounds on the helicopter - breaking away.
-RGDEP SWAT: descending. Stay near the helicopter.
-RGDONE SWAT: ground team withdrawn.
-RGFAIL SWAT: model unavailable or heli moving.
-RGHOLD SWAT: use HOLD POSITION first.
-RGHIGH SWAT: heli must hover 12-22m above ground.
-RGMOVE SWAT: wait until the helicopter is nearly still.
-RGBLOCK SWAT: choose a clear open area.
-RGUP EVAC: ascending.
-RGABO EVAC: aboard. Team returning.
-RGSEAT EVAC: passenger seat unavailable.
-RGANIM EVAC: animation unavailable.
-RPDFAIL EVAC: rope descent unavailable here.
-SQIN ~g~SQUAD~w~: team on the ground. Escorting CJ.
-SQBACK ~g~SQUAD~w~: team back aboard.
-SQLOST ~r~SQUAD~w~: escort team lost.
-SQCOVER ~g~SQUAD~w~: team covering your extraction.
-SQXF ~r~SHOTS AT CJ - FRONT!~w~ Covering CJ, returning fire.
-SQSF ~r~SNIPER - FRONT!~w~ Keep CJ behind cover!
-SQVF ~r~CAR INCOMING - FRONT!~w~ Taking out the driver.
-SQRF ~r~SHOOTER ON THE ROOF - FRONT!~w~ Engaging high.
-SQXL ~r~SHOTS AT CJ - LEFT!~w~ Covering CJ, returning fire.
-SQSL ~r~SNIPER - LEFT!~w~ Keep CJ behind cover!
-SQVL ~r~CAR INCOMING - LEFT!~w~ Taking out the driver.
-SQRL ~r~SHOOTER ON THE ROOF - LEFT!~w~ Engaging high.
-SQXB ~r~SHOTS AT CJ - REAR!~w~ Covering CJ, returning fire.
-SQSB ~r~SNIPER - REAR!~w~ Keep CJ behind cover!
-SQVB ~r~CAR INCOMING - REAR!~w~ Taking out the driver.
-SQRB ~r~SHOOTER ON THE ROOF - REAR!~w~ Engaging high.
-SQXR ~r~SHOTS AT CJ - RIGHT!~w~ Covering CJ, returning fire.
-SQSR ~r~SNIPER - RIGHT!~w~ Keep CJ behind cover!
-SQVR ~r~CAR INCOMING - RIGHT!~w~ Taking out the driver.
-SQRR ~r~SHOOTER ON THE ROOF - RIGHT!~w~ Engaging high.
+HCNEED ~y~HELICOVER:~w~ call the helicopter first.
+HCVER ~y~HELICOVER:~w~ map marker is not supported on this game version.
+HCNOMAP ~y~HELICOVER:~w~ put a marker on the map first.
+HCCHOS ~b~PILOT:~w~ over the destination. Press exit to get out.
+HCAIR ~r~POLICE CHOPPER!~w~ Gunners returning fire.
+HCCONT ~r~CONTACT!~w~ Gunners engaging.
+HCKILL ~g~TARGET DOWN~w~ ~1~
+HCCLEAR ~g~GUNNERS:~w~ area clear.
+HCFM0 ~y~GUNNERS:~w~ cease fire.
+HCFM1 ~r~GUNNERS:~w~ weapons free - anyone but us is a target.
+HCFM2 ~b~GUNNERS:~w~ firing on your targets.
+HCFM3 ~g~GUNNERS:~w~ protecting CJ.
+HCFM4 ~p~GUNNERS:~w~ overwatch - armed hostiles only.
+HCXROPE ~b~PILOT:~w~ no landing spot here - going down by rope.
+HCNOPAD ~b~PILOT:~w~ no flat spot - hovering for a rope exit.
+HCXHERE ~b~PILOT:~w~ finding a clear spot to let you out.
+HCXARR ~b~PILOT:~w~ you will get out on arrival.
+HCXWAIT ~y~PILOT:~w~ wait until we land or hover.
+HCDWAIT ~y~PILOT:~w~ wait until we reach the destination.
+HCPAT ~b~PILOT:~w~ patrolling around CJ.
+HCAVOID ~y~PILOT:~w~ route blocked - holding for a clear path.
+HCROPE ~b~PILOT:~w~ moving in - walk to the rope.
+HCRTEAM ~b~PILOT:~w~ moving in to drop the team.
+HCRBACK ~b~PILOT:~w~ moving in to pick up the team.
+HCEVAC ~b~PILOT:~w~ landing nearby.
+HCTEAM ~g~SQUAD:~w~ guarding the helicopter. Get in when ready.
+HCBOARD ~b~PILOT:~w~ CJ aboard. Open the menu and pick a destination.
+HCGROVE ~b~PILOT:~w~ heading to Grove Street.
+HCHOME ~b~PILOT:~w~ approaching Grove Street.
+HCARRIV ~b~PILOT:~w~ landed. Press exit to get out.
+HCDAMAG ~r~MAYDAY!~w~ Critical damage - pulling out.
+HCMUST ~b~PILOT:~w~ waiting for the crew to get back aboard.
+HCEMERG ~r~MAYDAY!~w~ Critical damage - emergency landing.
+HCNOSEA ~y~HELICOVER:~w~ the Hunter has no passenger seat.
+HCNOSIT ~y~PILOT:~w~ cannot land here. Move to open, level ground.
+HCFAR ~y~PILOT:~w~ come within 12 m of the helicopter.
+HCWAIT ~y~PILOT:~w~ waiting for the crew. Clear their path.
+HCIN ~y~HELICOVER:~w~ get in the helicopter first.
+HCOFF ~r~HELICOVER:~w~ files missing. Copy all 7 files to CLEO and restart.
+HCSWAP ~b~PILOT:~w~ helicopter changed.
+HCSNO ~y~HELICOVER:~w~ the Hunter has no passenger seat - get out first.
+HCSFAIL ~r~HELICOVER:~w~ change failed, kept the current helicopter.
+HCCREW ~g~HELICOVER:~w~ crew changed.
+HCCFAIL ~r~HELICOVER:~w~ crew change failed, kept the current crew.
+HCBLOCK ~y~PILOT:~w~ cannot land here. Choose open ground or FOLLOW CJ.
+HCLOSE ~y~PILOT:~w~ land first.
+HCEXIT ~y~HELICOVER:~w~ get out of the helicopter first.
+SQALR ~y~SQUAD:~w~ the team is already on the ground.
+SQNONE ~y~SQUAD:~w~ no team on the ground.
+SQFOOT ~y~SQUAD:~w~ CJ must be on foot to receive the team.
+SQCREW ~y~SQUAD:~w~ wait until the crew is back aboard.
+HCFOCUS ~r~SHOOTER ON CJ!~w~ Gunners focusing fire.
+HCEVADE ~r~TAKING HITS!~w~ Pilot breaking away.
+HCSHOT ~r~TAKING FIRE!~w~ Pilot breaking away.
+HCHELLO ~b~HELICOVER 1.1~w~ ready. CLEO menu > Helicover.
+HCHELLV ~b~HELICOVER 1.1~w~ ready. Map marker off on this game version.
+RGDEP ~b~PILOT:~w~ team going down the ropes.
+RGDONE ~g~SQUAD:~w~ team back aboard.
+RGFAIL ~r~HELICOVER:~w~ could not load the team.
+RGHOLD ~y~PILOT:~w~ need a steady hover first.
+RGHIGH ~y~PILOT:~w~ wrong height for ropes. Try open ground.
+RGMOVE ~y~PILOT:~w~ wait until we are steady.
+RGBLOCK ~y~PILOT:~w~ no clear drop zone. Try open ground.
+RGUP ~b~PILOT:~w~ pulling you up.
+RGABO ~b~PILOT:~w~ CJ aboard. Team climbing up.
+RGSEAT ~y~PILOT:~w~ no free seat.
+RGANIM ~y~HELICOVER:~w~ rope animation unavailable.
+RPDFAIL ~y~PILOT:~w~ cannot lower the rope here. Try another spot.
+SQIN ~g~SQUAD:~w~ on the ground. Escorting CJ.
+SQBACK ~g~SQUAD:~w~ team back aboard.
+SQLOST ~r~SQUAD LOST!~w~ The escort team is down.
+SQCOVER ~g~SQUAD:~w~ covering your extraction.
+SQXF ~r~SHOTS AT CJ - FRONT!~w~ Covering him.
+SQSF ~r~SNIPER - FRONT!~w~ Keep CJ in cover.
+SQVF ~r~CAR INCOMING - FRONT!~w~ Hitting the driver.
+SQRF ~r~ROOF - FRONT!~w~ Shooter up high.
 SQCF ~r~CONTACT FRONT!~w~ Squad engaging.
+SQAF ~r~CONTACT FRONT!~w~ Assault - moving up.
+SQXL ~r~SHOTS AT CJ - LEFT!~w~ Covering him.
+SQSL ~r~SNIPER - LEFT!~w~ Keep CJ in cover.
+SQVL ~r~CAR INCOMING - LEFT!~w~ Hitting the driver.
+SQRL ~r~ROOF - LEFT!~w~ Shooter up high.
 SQCL ~r~CONTACT LEFT!~w~ Squad engaging.
-SQCR ~r~CONTACT RIGHT!~w~ Squad engaging.
+SQAL ~r~CONTACT LEFT!~w~ Assault - moving up.
+SQXB ~r~SHOTS AT CJ - REAR!~w~ Covering him.
+SQSB ~r~SNIPER - REAR!~w~ Keep CJ in cover.
+SQVB ~r~CAR INCOMING - REAR!~w~ Hitting the driver.
+SQRB ~r~ROOF - REAR!~w~ Shooter up high.
 SQCB ~r~CONTACT REAR!~w~ Squad engaging.
-SQAF ~r~CONTACT FRONT!~w~ Assault: bounding forward, flankers moving.
-SQAL ~r~CONTACT LEFT!~w~ Assault: bounding forward, flankers moving.
-SQAR ~r~CONTACT RIGHT!~w~ Assault: bounding forward, flankers moving.
-SQAB ~r~CONTACT REAR!~w~ Assault: bounding forward, flankers moving.
-SQCLR ~g~AREA SECURE.~w~ Squad regrouping on CJ.
-SQDOWN ~r~MAN DOWN!~w~ We lost one of ours.
-SQCOV ~r~CJ IS HIT!~w~ Shields up - covering CJ.
-SQMED ~g~MEDIC~w~: CJ patched up.
-SQMEDG ~g~MEDIC~w~: wounded teammate patched up.
-SQCAR ~b~SQUAD~w~: mounting up with CJ.
-SQRLD ~y~SQUAD~w~: reloading - cover me!
-SQCVR ~y~SQUAD~w~: taking cover, returning fire.
-SQEVAC ~r~SQUAD~w~: too hot here, CJ is hurt - EVAC recommended!
+SQAB ~r~CONTACT REAR!~w~ Assault - moving up.
+SQXR ~r~SHOTS AT CJ - RIGHT!~w~ Covering him.
+SQSR ~r~SNIPER - RIGHT!~w~ Keep CJ in cover.
+SQVR ~r~CAR INCOMING - RIGHT!~w~ Hitting the driver.
+SQRR ~r~ROOF - RIGHT!~w~ Shooter up high.
+SQCR ~r~CONTACT RIGHT!~w~ Squad engaging.
+SQAR ~r~CONTACT RIGHT!~w~ Assault - moving up.
+SQCLR ~g~SQUAD:~w~ area secure, regrouping on CJ.
+SQDOWN ~r~MAN DOWN!~w~ We lost one.
+SQCOV ~r~CJ IS HIT!~w~ Shields up.
+SQMED ~g~MEDIC:~w~ CJ patched up.
+SQMEDG ~g~MEDIC:~w~ teammate patched up.
+SQCAR ~g~SQUAD:~w~ mounting up.
+SQRLD ~g~SQUAD:~w~ reloading!
+SQCVR ~g~SQUAD:~w~ taking cover.
+SQEVAC ~r~TOO HOT!~w~ CJ is hurt - call ROPE PICKUP.
