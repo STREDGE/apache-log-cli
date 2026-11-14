@@ -69,10 +69,10 @@ for k,t in enumerate(team):w.pos[t]=[BG[k][0],BG[k][1],0.]
 hostile=950;w.exists.add(hostile);w.pos[hostile]=[20.,0.,0.];w.pedtype[hostile]=7;w.weapons[hostile]=30;w.civilians=[hostile];w.damage.add((1,hostile))
 w.calls.clear();w.messages.clear();steps(w,V,6)
 assert w.shared[b.SQ_T]==hostile and w.shared[b.SQ_THREATS]==1 and 'SQCR' in w.messages,(w.shared[b.SQ_T],w.messages)
-o=last(w,0x5d3,team[1]);assert abs(o[1]-2.)<.01 and abs(o[2]+1.3)<.01 and o[4]==6,o
+o=last(w,0x637,team[1]);assert abs(o[1]-2.)<.01 and abs(o[2]+1.3)<.01 and o[4]==6 and o[7]==hostile,o
 assert last(w,0x74d,team[2])[1]==hostile  # already within 1.4 m of his shield point (2, 1.3)
 assert last(w,0x634,team[0])[1]==hostile and last(w,0x634,team[3])[1]==hostile
-passed('Contact right: shields step between CJ and the threat, the other two fight crouched')
+passed('Contact right: shields step between CJ and the threat firing on the move, the other two fight crouched')
 w.pos[team[1]]=[2.,-1.3,0.];w.pos[team[2]]=[2.,1.3,0.];steps(w,V,3)
 assert last(w,0x74d,team[1])[1]==hostile and last(w,0x74d,team[2])[1]==hostile
 w.calls.clear();steps(w,V,8)
@@ -84,7 +84,7 @@ passed('Bodyguard leash: an engager more than 14 m from CJ returns to his slot i
 w.pos[team[0]]=[0.,3.2,0.];w.health[1]=30;w.messages.clear();w.calls.clear();steps(w,V,6)
 ring=[(0.,-1.5),(-1.2,-.6),(1.2,-.6),(0.,1.2)]  # u = (0,-1): threat behind CJ
 for k,t in enumerate(team):
- o=[x for x in orders(w,0x5d3,t)]+[]
+ o=orders(w,0x637,t)
  if o:assert abs(o[-1][1]-ring[k][0])<.01 and abs(o[-1][2]-ring[k][1])<.01,(k,o[-1])
 assert w.messages.count('SQCOV')==1
 steps(w,V,40);assert w.messages.count('SQCOV')==1
@@ -160,15 +160,30 @@ passed('Rope pickup with the team on the ground: the same team covers CJ (only t
 w,c,ground,sq,team=escort_world(tactics=1);V=(c,ground,sq)
 for k,t in enumerate(team):w.pos[t]=list(sqb.AS_FORM[k])+[0.]
 hostile=950;w.exists.add(hostile);w.pos[hostile]=[30.,0.,0.];w.pedtype[hostile]=7;w.weapons[hostile]=30;w.civilians=[hostile];w.damage.add((1,hostile))
-w.calls.clear();steps(w,V,6)
-assert last(w,0x634,team[0])[1]==hostile and last(w,0x634,team[1])[1]==hostile
-o=last(w,0x5d3,team[2]);assert abs(o[1]-30.)<.01 and abs(o[2]+9.)<.01 and o[4]==7,o
-o=last(w,0x5d3,team[3]);assert abs(o[1]-30.)<.01 and abs(o[2]-9.)<.01 and o[4]==7,o
+w.now=(w.now//3000+1)*3000+100;w.calls.clear();w.messages.clear();steps(w,V,6)
+mover,cover=(team[0],team[1]) if (w.now//3000)%2==0 else (team[1],team[0])
+o=last(w,0x637,mover);g0=w.pos[mover];step=min(math.dist(g0[:2],[30.,0.])-8.,6.)
+assert o[7]==hostile and abs(math.dist(o[1:3],g0[:2])-step)<.05 and math.dist(o[1:3],[30.,0.])<math.dist(g0[:2],[30.,0.]),o
+assert last(w,0x634,cover)[1]==hostile and not orders(w,0x637,cover)
+assert 'SQAR' in w.messages,w.messages
+o=last(w,0x637,team[2]);assert abs(o[1]-30.)<.01 and abs(o[2]+9.)<.01 and o[4]==6 and o[7]==hostile,o
+o=last(w,0x637,team[3]);assert abs(o[1]-30.)<.01 and abs(o[2]-9.)<.01 and o[7]==hostile,o
+passed('Assault contact: one man bounds forward firing while his partner covers crouched; flankers move out firing')
+w.now+=3000;w.calls.clear();steps(w,V,4)
+assert orders(w,0x637,cover) and last(w,0x634,mover)[1]==hostile
+passed('Bounding overwatch: every 3 s the pair swaps who moves and who covers')
 w.pos[team[2]]=[29.,-8.,0.];w.calls.clear();steps(w,V,3);assert last(w,0x7a5,team[2])[1]==hostile
-passed('Assault: one pair advances crouched, the other flanks 9 m to each side and attacks')
+passed('A flanker who reached his flank point attacks from there')
 w.pos[team[0]]=[0.,60.,0.];w.calls.clear();steps(w,V,3)
 o=last(w,0x5d3,team[0]);assert o[4]==7 and abs(o[2]-sqb.AS_FORM[0][1])<.01,o
 passed('Assault leash: nobody pushes more than 40 m away from CJ')
+w.dead.add(hostile);w.now+=5000
+for k,t in enumerate(team):w.pos[t]=list(sqb.AS_FORM[k])+[0.]
+w.calls.clear();steps(w,V,8)
+for k,t in enumerate(team):
+ o=last(w,0x667,t);assert (round(o[1],2),round(o[2],2))==sqb.AS_AIM[k] and o[4]==1200,(k,o)
+w.now+=1100;steps(w,V,3);assert all(last(w,0x4eb,t)[1]==1 for t in team)
+passed('Assault holding: each man faces his sector, then takes a knee')
 # ------------------------------------------------------------------ rules of engagement
 def roe(fire,typ=7,weapon=30,shooting=False,attacker=False,wanted=0,targeting=False,pos=(15.,0.,0.)):
  w,c,ground,sq,team=escort_world(fire=fire);V=(c,ground,sq);w.wanted=wanted
@@ -220,6 +235,22 @@ passed('After a crouched fight the guard stands up before moving on')
 w.interior=3;w.pos[team[1]]=[0.,-30.,0.];w.calls.clear();steps(w,V,6);assert not any(orders(w,op,t) for t in team for op in (0x5d3,0xa1,0x5f5,0x667))
 w.interior=0
 passed('CJ inside an interior: the team waits outside instead of teleporting after him')
+w,c,ground,sq,team=escort_world();V=(c,ground,sq)
+hostile=951;w.exists.add(hostile);w.pos[hostile]=[25.,25.,0.];w.pedtype[hostile]=7;w.weapons[hostile]=30;w.damage.add((1,hostile));w.civilians=[]
+w.shared[b.FIRE_TARGET]=hostile;steps(w,V,6);assert w.shared[b.SQ_T]==hostile
+passed('The squad also engages whatever the door gunners are firing at')
+# fence: knee-high blocked, head-high clear, flat ground behind it -> climb over
+w,c,ground,sq,team=escort_world();V=(c,ground,sq)
+for k,t in enumerate(team):w.pos[t]=[BG[k][0],BG[k][1],1.]
+w.pos[team[0]]=[0.,-12.,1.];steps(w,V,3);assert last(w,0x5d3,team[0])
+w.los_fn=lambda a,z:not(a[2]<.6 and z[2]<.6)
+w.calls.clear();steps(w,V,3)
+assert orders(w,0x78f,team[0]) and abs(w.actor_heading[team[0]]-0.)<.5,(orders(w,0x78f,team[0]),w.actor_heading[team[0]])
+passed('A fence in the way: the guard turns to it and climbs over')
+w,c,ground,sq,team=escort_world();V=(c,ground,sq)
+w.pos[team[0]]=[0.,-12.,1.];steps(w,V,3);w.los_fn=lambda a,z:not(a[2]<.6 and z[2]<.6);w.ground_fn=lambda x,y,z:1. if y>-10.5 else 0.
+w.calls.clear();steps(w,V,3);assert not orders(w,0x78f,team[0])
+passed('Stairs or a slope are walked, not vaulted')
 # ------------------------------------------------------------------ menu
 w,c,p=setup(True);launch=VM('Helicover',w);summon(w,c);w.step(c,p,launch,n=15)
 w.events.append(3);w.step(c,p,n=4);assert w.menu[-2]==b'TEAM ON FOOT >' and w.menu[-1]==b'< BACK'
@@ -255,6 +286,11 @@ passed('CJ driving fast: the helicopter switches to the native chase')
 fw=g['fire_world'];w,c,f=fw();npc=g['target'](w,typ=7,skin=20);w.damage.add((1,npc));w.los_fn=lambda a,z:False;w.step(c,f,n=12)
 m=[x[2] for x in calls(w,0x4a2) if abs(x[2][5]-70.)<.01][-1];assert abs(m[3]-(w.pos[npc][2]+40.))<.01,m
 passed('Combat orbit: a point without a view of the threat is flown 15 m higher and the next one is tried')
+pts=[];n=len(calls(w,0x4a2))
+for _ in range(30):w.step(c,f)
+pts={(round(x[2][1]),round(x[2][2])) for x in calls(w,0x4a2)[n:] if abs(x[2][5]-70.)<.01}
+assert len(pts)<=4,pts
+passed('Combat orbit with no clear view moves on at most every 1.2 s instead of thrashing every tick')
 
 text='\n'.join(results)+'\nMocked script execution only: real pathing, cover and gunfire are not tested.\n'
 (b.OUT/'squad_tests.txt').write_text(text);print(text)
