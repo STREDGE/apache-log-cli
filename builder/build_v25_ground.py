@@ -70,16 +70,16 @@ s.go('ACTIVE')
 # The reverse clip is cosmetic; vertical position is moved explicitly.
 s.label('CJ_ASCENT');s.check(0x0431,[V(1),I(0)],'NO_SEAT');s.check(0x04ee,[S('PED')],'ANIM_FAIL');s.check(0x056e,[V(1)],'CLEANUP');s.get(19,b.STATE);s.eq(19,3,'CLEANUP')
 # Save a ground position for cancellation and disable player control only during ascent.
-a(0x0407,V(1),F(0),F(-3),F(-1),V(2),V(3),V(4));a(0x02ce,V(2),V(3),V(4),V(4));a(0x000b,V(4),F(.7));a(0x0087,V(8),V(4));a(0x00aa,V(1),V(10),V(11),V(9));a(0x000b,V(9),F(-1));a(0x0063,V(9),V(8));a(0x0013,V(9),F(1000.0/1800.0));a(0x01b4,I(0),I(0));a(6,V(26),I(1))
+a(0x0407,V(1),F(0),F(-3),F(-1),V(2),V(3),V(4));a(0x02ce,V(2),V(3),V(4),V(4));a(0x000b,V(4),F(.7));a(0x0087,V(8),V(4));a(0x00aa,V(1),V(10),V(11),V(9));a(0x000b,V(9),F(-3));a(0x0063,V(9),V(8));a(0x0013,V(9),F(1000.0/1500.0));a(0x01b4,I(0),I(0));a(6,V(26),I(1))
 # v33: no snap to the rope point (that was the abrupt frame change). CJ drifts onto the rope line
 # during the climb (5@/7@ horizontal speed) and the clip blends in more slowly.
-a(0x00a0,V(0),V(12),V(13),V(14));a(0x0087,V(5),V(2));a(0x0063,V(5),V(12));a(0x0013,V(5),F(1000.0/1800.0));a(0x0087,V(7),V(3));a(0x0063,V(7),V(13));a(0x0013,V(7),F(1000.0/1800.0))
+a(0x00a0,V(0),V(12),V(13),V(14));a(0x0087,V(5),V(2));a(0x0063,V(5),V(12));a(0x0013,V(5),F(1000.0/1500.0));a(0x0087,V(7),V(3));a(0x0063,V(7),V(13));a(0x0013,V(7),F(1000.0/1500.0))
 a(0x0605,V(0),S('ABSEIL'),S('PED'),F(2),I(1),I(1),I(1),I(1),I(-1));a(1,I(100));s.check(0x0611,[V(0),S('ABSEIL')],'CJ_ANIM_NOT_RUNNING');a(0x0614,V(0),S('ABSEIL'),F(.99));a(0x0393,V(0),S('ABSEIL'),F(-1));s.label('CJ_ANIM_NOT_RUNNING')
 plat_create()
 a(0x01bd,V(16));a(0x03e5,S('RGUP'))
-s.label('CJ_UP_TICK');a(1,I(0));s.check(0x0256,[I(0)],'ASCENT_ABORT');s.check(0x056d,[V(0)],'ASCENT_ABORT');s.check(0x8118,[V(0)],'ASCENT_ABORT');s.check(0x056e,[V(1)],'ASCENT_ABORT');s.check(0x8119,[V(1)],'ASCENT_ABORT');s.get(19,b.STATE);s.eq(19,3,'ASCENT_ABORT');a(0x01bd,V(15));a(0x0062,V(15),V(16));s.check(0x0019,[V(15),I(1800)],'CJ_TIME_READY');a(6,V(15),I(1800));s.label('CJ_TIME_READY');s.check(0x0611,[V(0),S('ABSEIL')],'CJ_FRAME_ANIM_SKIP');a(0x0093,V(11),V(15));a(0x0013,V(11),F(1.0/1800.0));a(0x0007,V(12),F(1));a(0x0063,V(12),V(11));a(0x0614,V(0),S('ABSEIL'),V(12));s.label('CJ_FRAME_ANIM_SKIP')
+s.label('CJ_UP_TICK');a(1,I(0));s.check(0x0256,[I(0)],'ASCENT_ABORT');s.check(0x056d,[V(0)],'ASCENT_ABORT');s.check(0x8118,[V(0)],'ASCENT_ABORT');s.check(0x056e,[V(1)],'ASCENT_ABORT');s.check(0x8119,[V(1)],'ASCENT_ABORT');s.get(19,b.STATE);s.eq(19,3,'ASCENT_ABORT');a(0x01bd,V(15));a(0x0062,V(15),V(16));s.check(0x0019,[V(15),I(1500)],'CJ_TIME_READY');a(6,V(15),I(1500));s.label('CJ_TIME_READY');s.check(0x0611,[V(0),S('ABSEIL')],'CJ_FRAME_ANIM_SKIP');a(0x0093,V(11),V(15));a(0x0013,V(11),F(1.0/1500.0));a(0x0007,V(12),F(1));a(0x0063,V(12),V(11));a(0x0614,V(0),S('ABSEIL'),V(12));s.label('CJ_FRAME_ANIM_SKIP')
 plat_follow()
-a(0x083c,V(0),V(5),V(7),V(9));s.check(0x0019,[V(15),I(1799)],'CJ_UP_TICK');a(0x083c,V(0),F(0),F(0),F(0))
+a(0x083c,V(0),V(5),V(7),V(9));s.check(0x0019,[V(15),I(1499)],'CJ_UP_TICK');a(0x083c,V(0),F(0),F(0),F(0))
 plat_delete()
 s.check(0x0431,[V(1),I(0)],'ASCENT_ABORT');a(0x0430,V(0),V(1),I(0));s.check(0x0448,[V(0),V(1)],'ASCENT_ABORT');a(0x01b4,I(0),I(1));a(6,V(26),I(0));a(0x03e5,S('RGABO'))
 # v33: once CJ is aboard the four rope guards return together: sprint to their ropes (<= 2.5 s),

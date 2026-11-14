@@ -52,7 +52,7 @@ PASS: Rope descent keeps an invisible platform under CJ so the game never starts
 PASS: Pickup waits until every rope guard is on the ground
 PASS: Rope guards return together and fast; CJ drifts onto the rope without a snap
 PASS: Assembler rejects both inverted literal/local comparison forms
-PASS: CJ ascent advances smoothly over about 1.8 seconds at two frame rates
+PASS: CJ ascent advances smoothly over about 1.5 seconds at two frame rates
 PASS: Only guards who reach the ground receive running formation tasks
 PASS: Cruise climbs in place before passing tall buildings
 PASS: Cruise accelerates smoothly to about 3x speed at a fixed clearance

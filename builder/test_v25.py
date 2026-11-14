@@ -580,12 +580,12 @@ for frame_ms in [16,33]:
  motion=[x for x in calls(w,0x83c) if x[2][0]==1]
  assert len(motion)>40,(frame_ms,len(motion))
  assert all(x[2][3]>0 for x in motion[:-1]) and motion[-1][2][3]==0
- assert 1700 <= motion[-1][0]-motion[0][0] <= 1900,(frame_ms,motion[-1][0]-motion[0][0])
+ assert 1400 <= motion[-1][0]-motion[0][0] <= 1600,(frame_ms,motion[-1][0]-motion[0][0])  # v34: 1.5 s climb
  assert not [x for x in calls(w,0xa1) if x[2][0]==1]  # v33: no snap to the rope point
  assert all(abs(x[2][1])<1e-6 and abs(x[2][2])<1e-6 for x in motion)  # CJ already on the rope line in this test
  frames=[x[2][2] for x in calls(w,0x614) if x[2][0]==1]
  assert len(frames)>40 and frames[-1]<frames[1]
-passed('CJ ascent advances smoothly over about 1.8 seconds at two frame rates')
+passed('CJ ascent advances smoothly over about 1.5 seconds at two frame rates')
 # Landing recognition must not interrupt SWAT rope tasks in the air.
 w,c,_=setup();summon(w,c);command(w,c,3,ticks=5);w.car=[0.,0.,15.];w.speed=0
 ground=VM('Helicover_Ground',w);w.step(c,ground,n=3);w.shared[b.ROPE_COMMAND]=1;w.step(c,ground,n=6)
@@ -728,6 +728,7 @@ for _ in range(120):
  w.step(c)
  if w.shared[b.STATE]!=22:break
 assert w.shared[b.STATE]==23 and abs(w.car[2]-(w.shared[b.DEST_Z]+18.))<.05 and [w.car[0],w.car[1]]==[w.shared[b.DEST_X],w.shared[b.DEST_Y]],w.car
+assert not w.frozen.get(c.v[5]) and w.shared[b.FROZEN]==0,'v34: native hover while waiting'
 passed('Destination approach cruises over the pad and sinks vertically to a hover')
 
 # The pilot brings a distant active target into view while following CJ.
