@@ -7,6 +7,7 @@ HCOUT ~y~HELICOVER~w~: move outdoors to call support.
 HCRWAIT ~y~EVAC~w~: unable to reach a safe hover. Move to open ground and retry.
 HCGCLMB ~y~EVAC~w~: cannot climb safely. Clear obstacles and retry.
 HCMAPOF ~y~EVAC~w~: map marker flight is disabled: it crashes CLEO Android.
+HCDBG DBG ~1~
 HCNOMAP ~y~EVAC~w~: place a destination marker on the map first.
 HCCHOS ~g~EVAC~w~: above destination. Choose LAND or ROPE EXIT.
 HCDWAIT ~y~EVAC~w~: wait until the helicopter reaches the destination.
