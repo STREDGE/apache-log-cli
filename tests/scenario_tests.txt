@@ -1,0 +1,64 @@
+PASS: Pickup requests native landing with reduced approach altitude/thrust/speed and vehicle marker
+PASS: Guard deployment waits for stable pickup; pilot stays in helicopter
+PASS: Obstructed pickup does not issue a landing order
+PASS: Uneven pickup is rejected
+PASS: Full pickup -> team muster -> Grove flight -> detected landing -> CJ leaves
+PASS: Grove chooses a nearby point in the circle when the centre is obstructed
+PASS: Unloaded/invalid Grove ground times out with status; CJ remains safely aboard
+PASS: Stalled approach reports blocked without restarting the mission or teleporting
+PASS: Final descent is ordered once after coming close and slow
+PASS: Changing helicopter or crew resumes the same native landing
+PASS: Evacuation menu updates status while it is open
+PASS: Existing protection worker still issues target tasks for a simulated attacker
+PASS: Existing protection worker still excludes Grove actors in the mock
+PASS: Fire mode selection still enables and stops issuing tasks in the mock
+PASS: All four onboard guards remain attached after Grove and follow takeoff
+PASS: Takeoff-follow requests CJ to exit; no unintended hover with CJ aboard
+PASS: Follow-shots finds the game auto-aim target instead of the first nearby NPC
+PASS: Evacuation menu exposes the new takeoff command
+PASS: Protect CJ and cease-fire remain active after aim and takeoff changes
+PASS: Weapon menu changes all four live guards to MP5
+PASS: Crew-based automatic weapon selection can be restored
+PASS: All weapon selections update the four guards in the mock
+PASS: Gesture activation is removed; CLEO menu invocation still opens the panel
+PASS: Rope insertion creates four additional guards while aircraft guards remain attached
+PASS: Evacuation menu exposes rope insertion
+PASS: Protect CJ does not target a member of the ground team
+PASS: Ground team receives CJ-relative formation tasks after descent
+PASS: Ground team attacks the hostile selected by Protect CJ in the mock
+PASS: Leaving hold removes the temporary ground squad and clears friendly handles
+PASS: Insertion is rejected unless helicopter is holding
+PASS: Fifth rope proximity triggers simulated reverse ascent, restores CJ control and returns four guards
+PASS: Interrupting player ascent restores control and the last ground position
+PASS: CJ ascent avoids new animation streaming and tolerates an unavailable animation task
+PASS: Missing resident PED animation cancels safely before disabling CJ control
+PASS: Fire worker omits passenger getter implicated by the AML crash log
+PASS: Rope command approaches a clear site, then starts deployment when hovering
+PASS: Rope command summons helicopter when no support is active
+PASS: CLEO menu rope action summons and starts the approach
+PASS: Rope approach rejects blocked sites without spawning the team
+PASS: At elevated terrain, hovering 4m from pickup starts deployment at safe height
+PASS: Fifth rope is created during guard descent rather than waiting for it to end
+PASS: A stalled rope approach reports failure after 35 seconds
+PASS: Assembler rejects both inverted literal/local comparison forms
+PASS: CJ ascent advances smoothly over about 1.8 seconds at two frame rates
+PASS: Only guards who reach the ground receive running formation tasks
+PASS: Grove flight waits for safe climb and reports a stalled ascent
+PASS: Guards keep selected weapons in cease fire and without CJ shooting
+PASS: Map marker -> hover -> selected rope descent restores CJ control and preserves onboard team
+PASS: Map flight rejects an absent marker
+PASS: Four guards acquire separate eligible threats when available, with stronger checked bullets
+PASS: Map destination searches a nearby clear landing footprint
+PASS: Blocked descent shaft leaves CJ aboard with control enabled
+PASS: Patrol changes position around CJ and can return to follow
+PASS: Patrol summons a helicopter if none is active
+PASS: Follow reissues its order if the helicopter is far from CJ
+PASS: Marked destination hover -> choose landing preserves CJ aboard
+PASS: Target distribution excludes Grove and the additional ground squad
+PASS: CLEO setup menu starts patrol
+PASS: CLEO evacuation menu starts the marked route
+PASS: Blocked forward cruise chooses a side detour then resumes the Grove route
+PASS: When both detours are obstructed, cruise reports a blocked route
+PASS: Pilot can reposition to keep an active threat in view
+PASS: New hold command cancels an active detour without ejecting CJ
+Mocked script execution only: actual GTA flight, collisions, gunfire, animations and Android behavior are not tested.
