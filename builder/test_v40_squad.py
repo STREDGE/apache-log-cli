@@ -318,5 +318,14 @@ w,c,f=gunner_world([(900,0.,0.),(901,-12.,0.),(902,12.,0.),(903,0.,12.)]);w.step
 gt=[w.shared[b.GUARD_TARGET+i] for i in range(4)];assert len(set(gt))==4,gt
 passed('With four threats around, the four gunners never double up')
 
+w,c,f=gunner_world([(930,-2.,0.),(931,12.,0.),(932,-12.,0.)]);w.weapons[931]=35;w.messages.clear();w.step(c,f,n=16)
+gt=[w.shared[b.GUARD_TARGET+i] for i in range(4)]
+assert gt.count(931)==2 and 'HCRPG' in w.messages,(gt,w.messages)
+passed('RPG: two gunners focus the rocket launcher at once, with an RPG! call')
+w,c,f=gunner_world([(911,-2.,0.),(940,12.,0.)]);w.step(c,f,n=16);first=w.shared[b.GUARD_TARGET]
+w.exists.add(941);w.pos[941]=[30.,-45.,0.];w.skin[941]=20;w.pedtype[941]=7;w.damage.add((1,941));w.shared[b.SQ_T]=941;w.step(c,f,n=30)
+assert first==940 and w.shared[b.GUARD_TARGET]==940,(first,[w.shared[b.GUARD_TARGET+i] for i in range(4)])
+passed('A gunner finishes the target he started instead of hopping to a newer one')
+
 text='\n'.join(results)+'\nMocked script execution only: real pathing, cover and gunfire are not tested.\n'
 (b.OUT/'squad_tests.txt').write_text(text);print(text)
