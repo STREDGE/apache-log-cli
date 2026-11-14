@@ -481,6 +481,27 @@ passed('Beyond 45 m the native autopilot flies the approach at higher speed')
 w,c,_=setup();summon(w,c);w.car=[0.,-30.,40.];w.los_fn=lambda a,z:not(abs(a[1]+30.)<.01 and abs(a[2]-40.)<.01);w.shared[b.CMD]=10;w.step(c,n=8)
 assert w.shared[b.STATE]==19 and not w.frozen.get(c.v[5])
 passed('An obstructed glide path keeps the native approach instead of teleporting through it')
+# v28: downtown spawn is placed 20 m above the highest surface instead of inside a tower.
+w,c,_=setup();w.ground_fn=lambda x,y,z:(120. if z>500 else 0.);summon(w,c)
+spawn=calls(w,0xa5)[-1][2];assert spawn[3]>=140.,spawn
+passed('Spawn height clears tall buildings')
+# v28: a following helicopter that stops far from CJ for 5 s is lifted above the roofs.
+w,c,_=setup();summon(w,c);w.car=[0.,-80.,20.];w.speed=0.;w.step(c,n=3);assert not calls(w,0xab)
+w.now+=5200;w.step(c,n=3);assert calls(w,0xab) and w.car[2]>=30.,(w.car,calls(w,0xab))
+passed('A wedged helicopter is lifted out and resumes its order')
+w,c,_=setup();summon(w,c);w.car=[0.,-10.,20.];w.speed=0.;w.step(c,n=3);w.now+=8000;w.step(c,n=3);assert not calls(w,0xab)
+passed('A slow hover close to CJ is not mistaken for being stuck')
+# v28: dismissal removes a visible, stuck helicopter after 12 s so support can be called again.
+w,c,_=setup();summon(w,c);w.onscreen=True;w.speed=0.;command(w,c,4,ticks=3);assert w.shared[b.STATE]==4
+w.now+=12500;w.step(c,n=5);assert w.shared[b.STATE]==0 and c.v[5] not in w.exists,(w.shared[b.STATE],)
+command(w,c,1,ticks=8);assert w.shared[b.STATE]==2
+passed('Dismiss deletes a stuck on-screen helicopter and a new call works')
+# v28: rope descent starts 3 m below the helicopter centre (outside the hull) and still lands CJ.
+w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.shared[b.STATE]=23;w.car=[0.,0.,18.]
+ground=VM('Helicover_Ground',w);w.step(c,ground,n=4);w.shared[b.DROP_COMMAND]=1;w.step(c,ground,n=40)
+start=[x for x in calls(w,0x362) if x[2][0]==1][0][2];assert abs(start[3]-(18.-3.))<1e-4,start
+assert w.control and 1 not in w.incar,(w.messages,)
+passed('Rope descent starts below the hull and restores control on the ground')
 # Reject the literal/local argument swap observed in the crash log.
 from asm_v25 import Script, V, F
 for opcode,args in [(0x0023,(V(19),F(12.0))),(0x0021,(F(1.5),V(8)))]:
