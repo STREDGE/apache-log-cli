@@ -93,6 +93,7 @@ PASS: A blocked rope drop moves a few metres and retries automatically
 PASS: After five failed rope attempts the player gets one clear message and stays aboard
 PASS: LAND mode falls back to the rope when there is no place to land
 PASS: No flat pad near the marker: hover over it for a rope exit instead of giving up
+PASS: Exit works on the first press: per-frame polling of the one-frame widget release, with debounce
 PASS: Rope evacuation lifts CJ only after he walks to the rope (6 m away)
 PASS: FIRE CONTROL lists CEASE FIRE, PROTECT CJ, FOLLOW CJ SHOTS, WEAPONS FREE, OVERWATCH
 PASS: OVERWATCH: armed hostiles only, 75-damage precision rounds

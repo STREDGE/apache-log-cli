@@ -31,6 +31,10 @@ ROPE_PENDING=STATE+143;DROP_RESULT=STATE+144;ROPE_TRIES=STATE+145;RETRY_AT=STATE
 # v39.2: the hover point is CJ + 9 m along the helicopter's heading, so the tail rope (0,-3)
 # hangs 6 m in front of CJ - he is lifted only after walking to it, not while standing still.
 ROPE_PICKUP_AHEAD=9.0
+# v39.3: the exit widget's release lasts a frame or two, but the core ticks every 100 ms, so it
+# missed most presses. The fire worker (WAIT 0, every frame) stamps EXIT_PRESSED with the time;
+# the core accepts a stamp younger than 600 ms and debounces commands for 1.5 s (EXIT_LAST).
+EXIT_PRESSED=STATE+148;EXIT_LAST=STATE+149
 EXIT_WIDGET=0  # CTouchInterface widget of the on-screen enter/exit vehicle button (CPad::ExitVehicleJustDown)
 CRUISE_T=STATE+118;CR_UP=STATE+119;CR_DN=STATE+120
 CR_CMDZ=STATE+128  # v33: commanded z, integrated by steps (never rebuilt from the actual z)
@@ -116,7 +120,7 @@ c.label('INIT');a(0);c.set(AVOID_STAGE,0);c.set(AVOID_NEXT,0);c.set(BUSY,0);c.se
 for key in range(PUB,PUB+7):c.set(key,-1)
 for key in range(GROUND_PUB,GROUND_PUB+5):c.set(key,-1)
 c.set(ROPE_COMMAND,0)
-for key,val in [(STATE,0),(CMD,0),(OPEN,0),(MODEL,487),(CREW,2),(FIRE,0),(TOUCH,0),(HUD,1),(HP,0),(WEAPON_SETTING,0),(EXIT_MODE,0),(AUTO_EXIT,0),(LOCK_HOLD,0),(ROPE_PENDING,0),(DROP_RESULT,0),(ROPE_TRIES,0),(RETRY_AT,0),(FORCE_ROPE,0),(KILLS,0),(LAST_TGT,-1),(ENGAGED,0),(CLEAR_AT,0),(ORBIT_I,0),(ORBIT_NEXT,0)]:c.set(key,val)
+for key,val in [(STATE,0),(CMD,0),(OPEN,0),(MODEL,487),(CREW,2),(FIRE,0),(TOUCH,0),(HUD,1),(HP,0),(WEAPON_SETTING,0),(EXIT_MODE,0),(AUTO_EXIT,0),(LOCK_HOLD,0),(ROPE_PENDING,0),(DROP_RESULT,0),(ROPE_TRIES,0),(RETRY_AT,0),(FORCE_ROPE,0),(EXIT_PRESSED,0),(EXIT_LAST,0),(KILLS,0),(LAST_TGT,-1),(ENGAGED,0),(CLEAR_AT,0),(ORBIT_I,0),(ORBIT_NEXT,0)]:c.set(key,val)
 c.label('IDLE');a(1,I(100));a(0x01bd,V(20));a(0xddc,I(HEART),V(20));c.get(8,CMD);c.set(CMD,0)
 c.eq(8,1,'IDLE_EVAC');a(6,V(25),I(0));c.go('LOAD')
 # v38: evacuation commands no longer summon support on their own; they ask for CALL SUPPORT first.
@@ -575,8 +579,12 @@ c.label('CR_BAD_POS');c.set(DBG_CODE,99);c.ret()
 # runs the selected exit method instead (command 15). Doors unlock when CJ is outside, and for
 # LOCK_HOLD ms after the script itself starts CJ's leave-car task.
 c.label('EXIT_BUTTON');c.check(0x0448,[V(18),V(5)],'EXIT_UNLOCK');c.get(19,LOCK_HOLD);c.check(0x001d,[V(20),V(19)],'EXIT_RET')
-a(0x020a,V(5),I(4));c.check(0x0a52,[I(EXIT_WIDGET)],'EXIT_RET');c.set(CMD,15);c.ret()
-c.label('EXIT_UNLOCK');a(0x020a,V(5),I(1))
+a(0x020a,V(5),I(4))
+c.get(19,EXIT_PRESSED);c.eq(19,0,'EXIT_STAMP');c.go('EXIT_DIRECT')
+c.label('EXIT_STAMP');c.set(EXIT_PRESSED,0);a(0x0085,V(17),V(20));a(0x0062,V(17),V(19));c.check(0x0019,[V(17),I(600)],'EXIT_FIRE')
+c.label('EXIT_DIRECT');c.check(0x0a52,[I(EXIT_WIDGET)],'EXIT_RET')
+c.label('EXIT_FIRE');c.get(19,EXIT_LAST);a(0x0085,V(17),V(20));a(0x0062,V(17),V(19));c.check(0x0019,[V(17),I(1500)],'EXIT_RET');a(0xddc,I(EXIT_LAST),V(20));c.set(CMD,15);c.ret()
+c.label('EXIT_UNLOCK');a(0x020a,V(5),I(1));c.set(EXIT_PRESSED,0)
 c.label('EXIT_RET');c.ret()
 c.label('REQUEST_EXIT');c.check(0x0448,[V(18),V(5)],'NOT_ABOARD')
 for st in [12,9]:
@@ -776,7 +784,7 @@ launch.label('MISSING');a(0x03e5,S('HCOFF'));a(0x004e)
 # Dedicated fire worker: no global faction hatred and no automatic armed turrets.
 f=Script();a=f.add
 f.label('INIT');a(0);f.set(FIRENEXT,0);f.set(FIREGEN,-1);f.set(FWANTED,-1);f.set(FIRE_ACTIVE,0);f.set(FIRE_TARGET,-1);f.set(FIRE_TASK_TARGET,-1);f.set(FIRE_TASK_PHASE,-1);f.set(FIRE_TASK_MODE,-1);f.set(FIRE_TASK_NEXT,0);f.set(FIRE_SCAN_NEXT,0);a(6,V(26),I(-1));a(6,V(27),I(0));a(6,V(29),I(-1))
-f.label('WAIT');a(1,I(0));a(0x01bd,V(30));a(0xddc,I(FIREHEART),V(30));f.get(30,BUSY);f.eq(30,0,'WAIT');f.get(30,STATE)
+f.label('WAIT');a(1,I(0));a(0x01bd,V(30));a(0xddc,I(FIREHEART),V(30));f.check(0x0a52,[I(EXIT_WIDGET)],'EXIT_POLL_DONE');a(0xddc,I(EXIT_PRESSED),V(30));f.label('EXIT_POLL_DONE');f.get(30,BUSY);f.eq(30,0,'WAIT');f.get(30,STATE)
 for stateid in [0,1,5,6,16]:
  nxt='FSTATE_NEXT_'+str(stateid);f.eq(30,stateid,nxt);f.go('WAIT');f.label(nxt)
 for index in range(7):f.get(index,PUB+index)
