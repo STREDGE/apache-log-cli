@@ -12,6 +12,10 @@ FIRE_ACTIVE=STATE+59;TRACKED_TARGET=STATE+60;FIRE_SCAN_NEXT=STATE+61;FIRE_TASK_M
 LAND_SLOW=STATE+63;LAND_FINAL=STATE+64
 WEAPON_SETTING=STATE+65
 ROPE_COMMAND=STATE+70;GROUND_PUB=STATE+71;GROUND_MOVE_NEXT=STATE+80;DROP_COMMAND=STATE+81;DEST_X=STATE+82;DEST_Y=STATE+83;DEST_Z=STATE+84;GUARD_TARGET=STATE+90;PATROL_STEP=STATE+97;PATROL_NEXT=STATE+98;FOLLOW_NEXT=STATE+99;AVOID_STAGE=STATE+110;AVOID_NEXT=STATE+111;AVOID_AT=STATE+112;AVOID_X=STATE+113;AVOID_Y=STATE+114;AVOID_Z=STATE+115
+GLIDE_C=STATE+116
+# 0AB6 GET_TARGET_BLIP_COORDS is a CLEO 4 PC opcode; CLEO Android crashes on it.
+# FLY TO MAP MARKER stays disabled until a marker source that works on Android exists.
+MAP_MARKER=False
 GROVE_X=2492.0;GROVE_Y=-1666.0
 STATES={25:'MAP CLIMB',24:'PATROLLING',21:'TO MAP POINT',22:'DEST APPROACH',23:'AWAITING EXIT',20:'CLIMB TO GROVE',19:'ROPE APPROACH',17:'CHANGING CREW',18:'LANDING BLOCKED',16:'CHANGING HELI',0:'READY',1:'LOADING',2:'FOLLOWING',3:'HOLDING',4:'DEPARTING',5:'LOAD FAILED',6:'GO OUTDOORS',7:'EVAC INBOUND',8:'TEAM COVERING',9:'CJ ON BOARD',10:'TO GROVE STREET',11:'GROVE LANDING',12:'LANDED',13:'DAMAGED / RTB',14:'TEAM BOARDING',15:'EMERGENCY LAND'}
 MESSAGES={
@@ -20,6 +24,7 @@ MESSAGES={
  'HCFAIL':'~r~HELICOVER~w~: model load failed. Try again.', 'HCOUT':'~y~HELICOVER~w~: move outdoors to call support.',
  'HCRWAIT':'~y~EVAC~w~: unable to reach a safe hover. Move to open ground and retry.',
  'HCGCLMB':'~y~EVAC~w~: cannot climb safely. Clear obstacles and retry.',
+ 'HCMAPOF':'~y~EVAC~w~: map marker flight is disabled: it crashes CLEO Android.',
  'HCNOMAP':'~y~EVAC~w~: place a destination marker on the map first.',
  'HCCHOS':'~g~EVAC~w~: above destination. Choose LAND or ROPE EXIT.',
  'HCDWAIT':'~y~EVAC~w~: wait until the helicopter reaches the destination.',
@@ -138,8 +143,26 @@ c.label('REQUEST_ROPE');c.check(0x80db,[V(18),V(5)],'ROPE_CJ_ABOARD');c.eq(24,0,
 c.label('ROPE_MUSTER');a(6,V(25),I(11));c.go('START_MUSTER')
 c.label('ROPE_CJ_ABOARD');msg(c,'HCEXIT');c.go('TICK')
 c.label('ROPE_PREP');c.eq(0,425,'ROPE_SEATS');msg(c,'HCNOSEA');c.go('TICK')
-c.label('ROPE_SEATS');a(0x01ea,V(5),V(19));c.check(0x0019,[V(19),I(0)],'NO_SEATS');a(0x04c4,V(18),F(0),F(8),F(100),V(26),V(27),V(28));a(0x02ce,V(26),V(27),V(28),V(28));a(0x00a0,V(18),V(9),V(10),V(11));a(0x000b,V(11),F(26));a(0x02ce,V(9),V(10),V(11),V(31));a(0x0087,V(17),V(28));a(0x0063,V(17),V(31));c.check(0x0023,[F(5),V(17)],'BAD_SITE');c.check(0x0021,[V(17),F(-5)],'BAD_SITE');c.call('CHECK_SITE');c.eq(17,1,'BAD_SITE');c.call('UNFREEZE');c.call('RESTORE_FLIGHT');a(0x04df,V(5),I(0));a(0x0087,V(9),V(28));a(0x000b,V(9),F(15));a(0x0087,V(11),V(28));a(0x000b,V(11),F(15));a(0x0853,V(5),I(3));a(0x07bb,V(5),I(0));a(0x04a2,V(5),V(26),V(27),V(9),F(12),V(11));a(0x00ad,V(5),F(26));a(0x01bd,V(21));state(c,19);c.go('TICK')
-c.label('ROPE_APPROACH_TICK');a(0x00aa,V(5),V(9),V(10),V(11));a(0x0509,V(9),V(10),V(26),V(27),V(31));c.check(0x0023,[F(5),V(31)],'ROPE_APPROACH_TIMEOUT');a(0x0087,V(19),V(11));a(0x0063,V(19),V(28));c.check(0x0021,[V(19),F(12)],'ROPE_APPROACH_TIMEOUT');c.check(0x0023,[F(22),V(19)],'ROPE_APPROACH_TIMEOUT');a(0x02e3,V(5),V(19));c.check(0x0023,[F(3),V(19)],'ROPE_APPROACH_TIMEOUT');c.call('BLOCK_HOVER');state(c,3);c.set(ROPE_COMMAND,1);c.go('TICK')
+c.label('ROPE_SEATS');a(0x01ea,V(5),V(19));c.check(0x0019,[V(19),I(0)],'NO_SEATS')
+# v27: hover point = CJ + 3 m along the helicopter's heading, so the tail rope (0,-3) hangs on CJ.
+a(0x00aa,V(5),V(9),V(10),V(11));a(0x0407,V(5),F(0),F(3),F(0),V(26),V(27),V(28));a(0x0063,V(26),V(9));a(0x0063,V(27),V(10))
+a(0x00a0,V(18),V(9),V(10),V(28));a(0x005b,V(26),V(9));a(0x005b,V(27),V(10));a(0x000b,V(28),F(100));a(0x02ce,V(26),V(27),V(28),V(28));a(0x00a0,V(18),V(9),V(10),V(11));a(0x000b,V(11),F(26));a(0x02ce,V(9),V(10),V(11),V(31));a(0x0087,V(17),V(28));a(0x0063,V(17),V(31));c.check(0x0023,[F(5),V(17)],'BAD_SITE');c.check(0x0021,[V(17),F(-5)],'BAD_SITE');c.call('CHECK_SITE');c.eq(17,1,'BAD_SITE');c.call('UNFREEZE');c.call('RESTORE_FLIGHT');a(0x04df,V(5),I(0));a(0x0087,V(9),V(28));a(0x000b,V(9),F(15));a(0x0087,V(11),V(28));a(0x000b,V(11),F(15));a(0x0853,V(5),I(10));a(0x04a2,V(5),V(26),V(27),V(9),F(12),V(11));a(0x00ad,V(5),F(45));a(0x01bd,V(21));state(c,19);c.go('TICK')
+# v27: the native autopilot circles around a 3-5 m target instead of stopping. Within
+# 45 m (clear line of sight) freeze the helicopter and glide it by script at ~25 m/s
+# straight to the hover point, then hand over to the rope worker while still frozen.
+c.label('ROPE_APPROACH_TICK');a(0x00aa,V(5),V(9),V(10),V(11));c.get(19,FROZEN);c.eq(19,1,'ROPE_FAR');c.go('ROPE_GLIDE')
+c.label('ROPE_FAR');a(0x0509,V(9),V(10),V(26),V(27),V(31));c.check(0x0023,[F(45),V(31)],'ROPE_APPROACH_TIMEOUT')
+a(0x0087,V(19),V(28));a(0x000b,V(19),F(15));c.check(0x06bd,[V(9),V(10),V(11),V(26),V(27),V(19),I(1),I(0),I(0),I(1),I(0)],'ROPE_APPROACH_TIMEOUT')
+# SET_CAR_COORDINATES adds the model's base offset to z; measure it once so the glide does not climb.
+a(0x0574,V(5),I(1));c.set(FROZEN,1);a(0x00ab,V(5),V(9),V(10),V(11));a(0x00aa,V(5),V(17),V(19),V(31));a(0x0063,V(31),V(11));a(0xddc,I(GLIDE_C),V(31))
+a(0x0407,V(5),F(0),F(3),F(0),V(17),V(19),V(31));a(0x0063,V(17),V(9));a(0x0063,V(19),V(10));a(0x00a0,V(18),V(26),V(27),V(31));a(0x005b,V(26),V(17));a(0x005b,V(27),V(19))
+c.label('ROPE_GLIDE');a(0x00aa,V(5),V(9),V(10),V(11))
+a(0x0087,V(17),V(26));a(0x0063,V(17),V(9));a(0x0087,V(29),V(27));a(0x0063,V(29),V(10));a(0x0087,V(30),V(28));a(0x000b,V(30),F(15));a(0x0063,V(30),V(11))
+a(0x050a,F(0),F(0),F(0),V(17),V(29),V(30),V(31));c.check(0x0021,[V(31),F(.8)],'ROPE_ARRIVE')
+a(0x0007,V(19),F(.8));a(0x0073,V(19),V(31));a(0x006b,V(17),V(19));a(0x006b,V(29),V(19));a(0x006b,V(30),V(19))
+a(0x005b,V(9),V(17));a(0x005b,V(10),V(29));a(0x005b,V(11),V(30));c.get(19,GLIDE_C);a(0x0063,V(11),V(19));a(0x00ab,V(5),V(9),V(10),V(11));c.go('TICK')
+c.label('ROPE_ARRIVE');a(0x0087,V(11),V(28));a(0x000b,V(11),F(15));c.get(19,GLIDE_C);a(0x0063,V(11),V(19));a(0x00ab,V(5),V(26),V(27),V(11))
+c.call('BLOCK_HOVER');a(0x0574,V(5),I(1));c.set(FROZEN,1);state(c,3);c.set(ROPE_COMMAND,1);c.go('TICK')
 c.label('ROPE_APPROACH_TIMEOUT');a(0x0085,V(17),V(20));a(0x0062,V(17),V(21));c.check(0x0019,[V(17),I(35000)],'TICK');c.call('BLOCK_HOVER');state(c,18);msg(c,'HCRWAIT');c.go('TICK')
 
 c.label('EVAC');c.eq(24,1,'EVAC_NOT_GROUND');a(6,V(25),I(5));c.go('START_MUSTER')
@@ -175,7 +198,10 @@ c.label('LEAVE_CJ');c.eq(7,12,'LEAVE_CHECK_PHASE');c.go('LEAVE_ALLOWED')
 c.label('LEAVE_CHECK_PHASE');c.eq(24,3,'LEAVE_GROUND_CHECK');c.eq(7,9,'NOT_LANDED');c.go('LEAVE_ALLOWED')
 c.label('LEAVE_GROUND_CHECK');c.eq(24,1,'NOT_LANDED')
 c.label('LEAVE_ALLOWED');c.check(0x00db,[V(18),V(5)],'TICK');a(0x05cd,V(18),V(5));c.go('TICK')
-c.label('REQUEST_MAP');c.set(AVOID_STAGE,0);c.check(0x0448,[V(18),V(5)],'NOT_ABOARD');c.check(0x0ab6,[V(26),V(27),V(28)],'NO_MAP');a(0xddc,I(DEST_X),V(26));a(0xddc,I(DEST_Y),V(27));a(0xddc,I(DEST_Z),V(28));c.set(GROVE_WAIT,0);c.set(GROVE_NEXT_SCAN,0);c.call('UNFREEZE');c.call('RESTORE_FLIGHT');a(0x00aa,V(5),V(9),V(10),V(11));a(0x0087,V(17),V(11));a(0x000b,V(17),F(80));a(0x02ce,V(9),V(10),V(17),V(17));a(0x000b,V(17),F(65));a(0x04df,V(5),I(0));a(0x04a2,V(5),V(9),V(10),V(17),F(45),V(17));a(0x00ad,V(5),F(30));a(0x01bd,V(21));state(c,25);c.go('TICK')
+c.label('REQUEST_MAP');c.set(AVOID_STAGE,0);c.check(0x0448,[V(18),V(5)],'NOT_ABOARD')
+if MAP_MARKER:c.check(0x0ab6,[V(26),V(27),V(28)],'NO_MAP')
+else:msg(c,'HCMAPOF');c.go('TICK')
+a(0xddc,I(DEST_X),V(26));a(0xddc,I(DEST_Y),V(27));a(0xddc,I(DEST_Z),V(28));c.set(GROVE_WAIT,0);c.set(GROVE_NEXT_SCAN,0);c.call('UNFREEZE');c.call('RESTORE_FLIGHT');a(0x00aa,V(5),V(9),V(10),V(11));a(0x0087,V(17),V(11));a(0x000b,V(17),F(80));a(0x02ce,V(9),V(10),V(17),V(17));a(0x000b,V(17),F(65));a(0x04df,V(5),I(0));a(0x04a2,V(5),V(9),V(10),V(17),F(45),V(17));a(0x00ad,V(5),F(30));a(0x01bd,V(21));state(c,25);c.go('TICK')
 c.label('MAP_CLIMB_TICK');a(0x0819,V(4),V(19));c.check(0x0021,[V(19),F(40)],'MAP_CLIMB_TIMEOUT');c.get(26,DEST_X);c.get(27,DEST_Y);c.get(28,DEST_Z);c.call('RESTORE_FLIGHT');a(0x0087,V(9),V(28));a(0x000b,V(9),F(80));a(0x04a2,V(5),V(26),V(27),V(9),F(45),V(9));a(0x00ad,V(5),F(30));state(c,21);c.go('TICK')
 c.label('MAP_CLIMB_TIMEOUT');a(0x0085,V(17),V(20));a(0x0062,V(17),V(21));c.check(0x0019,[V(17),I(30000)],'TICK');c.call('BLOCK_HOVER');state(c,18);msg(c,'HCGCLMB');c.go('TICK')
 c.label('NO_MAP');msg(c,'HCNOMAP');c.go('TICK')

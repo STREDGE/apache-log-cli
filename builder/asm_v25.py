@@ -6,6 +6,8 @@ OUT.mkdir(parents=True,exist_ok=True)
 LIB={int(c['id'],16):c for e in json.load(open(ROOT/'sa_mobile.json'))['extensions'] for c in e['commands']}
 # Official CLEO source defines 0DF4, missing from the downloaded library snapshot.
 LIB[0x0df4]={'id':'0DF4','name':'GET_MENU_TOUCHED_ITEM_INDEX','num_params':2}
+# Native SA command (self, x, y, z), absent from the trimmed library snapshot.
+LIB[0x00ab]={'id':'00AB','name':'SET_CAR_COORDINATES','num_params':4}
 STATE=0x48454d00;CMD=STATE+1;HEART=STATE+2
 # Protocol: commands 1 summon, 2 follow, 3 hold, 4 depart.
 # States 0 ready, 1 loading, 2 follow, 3 hold, 4 depart, 5 model error, 6 outdoors required.
