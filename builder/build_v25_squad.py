@@ -1,0 +1,311 @@
+"""Helicover v40 tactical squad AI (Helicover_Squad.csa).
+
+One worker drives whichever team is on foot: the rope / escort team of the ground worker
+(GROUND_PUB, while SQ_ROPE = 1) or the helicopter crew after an evacuation landing (PUB+3..6,
+while PHASE = 1). The core, ground and fire workers stop tasking those guards while SQ_HEART is
+fresh, so exactly one script gives them orders.
+
+Every 100 ms: perception every 400 ms (threats around CJ, rules of engagement from FIRE CONTROL),
+then a decision for each of the four guards. Tasks are only re-issued when the order changes or
+its time runs out, so the game AI is never restarted every tick.
+
+Tactics (SETUP > TEAM ON FOOT): 0 BODYGUARD - tight diamond, two shields step between CJ and the
+threat, two engage on a short leash; 1 ASSAULT - wide wedge, one pair advances crouched, the other
+flanks. When CJ is badly hurt everyone forms a ring around him. The rear guard is the medic.
+
+Registers: 0 CJ, 1 heli, 2-5 guards, 6 CJ car/-1, 7 tactics, 8 fire mode, 9-11 CJ xyz, 12 now,
+13-16 threats, 17 group, 18 threat count (perception) / CJ speed (guards), 19 message scratch,
+20 move speed, 21-23 guard xyz, 24 guard-CJ distance, 25 target, 26-31 scratch.
+"""
+from asm_v25 import *
+import build_v25 as b
+s=Script();a=s.add
+FIELDS={'TASK':0,'NEXT':1,'TX':2,'TY':3,'LX':4,'LY':5,'LT':6,'DEAD':7,'TGT':8,'COVER':9}
+# TASK values: -1 not set up, 0 idle, 1 moving, 2 sector watch, 3 shooting, 4 entering car,
+# 5 riding, 6 leaving car, 7 path-node move, 8 crouched assault, 9 medic, 10 timed attack
+def fk(k,f):return b.SQ_SLOT+k*b.SQ_SLOT_SIZE+FIELDS[f]
+_n=[0]
+def uid(p):_n[0]+=1;return p+'_'+str(_n[0])
+def alive(var,fail):s.check(0x056d,[V(var)],fail);s.check(0x8118,[V(var)],fail)
+def msg(key,throttle=True):
+ end=uid('MSG_END');s.get(19,b.HUD);s.eq(19,1,end)
+ if throttle:s.get(19,b.SQ_MSG_NEXT);s.check(0x001d,[V(12),V(19)],end)
+ a(0x03e5,S(key));a(0x0085,V(19),V(12));a(0x000a,V(19),I(3500));a(0xddc,I(b.SQ_MSG_NEXT),V(19));s.label(end)
+def setk(k,f,var):a(0xddc,I(fk(k,f)),V(var))
+def setk_lit(k,f,val):s.set(fk(k,f),val)
+def later(k,ms):a(0x0085,V(31),V(12));a(0x000a,V(31),I(ms));setk(k,'NEXT',31)
+def reset_slots():
+ for k in range(4):
+  setk_lit(k,'TASK',-1);setk_lit(k,'NEXT',0);setk_lit(k,'DEAD',0);setk_lit(k,'TGT',-1);setk_lit(k,'LT',0);setk_lit(k,'COVER',0)
+def reset_threats():
+ for i in range(4):s.set(b.SQ_T+i,-1)
+ s.set(b.SQ_THREATS,0);s.set(b.SQ_CONTACT,0);s.set(b.SQ_CLEAR_AT,0)
+
+BG_FORM=[(0,3.2),(-2.4,.6),(2.4,.6),(0,-2.8)]
+AS_FORM=[(0,7.0),(-5.0,3.0),(5.0,3.0),(0,-4.5)]
+BG_AIM=[(0,15),(-15,3),(15,3),(0,-15)]
+AS_AIM=[(0,18),(-12,12),(12,12),(0,-15)]
+NEAR=[-6.,-3.,0.,3.,6.]
+MID=[-27.,-18.,-9.,0.,9.,18.,27.]
+
+s.label('INIT');a(0)
+s.set(b.SQ_GROUP,0);s.set(b.SQ_SCAN_NEXT,0);s.set(b.SQ_MSG_NEXT,0);s.set(b.SQ_MEDIC_NEXT,0);reset_threats();reset_slots()
+s.label('LOOP');a(1,I(100));a(0x01bd,V(12));a(0xddc,I(b.SQ_HEART),V(12))
+s.check(0x0256,[I(0)],'RELEASE');s.get(19,b.STATE)
+for st in [0,1,4,5,6,13,16]:
+ nxt='STATE_OK_'+str(st);s.eq(19,st,nxt);s.go('RELEASE');s.label(nxt)
+s.get(0,b.PUB);alive(0,'RELEASE');s.get(1,b.PUB+1)
+s.get(19,b.SQ_ROPE);s.eq(19,1,'GROUP_NOT_ROPE');a(6,V(17),I(2))
+for i in range(4):s.get(2+i,b.GROUND_PUB+i)
+s.go('GROUP_SET')
+s.label('GROUP_NOT_ROPE');s.get(19,b.PHASE);s.eq(19,1,'RELEASE');a(6,V(17),I(1))
+for i in range(4):s.get(2+i,b.PUB+3+i)
+s.go('GROUP_SET')
+s.label('RELEASE');a(6,V(17),I(0))
+s.label('GROUP_SET');s.get(19,b.SQ_GROUP);s.check(0x803b,[V(17),V(19)],'GROUP_SAME')
+a(0xddc,I(b.SQ_GROUP),V(17));reset_slots();reset_threats()
+s.label('GROUP_SAME');s.eq(17,0,'GROUP_ACTIVE');s.go('LOOP')
+s.label('GROUP_ACTIVE');a(0x00a0,V(0),V(9),V(10),V(11));a(6,V(6),I(-1));s.check(0x00df,[V(0)],'CJ_ON_FOOT');a(0x03c0,V(0),V(6));s.label('CJ_ON_FOOT')
+s.get(7,b.TACTICS);s.get(8,b.FIRE)
+# CJ inside an interior: the team waits outside (no teleport into interior coordinates)
+a(0x077e,V(19));s.eq(19,0,'LOOP')
+s.get(19,b.SQ_SCAN_NEXT);s.check(0x001d,[V(12),V(19)],'NO_SCAN');a(0x0085,V(19),V(12));a(0x000a,V(19),I(400));a(0xddc,I(b.SQ_SCAN_NEXT),V(19));s.call('PERCEIVE')
+s.label('NO_SCAN')
+for i in range(4):s.get(13+i,b.SQ_T+i)
+a(0x06ac,V(0),V(18))
+for k in range(4):s.call('GUARD_%d'%k)
+s.go('LOOP')
+
+# ---------------------------------------------------------------- perception
+s.label('PERCEIVE')
+for i in range(4):s.get(13+i,b.SQ_T+i)
+a(6,V(18),I(0))
+# keep the threats that are still valid, compacted to the front of the list
+for i in range(4):
+ drop=uid('KEEP_DROP');placed=uid('KEEP_PLACED');a(0x0085,V(29),V(13+i));a(6,V(31),I(1));s.call('CLASSIFY');s.eq(30,1,drop)
+ for j in range(i+1):
+  nj=uid('KEEP_AT');s.eq(18,j,nj);a(0x0085,V(13+j),V(29));s.go(placed);s.label(nj)
+ s.label(placed);a(0x000a,V(18),I(1));s.label(drop)
+for j in range(4):
+ keep=uid('CLEAR_TAIL');s.check(0x8019,[V(18),I(j)],keep);a(6,V(13+j),I(-1));s.label(keep)
+# then look for new ones: fine cells near CJ, coarser cells out to ~30 m, and drivers of nearby cars
+for x in NEAR:
+ for y in NEAR:
+  a(0x0087,V(26),V(9));a(0x000b,V(26),F(x));a(0x0087,V(27),V(10));a(0x000b,V(27),F(y));a(0x0a3e,V(26),V(27),V(11),F(1.6),F(1.6),F(4),V(29));s.call('CONSIDER');s.check(0x8019,[V(18),I(3)],'PERCEIVE_STORE')
+for x in MID:
+ for y in MID:
+  if x==0 and y==0:continue  # the fine grid covers the centre; every other cell is scanned (no blind ring)
+  a(0x0087,V(26),V(9));a(0x000b,V(26),F(x));a(0x0087,V(27),V(10));a(0x000b,V(27),F(y));a(0x0a3e,V(26),V(27),V(11),F(4.6),F(4.6),F(10),V(29));s.call('CONSIDER');s.check(0x8019,[V(18),I(3)],'PERCEIVE_STORE')
+for dx,dy in [(-30,-30),(0,-30),(-30,0),(0,0)]:
+ nxt=uid('CAR_NEXT');a(0x0087,V(26),V(9));a(0x000b,V(26),F(dx));a(0x0087,V(27),V(10));a(0x000b,V(27),F(dy));a(0x0087,V(28),V(26));a(0x000b,V(28),F(30));a(0x0087,V(31),V(27));a(0x000b,V(31),F(30))
+ a(0x053e,V(26),V(27),V(28),V(31),I(-1),V(23));s.check(0x056e,[V(23)],nxt);s.check(0x803b,[V(23),V(1)],nxt);s.check(0x803b,[V(23),V(6)],nxt);a(0x046c,V(23),V(29));s.call('CONSIDER');s.check(0x8019,[V(18),I(3)],'PERCEIVE_STORE');s.label(nxt)
+s.label('PERCEIVE_STORE')
+for i in range(4):a(0xddc,I(b.SQ_T+i),V(13+i))
+a(0xddc,I(b.SQ_THREATS),V(18))
+# radio calls: direction of the first contact relative to CJ, and "area secure" 3.5 s after the last
+s.eq(18,0,'CALL_CONTACT')
+s.get(19,b.SQ_CONTACT);s.eq(19,1,'CALL_RET');s.get(19,b.SQ_CLEAR_AT);s.eq(19,0,'CALL_CLEAR_CHECK');a(0x0085,V(19),V(12));a(0x000a,V(19),I(3500));a(0xddc,I(b.SQ_CLEAR_AT),V(19));s.ret()
+s.label('CALL_CLEAR_CHECK');s.check(0x001d,[V(12),V(19)],'CALL_RET');s.set(b.SQ_CONTACT,0);s.set(b.SQ_CLEAR_AT,0);msg('SQCLR',False);s.ret()
+s.label('CALL_CONTACT');s.set(b.SQ_CLEAR_AT,0);s.get(19,b.SQ_CONTACT);s.eq(19,0,'CALL_RET');s.set(b.SQ_CONTACT,1)
+a(0x00a0,V(13),V(26),V(27),V(28));a(0x0063,V(26),V(9));a(0x0063,V(27),V(10));a(0x0604,V(26),V(27),V(29));a(0x0172,V(0),V(30));a(0x0063,V(29),V(30))
+s.check(0x0023,[F(0),V(29)],'DIR_POS');a(0x000b,V(29),F(360))
+s.label('DIR_POS');s.check(0x0023,[F(360),V(29)],'DIR_WRAP');s.go('DIR_READY')
+s.label('DIR_WRAP');a(0x000b,V(29),F(-360))
+s.label('DIR_READY')
+s.check(0x0023,[F(45),V(29)],'DIR_LEFT');msg('SQCF',False);s.ret()
+s.label('DIR_LEFT');s.check(0x0023,[F(135),V(29)],'DIR_REAR');msg('SQCL',False);s.ret()
+s.label('DIR_REAR');s.check(0x0023,[F(225),V(29)],'DIR_RIGHT');msg('SQCB',False);s.ret()
+s.label('DIR_RIGHT');s.check(0x0023,[F(315),V(29)],'DIR_FRONT2');msg('SQCR',False);s.ret()
+s.label('DIR_FRONT2');msg('SQCF',False)
+s.label('CALL_RET');s.ret()
+
+# 29@ candidate: append to the threat list when it is new, there is room and CLASSIFY accepts it.
+s.label('CONSIDER');s.check(0x0019,[V(18),I(3)],'CON_ROOM');s.ret()
+s.label('CON_ROOM')
+for j in range(4):s.check(0x803b,[V(29),V(13+j)],'CON_RET')
+a(6,V(31),I(0));s.call('CLASSIFY');s.eq(30,1,'CON_RET')
+for j in range(4):
+ nj=uid('CON_AT');s.eq(18,j,nj);a(0x0085,V(13+j),V(29));s.go('CON_COUNT');s.label(nj)
+s.label('CON_COUNT');a(0x000a,V(18),I(1))
+s.label('CON_RET');s.ret()
+
+# 30@ = 1 when 29@ is a threat under the current rules of engagement. 31@ = 1: an existing threat,
+# kept while it stays in range (no need to keep shooting); police still drop out at wanted level 0.
+# Uses 19-25.
+s.label('CLASSIFY');a(6,V(30),I(0));alive(29,'CL_RET')
+s.check(0x803b,[V(29),V(0)],'CL_RET')
+for i in range(2,7):s.get(19,b.PUB+i);s.check(0x803b,[V(29),V(19)],'CL_RET')
+for i in range(5):s.get(19,b.GROUND_PUB+i);s.check(0x803b,[V(29),V(19)],'CL_RET')
+s.check(0x8448,[V(29),V(1)],'CL_RET')
+a(0x00a0,V(29),V(20),V(21),V(22));a(0x050a,V(20),V(21),V(22),V(9),V(10),V(11),V(22));s.check(0x0023,[F(55),V(22)],'CL_RET')
+# Anyone who hurt CJ or one of the team is hostile under every mode (self-defence).
+s.check(0x051a,[V(0),V(29)],'CL_NOT_ATTACKER_CJ');s.go('CL_ACCEPT');s.label('CL_NOT_ATTACKER_CJ')
+for k in range(4):
+ nxt=uid('CL_NOT_ATTACKER');alive(2+k,nxt);s.check(0x051a,[V(2+k),V(29)],nxt);s.go('CL_ACCEPT');s.label(nxt)
+s.eq(8,0,'CL_ROE');s.ret()
+s.label('CL_ROE');a(0x089f,V(29),V(23));a(0x0470,V(29),V(24))
+s.eq(8,2,'CL_NOT_FOLLOW');s.eq(31,1,'CL_FOLLOW_AIM');s.go('CL_ACCEPT');s.label('CL_FOLLOW_AIM');s.check(0x0457,[I(0),V(29)],'CL_RET');s.go('CL_ACCEPT')
+s.label('CL_NOT_FOLLOW');s.eq(23,8,'CL_NOT_GROVE');s.ret()
+s.label('CL_NOT_GROVE');s.eq(23,6,'CL_NOT_COP');a(0x01c0,I(0),V(25));s.check(0x0019,[V(25),I(0)],'CL_RET');s.go('CL_ACCEPT')
+s.label('CL_NOT_COP');s.eq(31,1,'CL_FRESH');s.go('CL_ACCEPT');s.label('CL_FRESH')
+# armed = pistols .. minigun (22-38) or thrown explosives (16-18)
+s.check(0x0019,[V(24),I(21)],'CL_THROWN');s.check(0x0019,[V(24),I(38)],'CL_ARMED');s.ret()
+s.label('CL_THROWN');s.check(0x0019,[V(24),I(15)],'CL_RET');s.check(0x0019,[V(24),I(18)],'CL_ARMED');s.ret()
+s.label('CL_ARMED');s.eq(8,1,'CL_CAREFUL');s.go('CL_ACCEPT')
+s.label('CL_CAREFUL');s.check(0x02e0,[V(29)],'CL_GANG');s.go('CL_ACCEPT')
+s.label('CL_GANG');s.check(0x0023,[F(20),V(22)],'CL_RET')
+for gang in [7,9,10]:
+ nxt=uid('CL_GANG_NEXT');s.eq(23,gang,nxt);s.go('CL_ACCEPT');s.label(nxt)
+s.ret()
+s.label('CL_ACCEPT');a(6,V(30),I(1))
+s.label('CL_RET');s.ret()
+
+# ---------------------------------------------------------------- one guard
+def formation(k,table,lead=True):
+ """26-28 = CJ-relative point (x right, y ahead of CJ); y is pushed ahead while CJ moves."""
+ ox,oy=table[k]
+ a(0x0007,V(30),F(0))
+ if lead:
+  a(0x0087,V(30),V(18));a(0x0013,V(30),F(.9))
+  cap=uid('LEAD_CAP');s.check(0x0021,[V(30),F(6)],cap);a(0x0007,V(30),F(6));s.label(cap)
+ a(0x0007,V(29),F(ox));a(0x000b,V(30),F(oy));a(0x04c4,V(0),V(29),V(30),F(0),V(26),V(27),V(28))
+def form_point(k):
+ """26-28 = this guard's formation point for the current tactics."""
+ bg=uid('FP_BG');done=uid('FP_DONE');s.eq(7,1,bg);formation(k,AS_FORM);s.go(done);s.label(bg);formation(k,BG_FORM);s.label(done)
+def move_to(k,G,speed,ms=2500,every=800):
+ """Go straight to 26-28 at move state `speed` (literal or V). Re-issued only for a new order,
+ a target that moved more than a metre, or after `every` ms. Returns from the guard routine."""
+ issue=uid('MOVE_ISSUE');drift=uid('MOVE_DRIFT')
+ s.get(31,fk(k,'TASK'));s.eq(31,1,issue);s.get(31,fk(k,'NEXT'));s.check(0x001d,[V(12),V(31)],drift);s.go(issue)
+ s.label(drift);s.get(29,fk(k,'TX'));s.get(30,fk(k,'TY'));a(0x0509,V(26),V(27),V(29),V(30),V(31));s.check(0x0021,[V(31),F(1.0)],'G%d_RET'%k)
+ s.label(issue);stand=uid('MOVE_STAND');moved=uid('MOVE_UP');s.get(31,fk(k,'TASK'));s.eq(31,8,stand);s.go(moved);s.label(stand);s.get(31,fk(k,'TASK'));s.eq(31,9,moved+'_NO')
+ s.label(moved);a(0x04eb,V(G),I(0));s.label(moved+'_NO')
+ a(0x05d3,V(G),V(26),V(27),V(28),speed,I(ms));setk(k,'TX',26);setk(k,'TY',27);setk_lit(k,'TASK',1);later(k,every);s.ret()
+def teleport_to_point(k,G):
+ """Put the guard on the ground at 26/27 (only used when he is off screen)."""
+ a(0x0087,V(31),V(11));a(0x000b,V(31),F(3));a(0x02ce,V(26),V(27),V(31),V(28));a(0x000b,V(28),F(.7));a(0x00a1,V(G),V(26),V(27),V(28));setk_lit(k,'TASK',0);setk(k,'LX',26);setk(k,'LY',27);setk(k,'LT',12);s.ret()
+def same_order(k,task,target_var,issue):
+ """Return from the guard routine while the guard already runs `task` on target_var and the order
+ has not expired; otherwise continue at `issue` (placed right after this call)."""
+ s.get(31,fk(k,'TASK'));s.eq(31,task,issue);s.get(31,fk(k,'TGT'));s.check(0x003b,[V(31),V(target_var)],issue);s.get(31,fk(k,'NEXT'));s.check(0x001d,[V(12),V(31)],'G%d_RET'%k)
+def order(k,task,target_var,ms):setk_lit(k,'TASK',task);setk(k,'TGT',target_var);later(k,ms);s.ret()
+def shield(k,G,front,lateral):
+ """Step to CJ + front*u + lateral*perp (u = unit vector CJ->threat in 29/30), then fire from there."""
+ a(0x0087,V(26),V(29));a(0x0013,V(26),F(front));a(0x005b,V(26),V(9));a(0x0087,V(28),V(30));a(0x0013,V(28),F(-lateral));a(0x005b,V(26),V(28))
+ a(0x0087,V(27),V(30));a(0x0013,V(27),F(front));a(0x005b,V(27),V(10));a(0x0087,V(28),V(29));a(0x0013,V(28),F(lateral));a(0x005b,V(27),V(28))
+ a(0x0087,V(28),V(11));a(0x0509,V(21),V(22),V(26),V(27),V(31));fire=uid('SHIELD_FIRE');s.check(0x0021,[V(31),F(1.4)],fire);move_to(k,G,I(6),1500,700)
+ s.label(fire);issue=uid('SHIELD_ISSUE');same_order(k,3,25,issue);s.label(issue);a(0x074d,V(G),V(25),I(1500));order(k,3,25,1200)
+def engage_duck(k,G):
+ issue=uid('DUCK_ISSUE');same_order(k,8,25,issue);s.label(issue);a(0x0634,V(G),V(25),I(1),I(1000),I(60));order(k,8,25,3000)
+def engage_timed(k,G):
+ issue=uid('TIMED_ISSUE');same_order(k,10,25,issue);s.label(issue);a(0x07a5,V(G),V(25),I(3000));order(k,10,25,2500)
+def leash(k,G,limit,speed):
+ """Further than `limit` from CJ: go back to the formation point instead of fighting."""
+ ok=uid('LEASH_OK');s.check(0x0021,[V(24),F(limit)],ok);form_point(k);move_to(k,G,I(speed),2500,900);s.label(ok)
+
+def guard(k):
+ G=2+k;P='G%d_'%k;R=P+'RET'
+ s.label('GUARD_%d'%k);s.check(0x056d,[V(G)],R);s.check(0x8118,[V(G)],P+'DEAD')
+ s.check(0x8a32,[V(G)],R);a(0x0819,V(G),V(21));s.check(0x0023,[F(2.5),V(21)],R)
+ s.get(21,fk(k,'TASK'));s.eq(21,-1,P+'READY')
+ a(0x081a,V(G),I(2));a(0x02e2,V(G),I(80));a(0x07dd,V(G),I(80));a(0x0856,V(G),I(1));setk_lit(k,'TASK',0);setk_lit(k,'NEXT',0);setk_lit(k,'DEAD',0);setk(k,'LT',12)
+ a(0x00a0,V(G),V(21),V(22),V(23));setk(k,'LX',21);setk(k,'LY',22)
+ s.label(P+'READY');a(0x00a0,V(G),V(21),V(22),V(23));a(0x050a,V(21),V(22),V(23),V(9),V(10),V(11),V(24))
+ # ---- CJ in a vehicle: ride along when there is a free seat, never chase a car that drives away
+ s.eq(6,-1,P+'VEH');s.go(P+'FOOT')
+ s.label(P+'VEH');s.check(0x803b,[V(6),V(1)],R);s.check(0x80db,[V(G),V(6)],P+'RIDING')
+ a(0x02e3,V(6),V(25));s.check(0x0021,[V(25),F(6)],P+'VEH_SLOW');s.check(0x0021,[V(24),F(10)],P+'VEH_SLOW');s.ret()
+ s.label(P+'VEH_SLOW');s.get(25,fk(k,'TASK'));s.eq(25,4,P+'VEH_ISSUE');s.get(25,fk(k,'NEXT'));s.check(0x001d,[V(12),V(25)],R)
+ s.label(P+'VEH_ISSUE');a(0x01ea,V(6),V(26))
+ for seat in [k%3,(k+1)%3,(k+2)%3]:
+  nxt=uid(P+'SEAT');s.check(0x0019,[V(26),I(seat)],nxt);s.check(0x0431,[V(6),I(seat)],nxt);a(0x05ca,V(G),V(6),I(8000),I(seat));setk_lit(k,'TASK',4);later(k,3000)
+  if k==0:msg('SQCAR')
+  s.ret();s.label(nxt)
+ s.ret()
+ s.label(P+'RIDING');setk_lit(k,'TASK',5);s.ret()
+ # ---- CJ on foot: get out of any car first
+ s.label(P+'FOOT');s.check(0x00df,[V(G)],P+'ON_FOOT');s.get(25,fk(k,'TASK'));s.eq(25,6,P+'LEAVE');s.get(25,fk(k,'NEXT'));s.check(0x001d,[V(12),V(25)],R)
+ s.label(P+'LEAVE');a(0x0633,V(G));setk_lit(k,'TASK',6);later(k,2500);s.ret()
+ # ---- far behind: catch up out of sight, or run there on the path network
+ s.label(P+'ON_FOOT');s.check(0x0021,[V(24),F(70)],P+'NEAR');form_point(k);s.check(0x82cb,[V(G)],P+'FAR_SEEN');teleport_to_point(k,G)
+ s.label(P+'FAR_SEEN');s.get(25,fk(k,'TASK'));s.eq(25,7,P+'FAR_PATH');s.get(25,fk(k,'NEXT'));s.check(0x001d,[V(12),V(25)],R)
+ s.label(P+'FAR_PATH');a(0x05f5,V(G),V(9),V(10),V(11),I(7),I(20000));setk_lit(k,'TASK',7);later(k,3000);s.ret()
+ # ---- stuck check every 2.5 s: moving, far, and barely moved
+ s.label(P+'NEAR');s.get(25,fk(k,'LT'));a(0x0085,V(26),V(12));a(0x0062,V(26),V(25));s.check(0x0019,[V(26),I(2500)],P+'STUCK_DONE')
+ s.get(26,fk(k,'LX'));s.get(27,fk(k,'LY'));a(0x0509,V(21),V(22),V(26),V(27),V(28));setk(k,'LX',21);setk(k,'LY',22);setk(k,'LT',12)
+ s.check(0x0021,[V(24),F(9)],P+'STUCK_DONE');s.check(0x0023,[F(.7),V(28)],P+'STUCK_DONE');s.get(25,fk(k,'TASK'));s.eq(25,1,P+'STUCK_DONE')
+ form_point(k);s.check(0x82cb,[V(G)],P+'STUCK_SEEN');teleport_to_point(k,G)
+ s.label(P+'STUCK_SEEN');a(0x05f5,V(G),V(26),V(27),V(28),I(6),I(15000));setk_lit(k,'TASK',7);later(k,3000);s.ret()
+ s.label(P+'STUCK_DONE');s.get(25,fk(k,'TASK'));s.eq(25,7,P+'NOT_PATHING');s.get(25,fk(k,'NEXT'));s.check(0x001d,[V(12),V(25)],R)
+ s.label(P+'NOT_PATHING')
+ # ---- combat: own threat (spread over the list), else the first one
+ a(0x0085,V(25),V(13+k));alive(25,P+'T0');s.go(P+'COMBAT')
+ s.label(P+'T0');a(0x0085,V(25),V(13));alive(25,P+'PEACE')
+ s.label(P+'COMBAT');a(0x00a0,V(25),V(26),V(27),V(28));a(0x0087,V(29),V(26));a(0x0063,V(29),V(9));a(0x0087,V(30),V(27));a(0x0063,V(30),V(10))
+ a(0x0509,V(9),V(10),V(26),V(27),V(31));s.check(0x0023,[F(.5),V(31)],P+'D_OK');a(0x0007,V(31),F(.5));s.label(P+'D_OK');a(0x0073,V(29),V(31));a(0x0073,V(30),V(31))
+ a(0x0226,V(0),V(31));s.check(0x0019,[V(31),I(35)],P+'CRIT')
+ s.eq(7,1,P+'BODYGUARD')
+ # ASSAULT: pair 0/1 advances crouched (leash 40 m), pair 2/3 flanks 9 m to the side of the threat
+ if k in (0,1):
+  leash(k,G,40,7);engage_duck(k,G)
+ else:
+  side=-1 if k==2 else 1;leash(k,G,40,7)
+  a(0x0509,V(21),V(22),V(26),V(27),V(31));close=uid(P+'FLANK_CLOSE');s.check(0x0021,[V(31),F(10)],close)
+  a(0x0087,V(31),V(30));a(0x0013,V(31),F(-9*side));a(0x005b,V(26),V(31));a(0x0087,V(31),V(29));a(0x0013,V(31),F(9*side));a(0x005b,V(27),V(31))
+  a(0x0509,V(21),V(22),V(26),V(27),V(31));s.check(0x0021,[V(31),F(3)],close);move_to(k,G,I(7),2500,900)
+  s.label(close);engage_timed(k,G)
+ # BODYGUARD: 1 and 2 are shields between CJ and the threat, 0 and 3 engage within 14 m of CJ
+ s.label(P+'BODYGUARD')
+ if k in (1,2):shield(k,G,2.0,-1.3 if k==1 else 1.3)
+ else:leash(k,G,14,6);engage_duck(k,G)
+ # CJ below 35 HP: everyone closes a ring around him and fires
+ s.label(P+'CRIT')
+ if k==0:
+  said=uid(P+'COVER_SAID');s.get(31,fk(k,'COVER'));s.eq(31,0,said);msg('SQCOV',False);setk_lit(k,'COVER',1);s.label(said)
+ shield(k,G,*[(1.5,0),(.6,-1.2),(.6,1.2),(-1.2,0)][k])
+ # ---- no threat: medic first (rear guard), then formation / sector watch
+ s.label(P+'PEACE')
+ if k==0:setk_lit(k,'COVER',0)
+ if k==3:
+  s.get(25,fk(k,'TASK'));s.eq(25,9,P+'MEDIC_IDLE');s.get(25,fk(k,'NEXT'));s.check(0x001d,[V(12),V(25)],R)
+  s.label(P+'MEDIC_IDLE');s.get(25,b.SQ_MEDIC_NEXT);s.check(0x001d,[V(12),V(25)],P+'NO_MEDIC')
+  a(0x0226,V(0),V(31));s.check(0x8019,[V(31),I(59)],P+'MED_GUARDS');a(0x0085,V(25),V(0));s.go(P+'MED_GO')
+  s.label(P+'MED_GUARDS')
+  for j in range(3):
+   nxt=uid(P+'MED_NEXT');alive(2+j,nxt);a(0x0226,V(2+j),V(31));s.check(0x0019,[V(31),I(59)],P+'MED_G%d'%j);s.go(nxt)
+   s.label(P+'MED_G%d'%j);a(0x0085,V(25),V(2+j));s.go(P+'MED_GO');s.label(nxt)
+  s.go(P+'NO_MEDIC')
+  s.label(P+'MED_GO');a(0x00a0,V(25),V(26),V(27),V(28));a(0x0509,V(21),V(22),V(26),V(27),V(31));s.check(0x0021,[V(31),F(1.6)],P+'MED_TREAT');move_to(k,G,I(6),2000,700)
+  s.label(P+'MED_TREAT');a(0x04eb,V(G),I(1));a(0x0226,V(25),V(31));s.check(0x803b,[V(25),V(0)],P+'MED_CJ')
+  a(0x000a,V(31),I(60));s.check(0x0019,[V(31),I(150)],P+'MED_G_SET');a(6,V(31),I(150));s.label(P+'MED_G_SET');a(0x0223,V(25),V(31))
+  a(0x0085,V(31),V(12));a(0x000a,V(31),I(20000));a(0xddc,I(b.SQ_MEDIC_NEXT),V(31));msg('SQMEDG',False);setk_lit(k,'TASK',9);later(k,2500);s.ret()
+  s.label(P+'MED_CJ');a(0x000a,V(31),I(35));s.check(0x0019,[V(31),I(100)],P+'MED_CJ_SET');a(6,V(31),I(100));s.label(P+'MED_CJ_SET');a(0x0223,V(25),V(31))
+  a(0x0085,V(31),V(12));a(0x000a,V(31),I(40000));a(0xddc,I(b.SQ_MEDIC_NEXT),V(31));msg('SQMED',False);setk_lit(k,'TASK',9);later(k,2500);s.ret()
+  s.label(P+'NO_MEDIC')
+ form_point(k);a(0x0509,V(21),V(22),V(26),V(27),V(31))
+ s.check(0x0021,[V(31),F(1.2)],P+'CLOSE');s.go(P+'MOVE')
+ s.label(P+'CLOSE');s.check(0x0021,[V(18),F(.5)],P+'WATCH')
+ s.label(P+'MOVE');a(6,V(20),I(4));s.check(0x0021,[V(18),F(3)],P+'SPD_DIST');a(6,V(20),I(6))
+ s.label(P+'SPD_DIST');s.check(0x0021,[V(31),F(3.5)],P+'SPD_SET');a(6,V(20),I(6));s.check(0x0021,[V(31),F(9)],P+'SPD_SET');a(6,V(20),I(7))
+ s.label(P+'SPD_SET');move_to(k,G,V(20),2500,700)
+ # standing with CJ: weapons up on this guard's sector
+ s.label(P+'WATCH');s.get(25,fk(k,'TASK'));s.eq(25,2,P+'WATCH_ISSUE');s.get(25,fk(k,'NEXT'));s.check(0x001d,[V(12),V(25)],R)
+ s.label(P+'WATCH_ISSUE');aim=uid(P+'AIM_BG');done=uid(P+'AIM_DONE');s.eq(7,1,aim);formation(k,AS_AIM,False);s.go(done);s.label(aim);formation(k,BG_AIM,False);s.label(done)
+ a(0x000b,V(28),F(.8));a(0x0667,V(G),V(26),V(27),V(28),I(2600));setk_lit(k,'TASK',2);later(k,2400);s.ret()
+ # ---- casualty report (once per guard)
+ s.label(P+'DEAD');s.get(25,fk(k,'DEAD'));s.eq(25,0,R);s.get(25,fk(k,'TASK'));s.eq(25,-1,P+'DEAD_NEW');s.ret()
+ s.label(P+'DEAD_NEW');setk_lit(k,'DEAD',1);msg('SQDOWN',False)
+ s.label(R);s.ret()
+for k in range(4):guard(k)
+
+TEXTS={
+ 'SQCF':'~r~CONTACT FRONT!~w~ Squad engaging.','SQCL':'~r~CONTACT LEFT!~w~ Squad engaging.',
+ 'SQCR':'~r~CONTACT RIGHT!~w~ Squad engaging.','SQCB':'~r~CONTACT REAR!~w~ Squad engaging.',
+ 'SQCLR':'~g~AREA SECURE.~w~ Squad regrouping on CJ.','SQDOWN':'~r~MAN DOWN!~w~ We lost one of ours.',
+ 'SQCOV':'~r~CJ IS HIT!~w~ Shields up - covering CJ.','SQMED':'~g~MEDIC~w~: CJ patched up.',
+ 'SQMEDG':'~g~MEDIC~w~: wounded teammate patched up.','SQCAR':'~b~SQUAD~w~: mounting up with CJ.',
+}
+if __name__=='__main__':
+ report=s.build('Helicover_Squad','csa');print(report)
+ with (OUT/'validation.txt').open('a') as validation:validation.write(report+'\n')
+ with (OUT/'Helicover.fxt').open('a') as f:f.write(''.join(k+' '+v+'\n' for k,v in TEXTS.items()))

@@ -5,7 +5,7 @@ Helicover.fxt and build_v25_ground.py appends the ground-team texts to it."""
 import re,shutil,subprocess,sys
 from pathlib import Path
 HERE=Path(__file__).resolve().parent;ROOT=HERE.parent;OUT=ROOT/'build'
-NAMES=['Helicover','Helicover_Core','Helicover_Panel','Helicover_Fire','Helicover_Ground']
+NAMES=['Helicover','Helicover_Core','Helicover_Panel','Helicover_Fire','Helicover_Ground','Helicover_Squad']
 def run(script):
     r=subprocess.run([sys.executable,script],cwd=HERE,capture_output=True,text=True)
     sys.stdout.write(r.stdout);sys.stderr.write(r.stderr)
@@ -19,7 +19,7 @@ def missing_keys():
             if m and int(m.group(1),16)&0x7fff in(0x03e5,0x01e5):used.add(m.group(2))
     return sorted(used-have)
 if __name__=='__main__':
-    run('build_v25.py');run('build_v25_ground.py')
+    run('build_v25.py');run('build_v25_ground.py');run('build_v25_squad.py')
     miss=missing_keys()
     if miss:sys.exit('Missing FXT texts: '+', '.join(miss))
     for f in OUT.iterdir():

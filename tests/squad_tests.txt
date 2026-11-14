@@ -1,0 +1,44 @@
+PASS: TEAM ON FOOT: four armed guards rope down next to CJ, then the helicopter resumes FOLLOW
+PASS: Bodyguard diamond: each guard takes his own slot, sprinting from afar, running, walking when close
+PASS: Move orders are refreshed every 0.7 s at most, not every tick
+PASS: Standing with CJ: weapons up, each guard covering his own sector
+PASS: Moving with CJ: the formation leads him (capped at 6 m) and matches walking or running
+PASS: Contact right: shields step between CJ and the threat, the other two fight crouched
+PASS: Shields fire from their spot; combat orders are not restarted every tick
+PASS: Bodyguard leash: an engager more than 14 m from CJ returns to his slot instead of chasing
+PASS: CJ badly hurt: the whole team closes a ring around him; one COVER CJ call
+PASS: AREA SECURE is called 3.5 s after the last threat is gone
+PASS: Medic: the rear guard runs to a wounded CJ, kneels and patches him (+35 HP), then cools down
+PASS: Medic also treats a wounded teammate (+60 HP, max 150)
+PASS: Mount up: the guards take CJ's passenger seats
+PASS: CJ gets out: the guards get out of the car too
+PASS: A car driving away is not chased; the guards hold and regroup when CJ stops
+PASS: Far behind: teleport only out of sight, otherwise run on the path network
+PASS: A stuck guard (moving, far, not progressing) is recovered out of sight
+PASS: MAN DOWN is called once when a guard dies
+PASS: RECALL TEAM: hover, the team ropes back up, then FOLLOW resumes
+PASS: CJ boards the helicopter another way: the team withdraws and boards
+PASS: Losing the whole team is reported and cleaned up
+PASS: Rope pickup with the team on the ground: the same team covers CJ (only the CJ rope is added)
+PASS: Assault: one pair advances crouched, the other flanks 9 m to each side and attacks
+PASS: Assault leash: nobody pushes more than 40 m away from CJ
+PASS: CEASE FIRE: the team only answers someone who hurt CJ or a teammate
+PASS: PROTECT CJ: armed shooters, or armed Ballas/Vagos/Rifa close to CJ
+PASS: Grove Street members are never engaged unless they attack
+PASS: Police are engaged only while CJ is wanted
+PASS: FOLLOW CJ SHOTS: the team engages what CJ aims at
+PASS: WEAPONS FREE: any armed person, never unarmed civilians
+PASS: Teammates, the crew and the pilot are never threats
+PASS: Fire worker leaves on-foot guards to the squad while its heartbeat is fresh
+PASS: Without the squad worker the fire worker still commands on-foot guards (old behaviour)
+PASS: Rope evacuation guards are led by the squad while CJ walks to the rope
+PASS: After a crouched fight the guard stands up before moving on
+PASS: CJ inside an interior: the team waits outside instead of teleporting after him
+PASS: EVAC > TEAM ON FOOT: deploy/recall and BODYGUARD/ASSAULT tactics
+PASS: TEAM ON FOOT refuses politely: CJ aboard, team already down, nothing to recall, CJ in a car
+PASS: Overwatch: the helicopter circles CJ at 30 m, 24 m above him, instead of hovering on top
+PASS: Overwatch skips stations from which a building hides CJ
+PASS: Taking heavy fire: evasive manoeuvre widens the circle to 50 m and climbs to 45 m
+PASS: CJ driving fast: the helicopter switches to the native chase
+PASS: Combat orbit: a point without a view of the threat is flown 15 m higher and the next one is tried
+Mocked script execution only: real pathing, cover and gunfire are not tested.

@@ -50,7 +50,7 @@ def label_names(name,comp):
     return set().union(*[inv.get(a,set()) for a in comp])
 if __name__=='__main__':
     bad=0
-    for name in ['Helicover_Core','Helicover_Panel','Helicover','Helicover_Fire','Helicover_Ground']:
+    for name in ['Helicover_Core','Helicover_Panel','Helicover','Helicover_Fire','Helicover_Ground','Helicover_Squad']:
         r=[c for c in check(name) if not (label_names(name,c)&REVIEWED.get(name,set()))];bad+=len(r)
         print(name,'unreviewed WAIT-less cycles:',len(r),[sorted(label_names(name,c))[:6] for c in r])
     sys.exit(1 if bad else 0)
