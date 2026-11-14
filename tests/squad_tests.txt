@@ -3,7 +3,7 @@ PASS: Bodyguard diamond: each guard takes his own slot, sprinting from afar, run
 PASS: Move orders are refreshed every 0.7 s at most, not every tick
 PASS: Standing with CJ: weapons up, each guard covering his own sector
 PASS: Moving with CJ: the formation leads him (capped at 6 m) and matches walking or running
-PASS: Contact right: shields step between CJ and the threat, the other two fight crouched
+PASS: Contact right: shields step between CJ and the threat firing on the move, the other two fight crouched
 PASS: Shields fire from their spot; combat orders are not restarted every tick
 PASS: Bodyguard leash: an engager more than 14 m from CJ returns to his slot instead of chasing
 PASS: CJ badly hurt: the whole team closes a ring around him; one COVER CJ call
@@ -20,8 +20,11 @@ PASS: RECALL TEAM: hover, the team ropes back up, then FOLLOW resumes
 PASS: CJ boards the helicopter another way: the team withdraws and boards
 PASS: Losing the whole team is reported and cleaned up
 PASS: Rope pickup with the team on the ground: the same team covers CJ (only the CJ rope is added)
-PASS: Assault: one pair advances crouched, the other flanks 9 m to each side and attacks
+PASS: Assault contact: one man bounds forward firing while his partner covers crouched; flankers move out firing
+PASS: Bounding overwatch: every 3 s the pair swaps who moves and who covers
+PASS: A flanker who reached his flank point attacks from there
 PASS: Assault leash: nobody pushes more than 40 m away from CJ
+PASS: Assault holding: each man faces his sector, then takes a knee
 PASS: CEASE FIRE: the team only answers someone who hurt CJ or a teammate
 PASS: PROTECT CJ: armed shooters, or armed Ballas/Vagos/Rifa close to CJ
 PASS: Grove Street members are never engaged unless they attack
@@ -34,6 +37,9 @@ PASS: Without the squad worker the fire worker still commands on-foot guards (ol
 PASS: Rope evacuation guards are led by the squad while CJ walks to the rope
 PASS: After a crouched fight the guard stands up before moving on
 PASS: CJ inside an interior: the team waits outside instead of teleporting after him
+PASS: The squad also engages whatever the door gunners are firing at
+PASS: A fence in the way: the guard turns to it and climbs over
+PASS: Stairs or a slope are walked, not vaulted
 PASS: EVAC > TEAM ON FOOT: deploy/recall and BODYGUARD/ASSAULT tactics
 PASS: TEAM ON FOOT refuses politely: CJ aboard, team already down, nothing to recall, CJ in a car
 PASS: Overwatch: the helicopter circles CJ at 30 m, 24 m above him, instead of hovering on top
@@ -41,4 +47,5 @@ PASS: Overwatch skips stations from which a building hides CJ
 PASS: Taking heavy fire: evasive manoeuvre widens the circle to 50 m and climbs to 45 m
 PASS: CJ driving fast: the helicopter switches to the native chase
 PASS: Combat orbit: a point without a view of the threat is flown 15 m higher and the next one is tried
+PASS: Combat orbit with no clear view moves on at most every 1.2 s instead of thrashing every tick
 Mocked script execution only: real pathing, cover and gunfire are not tested.

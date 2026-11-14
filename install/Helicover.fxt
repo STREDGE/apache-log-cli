@@ -78,6 +78,10 @@ SQCF ~r~CONTACT FRONT!~w~ Squad engaging.
 SQCL ~r~CONTACT LEFT!~w~ Squad engaging.
 SQCR ~r~CONTACT RIGHT!~w~ Squad engaging.
 SQCB ~r~CONTACT REAR!~w~ Squad engaging.
+SQAF ~r~CONTACT FRONT!~w~ Assault: bounding forward, flankers moving.
+SQAL ~r~CONTACT LEFT!~w~ Assault: bounding forward, flankers moving.
+SQAR ~r~CONTACT RIGHT!~w~ Assault: bounding forward, flankers moving.
+SQAB ~r~CONTACT REAR!~w~ Assault: bounding forward, flankers moving.
 SQCLR ~g~AREA SECURE.~w~ Squad regrouping on CJ.
 SQDOWN ~r~MAN DOWN!~w~ We lost one of ours.
 SQCOV ~r~CJ IS HIT!~w~ Shields up - covering CJ.

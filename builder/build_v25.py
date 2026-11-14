@@ -247,7 +247,7 @@ c.eq(19,11,'ST_OFS_11');c.eq(29,1,'ST_OFS_N_11');a(0x0007,V(26),F(-25.0));a(0x00
 a(0x0007,V(26),F(0));a(0x0007,V(27),F(30))
 c.label('ST_OFS_DONE');a(0x005b,V(26),V(9));a(0x005b,V(27),V(10));a(0x0087,V(28),V(11));a(0x000b,V(28),F(80));a(0x02ce,V(26),V(27),V(28),V(28));c.check(0x8025,[V(28),V(11)],'ST_GROUND_HIGH');a(0x0087,V(28),V(11));c.label('ST_GROUND_HIGH')
 c.eq(29,1,'ST_ALT_NORMAL');a(0x000b,V(28),F(45));c.go('ST_ALT_DONE');c.label('ST_ALT_NORMAL');a(0x000b,V(28),F(24));c.label('ST_ALT_DONE')
-a(6,V(30),I(0));a(0x0087,V(31),V(11));a(0x000b,V(31),F(1));c.check(0x06bd,[V(26),V(27),V(28),V(9),V(10),V(31),I(1),I(0),I(0),I(1),I(0)],'ST_POINT_RET');a(6,V(30),I(1))
+a(6,V(30),I(0));a(0x0087,V(31),V(11));a(0x000b,V(31),F(1));c.check(0x06bd,[V(26),V(27),V(28),V(9),V(10),V(31),I(1),I(0),I(0),I(0),I(0)],'ST_POINT_RET');a(6,V(30),I(1))
 c.label('ST_POINT_RET');c.ret()
 # Hull sampled every 2 s; a loss of more than 120 within 2 s starts a 7 s evasive manoeuvre.
 c.label('EVADE_CHECK');c.get(19,HP_T);c.check(0x001d,[V(20),V(19)],'EVADE_RET');a(0x0085,V(19),V(20));a(0x000a,V(19),I(2000));a(0xddc,I(HP_T),V(19));c.get(17,HP_PREV);a(0xddc,I(HP_PREV),V(6));c.eq(17,0,'EVADE_DROP');c.ret()
@@ -517,9 +517,11 @@ c.label('TRACK_GOTO');c.get(30,EVADE_UNTIL);c.check(0x001d,[V(30),V(20)],'TRACK_
 c.label('TRACK_NORMAL');a(0x0087,V(11),V(31));a(0x000b,V(11),F(25))
 c.label('TRACK_POS');a(0x005b,V(9),V(17));a(0x005b,V(10),V(19))
 # v40: an orbit point without a clear view of the threat is flown 15 m higher, and the next tick
-# moves on to the following point (ORBIT_NEXT = 0) until the gunners can see it.
-a(0x0087,V(30),V(31));a(0x000b,V(30),F(1));c.check(0x06bd,[V(9),V(10),V(11),V(17),V(19),V(30),I(1),I(0),I(0),I(1),I(0)],'TRACK_BLOCKED');c.go('TRACK_ISSUE')
-c.label('TRACK_BLOCKED');a(0x000b,V(11),F(15));c.set(ORBIT_NEXT,0)
+# moves on to the following point (ORBIT_NEXT <= now + 1.2 s) until the gunners can see it.
+a(0x0087,V(30),V(31));a(0x000b,V(30),F(1));c.check(0x06bd,[V(9),V(10),V(11),V(17),V(19),V(30),I(1),I(0),I(0),I(0),I(0)],'TRACK_BLOCKED');c.go('TRACK_ISSUE')
+# v40.1: move on to the next point after 1.2 s at the earliest (v40 re-picked every 100 ms and the
+# helicopter thrashed between points); only buildings count, not trees and other objects.
+c.label('TRACK_BLOCKED');a(0x000b,V(11),F(15));c.get(30,ORBIT_NEXT);a(0x0085,V(8),V(20));a(0x000a,V(8),I(1200));c.check(0x001d,[V(30),V(8)],'TRACK_ISSUE');a(0xddc,I(ORBIT_NEXT),V(8))
 c.label('TRACK_ISSUE');a(0x07bb,V(5),I(0));a(0x04a2,V(5),V(9),V(10),V(11),F(20),F(70));a(0xddc,I(TRACKED_TARGET),V(29));c.ret()
 c.label('TRACK_STOP');c.get(19,TRACKED_TARGET);c.eq(19,-1,'TRACK_RESUME');c.ret()
 c.label('TRACK_RESUME');c.set(TRACKED_TARGET,-1);c.call('RESTORE_FLIGHT');a(0x0726,V(5),V(18),I(-1),F(15));c.ret()
