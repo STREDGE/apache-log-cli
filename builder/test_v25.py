@@ -604,7 +604,8 @@ passed('When both detours are obstructed, cruise reports a blocked route')
 
 # The pilot brings a distant active target into view while following CJ.
 w,c,f=fire_world();npc=target(w,typ=7,skin=20);w.damage.add((1,npc));w.step(c,f,n=25)
-assert any(x[2][1]==npc for x in calls(w,0x780)),calls(w,0x780)
+assert not calls(w,0x780),'0780 keeps a dangling ped pointer; never use it'
+assert w.shared[b.TRACKED_TARGET]==npc and calls(w,0x4a2),calls(w,0x4a2)
 passed('Pilot can reposition to keep an active threat in view')
 # A player follow order cancels an active cruise detour.
 w,c,_=setup();summon(w,c);start_grove(w,c);w.los_fn=lambda a,z:not (abs(z[0]-a[0])<.1 and z[1]-a[1]>30.)

@@ -295,10 +295,19 @@ c.ret()
 # helicopter, keep it in view. Never change landing, hold, muster or Grove missions.
 c.label('TRACK_COMBAT');c.eq(7,2,'TRACK_PATROL');c.go('TRACK_ACTIVE');c.label('TRACK_PATROL');c.eq(7,24,'TRACK_INACTIVE');c.label('TRACK_ACTIVE');c.get(29,FIRE_TARGET);alive(c,29,'TRACK_STOP')
 a(0x00a0,V(18),V(9),V(10),V(11));a(0x00a0,V(29),V(17),V(19),V(31));a(0x050a,V(9),V(10),V(11),V(17),V(19),V(31),V(30));c.check(0x0023,[F(65),V(30)],'TRACK_STOP')
-c.get(19,TRACKED_TARGET);c.check(0x003b,[V(19),V(29)],'TRACK_CHANGED');c.ret()
+c.get(19,TRACKED_TARGET);c.check(0x003b,[V(19),V(29)],'TRACK_CHANGED');c.go('TRACK_DIST')
 c.label('TRACK_CHANGED');c.eq(19,-1,'TRACK_REPLACE');c.go('TRACK_DIST')
 c.label('TRACK_REPLACE');c.call('RESTORE_FLIGHT');a(0x0726,V(5),V(18),I(-1),F(15));c.set(TRACKED_TARGET,-1)
-c.label('TRACK_DIST');a(0x00aa,V(5),V(9),V(10),V(11));a(0x00a0,V(29),V(17),V(19),V(31));a(0x050a,V(9),V(10),V(11),V(17),V(19),V(31),V(30));c.check(0x0021,[V(30),F(30)],'TRACK_DONE');a(0x07bb,V(5),I(0));a(0x0780,V(5),V(29),I(-1),F(35),F(20));a(0xddc,I(TRACKED_TARGET),V(29));c.ret()
+c.label('TRACK_DIST');a(0x00aa,V(5),V(9),V(10),V(11));a(0x00a0,V(29),V(17),V(19),V(31));a(0x050a,V(9),V(10),V(11),V(17),V(19),V(31),V(30));c.check(0x0021,[V(30),F(30)],'TRACK_DONE')
+# v26 crash fix: 0780 HELI_KEEP_ENTITY_IN_VIEW keeps a pointer to a no-save street ped;
+# when the game streams that ped out the autopilot dereferences null inside
+# CCarCtrl::SteerAIHeliToKeepEntityInView. Steer by coordinates instead: hover 25 m
+# from the threat on the helicopter's side, 25 m above it, refreshed every tick.
+a(0x0063,V(9),V(17));a(0x0063,V(10),V(19));a(0x0509,V(9),V(10),F(0),F(0),V(30));c.check(0x0021,[V(30),F(1)],'TRACK_ABOVE')
+a(0x0007,V(11),F(25));a(0x0073,V(11),V(30));a(0x006b,V(9),V(11));a(0x006b,V(10),V(11));c.go('TRACK_GOTO')
+c.label('TRACK_ABOVE');a(0x0007,V(9),F(0));a(0x0007,V(10),F(0))
+c.label('TRACK_GOTO');a(0x005b,V(9),V(17));a(0x005b,V(10),V(19));a(0x0087,V(11),V(31));a(0x000b,V(11),F(25))
+a(0x07bb,V(5),I(0));a(0x04a2,V(5),V(9),V(10),V(11),F(20),F(45));a(0xddc,I(TRACKED_TARGET),V(29));c.ret()
 c.label('TRACK_STOP');c.get(19,TRACKED_TARGET);c.eq(19,-1,'TRACK_RESUME');c.ret()
 c.label('TRACK_RESUME');c.set(TRACKED_TARGET,-1);c.call('RESTORE_FLIGHT');a(0x0726,V(5),V(18),I(-1),F(15));c.ret()
 c.label('TRACK_INACTIVE');c.set(TRACKED_TARGET,-1)
