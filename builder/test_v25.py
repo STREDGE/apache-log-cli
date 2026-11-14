@@ -214,8 +214,6 @@ def start_grove(w,c):
  command(w,c,6,ticks=24)
  assert w.incar.get(1)==c.v[5] and w.shared[b.STATE]==9,(w.incar,w.shared[b.STATE],c.v[24])
  command(w,c,7,ticks=15)
- assert w.shared[b.STATE]==20
- w.altitude=50;w.step(c,n=8)
  assert w.shared[b.STATE]==10,(w.shared[b.STATE],c.v[24])
 
 w,c,_=setup();summon(w,c);pilot=c.v[4];car=c.v[5];command(w,c,5,ticks=8)
@@ -247,8 +245,7 @@ assert w.shared[b.STATE]==2 and not calls(w,0x743) and 'HCNOSIT' in w.messages
 passed('Uneven pickup is rejected')
 
 w,c,_=setup();summon(w,c);start_grove(w,c);car=c.v[5]
-route=calls(w,0x4a2)[-1][2]
-assert route[1:3]==[b.GROVE_X,b.GROVE_Y]
+assert w.frozen.get(car) and calls(w,0xab),'scripted cruise drives the helicopter'
 w.car=[b.GROVE_X+150,b.GROVE_Y,75];w.step(c,n=3)
 assert calls(w,0x4e4)[-1][2]==[b.GROVE_X,b.GROVE_Y]
 assert calls(w,0x7bb)[-1][2]==[car,0] and calls(w,0xad)[-1][2]==[car,21.]
@@ -550,12 +547,16 @@ assert any(x[2][0]==squad[0] and x[2][4]==6 for x in calls(w,0x5d3))
 assert not any(x[2][0] in squad[1:] for x in calls(w,0x5d3))
 passed('Only guards who reach the ground receive running formation tasks')
 
-# Grove flight waits for a climb and reports if the helicopter remains low.
-w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.altitude=5;command(w,c,7,ticks=8)
-assert w.shared[b.STATE]==20
-w.now+=31000;w.step(c,n=6)
-assert w.shared[b.STATE]==18 and 'HCGCLMB' in w.messages
-passed('Grove flight waits for safe climb and reports a stalled ascent')
+# v31: the scripted cruise climbs in place until it clears tall roofs ahead.
+w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.ground_fn=lambda x,y,z:(200. if z>500 else 0.);command(w,c,7,ticks=2)
+x0,y0,z0=w.car;w.step(c,n=5);x1,y1,z1=w.car
+assert w.shared[b.STATE]==10 and (x1,y1)==(x0,y0) and z1>z0,(w.car,x0,y0,z0)
+passed('Cruise climbs in place before passing tall buildings')
+# v31: open-sky cruise covers ~70 m/s and keeps 35 m above the highest surface.
+w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];command(w,c,7,ticks=2);w.step(c,n=10)
+start=w.car.copy();w.step(c,n=10);moved=math.dist(start[:2],w.car[:2])
+assert 60.<moved<75. and abs(w.car[2]-35.)<1.,(moved,w.car)
+passed('Cruise flies about 3x faster at a fixed clearance')
 
 # Weapons remain selected during cease fire and while CJ is not shooting.
 w,c,_=setup();summon(w,c);f=VM('Helicover_Fire',w);w.shared[b.FIRE]=0;w.step(c,f,n=15)
@@ -567,8 +568,7 @@ passed('Guards keep selected weapons in cease fire and without CJ shooting')
 if b.MAP_MARKER:
  # Map flight snapshots the marker, reaches a hover, then allows a rope descent.
  w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.marker=[200.,150.,0.];ground=VM('Helicover_Ground',w);w.step(c,ground,n=3)
- command(w,c,11,ticks=8);assert w.shared[b.STATE]==25
- w.altitude=50;w.step(c,n=8);assert w.shared[b.STATE]==21
+ command(w,c,11,ticks=8);assert w.shared[b.STATE]==21
  w.car=[205.,150.,80.];w.step(c,ground,n=8);assert w.shared[b.STATE]==22,(w.shared[b.STATE],w.messages)
  w.car=[w.shared[b.DEST_X],w.shared[b.DEST_Y],w.shared[b.DEST_Z]+18.];w.speed=0;w.step(c,ground,n=8);assert w.shared[b.STATE]==23
  command(w,c,13,ticks=3);w.step(c,ground,n=45)
@@ -604,7 +604,7 @@ passed('Four guards acquire separate eligible threats when available, with stron
 if b.MAP_MARKER:
  # Search a nearby landing candidate when the exact map marker is obstructed.
  w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.marker=[200.,150.,0.];w.clear_fn=lambda x,y:not(abs(x-200.)<.2 and abs(y-150.)<.2)
- command(w,c,11,ticks=8);assert w.shared[b.STATE]==25;w.altitude=50;w.step(c,n=8);w.car=[205.,150.,80.];w.step(c,n=8)
+ command(w,c,11,ticks=8);assert w.shared[b.STATE]==21;w.car=[205.,150.,80.];w.step(c,n=8)
  assert w.shared[b.STATE]==22 and (w.shared[b.DEST_X],w.shared[b.DEST_Y])!=(200.,150.)
  passed('Map destination searches a nearby clear landing footprint')
 else:
@@ -629,8 +629,8 @@ passed('Follow reissues its order if the helicopter is far from CJ')
 
 if b.MAP_MARKER:
  # A marked destination can also be landed at after the hover choice.
- w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.marker=[200.,150.,0.];command(w,c,11,ticks=8);assert w.shared[b.STATE]==25
- w.altitude=50.;w.step(c,n=8);w.car=[205.,150.,80.];w.step(c,n=8);assert w.shared[b.STATE]==22
+ w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.marker=[200.,150.,0.];command(w,c,11,ticks=8);assert w.shared[b.STATE]==21
+ w.car=[205.,150.,80.];w.step(c,n=8);assert w.shared[b.STATE]==22
  w.car=[w.shared[b.DEST_X],w.shared[b.DEST_Y],w.shared[b.DEST_Z]+18.];w.speed=0;w.step(c,n=8);assert w.shared[b.STATE]==23
  command(w,c,12,ticks=6);assert w.shared[b.STATE]==11
  w.car=[w.shared[b.DEST_X],w.shared[b.DEST_Y],w.shared[b.DEST_Z]+1.5];w.altitude=1.5;w.step(c,n=15)
@@ -653,21 +653,20 @@ assert b'PATROL AROUND CJ' in w.menu;w.events.append(5);w.step(c,p,n=12);assert 
 passed('CLEO setup menu starts patrol')
 if b.MAP_MARKER:
  w,c,p=setup(True);summon(w,c);w.incar[1]=c.v[5];w.marker=[200.,150.,0.];launch=VM('Helicover',w);w.step(c,p,launch,n=15);w.events.append(3);w.step(c,p,n=5)
- assert b'FLY TO MAP MARKER' in w.menu;w.events.append(2);w.step(c,p,n=12);assert w.shared[b.STATE]==25
+ assert b'FLY TO MAP MARKER' in w.menu;w.events.append(2);w.step(c,p,n=12);assert w.shared[b.STATE]==21
  passed('CLEO evacuation menu starts the marked route')
 
-# A forward obstruction produces a clear side detour, then resumes the destination.
-w,c,_=setup();summon(w,c);start_grove(w,c)
-w.los_fn=lambda a,z: not (abs(z[0]-a[0])<.1 and z[1]-a[1]>30.)
-w.now+=1500;w.step(c,n=5)
-assert w.shared[b.AVOID_STAGE]==1 and w.shared[b.STATE]==10
-assert calls(w,0x4a2)[-1][2][1] != b.GROVE_X
-w.los_fn=lambda a,z:True;w.now+=7000;w.step(c,n=5)
-assert w.shared[b.AVOID_STAGE]==0 and calls(w,0x4a2)[-1][2][1:3]==[b.GROVE_X,b.GROVE_Y]
-passed('Blocked forward cruise chooses a side detour then resumes the Grove route')
-w,c,_=setup();summon(w,c);start_grove(w,c);w.los_fn=lambda a,z:False;w.now+=1500;w.step(c,n=5)
-assert w.shared[b.STATE]==18 and 'HCAVOID' in w.messages
-passed('When both detours are obstructed, cruise reports a blocked route')
+# v31: a blocked cruise segment never teleports through geometry; it climbs instead.
+w,c,_=setup();summon(w,c);start_grove(w,c);w.los_fn=lambda a,z:False;x0,y0,z0=w.car;w.step(c,n=3)
+assert (w.car[0],w.car[1])==(x0,y0) and w.car[2]>z0 and w.shared[b.STATE]==10
+passed('Blocked cruise segment climbs in place instead of passing through')
+# v31: arriving over the pad sinks vertically to 18 m without circling.
+w,c,_=setup();summon(w,c);start_grove(w,c);w.car=[b.GROVE_X+60,b.GROVE_Y,75];w.step(c,n=8);assert w.shared[b.STATE]==22
+for _ in range(120):
+ w.step(c)
+ if w.shared[b.STATE]!=22:break
+assert w.shared[b.STATE]==23 and abs(w.car[2]-(w.shared[b.DEST_Z]+18.))<.05 and [w.car[0],w.car[1]]==[w.shared[b.DEST_X],w.shared[b.DEST_Y]],w.car
+passed('Destination approach cruises over the pad and sinks vertically to a hover')
 
 # The pilot brings a distant active target into view while following CJ.
 w,c,f=fire_world();npc=target(w,typ=7,skin=20);w.damage.add((1,npc));w.step(c,f,n=25)
@@ -676,10 +675,10 @@ assert w.shared[b.TRACKED_TARGET]==npc and calls(w,0x4a2),calls(w,0x4a2)
 passed('Pilot can reposition to keep an active threat in view')
 # A player follow order cancels an active cruise detour.
 w,c,_=setup();summon(w,c);start_grove(w,c);w.los_fn=lambda a,z:not (abs(z[0]-a[0])<.1 and z[1]-a[1]>30.)
-w.now+=1500;w.step(c,n=5);assert w.shared[b.AVOID_STAGE]==1
+w.step(c,n=5);assert w.frozen.get(c.v[5])
 # CJ is aboard, so a HOLD order cancels the cruise without ejecting CJ.
-command(w,c,3,ticks=8);assert w.shared[b.STATE]==3 and w.shared[b.AVOID_STAGE]==0 and w.incar.get(1)==c.v[5]
-passed('New hold command cancels an active detour without ejecting CJ')
+command(w,c,3,ticks=8);assert w.shared[b.STATE]==3 and not w.frozen.get(c.v[5]) and w.incar.get(1)==c.v[5]
+passed('New hold command stops the scripted cruise without ejecting CJ')
 
 text='\n'.join(results)+'\nMocked script execution only: actual GTA flight, collisions, gunfire, animations and Android behavior are not tested.\n'
 (b.OUT/'scenario_tests.txt').write_text(text);print(text)
