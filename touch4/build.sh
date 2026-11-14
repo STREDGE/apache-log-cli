@@ -7,7 +7,7 @@ OUT=${OUT:-../build/touch4}
 T="--target=aarch64-linux-android21"
 mkdir -p "$OUT/stubs"
 cat > "$OUT/stubs/c.c" <<'S'
-void mprotect(void){} void mmap(void){} void munmap(void){} void getpagesize(void){}
+void mprotect(void){} void getpagesize(void){}
 void open(void){} void read(void){} void write(void){} void close(void){} void dl_iterate_phdr(void){}
 S
 cat > "$OUT/stubs/dl.c" <<'S'

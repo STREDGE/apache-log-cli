@@ -14,7 +14,8 @@
  *  2. lifts the 2-finger limits (OS_PointerGetNumber -> 4, index checks -> 3);
  *  3. hooks ProcessEvents() (game thread) to deliver queued touches through the game's own
  *     AND_TouchEvent(type, slot, x, y) before the normal event processing;
- *  4. replaces the NVEventMultiTouchEvent4 stub and hooks the 2-finger JNI entry. The first
+ *  4. replaces the NVEventMultiTouchEvent4 stub (8 bytes: ldr x16 from a pointer stored in the patched
+ *     2-finger entry; br x16) and hooks the 2-finger JNI entry. No new executable memory is needed. The first
  *     touch switches the activity to Use2Touches = false through JNI; from then on Java sends
  *     up to four fingers and the mod handles all of them itself. Each finger is followed by its
  *     Android pointer id (MotionEvent.getPointerId), so it keeps its slot until it is lifted,
@@ -42,8 +43,6 @@ typedef unsigned short u16;
 #define RTLD_NOW 2
 
 extern int mprotect(void *addr, u64 len, int prot);
-extern void *mmap(void *addr, u64 len, int prot, int flags, int fd, long off);
-extern int munmap(void *addr, u64 len);
 extern int getpagesize(void);
 extern int open(const char *path, int flags, ...);
 extern long read(int fd, void *buf, u64 n);
@@ -150,6 +149,16 @@ static mt2_fn g_mt2; /* original 2-finger handler (relocated prologue) */
 static touch_fn g_touch;
 static pe_fn g_pe_orig;
 static unsigned char g_points[4 * POINT_STRIDE] __attribute__((aligned(16)));
+/* The original ProcessEvents / NVEventMultiTouchEvent: their first instructions (no PC-relative
+   code; checked word by word against the game at install) followed by a jump back into the game. */
+HIDDEN u64 g_pe_cont, g_mt2_cont;
+extern const char pe_orig_tramp[], mt2_orig_tramp[];
+__asm__(".text\n.p2align 2\n.hidden pe_orig_tramp\n.type pe_orig_tramp,%function\npe_orig_tramp:\n"
+        ".inst 0xd10203ff\n.inst 0xa9026ffc\n.inst 0xa90367fa\n.inst 0xa9045ff8\n"
+        "adrp x17, g_pe_cont\nldr x17, [x17, #:lo12:g_pe_cont]\nbr x17\n"
+        ".p2align 2\n.hidden mt2_orig_tramp\n.type mt2_orig_tramp,%function\nmt2_orig_tramp:\n"
+        ".inst 0xd101c3ff\n.inst 0xf90013f9\n.inst 0xa9035ff8\n.inst 0xa90457f6\n.inst 0xa9054ff4\n.inst 0xa9067bfd\n"
+        "adrp x17, g_mt2_cont\nldr x17, [x17, #:lo12:g_mt2_cont]\nbr x17\n");
 
 /* ---------- queue: UI thread -> game thread ---------- */
 /* AND_TouchEvent types, as ProcessEvents maps the per-finger codes: 1 up, 2 down, 3 move, 4 cancel. */
@@ -322,10 +331,10 @@ static int refuse(const char *why) { lg(why); lg(" - nothing changed\n"); flush_
 
 static int g_done;
 static int install(void) {
-    u64 stub, pe, mt2, i, page = 0;
-    u32 *t, jump[4], b;
+    u64 stub, pe, mt2, i;
+    u32 jump[6], ldr16[2];
     g_page = (u64)getpagesize();
-    lg("Touch x4 1.1\n");
+    lg("Touch x4 1.2\n");
     dl_iterate_phdr(find_gtasa, 0);
     if (!g_base) return refuse("libGTASA.so not loaded");
     lg("libGTASA base "); lghex(g_base); lg("\n");
@@ -333,32 +342,21 @@ static int install(void) {
     for (i = 0; i < NPATCHES; i++) if (rd32(PATCHES[i].off) != PATCHES[i].expect) { lg("at "); lghex(PATCHES[i].off); return refuse(": unexpected code, other game version"); }
     if (rd32(OFF_MT4_STUB) != MT4_STUB_EXPECT[0] || rd32(OFF_MT4_STUB + 4) != MT4_STUB_EXPECT[1]) return refuse("multitouch4 stub differs");
     for (i = 0; i < 4; i++) if (rd32(OFF_PROCESS_EVENTS + 4 * i) != PE_PROLOGUE[i]) return refuse("ProcessEvents differs");
-    for (i = 0; i < 4; i++) if (rd32(OFF_MT2 + 4 * i) != MT2_PROLOGUE[i]) return refuse("multitouch handler differs");
+    for (i = 0; i < 6; i++) if (rd32(OFF_MT2 + 4 * i) != MT2_PROLOGUE[i]) return refuse("multitouch handler differs");
     for (i = 0; i < NSTATE_REFS; i++) if (rd32(STATE_REFS[i].off) != STATE_REFS[i].expect) return refuse("ProcessEvents state differs");
     if (*(volatile u64 *)(g_base + OFF_POINTS_GOT) != g_base + OFF_POINTS) return refuse("Points GOT differs");
-    /* executable page within +-128 MB of the stub for a 4-byte branch */
+    /* v1.2: no new executable memory (Android may refuse it). The relocated prologues live in this
+       module's own code (pe_orig_tramp / mt2_orig_tramp below); check they match the game first. */
+    for (i = 0; i < 4; i++) if (((const u32 *)(u64)&pe_orig_tramp)[i] != PE_PROLOGUE[i]) return refuse("ProcessEvents trampoline differs");
+    for (i = 0; i < 6; i++) if (((const u32 *)(u64)&mt2_orig_tramp)[i] != MT2_PROLOGUE[i]) return refuse("multitouch trampoline differs");
     stub = g_base + OFF_MT4_STUB;
-    for (i = 0; i < 96 && !page; i++) {
-        u64 hint = (i < 48) ? g_base + 0x1300000UL + i * 0x100000UL : g_base - (i - 47) * 0x100000UL;
-        void *p = mmap((void *)hint, g_page, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-        if (p == (void *)-1L || !p) continue;
-        if ((u64)p - stub + 0x7f00000UL < 0xfe00000UL) page = (u64)p; else munmap(p, g_page);
-    }
-    if (!page) return refuse("no executable page near libGTASA");
-    lg("trampoline page "); lghex(page); lg("\n");
     g_touch = (touch_fn)(g_base + OFF_AND_TOUCH);
     pe = g_base + OFF_PROCESS_EVENTS;
     mt2 = g_base + OFF_MT2;
-    t = (u32 *)page;
-    abs_jump(t, (u64)&touch4_multitouch4);                       /* [0..3]   entry for the stub */
-    for (i = 0; i < 4; i++) t[4 + i] = PE_PROLOGUE[i];           /* [4..11]  original ProcessEvents */
-    abs_jump(t + 8, pe + 16);
-    for (i = 0; i < 4; i++) t[12 + i] = MT2_PROLOGUE[i];         /* [12..19] original 2-finger handler */
-    abs_jump(t + 16, mt2 + 16);
-    sync_icache(page, 80);
-    mprotect((void *)page, g_page, PROT_READ | PROT_EXEC);
-    g_pe_orig = (pe_fn)(page + 16);
-    g_mt2 = (mt2_fn)(page + 48);
+    g_pe_cont = pe + 16;
+    g_mt2_cont = mt2 + 24;
+    g_pe_orig = (pe_fn)(u64)&pe_orig_tramp;
+    g_mt2 = (mt2_fn)(u64)&mt2_orig_tramp;
     /* 1. Points -> 4 entries */
     memcpy(g_points, (void *)(g_base + OFF_POINTS), POINTS_BYTES);
     if (set_prot(g_base + OFF_POINTS_GOT, 8, PROT_READ | PROT_WRITE)) return refuse("cannot write GOT");
@@ -372,11 +370,14 @@ static int install(void) {
     /* 3. ProcessEvents hook (game thread) */
     abs_jump(jump, (u64)&touch4_process_events);
     write_code(pe, jump, 16);
-    /* 4. stub -> branch to the trampoline entry; last the 2-finger entry, which switches Java to 4 */
-    b = 0x14000000U | (u32)(((page - stub) >> 2) & 0x3ffffffU);
-    write_code(stub, &b, 4);
+    /* 4. the 2-finger entry: 24 bytes = jump to our handler + the address of our 4-finger handler,
+       which the 8-byte multitouch4 stub then loads PC-relative (ldr x16, mt2+16; br x16) */
     abs_jump(jump, (u64)&touch4_multitouch2);
-    write_code(mt2, jump, 16);
+    jump[4] = (u32)(u64)&touch4_multitouch4; jump[5] = (u32)((u64)&touch4_multitouch4 >> 32);
+    write_code(mt2, jump, 24);
+    ldr16[0] = 0x58000010U | (u32)((((mt2 + 16) - stub) >> 2) & 0x7ffffU) << 5;
+    ldr16[1] = 0xd61f0200U; /* br x16 */
+    write_code(stub, ldr16, 8);
     lg("4-finger input enabled (switches on at the first touch)\n");
     return 1;
 }
@@ -385,7 +386,7 @@ static int install(void) {
 /* AML's ModInfo starts with these fields; the loader may store more after them (handle, dependencies),
    so the object is padded with zeros. */
 struct ModInfo { char guid[48]; char name[48]; char version[24]; char author[48]; u16 ver[4]; unsigned char reserved[336]; };
-static struct ModInfo g_info __attribute__((aligned(16))) = {"net.helicover.touch4", "Touch x4", "1.1", "Helicover", {1, 1, 0, 0}, {0}};
+static struct ModInfo g_info __attribute__((aligned(16))) = {"net.helicover.touch4", "Touch x4", "1.2", "Helicover", {1, 2, 0, 0}, {0}};
 EXPORT struct ModInfo *__GetModInfo(void) { return &g_info; }
 EXPORT void OnModPreLoad(void) {}
 EXPORT void OnModLoad(void) {

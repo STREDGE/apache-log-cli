@@ -74,10 +74,10 @@ class Emu:
         uc.mem_write(DATA, struct.pack('<QQQH', GTA_BASE, DATA + 0x100, 0, 0))
         # game functions the test replaces with recorders (none of them is checked by the mod)
         g = GTA_BASE
-        uc.mem_write(g + C['OFF_MT2'] + 16, u32(0x9101c3ff) + u32(0x52800020) + u32(RET))  # add sp,#0x70; mov w0,#1; ret
+        uc.mem_write(g + C['OFF_MT2'] + 24, u32(0x9101c3ff) + u32(0x52800020) + u32(RET))  # add sp,#0x70; mov w0,#1; ret
         uc.mem_write(g + C['OFF_AND_TOUCH'], u32(RET))
         uc.mem_write(g + C['OFF_PROCESS_EVENTS'] + 16, u32(0x910203ff) + u32(0x52800aa0) + u32(RET))  # add sp,#0x80; mov w0,#0x55; ret
-        uc.hook_add(UC_HOOK_CODE, self.on_mt2, begin=g + C['OFF_MT2'] + 16, end=g + C['OFF_MT2'] + 16)
+        uc.hook_add(UC_HOOK_CODE, self.on_mt2, begin=g + C['OFF_MT2'] + 24, end=g + C['OFF_MT2'] + 24)
         # fake JNIEnv: ENV -> function table of 229 recording stubs
         uc.mem_write(ENV, struct.pack('<Q', ENV + 0x100))
         uc.mem_write(ENV + 0x100, b''.join(struct.pack('<Q', self.stub_for('jni:%d' % i)) for i in range(229)))
@@ -289,12 +289,15 @@ def test_install(page):
     got = e.r64(C['OFF_POINTS_GOT'])
     check(MOD_BASE <= got < MOD_BASE + 0x100000, 'Points GOT -> mod array')
     check(bytes(e.uc.mem_read(got, 56)) == bytes(e.uc.mem_read(GTA_BASE + C['OFF_POINTS'], 56)), 'Points copied')
-    b = e.r32(C['OFF_MT4_STUB'])
-    check(b >> 26 == 0x05, 'stub is a B')
-    imm = b & 0x3ffffff
-    if imm & 0x2000000: imm -= 0x4000000
-    tramp = GTA_BASE + C['OFF_MT4_STUB'] + imm * 4
-    check(any(r == tramp for h, r in e.mmaps), 'B lands on the mmap page')
+    # v1.2: the 8-byte stub loads the 4-finger handler from the patched 2-finger entry (mt2+16)
+    l, br = e.r32(C['OFF_MT4_STUB']), e.r32(C['OFF_MT4_STUB'] + 4)
+    imm = (l >> 5) & 0x7ffff
+    if imm & 0x40000: imm -= 0x80000
+    check(l & 0xff00001f == 0x58000010 and br == 0xd61f0200, 'stub is ldr x16 / br x16')
+    lit = C['OFF_MT4_STUB'] + imm * 4
+    check(lit == C['OFF_MT2'] + 0x10, 'stub literal is the pointer stored at mt2+16')
+    check(MOD_BASE <= e.r64(lit) < MOD_BASE + 0x100000, 'that pointer is in the mod')
+    check(not e.mmaps, 'no executable memory allocated')
     check(e.r32(C['OFF_PROCESS_EVENTS']) == 0x58000051 and e.r32(C['OFF_PROCESS_EVENTS'] + 4) == 0xd61f0220, 'ProcessEvents hooked')
     check(e.r32(C['OFF_MT2']) == 0x58000051, '2-finger entry hooked')
     last = {}
@@ -466,8 +469,8 @@ def test_modinfo():
     p = e.call(MOD_BASE + e.mod['__GetModInfo'])
     raw = bytes(e.uc.mem_read(p, 176))
     f = [raw[i:j].split(b'\0')[0].decode() for i, j in ((0, 48), (48, 96), (96, 120), (120, 168))]
-    check(f == ['net.helicover.touch4', 'Touch x4', '1.1', 'Helicover'], 'ModInfo strings %r' % f)
-    check(struct.unpack('<4H', raw[168:176]) == (1, 1, 0, 0), 'ModInfo version')
+    check(f == ['net.helicover.touch4', 'Touch x4', '1.2', 'Helicover'], 'ModInfo strings %r' % f)
+    check(struct.unpack('<4H', raw[168:176]) == (1, 2, 0, 0), 'ModInfo version')
     check(bytes(e.uc.mem_read(p + 176, 336)) == b'\0' * 336, 'ModInfo padding zero')
 
 if __name__ == '__main__':
