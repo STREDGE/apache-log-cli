@@ -11,6 +11,7 @@ HCDBG DBG ~1~
 HCNEED ~y~HELICOVER~w~: call support first (HELICOVER > CALL SUPPORT).
 HCNOMAP ~y~EVAC~w~: place a destination marker on the map first.
 HCCHOS ~g~EVAC~w~: above destination. Press the exit button to get out.
+HCAIR ~r~AIR THREAT!~w~ Returning fire on the police chopper.
 HCCONT ~r~CONTACT!~w~ Door gunners engaging.
 HCKILL ~g~TARGET DOWN~w~ - kills: ~1~
 HCCLEAR ~g~AREA CLEAR.~w~ Gunners holding.

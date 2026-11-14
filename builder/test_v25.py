@@ -73,7 +73,11 @@ class VM:
     marker=getattr(w,'marker',None);addr,size=vals[1],vals[2];entry=b.RADAR_TRACE_OFS+5*48
     mem={(b.WAYPOINT_OFS,4):(5|7<<16) if marker else 0,(b.WAYPOINT_OFS,2):5 if marker else 0xffff,(b.WAYPOINT_OFS+2,2):7 if marker else 0xffff,
          (entry+20,2):getattr(w,'wp_ref',7),(entry+41,1):getattr(w,'wp_flags',0x42),(entry+8,4):marker[0] if marker else 0.,(entry+12,4):marker[1] if marker else 0.}
-    put(0,mem[(addr,size)])
+    for k,tr in enumerate(getattr(w,'traces',[])):
+     tb=b.BULLET_TRACES_OFS+k*b.BULLET_TRACE_SIZE
+     for i in range(3):mem[(tb+4*i,4)]=tr['start'][i];mem[(tb+12+4*i,4)]=tr['end'][i]
+     mem[(tb+24,1)]=1 if tr.get('used',True) else 0;mem[(tb+28,4)]=tr['time']
+    put(0,mem.get((addr,size),0))
    elif base==0xab6:
     marker=getattr(w,'marker',None)
     for i in range(3):put(i,marker[i] if marker else 0.)
@@ -909,6 +913,20 @@ passed('Gunner callouts: CONTACT, TARGET DOWN with kill count, AREA CLEAR, mode 
 w,c,f=fire_world();w.shared[b.HUD]=0;w.shared[b.FIRE]=1;npc=target(w,typ=7);w.step(c,f,n=15);w.dead.add(npc);w.step(c,f,n=5)
 assert not [m for m in w.messages if m.startswith('HCC') or m.startswith('HCFM')] and not getattr(w,'debug',[]),w.messages
 passed('Callouts stay silent when STATUS MESSAGES is disabled')
+# v39.4: PROTECT CJ at 3+ stars returns fire at a police chopper found through its bullet traces
+def chopper_round(w,start=(60.,40.,45.),age=0):w.traces=[{'start':list(start),'end':list(w.player),'time':w.now-age}]
+w,c,f=fire_world();w.wanted=3;w.step(c,f,n=3);chopper_round(w);w.step(c,f,n=6)
+shots=[x for x in calls(w,0x6bc)];tasks=[x for x in calls(w,0x668)+calls(w,0x713) if x[2][3:6]==[60.,40.,45.] or x[2][1:4]==[60.,40.,45.]]
+assert 'HCAIR' in w.messages and tasks and shots and all(math.dist(x[2][3:6],[60.,40.,45.])<3. for x in shots),(w.messages,shots[:2])
+passed('PROTECT CJ at 3+ stars returns fire at the police chopper shooting CJ')
+w.traces=[];w.now+=1000;w.step(c,f,n=4);n=len(calls(w,0x6bc));assert n>len(shots),'keeps firing ~3 s after the last round'
+w.now+=4000;w.step(c,f,n=6);n2=len(calls(w,0x6bc));w.step(c,f,n=6);assert len(calls(w,0x6bc))==n2,'stops when the chopper is silent'
+passed('Return fire lasts 3 s after the chopper stops shooting')
+for wanted,start,age,why in [(2,(60.,40.,45.),0,'only at 3+ stars'),(4,(60.,40.,8.),0,'ground shooter ignored'),(4,None,0,'our own helicopter ignored'),(4,(60.,40.,45.),2000,'stale round ignored')]:
+ w,c,f=fire_world();w.wanted=wanted;w.step(c,f,n=3)
+ chopper_round(w,start or tuple(w.car),age);w.step(c,f,n=6)
+ assert 'HCAIR' not in w.messages,why
+passed('Air threat ignores low wanted levels, ground shooters, our own gunners and stale rounds')
 # combat orbit around the threat at 28 m, 25 m above it, moving between points
 w,c,f=fire_world();npc=target(w,typ=7,skin=20);w.damage.add((1,npc));w.step(c,f,n=10)
 pts=set()
