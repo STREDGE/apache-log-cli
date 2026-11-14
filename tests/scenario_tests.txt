@@ -106,4 +106,5 @@ PASS: PROTECT CJ at 3+ stars returns fire at the police chopper shooting CJ
 PASS: Return fire lasts 3 s after the chopper stops shooting
 PASS: Air threat ignores low wanted levels, ground shooters, our own gunners and stale rounds
 PASS: Combat orbit circles the threat at 28 m and 25 m above it
+PASS: All on-screen texts: radio style (coloured source or alert, then the message), at most 66 characters, no removed buttons
 Mocked script execution only: actual GTA flight, collisions, gunfire, animations and Android behavior are not tested.

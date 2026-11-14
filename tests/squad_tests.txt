@@ -72,5 +72,19 @@ PASS: Without cover nearby the engager fights crouched where he stands
 PASS: Reload drill: after 10 s of fighting guards crouch 1.5 s to reload, staggered so the others keep firing
 PASS: CJ badly hurt with three or more threats: shields up, then "EVAC recommended"
 PASS: After 20 s of quiet the team lowers its weapons; the first threat puts them back on alert
-PASS: Frame cost in a busy fight (8 threats, rounds at CJ): fire worker peak 2475, squad worker peak 1489 script instructions
+PASS: A car target: right-door gunners hit the engine, left-door gunners the driver
+PASS: CJ aiming at someone: two gunners join him on that target at once
+PASS: A gunner keeps a target he is hurting, and hands it over after 5 s without a hit
+PASS: Threat 40 m from CJ: the orbit centre moves 30% towards CJ so the gunners cover both
+PASS: A threat that slips out of a guard's sight gets 4 s of suppressive fire at his last seen spot, then normal fighting
+PASS: A wounded guard (below 50 HP) stays closer to CJ: 10 m leash instead of 14 m
+PASS: Welcome message once, a few seconds after the game starts
+PASS: Team drop notices say what really happens: "moving in to drop the team", "on the ground" - no false "rope pickup" / "holding"
+PASS: A 12 s fight with four shooters gives 2 clear radio calls, not a stream (SQXL, SQRLD)
+PASS: An alarm on screen is not covered by lesser calls; once it expires the chatter comes back
+PASS: MESSAGES: IMPORTANT keeps danger and tactical calls, drops the chatter
+PASS: MESSAGES: OFF is silent in a fight but still explains why a command was refused
+PASS: With the team on the ground only the squad calls the contact (no double "CONTACT!")
+PASS: SETTINGS: one row cycles MESSAGES: ALL / IMPORTANT / OFF
+PASS: Frame cost in a busy fight (8 threats, rounds at CJ): fire worker peak 2481, squad worker peak 1533 script instructions
 Mocked script execution only: real pathing, cover and gunfire are not tested.
