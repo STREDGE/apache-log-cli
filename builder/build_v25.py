@@ -16,9 +16,11 @@ GLIDE_C=STATE+116;STUCK_SINCE=STATE+117
 # 0AB6 GET_TARGET_BLIP_COORDS is a CLEO 4 PC opcode; CLEO Android crashes on it.
 # v29 reads the waypoint straight from libGTASA memory with CLEO Android 0DD8 instead.
 # Offsets come from the user's arm64 libGTASA.so (DWARF + disassembly of
-# CRadar::GetActualBlipArrayIndex); another game version needs new offsets.
+# CRadar::GetActualBlipArrayIndex and PlaceRedMarker); another game version needs new offsets.
 MAP_MARKER=True
-WAYPOINT_OFS=0xC1DE40+28     # FrontEndMenuManager.waypoint_blip (int32, -1 = none)
+# v30: the mobile map does not use FrontEndMenuManager.waypoint_blip. PlaceRedMarker()
+# stores the SetCoordBlip handle in gMobileMenu+0x68 and clears it to 0 (0 = none).
+WAYPOINT_OFS=0x8BE780+0x68   # gMobileMenu waypoint blip handle (int32, 0 = none)
 RADAR_TRACE_OFS=0xC21728     # CRadar::ms_RadarTrace[250], 48 bytes each
 
 GROVE_X=2492.0;GROVE_Y=-1666.0
@@ -214,7 +216,8 @@ c.label('MAP_CLIMB_TIMEOUT');a(0x0085,V(17),V(20));a(0x0062,V(17),V(21));c.check
 c.label('NO_MAP');msg(c,'HCNOMAP');c.go('TICK')
 # Waypoint handle = index | counter<<16. Valid when index < 250, the trace's ReferenceIndex
 # (+20) equals the counter and bTrackingBlip (bit 1 of byte +41) is set; x/y at +8/+12.
-c.label('READ_WAYPOINT');a(6,V(29),I(0));a(0x0dd8,V(30),I(WAYPOINT_OFS),I(4),I(1));c.eq(30,-1,'WP_HANDLE');c.ret()
+c.label('READ_WAYPOINT');a(6,V(29),I(0));a(0x0dd8,V(30),I(WAYPOINT_OFS),I(4),I(1));c.eq(30,-1,'WP_NOT_MINUS');c.ret()
+c.label('WP_NOT_MINUS');c.eq(30,0,'WP_HANDLE');c.ret()
 c.label('WP_HANDLE');a(0x0dd8,V(30),I(WAYPOINT_OFS),I(2),I(1));c.check(0x0019,[V(30),I(249)],'WP_INDEX');c.ret()
 c.label('WP_INDEX');a(0x0dd8,V(31),I(WAYPOINT_OFS+2),I(2),I(1));a(0x0012,V(30),I(48));a(0x000a,V(30),I(RADAR_TRACE_OFS))
 a(0x0085,V(28),V(30));a(0x000a,V(28),I(20));a(0x0dd8,V(26),V(28),I(2),I(1));c.check(0x003b,[V(26),V(31)],'WP_STALE')

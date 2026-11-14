@@ -67,7 +67,7 @@ class VM:
    elif op==0xdd8:
     assert vals[3]==1
     marker=getattr(w,'marker',None);addr,size=vals[1],vals[2];entry=b.RADAR_TRACE_OFS+5*48
-    mem={(b.WAYPOINT_OFS,4):(5|7<<16) if marker else -1,(b.WAYPOINT_OFS,2):5 if marker else 0xffff,(b.WAYPOINT_OFS+2,2):7 if marker else 0xffff,
+    mem={(b.WAYPOINT_OFS,4):(5|7<<16) if marker else 0,(b.WAYPOINT_OFS,2):5 if marker else 0xffff,(b.WAYPOINT_OFS+2,2):7 if marker else 0xffff,
          (entry+20,2):getattr(w,'wp_ref',7),(entry+41,1):getattr(w,'wp_flags',0x42),(entry+8,4):marker[0] if marker else 0.,(entry+12,4):marker[1] if marker else 0.}
     put(0,mem[(addr,size)])
    elif base==0xab6:
@@ -578,6 +578,7 @@ if b.MAP_MARKER:
  w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];command(w,c,11,ticks=6)
  assert w.shared[b.STATE]==2 and 'HCNOMAP' in w.messages
  passed('Map flight rejects an absent marker')
+ assert all(x[2][1]==0x8BE7E8 for x in calls(w,0xdd8) if x[2][2]==4 and x[2][1]<0x8C0000),calls(w,0xdd8)
  for attr,val,name in [('wp_ref',8,'a stale waypoint handle'),('wp_flags',0x40,'an inactive radar trace')]:
   w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.marker=[200.,150.,0.];setattr(w,attr,val);command(w,c,11,ticks=6)
   assert w.shared[b.STATE]==2 and 'HCNOMAP' in w.messages
