@@ -360,7 +360,7 @@ assert w.shared[b.GT_SUPP]==1 and gtargets(w)[0]==970,(w.shared[b.GT_SUPP],gtarg
 shots=[x[2] for x in w.calls if x[1]==0x6bc and x[0]>w.now-1000]
 assert any(abs(s[4])<1. and abs(s[3]-24.)<1.5 for s in shots),shots[-3:]
 passed('A target that ducks behind cover gets suppressive fire at his last seen position')
-for _ in range(50):w.health[970]-=1;w.step(c,f)  # someone else keeps hitting him, so this is not the 5 s hand-over
+for _ in range(30):w.step(c,f)  # 4 s after he was last seen, before the 5 s hand-over
 assert w.shared[b.GT_SUPP]==0,'suppression ends after about 4 s'
 passed('Suppression stops after about 4 s instead of wasting rounds on a wall')
 # ------------------------------------------------------------------ v41 pilot
@@ -490,6 +490,10 @@ def noisy_fight(level,secs=12):
 w,V,team=noisy_fight(2)
 assert 2<=len(w.messages)<=6,w.messages
 passed('A 12 s fight with four shooters gives %d clear radio calls, not a stream (%s)'%(len(w.messages),', '.join(w.messages)))
+w,V,team=squad_scene([(985,20.,0.,30,True)]);w.shooting_chars.add(985);w.shared[b.MSG_PRIO]=3;w.shared[b.MSG_UNTIL]=w.now+8000;w.messages.clear();steps(w,V,70)
+assert not w.messages,w.messages
+w.shared[b.MSG_PRIO]=1;steps(w,V,100);assert 'SQRLD' in w.messages,w.messages
+passed('An alarm on screen is not covered by lesser calls; once it expires the chatter comes back')
 w,V,team=noisy_fight(1)
 assert w.messages and not {'SQRLD','SQCVR','SQMED','SQMEDG','SQCAR'}&set(w.messages),w.messages
 passed('MESSAGES: IMPORTANT keeps danger and tactical calls, drops the chatter')

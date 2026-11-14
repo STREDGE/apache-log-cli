@@ -81,6 +81,7 @@ PASS: A wounded guard (below 50 HP) stays closer to CJ: 10 m leash instead of 14
 PASS: Welcome message once, a few seconds after the game starts
 PASS: Team drop notices say what really happens: "moving in to drop the team", "on the ground" - no false "rope pickup" / "holding"
 PASS: A 12 s fight with four shooters gives 2 clear radio calls, not a stream (SQXL, SQRLD)
+PASS: An alarm on screen is not covered by lesser calls; once it expires the chatter comes back
 PASS: MESSAGES: IMPORTANT keeps danger and tactical calls, drops the chatter
 PASS: MESSAGES: OFF is silent in a fight but still explains why a command was refused
 PASS: With the team on the ground only the squad calls the contact (no double "CONTACT!")
