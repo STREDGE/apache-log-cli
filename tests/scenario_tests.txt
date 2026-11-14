@@ -43,6 +43,11 @@ PASS: A stalled rope approach reports failure after 35 seconds
 PASS: Rope approach glides from 45 m to an exact hover without circling, compensating the z offset
 PASS: Beyond 45 m the native autopilot flies the approach at higher speed
 PASS: An obstructed glide path keeps the native approach instead of teleporting through it
+PASS: Spawn height clears tall buildings
+PASS: A wedged helicopter is lifted out and resumes its order
+PASS: A slow hover close to CJ is not mistaken for being stuck
+PASS: Dismiss deletes a stuck on-screen helicopter and a new call works
+PASS: Rope descent starts below the hull and restores control on the ground
 PASS: Assembler rejects both inverted literal/local comparison forms
 PASS: CJ ascent advances smoothly over about 1.8 seconds at two frame rates
 PASS: Only guards who reach the ground receive running formation tasks

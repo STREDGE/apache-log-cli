@@ -12,7 +12,7 @@ FIRE_ACTIVE=STATE+59;TRACKED_TARGET=STATE+60;FIRE_SCAN_NEXT=STATE+61;FIRE_TASK_M
 LAND_SLOW=STATE+63;LAND_FINAL=STATE+64
 WEAPON_SETTING=STATE+65
 ROPE_COMMAND=STATE+70;GROUND_PUB=STATE+71;GROUND_MOVE_NEXT=STATE+80;DROP_COMMAND=STATE+81;DEST_X=STATE+82;DEST_Y=STATE+83;DEST_Z=STATE+84;GUARD_TARGET=STATE+90;PATROL_STEP=STATE+97;PATROL_NEXT=STATE+98;FOLLOW_NEXT=STATE+99;AVOID_STAGE=STATE+110;AVOID_NEXT=STATE+111;AVOID_AT=STATE+112;AVOID_X=STATE+113;AVOID_Y=STATE+114;AVOID_Z=STATE+115
-GLIDE_C=STATE+116
+GLIDE_C=STATE+116;STUCK_SINCE=STATE+117
 # 0AB6 GET_TARGET_BLIP_COORDS is a CLEO 4 PC opcode; CLEO Android crashes on it.
 # FLY TO MAP MARKER stays disabled until a marker source that works on Android exists.
 MAP_MARKER=False
@@ -64,7 +64,7 @@ def healthcheck(s,fail):
  s.check(0x0256,[I(0)],fail);s.check(0x056e,[V(5)],fail);alive(s,4,fail);s.check(0x8119,[V(5)],fail)
 
 c=Script();a=c.add
-c.label('INIT');a(0);c.set(AVOID_STAGE,0);c.set(AVOID_NEXT,0);c.set(BUSY,0);c.set(FROZEN,0);c.set(LSTAGE,0);c.set(CREWGEN,0);c.set(FIRE_TARGET,-1);c.set(FIRE_ACTIVE,0);c.set(TRACKED_TARGET,-1)
+c.label('INIT');a(0);c.set(AVOID_STAGE,0);c.set(AVOID_NEXT,0);c.set(BUSY,0);c.set(FROZEN,0);c.set(LSTAGE,0);c.set(CREWGEN,0);c.set(FIRE_TARGET,-1);c.set(FIRE_ACTIVE,0);c.set(TRACKED_TARGET,-1);c.set(STUCK_SINCE,0)
 for key in range(PUB,PUB+7):c.set(key,-1)
 for key in range(GROUND_PUB,GROUND_PUB+5):c.set(key,-1)
 c.set(ROPE_COMMAND,0)
@@ -89,6 +89,8 @@ for weapon_model in [353,355,356,358]:a(0x0248,I(weapon_model))
 a(0x4d,L('MODEL_FAIL'));c.check(0x0256,[I(0)],'MODEL_FAIL')
 for v in [4,5,12,13,14,15,16,31]:a(6,V(v),I(-1))
 a(6,V(24),I(0));a(6,V(22),I(0));a(0x04c4,V(18),F(0),F(-45),F(28),V(9),V(10),V(11))
+# v28: in downtown CJ+28 m is inside tall buildings; spawn at least 20 m above the highest surface.
+a(0x02ce,V(9),V(10),F(1000),V(17));a(0x000b,V(17),F(20));c.check(0x0025,[V(17),V(11)],'SPAWN_Z_OK');a(0x0087,V(11),V(17));c.label('SPAWN_Z_OK')
 a(0x00a5,V(0),V(9),V(10),V(11),V(5));a(0x00a0,V(18),V(9),V(10),V(11));a(0x039f,V(5),V(9),V(10));a(0x0129,V(5),I(8),V(1),V(4));a(0x01c5,V(4));a(0x08af,V(4),I(200));a(0x0223,V(4),I(200));a(0x054a,V(4),I(1));a(0x0446,V(4),I(1));a(0x077a,V(4),I(0),I(0))
 a(0x0186,V(5),V(12));a(0x0168,V(12),I(2));a(0x0165,V(12),I(2));a(0x07e0,V(12),I(1));a(0x0957,V(5),I(1))
 for v,skin in [(13,2),(14,3),(15,2),(16,3)]:
@@ -103,7 +105,7 @@ c.label('TEAM_CHECK_ROPE');c.eq(25,11,'TEAM_CHECK_PATROL');c.go('ROPE_PREP')
 c.label('TEAM_CHECK_PATROL');c.eq(25,12,'FOLLOW');c.go('PATROL_START')
 c.label('TICK');c.get(19,FROZEN);c.eq(19,1,'TICK_NORMAL_WAIT');a(1,I(30));c.go('TICK_AFTER_WAIT')
 c.label('TICK_NORMAL_WAIT');a(1,I(100))
-c.label('TICK_AFTER_WAIT');a(0x01bd,V(20));a(0xddc,I(HEART),V(20));healthcheck(c,'CLEANUP');c.call('CHANGE_MODEL');c.call('CHANGE_CREW');c.call('PUBLISH');c.get(7,STATE);a(0x0227,V(5),V(6));a(0xddc,I(HP),V(6));c.call('TRACK_COMBAT');c.call('FLIGHT_AVOID');c.get(7,STATE)
+c.label('TICK_AFTER_WAIT');a(0x01bd,V(20));a(0xddc,I(HEART),V(20));healthcheck(c,'CLEANUP');c.call('CHANGE_MODEL');c.call('CHANGE_CREW');c.call('PUBLISH');c.get(7,STATE);a(0x0227,V(5),V(6));a(0xddc,I(HP),V(6));c.call('TRACK_COMBAT');c.call('FLIGHT_AVOID');c.call('UNSTICK');c.get(7,STATE)
 c.get(19,FIRE);c.check(0x003b,[V(19),V(23)],'UPDATE_FIRE');c.go('HEALTH')
 c.label('UPDATE_FIRE');c.call('APPLY_FIRE')
 c.label('HEALTH');c.eq(7,15,'HEALTH_LANDED_CHECK');c.go('DISPATCH')
@@ -269,7 +271,11 @@ c.label('DEPART_START');c.call('UNFREEZE');c.call('RESTORE_FLIGHT');a(0x0918,V(5
 c.label('DEPART_TICK');a(1,I(100));a(0x01bd,V(20));a(0xddc,I(HEART),V(20));c.set(CMD,0);healthcheck(c,'CLEANUP');c.call('CHANGE_MODEL');c.call('CHANGE_CREW');c.call('PUBLISH');a(0x0227,V(5),V(6));a(0xddc,I(HP),V(6));c.get(19,FIRE);c.check(0x003b,[V(19),V(23)],'DEPART_FIRE_CHANGE');c.go('DEPART_HEALTH_DONE')
 c.label('DEPART_FIRE_CHANGE');c.call('APPLY_FIRE')
 c.label('DEPART_HEALTH_DONE');a(0x0085,V(17),V(20));a(0x0062,V(17),V(21));c.check(0x0019,[V(17),I(45000)],'DEPART_DISTANCE');c.go('CLEANUP')
-c.label('DEPART_DISTANCE');c.check(0x0019,[V(17),I(3000)],'DEPART_TICK');c.check(0x82ca,[V(5)],'DEPART_TICK');c.check(0x80db,[V(18),V(5)],'DEPART_TICK');a(0x00a0,V(18),V(9),V(10),V(11));a(0x00aa,V(5),V(26),V(27),V(28));a(0x050a,V(9),V(10),V(11),V(26),V(27),V(28),V(19));c.check(0x0021,[V(19),F(250)],'DEPART_TICK');a(0x0164,V(12))
+c.label('DEPART_DISTANCE');c.check(0x0019,[V(17),I(3000)],'DEPART_TICK');c.check(0x80db,[V(18),V(5)],'DEPART_TICK')
+# v28: a stuck or slow departing helicopter is removed after 12 s even if it is still on screen.
+c.check(0x0019,[V(17),I(12000)],'DEPART_VISIBLE');c.go('DEPART_DELETE')
+c.label('DEPART_VISIBLE');c.check(0x82ca,[V(5)],'DEPART_TICK');a(0x00a0,V(18),V(9),V(10),V(11));a(0x00aa,V(5),V(26),V(27),V(28));a(0x050a,V(9),V(10),V(11),V(26),V(27),V(28),V(19));c.check(0x0021,[V(19),F(250)],'DEPART_TICK')
+c.label('DEPART_DELETE');a(0x0164,V(12))
 for var in [13,14,15,16,4]:
  skip='DELETE_SKIP_'+str(var);c.check(0x056d,[V(var)],skip);a(0x009b,V(var));c.label(skip)
 a(0x00a6,V(5));c.go('RESET')
@@ -401,6 +407,20 @@ c.label('RESUME_GROVE');c.call('UNFREEZE');c.set(GROVE_STREAM,0);c.call('RESTORE
 c.label('RESUME_ROPE');c.call('UNFREEZE');c.call('RESTORE_FLIGHT');a(0x0087,V(9),V(28));a(0x000b,V(9),F(15));a(0x0087,V(11),V(28));a(0x000b,V(11),F(15));a(0x0853,V(5),I(3));a(0x07bb,V(5),I(0));a(0x04a2,V(5),V(26),V(27),V(9),F(12),V(11));c.ret()
 c.label('RESUME_DEPART');c.call('UNFREEZE');c.call('RESTORE_FLIGHT');a(0x0407,V(5),F(0),F(1500),F(60),V(9),V(10),V(11));a(0x04a2,V(5),V(9),V(10),V(11),F(30),F(120));c.ret()
 
+# v28: a helicopter wedged in a building barely moves. After 5 s of < 1 m/s while it should be
+# flying (following/patrolling far from CJ, cruising, climbing) lift it 20 m above the roofs.
+c.label('UNSTICK');c.get(19,FROZEN);c.eq(19,0,'UNSTICK_RESET')
+for st in [2,24]:
+ nxt='UNSTICK_NOT_'+str(st);c.eq(7,st,nxt);a(0x00a0,V(18),V(9),V(10),V(11));a(0x00aa,V(5),V(29),V(30),V(31));a(0x050a,V(9),V(10),V(11),V(29),V(30),V(31),V(19));c.check(0x0021,[V(19),F(30)],'UNSTICK_RESET');c.go('UNSTICK_SPEED');c.label(nxt)
+for st in [10,20,25]:
+ nxt='UNSTICK_NOT_'+str(st);c.eq(7,st,nxt);c.go('UNSTICK_SPEED');c.label(nxt)
+c.go('UNSTICK_RESET')
+c.label('UNSTICK_SPEED');a(0x02e3,V(5),V(19));c.check(0x0023,[F(1),V(19)],'UNSTICK_RESET');c.get(19,STUCK_SINCE);c.eq(19,0,'UNSTICK_TIMER');a(0xddc,I(STUCK_SINCE),V(20));c.ret()
+c.label('UNSTICK_TIMER');a(0x0085,V(29),V(20));a(0x0062,V(29),V(19));c.check(0x0019,[V(29),I(5000)],'UNSTICK_WAIT')
+a(0x00aa,V(5),V(9),V(10),V(11));a(0x02ce,V(9),V(10),F(1000),V(17));a(0x000b,V(17),F(20));a(0x000b,V(11),F(10));c.check(0x0025,[V(17),V(11)],'UNSTICK_Z_OK');a(0x0087,V(11),V(17));c.label('UNSTICK_Z_OK')
+a(0x00ab,V(5),V(9),V(10),V(11));c.set(STUCK_SINCE,0);c.call('RESUME_FLIGHT');c.ret()
+c.label('UNSTICK_RESET');c.set(STUCK_SINCE,0)
+c.label('UNSTICK_WAIT');c.ret()
 c.label('RESTORE_FLIGHT');a(0x0853,V(5),I(10));a(0x07bb,V(5),I(6));c.ret()
 c.label('BLOCK_HOVER');c.call('UNFREEZE');a(0x07bb,V(5),I(0));a(0x0853,V(5),I(10));a(0x00aa,V(5),V(9),V(10),V(11));a(0x04df,V(5),I(0));a(0x04a2,V(5),V(9),V(10),V(11),F(10),V(11));a(0x00ad,V(5),F(21));a(0x04df,V(5),I(1));c.ret()
 c.label('SET_LANDING_MISSION');c.call('UNFREEZE');a(0x04df,V(5),I(0));a(0x07bb,V(5),I(0));a(0x0853,V(5),I(3));c.get(19,LAND_FINAL);c.eq(19,1,'LAND_APPROACH_MISSION');c.call('SET_FINAL_LANDING');c.ret()
