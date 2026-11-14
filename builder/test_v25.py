@@ -225,6 +225,9 @@ def fly_until(w,state,*vms,limit=600):
  # v33: the frozen helicopter keeps its own commanded height, so tests let it fly instead of teleporting it.
  for _ in range(limit):
   if w.shared[b.STATE]==state:return
+  # v37: emulate the native pilot finishing the final hover descent once it owns the helicopter
+  if w.shared[b.STATE]==22 and w.shared.get(b.DEST_NATIVE)==1 and not w.frozen.get(vms[0].v[5]):
+   target=calls(w,0x4a2)[-1][2];w.car=list(target[1:4]);w.speed=0.
   w.step(*vms)
  raise AssertionError(('never reached',state,w.shared[b.STATE],w.messages))
 def start_grove(w,c):
@@ -528,7 +531,7 @@ passed('Rope descent starts below the hull and restores control on the ground')
 # v32: an invisible platform follows 0.45 m below CJ's feet during the descent, then is removed.
 plats=[x for x in calls(w,0x107) if x[2][0]==3095];moves=[x for x in calls(w,0x1bc)]
 assert len(plats)==1 and calls(w,0x750) and len(moves)>20 and plats[0][2][4] not in w.exists
-assert all(abs(m[2][3]-z)<1e-6 for m in moves for z in [m[2][3]]),'placed'
+zs=[m[2][3] for m in moves];assert all(zs[i+1]<zs[i] for i in range(len(zs)-1)) and zs[0]-zs[-1]>8.,('v37: the platform descends on its own schedule like a lift',zs[:3],zs[-3:])
 passed('Rope descent keeps an invisible platform under CJ so the game never starts free fall')
 # v32: CJ is not lifted while any squad member is still above the ground, even at the rope.
 w,c,_=setup();summon(w,c);command(w,c,3,ticks=5);w.car=[0.,0.,18.];w.speed=0
@@ -733,14 +736,24 @@ if b.MAP_MARKER:
 w,c,_=setup();summon(w,c);start_grove(w,c);w.los_fn=lambda a,z:False;x0,y0,z0=w.car;w.step(c,n=3)
 assert (w.car[0],w.car[1])==(x0,y0) and w.car[2]>z0 and w.shared[b.STATE]==10
 passed('Blocked cruise segment climbs in place instead of passing through')
-# v31: arriving over the pad sinks vertically to 18 m without circling.
+# v37: the cruise brings the helicopter exactly overhead, then the native pilot descends (no frozen teleports near roofs).
 w,c,_=setup();summon(w,c);start_grove(w,c);w.car=[b.GROVE_X+60,b.GROVE_Y,75];w.step(c,n=8);assert w.shared[b.STATE]==22
-for _ in range(120):
+for _ in range(200):
  w.step(c)
- if w.shared[b.STATE]!=22:break
-assert w.shared[b.STATE]==23 and abs(w.car[2]-(w.shared[b.DEST_Z]+18.))<.05 and [w.car[0],w.car[1]]==[w.shared[b.DEST_X],w.shared[b.DEST_Y]],w.car
-assert not w.frozen.get(c.v[5]) and w.shared[b.FROZEN]==0,'v34: native hover while waiting'
-passed('Destination approach cruises over the pad and sinks vertically to a hover')
+ if w.shared.get(b.DEST_NATIVE)==1:break
+assert w.shared[b.DEST_NATIVE]==1 and not w.frozen.get(c.v[5]) and w.shared[b.FROZEN]==0
+assert math.dist(w.car[:2],[w.shared[b.DEST_X],w.shared[b.DEST_Y]])<1.
+mission=calls(w,0x4a2)[-1][2];assert mission[1:4]==[w.shared[b.DEST_X],w.shared[b.DEST_Y],w.shared[b.DEST_Z]+18.] and calls(w,0x853)[-1][2][1]==10 and calls(w,0x4ba)[-1][2][1]==0.
+w.step(c,n=5);assert w.shared[b.STATE]==22,'still descending'
+w.car=list(mission[1:4]);w.speed=0.;w.step(c,n=3);assert w.shared[b.STATE]==23 and not w.frozen.get(c.v[5])
+passed('Destination: scripted cruise to overhead, then native vertical descent to 18 m')
+# v37: if the native descent stalls, the hover is accepted after 25 s when close enough.
+w,c,_=setup();summon(w,c);start_grove(w,c);w.car=[b.GROVE_X+60,b.GROVE_Y,75];w.step(c,n=8)
+for _ in range(200):
+ w.step(c)
+ if w.shared.get(b.DEST_NATIVE)==1:break
+w.now+=26000;w.step(c,n=3);assert w.shared[b.STATE]==23
+passed('A stalled native descent still offers LAND / ROPE after 25 s')
 
 # The pilot brings a distant active target into view while following CJ.
 w,c,f=fire_world();npc=target(w,typ=7,skin=20);w.damage.add((1,npc));w.step(c,f,n=25)

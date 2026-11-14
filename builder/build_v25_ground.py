@@ -16,6 +16,11 @@ def plat_create():
 def plat_follow():
  _plat[0]+=1;skip='PLAT_FOLLOW_SKIP_'+str(_plat[0])
  s.check(0x03ca,[V(6)],skip);a(0x00a0,V(0),V(12),V(13),V(14));a(0x000b,V(14),F(-1.45));a(0x01bc,V(6),V(12),V(13),V(14));s.label(skip)
+def plat_ride():
+ # v37 descent: the platform follows its own schedule (start + 9@ * t), like a lift, so CJ rides
+ # down even if the slab's top is level with his feet; CJ's own velocity keeps the same pace.
+ _plat[0]+=1;skip='PLAT_RIDE_SKIP_'+str(_plat[0])
+ s.check(0x03ca,[V(6)],skip);a(0x00a0,V(0),V(12),V(13),V(11));a(0x0093,V(14),V(15));a(0x0013,V(14),F(.001));a(0x006b,V(14),V(9));a(0x005b,V(14),V(7));a(0x01bc,V(6),V(12),V(13),V(14));s.label(skip)
 def plat_delete():
  _plat[0]+=1;skip='PLAT_DELETE_SKIP_'+str(_plat[0])
  s.check(0x03ca,[V(6)],skip);a(0x0108,V(6));s.label(skip);a(6,V(6),I(-1));a(0x0249,I(PLATFORM_MODEL))
@@ -129,12 +134,13 @@ s.label('DROP_START');a(6,V(26),I(0));s.get(19,b.STATE);s.eq(19,23,'DROP_FAIL');
 # final ground warp ("teleport"). Start 3 m lower, below the skids, and recompute the descent speed.
 a(0x000b,V(8),F(-2));a(0x0087,V(9),V(8));a(0x0063,V(9),V(4));a(0x0362,V(0),V(2),V(3),V(8));s.check(0x04ee,[S('PED')],'DROP_ANIM_SKIP');a(0x0605,V(0),S('ABSEIL'),S('PED'),F(4),I(1),I(1),I(1),I(1),I(-1));s.label('DROP_ANIM_SKIP')
 plat_create()
+a(0x00a0,V(0),V(12),V(13),V(7));a(0x000b,V(7),F(-1.45))
 a(0x0013,V(9),F(-1000.0/3000.0));a(0x01bd,V(16))
 s.label('DROP_TICK');a(1,I(0));s.check(0x0256,[I(0)],'DROP_ABORT');s.check(0x056d,[V(0)],'DROP_ABORT');s.check(0x8118,[V(0)],'DROP_ABORT');s.check(0x056e,[V(1)],'DROP_ABORT');s.get(19,b.STATE);s.eq(19,23,'DROP_ABORT');a(0x01bd,V(15));a(0x0062,V(15),V(16));s.check(0x0019,[V(15),I(3000)],'DROP_TIME_READY');a(6,V(15),I(3000));s.label('DROP_TIME_READY')
 # v31: like the ascent, drive the ABSEIL frame every tick (paused anim, time 0 -> .99 over 3 s);
 # without it the ped dropped into a free-fall pose.
 s.check(0x0611,[V(0),S('ABSEIL')],'DROP_FRAME_SKIP');a(0x0093,V(11),V(15));a(0x0013,V(11),F(.99/3000.0));a(0x0614,V(0),S('ABSEIL'),V(11));a(0x0393,V(0),S('ABSEIL'),F(0));s.label('DROP_FRAME_SKIP')
-plat_follow()
+plat_ride()
 a(0x083c,V(0),F(0),F(0),V(9));s.check(0x0019,[V(15),I(2999)],'DROP_TICK')
 plat_delete()
 a(0x083c,V(0),F(0),F(0),F(0));a(0x00a1,V(0),V(2),V(3),V(4));a(0x01b4,I(0),I(1));s.check(0x056d,[V(17)],'DROP_NO_DUMMY');a(0x009b,V(17));s.label('DROP_NO_DUMMY');s.set(b.GROUND_PUB+4,-1);a(0x0574,V(1),I(0));s.set(b.FROZEN,0);s.set(b.STATE,3);a(0x0249,I(285));s.go('WAIT')

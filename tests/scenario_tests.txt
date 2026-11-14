@@ -76,7 +76,8 @@ PASS: Target distribution excludes Grove and the additional ground squad
 PASS: CLEO setup menu starts patrol
 PASS: CLEO evacuation menu starts the marked route
 PASS: Blocked cruise segment climbs in place instead of passing through
-PASS: Destination approach cruises over the pad and sinks vertically to a hover
+PASS: Destination: scripted cruise to overhead, then native vertical descent to 18 m
+PASS: A stalled native descent still offers LAND / ROPE after 25 s
 PASS: Pilot can reposition to keep an active threat in view
 PASS: New hold command stops the scripted cruise without ejecting CJ
 Mocked script execution only: actual GTA flight, collisions, gunfire, animations and Android behavior are not tested.

@@ -38,15 +38,3 @@ HCCFAIL ~r~HELICOVER~w~: crew change failed. Existing crew kept.
 HCBLOCK ~y~EVAC~w~: landing unavailable. Clear the area and retry or choose FOLLOW CJ.
 HCLOSE ~y~EVAC~w~: land first before boarding or leaving.
 HCEXIT ~y~EVAC~w~: exit the helicopter before TAKE OFF / FOLLOW.
-RGDEP SWAT: descending. Stay near the helicopter.
-RGDONE SWAT: ground team withdrawn.
-RGFAIL SWAT: model unavailable or heli moving.
-RGHOLD SWAT: use HOLD POSITION first.
-RGHIGH SWAT: heli must hover 12-22m above ground.
-RGMOVE SWAT: wait until the helicopter is nearly still.
-RGBLOCK SWAT: choose a clear open area.
-RGUP EVAC: ascending.
-RGABO EVAC: aboard. Team returning.
-RGSEAT EVAC: passenger seat unavailable.
-RGANIM EVAC: animation unavailable.
-RPDFAIL EVAC: rope descent unavailable here.

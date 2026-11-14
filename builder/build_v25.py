@@ -16,6 +16,7 @@ GLIDE_C=STATE+116;STUCK_SINCE=STATE+117
 # v36 diagnostic breadcrumbs: 'DBG state*100+step' is printed whenever it changes, so a screenshot
 # of a frozen screen shows where the core was. Set DEBUG_BREADCRUMBS=False for a quiet build.
 DEBUG_BREADCRUMBS=True;DBG_CODE=STATE+130;DBG_LAST=STATE+131
+DEST_NATIVE=STATE+133  # v37: 1 once the native pilot owns the final descent
 CRUISE_T=STATE+118;CR_UP=STATE+119;CR_DN=STATE+120
 CR_CMDZ=STATE+128  # v33: commanded z, integrated by steps (never rebuilt from the actual z)
 CR_DT=STATE+121;CR_V=STATE+122;CR_VT=STATE+123;CR_SLOW=STATE+124;CR_DX=STATE+125;CR_DY=STATE+126;CR_DZ=STATE+127
@@ -290,25 +291,18 @@ c.label('MAP_SCAN_TIMER');c.set(DBG_CODE,3);c.get(17,GROVE_NEXT_SCAN);c.check(0x
 for index,(dx,dy) in enumerate([(0,0),(8,0),(-8,0),(0,8),(0,-8),(16,0),(-16,0),(0,16),(0,-16),(16,16),(-16,16),(16,-16),(-16,-16)]):
  nxt='MAP_PAD_NEXT_'+str(index);c.get(26,DEST_X);c.get(27,DEST_Y);a(0x000b,V(26),F(dx));a(0x000b,V(27),F(dy));a(0x02ce,V(26),V(27),F(1000),V(28));c.check(0x0021,[V(28),F(-50)],nxt);c.check(0x0023,[F(800),V(28)],nxt);c.call('CHECK_SITE');c.eq(17,1,nxt);a(0xddc,I(DEST_X),V(26));a(0xddc,I(DEST_Y),V(27));a(0xddc,I(DEST_Z),V(28));c.go('DEST_HOVER_GO');c.label(nxt)
 c.get(17,GROVE_WAIT);a(0x0085,V(31),V(20));a(0x0062,V(31),V(17));c.check(0x0019,[V(31),I(8000)],'TICK');c.go('LAND_BLOCKED')
-c.label('DEST_HOVER_GO');c.set(DBG_CODE,4);a(0x01bd,V(21));state(c,22);c.go('TICK')
+c.label('DEST_HOVER_GO');c.set(DBG_CODE,4);c.set(DEST_NATIVE,0);a(0x01bd,V(21));state(c,22);c.go('TICK')
 # v31: cruise to the pad at altitude, then sink vertically to 18 m above it (no native circling).
-c.label('DEST_APPROACH_TICK');c.get(26,DEST_X);c.get(27,DEST_Y);c.get(28,DEST_Z);a(0x00aa,V(5),V(9),V(10),V(11));a(0x0509,V(9),V(10),V(26),V(27),V(31));c.check(0x0021,[V(31),F(1)],'DEST_DESCEND');c.call('CRUISE_STEP');c.go('TICK')
-c.label('DEST_DESCEND');c.set(DBG_CODE,5);c.get(19,FROZEN);c.eq(19,1,'DEST_DESC_BEGIN');c.go('DEST_DESC_RUN');c.label('DEST_DESC_BEGIN');c.call('GLIDE_BEGIN');c.label('DEST_DESC_RUN')
-c.call('CR_TIME');a(0x00aa,V(5),V(9),V(10),V(11));a(0x0087,V(30),V(28));a(0x000b,V(30),F(18));a(0x0063,V(30),V(11))
-c.check(0x0021,[V(30),F(.25)],'DESC_LE');c.go('DESC_RATE');c.label('DESC_LE');c.check(0x0023,[F(-.25),V(30)],'DESC_ARRIVE')
-# ease in: rate = clamp(1.5*dz, +-HOVER_SINK) m/s, never below 1.5 m/s near the end
-c.label('DESC_RATE');a(0x0087,V(29),V(30));a(0x0013,V(29),F(1.5))
-c.check(0x0021,[V(29),F(HOVER_SINK)],'DESC_R1');a(0x0007,V(29),F(HOVER_SINK));c.label('DESC_R1')
-c.check(0x0023,[F(-HOVER_SINK),V(29)],'DESC_R2');a(0x0007,V(29),F(-HOVER_SINK));c.label('DESC_R2')
-c.check(0x0023,[F(1.5),V(29)],'DESC_R3');c.check(0x0021,[V(29),F(-1.5)],'DESC_R3');c.check(0x0021,[V(29),F(0)],'DESC_R_NEG');a(0x0007,V(29),F(1.5));c.go('DESC_R3');c.label('DESC_R_NEG');a(0x0007,V(29),F(-1.5));c.label('DESC_R3')
-c.get(31,CR_DT);a(0x006b,V(29),V(31))
-# arrive instead of overshooting: descending when dz<0 (overshoot if dz > step), climbing otherwise
-c.check(0x0023,[F(0),V(30)],'DESC_UP');c.check(0x0025,[V(30),V(29)],'DESC_APPLY');c.go('DESC_ARRIVE')
-c.label('DESC_UP');c.check(0x0025,[V(29),V(30)],'DESC_APPLY');c.go('DESC_ARRIVE')
-c.label('DESC_APPLY');c.get(11,CR_CMDZ);a(0x005b,V(11),V(29));a(0xddc,I(CR_CMDZ),V(11));a(0x00ab,V(5),V(9),V(10),V(11));c.go('TICK')
-c.label('DESC_ARRIVE');c.set(DBG_CODE,6);c.get(11,CR_CMDZ);a(0x005b,V(11),V(30));a(0xddc,I(CR_CMDZ),V(11));a(0x00ab,V(5),V(26),V(27),V(11))
-# v34: hand the hover to the native pilot while waiting for LAND / ROPE (as in v26-v30)
-c.call('BLOCK_HOVER');c.set(DBG_CODE,7);state(c,23);msg(c,'HCCHOS');c.go('TICK')
+c.label('DEST_APPROACH_TICK');c.get(26,DEST_X);c.get(27,DEST_Y);c.get(28,DEST_Z);c.get(19,DEST_NATIVE);c.eq(19,0,'DEST_DESCEND');a(0x00aa,V(5),V(9),V(10),V(11));a(0x0509,V(9),V(10),V(26),V(27),V(31));c.check(0x0021,[V(31),F(1)],'DEST_DESCEND');c.call('CRUISE_STEP');c.go('TICK')
+# v37: the in-game freezes happened during the frozen, teleported descent next to roofs
+# (DBG 2205). Now the scripted cruise only brings the helicopter exactly overhead at its safe
+# altitude; then it is unfrozen, its residual speed zeroed, and the native pilot descends to
+# 18 m with a 10 m reached distance (already overhead, so it does not circle).
+c.label('DEST_DESCEND');c.set(DBG_CODE,5);c.get(19,DEST_NATIVE);c.eq(19,0,'DEST_NATIVE_WAIT')
+c.call('UNFREEZE');a(0x04ba,V(5),F(0));a(0x07bb,V(5),I(0));a(0x0853,V(5),I(10));a(0x0087,V(9),V(28));a(0x000b,V(9),F(18));a(0x04df,V(5),I(0));a(0x04a2,V(5),V(26),V(27),V(9),F(10),V(9));a(0x00ad,V(5),F(12));c.set(DEST_NATIVE,1);a(0x01bd,V(21));c.go('TICK')
+c.label('DEST_NATIVE_WAIT');c.set(DBG_CODE,6);a(0x00aa,V(5),V(9),V(10),V(11));a(0x0509,V(9),V(10),V(26),V(27),V(31));c.check(0x0023,[F(8),V(31)],'DEST_NATIVE_TIMEOUT');a(0x0087,V(19),V(11));a(0x0063,V(19),V(28));c.check(0x0021,[V(19),F(12)],'DEST_NATIVE_TIMEOUT');c.check(0x0023,[F(23),V(19)],'DEST_NATIVE_TIMEOUT');a(0x02e3,V(5),V(19));c.check(0x0023,[F(4),V(19)],'DEST_NATIVE_TIMEOUT')
+c.label('DEST_NATIVE_ARRIVE');c.call('BLOCK_HOVER');c.set(DBG_CODE,7);state(c,23);msg(c,'HCCHOS');c.go('TICK')
+c.label('DEST_NATIVE_TIMEOUT');a(0x0085,V(17),V(20));a(0x0062,V(17),V(21));c.check(0x0019,[V(17),I(25000)],'TICK');c.check(0x0023,[F(20),V(31)],'LAND_BLOCKED');c.go('DEST_NATIVE_ARRIVE')
 c.label('DEST_WAIT_TIMEOUT');a(0x0085,V(17),V(20));a(0x0062,V(17),V(21));c.check(0x0019,[V(17),I(60000)],'TICK');c.go('LAND_BLOCKED')
 c.label('TRAVEL_TICK');a(0x0007,V(26),F(GROVE_X));a(0x0007,V(27),F(GROVE_Y));c.call('CRUISE_STEP');c.check(0x0023,[F(180),V(19)],'TICK')
 c.get(17,GROVE_STREAM);c.eq(17,0,'GROVE_NEAR');c.set(GROVE_STREAM,1);a(0x04e4,F(GROVE_X),F(GROVE_Y));a(0x07bb,V(5),I(0));a(0x00ad,V(5),F(21))
