@@ -50,6 +50,7 @@ PASS: Dismiss deletes a stuck on-screen helicopter and a new call works
 PASS: Rope descent starts below the hull and restores control on the ground
 PASS: Rope descent keeps an invisible platform under CJ so the game never starts free fall
 PASS: Pickup waits until every rope guard is on the ground
+PASS: Rope guards return together and fast; CJ drifts onto the rope without a snap
 PASS: Assembler rejects both inverted literal/local comparison forms
 PASS: CJ ascent advances smoothly over about 1.8 seconds at two frame rates
 PASS: Only guards who reach the ground receive running formation tasks
@@ -61,6 +62,7 @@ PASS: Map flight rejects an absent marker
 PASS: Map flight rejects a stale waypoint handle
 PASS: Map flight rejects an inactive radar trace
 PASS: Map marker is read from libGTASA memory with 0DD8, never 0AB6
+PASS: Repeated map flight with delayed teleports keeps a steady cruise height
 PASS: Four guards acquire separate eligible threats when available, with stronger checked bullets
 PASS: Map destination searches a nearby clear landing footprint
 PASS: Blocked descent shaft leaves CJ aboard with control enabled

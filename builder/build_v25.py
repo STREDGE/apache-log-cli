@@ -14,6 +14,7 @@ WEAPON_SETTING=STATE+65
 ROPE_COMMAND=STATE+70;GROUND_PUB=STATE+71;GROUND_MOVE_NEXT=STATE+80;DROP_COMMAND=STATE+81;DEST_X=STATE+82;DEST_Y=STATE+83;DEST_Z=STATE+84;GUARD_TARGET=STATE+90;PATROL_STEP=STATE+97;PATROL_NEXT=STATE+98;FOLLOW_NEXT=STATE+99;AVOID_STAGE=STATE+110;AVOID_NEXT=STATE+111;AVOID_AT=STATE+112;AVOID_X=STATE+113;AVOID_Y=STATE+114;AVOID_Z=STATE+115
 GLIDE_C=STATE+116;STUCK_SINCE=STATE+117
 CRUISE_T=STATE+118;CR_UP=STATE+119;CR_DN=STATE+120
+CR_CMDZ=STATE+128  # v33: commanded z, integrated by steps (never rebuilt from the actual z)
 CR_DT=STATE+121;CR_V=STATE+122;CR_VT=STATE+123;CR_SLOW=STATE+124;CR_DX=STATE+125;CR_DY=STATE+126;CR_DZ=STATE+127
 # v32 scripted cruise for map/Grove flights: per-frame, time-based, with acceleration,
 # braking, rate-limited turning and smooth altitude changes (no jerks, no circling).
@@ -169,14 +170,14 @@ c.label('ROPE_APPROACH_TICK');a(0x00aa,V(5),V(9),V(10),V(11));c.get(19,FROZEN);c
 c.label('ROPE_FAR');a(0x0509,V(9),V(10),V(26),V(27),V(31));c.check(0x0023,[F(45),V(31)],'ROPE_APPROACH_TIMEOUT')
 a(0x0087,V(19),V(28));a(0x000b,V(19),F(15));c.check(0x06bd,[V(9),V(10),V(11),V(26),V(27),V(19),I(1),I(0),I(0),I(1),I(0)],'ROPE_APPROACH_TIMEOUT')
 # SET_CAR_COORDINATES adds the model's base offset to z; measure it once so the glide does not climb.
-a(0x0574,V(5),I(1));c.set(FROZEN,1);a(0x00ab,V(5),V(9),V(10),V(11));a(0x00aa,V(5),V(17),V(19),V(31));a(0x0063,V(31),V(11));a(0xddc,I(GLIDE_C),V(31))
+a(0x0574,V(5),I(1));c.set(FROZEN,1);a(0x00ab,V(5),V(9),V(10),V(11));a(0xddc,I(CR_CMDZ),V(11));a(0x00aa,V(5),V(17),V(19),V(31));a(0x0063,V(31),V(11));a(0xddc,I(GLIDE_C),V(31))
 a(0x0407,V(5),F(0),F(3),F(0),V(17),V(19),V(31));a(0x0063,V(17),V(9));a(0x0063,V(19),V(10));a(0x00a0,V(18),V(26),V(27),V(31));a(0x005b,V(26),V(17));a(0x005b,V(27),V(19))
 c.label('ROPE_GLIDE');a(0x00aa,V(5),V(9),V(10),V(11))
 a(0x0087,V(17),V(26));a(0x0063,V(17),V(9));a(0x0087,V(29),V(27));a(0x0063,V(29),V(10));a(0x0087,V(30),V(28));a(0x000b,V(30),F(15));a(0x0063,V(30),V(11))
 a(0x050a,F(0),F(0),F(0),V(17),V(29),V(30),V(31));c.check(0x0021,[V(31),F(.8)],'ROPE_ARRIVE')
 a(0x0007,V(19),F(.8));a(0x0073,V(19),V(31));a(0x006b,V(17),V(19));a(0x006b,V(29),V(19));a(0x006b,V(30),V(19))
-a(0x005b,V(9),V(17));a(0x005b,V(10),V(29));a(0x005b,V(11),V(30));c.get(19,GLIDE_C);a(0x0063,V(11),V(19));a(0x00ab,V(5),V(9),V(10),V(11));c.go('TICK')
-c.label('ROPE_ARRIVE');a(0x0087,V(11),V(28));a(0x000b,V(11),F(15));c.get(19,GLIDE_C);a(0x0063,V(11),V(19));a(0x00ab,V(5),V(26),V(27),V(11))
+a(0x005b,V(9),V(17));a(0x005b,V(10),V(29));c.get(11,CR_CMDZ);a(0x005b,V(11),V(30));a(0xddc,I(CR_CMDZ),V(11));a(0x00ab,V(5),V(9),V(10),V(11));c.go('TICK')
+c.label('ROPE_ARRIVE');a(0x0087,V(19),V(28));a(0x000b,V(19),F(15));a(0x0063,V(19),V(11));c.get(11,CR_CMDZ);a(0x005b,V(11),V(19));a(0xddc,I(CR_CMDZ),V(11));a(0x00ab,V(5),V(26),V(27),V(11))
 c.call('BLOCK_HOVER');a(0x0574,V(5),I(1));c.set(FROZEN,1);state(c,3);c.set(ROPE_COMMAND,1);c.go('TICK')
 c.label('ROPE_APPROACH_TIMEOUT');a(0x0085,V(17),V(20));a(0x0062,V(17),V(21));c.check(0x0019,[V(17),I(35000)],'TICK');c.call('BLOCK_HOVER');state(c,18);msg(c,'HCRWAIT');c.go('TICK')
 
@@ -292,8 +293,8 @@ c.get(31,CR_DT);a(0x006b,V(29),V(31))
 # arrive instead of overshooting: descending when dz<0 (overshoot if dz > step), climbing otherwise
 c.check(0x0023,[F(0),V(30)],'DESC_UP');c.check(0x0025,[V(30),V(29)],'DESC_APPLY');c.go('DESC_ARRIVE')
 c.label('DESC_UP');c.check(0x0025,[V(29),V(30)],'DESC_APPLY');c.go('DESC_ARRIVE')
-c.label('DESC_APPLY');a(0x005b,V(11),V(29));c.get(30,GLIDE_C);a(0x0063,V(11),V(30));a(0x00ab,V(5),V(9),V(10),V(11));c.go('TICK')
-c.label('DESC_ARRIVE');a(0x0087,V(11),V(28));a(0x000b,V(11),F(18));c.get(30,GLIDE_C);a(0x0063,V(11),V(30));a(0x00ab,V(5),V(26),V(27),V(11));state(c,23);msg(c,'HCCHOS');c.go('TICK')
+c.label('DESC_APPLY');c.get(11,CR_CMDZ);a(0x005b,V(11),V(29));a(0xddc,I(CR_CMDZ),V(11));a(0x00ab,V(5),V(9),V(10),V(11));c.go('TICK')
+c.label('DESC_ARRIVE');c.get(11,CR_CMDZ);a(0x005b,V(11),V(30));a(0xddc,I(CR_CMDZ),V(11));a(0x00ab,V(5),V(26),V(27),V(11));state(c,23);msg(c,'HCCHOS');c.go('TICK')
 c.label('DEST_WAIT_TIMEOUT');a(0x0085,V(17),V(20));a(0x0062,V(17),V(21));c.check(0x0019,[V(17),I(60000)],'TICK');c.go('LAND_BLOCKED')
 c.label('TRAVEL_TICK');a(0x0007,V(26),F(GROVE_X));a(0x0007,V(27),F(GROVE_Y));c.call('CRUISE_STEP');c.check(0x0023,[F(180),V(19)],'TICK')
 c.get(17,GROVE_STREAM);c.eq(17,0,'GROVE_NEAR');c.set(GROVE_STREAM,1);a(0x04e4,F(GROVE_X),F(GROVE_Y));a(0x07bb,V(5),I(0));a(0x00ad,V(5),F(21))
@@ -465,7 +466,7 @@ c.label('UNSTICK_WAIT');c.ret()
 # most CRUISE_TURN deg/s (slow while turning > 45 deg), altitude eases toward CRUISE_CLEAR m above
 # the highest surface below and 30/70/120 m ahead (stop and climb if > 8 m too low or blocked).
 # Returns 19@ = remaining 2D distance.
-c.label('GLIDE_BEGIN');a(0x00aa,V(5),V(9),V(10),V(11));a(0x0574,V(5),I(1));c.set(FROZEN,1);a(0x00ab,V(5),V(9),V(10),V(11));a(0x00aa,V(5),V(17),V(29),V(31));a(0x0063,V(31),V(11));a(0xddc,I(GLIDE_C),V(31));a(0xddc,I(CRUISE_T),V(20));a(0x0007,V(31),F(0));a(0xddc,I(CR_V),V(31));c.ret()
+c.label('GLIDE_BEGIN');a(0x00aa,V(5),V(9),V(10),V(11));a(0x0574,V(5),I(1));c.set(FROZEN,1);a(0x00ab,V(5),V(9),V(10),V(11));a(0xddc,I(CR_CMDZ),V(11));a(0x00aa,V(5),V(17),V(29),V(31));a(0x0063,V(31),V(11));a(0xddc,I(GLIDE_C),V(31));a(0xddc,I(CRUISE_T),V(20));a(0x0007,V(31),F(0));a(0xddc,I(CR_V),V(31));c.ret()
 c.label('CR_TIME');c.get(29,CRUISE_T);a(0x0085,V(30),V(20));a(0x0062,V(30),V(29));a(0xddc,I(CRUISE_T),V(20))
 c.check(0x0019,[V(30),I(100)],'CRT_HI');a(6,V(30),I(100));c.label('CRT_HI');c.check(0x0019,[V(30),I(0)],'CRT_LOW');c.go('CRT_OK');c.label('CRT_LOW');a(6,V(30),I(16));c.label('CRT_OK')
 a(0x0093,V(31),V(30));a(0x0013,V(31),F(.001));a(0xddc,I(CR_DT),V(31));c.ret()
@@ -492,6 +493,8 @@ for ahead in [30,70,120]:
  nxt='CR_ROOF_'+str(ahead);a(0x0407,V(5),F(0),F(ahead),F(0),V(17),V(29),V(30));a(0x02ce,V(17),V(29),F(1000),V(30));c.check(0x0025,[V(30),V(31)],nxt);a(0x0087,V(31),V(30));c.label(nxt)
 a(0x000b,V(31),F(CRUISE_CLEAR));a(0x0063,V(31),V(11))
 c.check(0x0021,[V(31),F(8)],'CR_LOW_OK');a(0x0007,V(30),F(0));a(0xddc,I(CR_VT),V(30));c.label('CR_LOW_OK')
+# v33: no sinking during the long leg (it caused bobbing over uneven roofs); only within 200 m
+c.check(0x0021,[V(19),F(200)],'CR_MAY_SINK');c.check(0x0023,[F(0),V(31)],'CR_MAY_SINK');a(0x0007,V(31),F(0));c.label('CR_MAY_SINK')
 a(0x0013,V(31),F(1.5))
 c.check(0x0021,[V(31),F(CRUISE_CLIMB)],'CR_Z1');a(0x0007,V(31),F(CRUISE_CLIMB));c.label('CR_Z1')
 c.check(0x0023,[F(-CRUISE_SINK),V(31)],'CR_Z2');a(0x0007,V(31),F(-CRUISE_SINK));c.label('CR_Z2')
@@ -509,7 +512,7 @@ a(0x0087,V(17),V(9));a(0x005b,V(17),V(30));a(0x005b,V(29),V(10))
 c.get(30,CR_DZ);a(0x0087,V(31),V(11));a(0x005b,V(31),V(30))
 c.check(0x06bd,[V(9),V(10),V(11),V(17),V(29),V(31),I(1),I(0),I(0),I(1),I(0)],'CR_BLOCKED');c.go('CR_MOVE')
 c.label('CR_BLOCKED');a(0x0087,V(17),V(9));a(0x0087,V(29),V(10));a(0x0007,V(30),F(0));a(0xddc,I(CR_V),V(30));c.get(30,CR_DT);a(0x0013,V(30),F(CRUISE_CLIMB));a(0x0087,V(31),V(11));a(0x005b,V(31),V(30))
-c.label('CR_MOVE');c.get(30,GLIDE_C);a(0x0063,V(31),V(30));a(0x00ab,V(5),V(17),V(29),V(31));c.ret()
+c.label('CR_MOVE');a(0x0063,V(31),V(11));c.get(30,CR_CMDZ);a(0x005b,V(31),V(30));a(0xddc,I(CR_CMDZ),V(31));a(0x00ab,V(5),V(17),V(29),V(31));c.ret()
 c.label('RESTORE_FLIGHT');a(0x0853,V(5),I(10));a(0x07bb,V(5),I(6));c.ret()
 c.label('BLOCK_HOVER');c.call('UNFREEZE');a(0x07bb,V(5),I(0));a(0x0853,V(5),I(10));a(0x00aa,V(5),V(9),V(10),V(11));a(0x04df,V(5),I(0));a(0x04a2,V(5),V(9),V(10),V(11),F(10),V(11));a(0x00ad,V(5),F(21));a(0x04df,V(5),I(1));c.ret()
 c.label('SET_LANDING_MISSION');c.call('UNFREEZE');a(0x04df,V(5),I(0));a(0x07bb,V(5),I(0));a(0x0853,V(5),I(3));c.get(19,LAND_FINAL);c.eq(19,1,'LAND_APPROACH_MISSION');c.call('SET_FINAL_LANDING');c.ret()
