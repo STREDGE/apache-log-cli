@@ -19,6 +19,8 @@ HCFM1 ~r~WEAPONS FREE~w~: engage everything except the team.
 HCFM2 ~b~FOLLOW YOUR LEAD~w~: gunners fire on your targets.
 HCFM3 ~g~PROTECT CJ~w~: engaging threats to CJ.
 HCFM4 ~p~OVERWATCH~w~: precision fire on armed hostiles.
+HCXROPE ~y~EVAC~w~: no clear landing spot here - using the rope.
+HCNOPAD ~y~EVAC~w~: no flat landing spot - hovering for a rope exit.
 HCXHERE ~g~EVAC~w~: getting out here. Finding a clear spot below.
 HCXARR ~g~EVAC~w~: you will get out on arrival.
 HCXWAIT ~y~EVAC~w~: wait until the helicopter lands or hovers.

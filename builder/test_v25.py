@@ -817,6 +817,32 @@ w,c,_=setup();summon(w,c);to_destination(w,c);command(w,c,12,ticks=6)
 w.car=[w.shared[b.DEST_X],w.shared[b.DEST_Y],w.shared[b.DEST_Z]+1.5];w.altitude=1.5;w.step(c,n=20);assert w.shared[b.STATE]==12
 before=len(calls(w,0x5cd));w.widget_released=b.EXIT_WIDGET;w.step(c,n=3);assert len(calls(w,0x5cd))>before
 passed('Exit button after landing lets CJ out')
+# ---- v39b: robust exit ----
+# a failed rope drop repositions and retries silently, then succeeds
+w,c,_=setup();summon(w,c);ground=VM('Helicover_Ground',w);w.step(c,ground,n=3);to_destination(w,c,ground)
+w.shared[b.EXIT_MODE]=1;w.siteclear=False;before=len(calls(w,0x4a2));w.widget_released=b.EXIT_WIDGET;w.step(c,ground,n=6)
+assert w.shared[b.ROPE_TRIES]==1 and len(calls(w,0x4a2))>before and 'RPDFAIL' not in w.messages and 1 in w.incar,(w.shared[b.ROPE_TRIES],w.messages)
+retry=calls(w,0x4a2)[-1][2];assert math.dist(retry[1:3],[w.shared[b.DEST_X],w.shared[b.DEST_Y]])>5.
+w.siteclear=True;w.car=list(retry[1:4]);w.now+=3600;w.step(c,ground,n=45)
+assert any(x[2][0]==1 for x in calls(w,0x362)) and 1 not in w.incar and 'RPDFAIL' not in w.messages,(w.messages,)
+passed('A blocked rope drop moves a few metres and retries automatically')
+# five failed attempts end with one RPDFAIL message
+w,c,_=setup();summon(w,c);ground=VM('Helicover_Ground',w);w.step(c,ground,n=3);to_destination(w,c,ground)
+w.shared[b.EXIT_MODE]=1;w.siteclear=False;w.widget_released=b.EXIT_WIDGET
+for _ in range(8):w.step(c,ground,n=4);w.now+=3600
+w.step(c,ground,n=6);assert w.messages.count('RPDFAIL')==1 and w.shared[b.ROPE_PENDING]==0 and 1 in w.incar,(w.messages,w.shared[b.ROPE_TRIES])
+passed('After five failed rope attempts the player gets one clear message and stays aboard')
+# LAND mode where the site is not landable -> rope instead
+w,c,_=setup();summon(w,c);ground=VM('Helicover_Ground',w);w.step(c,ground,n=3);to_destination(w,c,ground)
+w.shared[b.EXIT_MODE]=0;w.clear_fn=lambda x,y:False;w.widget_released=b.EXIT_WIDGET;w.step(c,ground,n=4)
+assert 'HCXROPE' in w.messages and w.shared[b.STATE]==23 and w.shared[b.ROPE_PENDING]==1,(w.messages,w.shared[b.STATE])
+w.clear_fn=lambda x,y:True;w.step(c,ground,n=45);assert any(x[2][0]==1 for x in calls(w,0x362)) and 1 not in w.incar
+passed('LAND mode falls back to the rope when there is no place to land')
+# no flat pad near the marker -> still hover over it (rope possible) instead of LAND_BLOCKED
+w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.marker=[200.,150.,0.];w.los_fn=lambda a,z:not(abs(a[0]-z[0])<.01 and abs(a[1]-z[1])<.01);command(w,c,11,ticks=8)
+w.car=[205.,150.,80.];w.step(c,n=8);w.now+=13000;w.step(c,n=8)
+assert w.shared[b.STATE]==22 and 'HCNOPAD' in w.messages and 'HCBLOCK' not in w.messages,(w.shared[b.STATE],w.messages)
+fly_until(w,23,c);passed('No flat pad near the marker: hover over it for a rope exit instead of giving up')
 # ---- v39-fire: fire control upgrade ----
 # menu order and value mapping
 w,c,p=setup(True);summon(w,c);launch=VM('Helicover',w);w.step(c,p,launch,n=15);w.events.append(6);w.step(c,p,n=5)

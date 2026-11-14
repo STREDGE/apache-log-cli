@@ -25,6 +25,9 @@ EXIT_MODE=STATE+134;AUTO_EXIT=STATE+135;LOCK_HOLD=STATE+136
 # combat-orbit point index and next switch time.
 KILLS=STATE+137;LAST_TGT=STATE+138;ENGAGED=STATE+139;CLEAR_AT=STATE+140;ORBIT_I=STATE+141;ORBIT_NEXT=STATE+142
 OVERWATCH_DAMAGE=75;OVERWATCH_CADENCE=900;ORBIT_RADIUS=28.0
+# v39b robust exit: rope drop retries with repositioning, and a rope fallback when there is
+# nowhere to land. DROP_RESULT -1 running / 0 done / 1 failed (set by the ground worker).
+ROPE_PENDING=STATE+143;DROP_RESULT=STATE+144;ROPE_TRIES=STATE+145;RETRY_AT=STATE+146;FORCE_ROPE=STATE+147
 EXIT_WIDGET=0  # CTouchInterface widget of the on-screen enter/exit vehicle button (CPad::ExitVehicleJustDown)
 CRUISE_T=STATE+118;CR_UP=STATE+119;CR_DN=STATE+120
 CR_CMDZ=STATE+128  # v33: commanded z, integrated by steps (never rebuilt from the actual z)
@@ -64,6 +67,8 @@ MESSAGES={
  'HCFM2':'~b~FOLLOW YOUR LEAD~w~: gunners fire on your targets.',
  'HCFM3':'~g~PROTECT CJ~w~: engaging threats to CJ.',
  'HCFM4':'~p~OVERWATCH~w~: precision fire on armed hostiles.',
+ 'HCXROPE':'~y~EVAC~w~: no clear landing spot here - using the rope.',
+ 'HCNOPAD':'~y~EVAC~w~: no flat landing spot - hovering for a rope exit.',
  'HCXHERE':'~g~EVAC~w~: getting out here. Finding a clear spot below.',
  'HCXARR':'~g~EVAC~w~: you will get out on arrival.',
  'HCXWAIT':'~y~EVAC~w~: wait until the helicopter lands or hovers.',
@@ -108,7 +113,7 @@ c.label('INIT');a(0);c.set(AVOID_STAGE,0);c.set(AVOID_NEXT,0);c.set(BUSY,0);c.se
 for key in range(PUB,PUB+7):c.set(key,-1)
 for key in range(GROUND_PUB,GROUND_PUB+5):c.set(key,-1)
 c.set(ROPE_COMMAND,0)
-for key,val in [(STATE,0),(CMD,0),(OPEN,0),(MODEL,487),(CREW,2),(FIRE,0),(TOUCH,0),(HUD,1),(HP,0),(WEAPON_SETTING,0),(EXIT_MODE,0),(AUTO_EXIT,0),(LOCK_HOLD,0),(KILLS,0),(LAST_TGT,-1),(ENGAGED,0),(CLEAR_AT,0),(ORBIT_I,0),(ORBIT_NEXT,0)]:c.set(key,val)
+for key,val in [(STATE,0),(CMD,0),(OPEN,0),(MODEL,487),(CREW,2),(FIRE,0),(TOUCH,0),(HUD,1),(HP,0),(WEAPON_SETTING,0),(EXIT_MODE,0),(AUTO_EXIT,0),(LOCK_HOLD,0),(ROPE_PENDING,0),(DROP_RESULT,0),(ROPE_TRIES,0),(RETRY_AT,0),(FORCE_ROPE,0),(KILLS,0),(LAST_TGT,-1),(ENGAGED,0),(CLEAR_AT,0),(ORBIT_I,0),(ORBIT_NEXT,0)]:c.set(key,val)
 c.label('IDLE');a(1,I(100));a(0x01bd,V(20));a(0xddc,I(HEART),V(20));c.get(8,CMD);c.set(CMD,0)
 c.eq(8,1,'IDLE_EVAC');a(6,V(25),I(0));c.go('LOAD')
 # v38: evacuation commands no longer summon support on their own; they ask for CALL SUPPORT first.
@@ -165,7 +170,7 @@ c.label('DISPATCH');c.get(8,CMD);c.set(CMD,0)
 for command,label in [(15,'REQUEST_EXIT'),(2,'REQUEST_FOLLOW'),(3,'REQUEST_HOLD'),(4,'REQUEST_DEPART'),(5,'EVAC'),(6,'BOARD_CJ'),(7,'REQUEST_GROVE'),(8,'LEAVE_CJ'),(9,'REQUEST_TAKEOFF'),(10,'REQUEST_ROPE'),(11,'REQUEST_MAP'),(12,'REQUEST_DEST_LAND'),(13,'REQUEST_DEST_ROPE'),(14,'REQUEST_PATROL')]:
  nxt='CMD_NEXT_'+str(command);c.eq(8,command,nxt);c.go(label);c.label(nxt)
 # Per-state continuous work.
-for st,label in [(7,'LANDING_TICK'),(11,'LANDING_TICK'),(15,'LANDING_TICK'),(8,'GROUND_TICK'),(9,'GROUND_TICK'),(12,'GROUND_TICK'),(14,'MUSTER_TICK'),(10,'TRAVEL_TICK'),(19,'ROPE_APPROACH_TICK'),(20,'GROVE_CLIMB_TICK'),(21,'MAP_TRAVEL_TICK'),(22,'DEST_APPROACH_TICK'),(24,'PATROL_TICK'),(25,'MAP_CLIMB_TICK'),(2,'FOLLOW_TICK')]:
+for st,label in [(7,'LANDING_TICK'),(11,'LANDING_TICK'),(15,'LANDING_TICK'),(8,'GROUND_TICK'),(9,'GROUND_TICK'),(12,'GROUND_TICK'),(14,'MUSTER_TICK'),(10,'TRAVEL_TICK'),(19,'ROPE_APPROACH_TICK'),(20,'GROVE_CLIMB_TICK'),(21,'MAP_TRAVEL_TICK'),(22,'DEST_APPROACH_TICK'),(24,'PATROL_TICK'),(25,'MAP_CLIMB_TICK'),(2,'FOLLOW_TICK'),(23,'AWAIT_TICK')]:
  nxt='STATE_NEXT_'+str(st);c.eq(7,st,nxt);c.go(label);c.label(nxt)
 c.go('TICK')
 for name,pending,target in [('FOLLOW',2,'FOLLOW'),('HOLD',3,'HOLD'),('DEPART',4,'DEPART')]:
@@ -268,8 +273,9 @@ c.label('WP_ACTIVE');a(0x0085,V(28),V(30));a(0x000a,V(28),I(8));a(0x0dd8,V(26),V
 for v in [26,27]:c.check(0x0021,[V(v),F(-3100)],'WP_STALE');c.check(0x0023,[F(3100),V(v)],'WP_STALE')
 a(0x02ce,V(26),V(27),F(1000),V(28));a(6,V(29),I(1));c.ret()
 c.label('WP_STALE');c.ret()
-c.label('REQUEST_DEST_LAND');c.eq(7,23,'DEST_NOT_READY');c.get(26,DEST_X);c.get(27,DEST_Y);c.get(28,DEST_Z);c.call('CHECK_SITE');c.eq(17,1,'BAD_SITE');state(c,11);c.go('ISSUE_LANDING')
-c.label('REQUEST_DEST_ROPE');c.eq(7,23,'DEST_NOT_READY');c.check(0x0448,[V(18),V(5)],'NOT_ABOARD');c.set(DROP_COMMAND,1);c.go('TICK')
+c.label('REQUEST_DEST_LAND');c.eq(7,23,'DEST_NOT_READY');c.get(26,DEST_X);c.get(27,DEST_Y);c.get(28,DEST_Z);c.call('CHECK_SITE');c.eq(17,1,'DEST_LAND_BAD');state(c,11);c.go('ISSUE_LANDING')
+c.label('DEST_LAND_BAD');c.get(19,AUTO_EXIT);c.eq(19,2,'BAD_SITE');c.set(AUTO_EXIT,0);msg(c,'HCXROPE');c.go('REQUEST_DEST_ROPE')
+c.label('REQUEST_DEST_ROPE');c.eq(7,23,'DEST_NOT_READY');c.check(0x0448,[V(18),V(5)],'NOT_ABOARD');c.set(DROP_COMMAND,1);c.set(ROPE_PENDING,1);c.set(DROP_RESULT,-1);c.set(ROPE_TRIES,0);c.set(RETRY_AT,0);c.go('TICK')
 c.label('DEST_NOT_READY');msg(c,'HCDWAIT');c.go('TICK')
 c.label('REQUEST_GROVE');c.check(0x0448,[V(18),V(5)],'NOT_ABOARD');a(6,V(25),I(7));c.go('START_MUSTER')
 c.label('NOT_ABOARD');msg(c,'HCIN');c.go('TICK')
@@ -311,9 +317,12 @@ c.label('GROVE_CRUISE');c.set(AVOID_STAGE,0);c.set(GROVE_STREAM,0);c.set(GROVE_W
 c.label('MAP_TRAVEL_TICK');c.get(26,DEST_X);c.get(27,DEST_Y);c.call('CRUISE_STEP');c.check(0x0023,[F(150),V(19)],'TICK');a(0x04e4,V(26),V(27));c.get(17,GROVE_WAIT);c.eq(17,0,'MAP_SCAN_TIMER');a(0xddc,I(GROVE_WAIT),V(20))
 c.label('MAP_SCAN_TIMER');c.set(DBG_CODE,3);c.get(17,GROVE_NEXT_SCAN);c.check(0x001d,[V(20),V(17)],'TICK');a(0x0085,V(17),V(20));a(0x000a,V(17),I(500));a(0xddc,I(GROVE_NEXT_SCAN),V(17))
 # Try the exact marker first, then neighbouring points. Each candidate requires a clear landing footprint.
-for index,(dx,dy) in enumerate([(0,0),(8,0),(-8,0),(0,8),(0,-8),(16,0),(-16,0),(0,16),(0,-16),(16,16),(-16,16),(16,-16),(-16,-16)]):
+MAP_PADS=[(0,0)]+[(round(r*dx/((dx*dx+dy*dy)**.5),1),round(r*dy/((dx*dx+dy*dy)**.5),1)) for r in [8,16,24] for dx,dy in [(1,0),(1,1),(0,1),(-1,1),(-1,0),(-1,-1),(0,-1),(1,-1)]]+[(32,0),(0,32),(-32,0),(0,-32)]
+for index,(dx,dy) in enumerate(MAP_PADS):
  nxt='MAP_PAD_NEXT_'+str(index);c.get(26,DEST_X);c.get(27,DEST_Y);a(0x000b,V(26),F(dx));a(0x000b,V(27),F(dy));a(0x02ce,V(26),V(27),F(1000),V(28));c.check(0x0021,[V(28),F(-50)],nxt);c.check(0x0023,[F(800),V(28)],nxt);c.call('CHECK_SITE');c.eq(17,1,nxt);a(0xddc,I(DEST_X),V(26));a(0xddc,I(DEST_Y),V(27));a(0xddc,I(DEST_Z),V(28));c.go('DEST_HOVER_GO');c.label(nxt)
-c.get(17,GROVE_WAIT);a(0x0085,V(31),V(20));a(0x0062,V(31),V(17));c.check(0x0019,[V(31),I(8000)],'TICK');c.go('LAND_BLOCKED')
+c.get(17,GROVE_WAIT);a(0x0085,V(31),V(20));a(0x0062,V(31),V(17));c.check(0x0019,[V(31),I(12000)],'TICK');c.go('MAP_NO_PAD')
+c.label('MAP_NO_PAD');c.get(19,AUTO_EXIT);c.eq(19,1,'MAP_NO_PAD_PLAIN');c.get(19,EXIT_MODE);c.eq(19,0,'DEST_HOVER_GO');c.set(FORCE_ROPE,1);msg(c,'HCXROPE');c.go('DEST_HOVER_GO')
+c.label('MAP_NO_PAD_PLAIN');msg(c,'HCNOPAD')
 c.label('DEST_HOVER_GO');c.set(DBG_CODE,4);c.set(DEST_NATIVE,0);a(0x01bd,V(21));state(c,22);c.go('TICK')
 # v31: cruise to the pad at altitude, then sink vertically to 18 m above it (no native circling).
 c.label('DEST_APPROACH_TICK');c.get(26,DEST_X);c.get(27,DEST_Y);c.get(28,DEST_Z);c.get(19,DEST_NATIVE);c.eq(19,0,'DEST_DESCEND');a(0x00aa,V(5),V(9),V(10),V(11));a(0x0509,V(9),V(10),V(26),V(27),V(31));c.check(0x0021,[V(31),F(1)],'DEST_DESCEND');c.call('CRUISE_STEP');c.go('TICK')
@@ -427,7 +436,9 @@ c.label('TRACK_DONE');c.ret()
 
 # Short detours during the two long-range cruise modes. Collision rays only guide the
 # pilot; they cannot guarantee safe clearance from all moving or unstreamed objects.
-c.label('FLIGHT_AVOID');c.get(19,FROZEN);c.eq(19,1,'AVOID_UNFROZEN');c.go('AVOID_NOT_CRUISE');c.label('AVOID_UNFROZEN');c.eq(7,10,'AVOID_CHECK_MAP');c.go('AVOID_ACTIVE_STATE');c.label('AVOID_CHECK_MAP');c.eq(7,21,'AVOID_NOT_CRUISE');c.label('AVOID_ACTIVE_STATE');c.get(19,AVOID_STAGE);c.eq(19,1,'AVOID_PROBE_TIMER');c.get(17,AVOID_AT);a(0x0085,V(19),V(20));a(0x0062,V(19),V(17));c.check(0x0019,[V(19),I(6000)],'AVOID_CHECK_REACHED');c.go('AVOID_RESUME')
+# v39b: the scripted cruise owns obstacle handling for Grove/map flights; the old native detours
+# could still fire on the first unfrozen tick and give up with HCAVOID, so they are disabled.
+c.label('FLIGHT_AVOID');c.go('AVOID_NOT_CRUISE');c.label('AVOID_UNFROZEN');c.eq(7,10,'AVOID_CHECK_MAP');c.go('AVOID_ACTIVE_STATE');c.label('AVOID_CHECK_MAP');c.eq(7,21,'AVOID_NOT_CRUISE');c.label('AVOID_ACTIVE_STATE');c.get(19,AVOID_STAGE);c.eq(19,1,'AVOID_PROBE_TIMER');c.get(17,AVOID_AT);a(0x0085,V(19),V(20));a(0x0062,V(19),V(17));c.check(0x0019,[V(19),I(6000)],'AVOID_CHECK_REACHED');c.go('AVOID_RESUME')
 c.label('AVOID_CHECK_REACHED');a(0x00aa,V(5),V(9),V(10),V(11));c.get(17,AVOID_X);c.get(19,AVOID_Y);a(0x0509,V(9),V(10),V(17),V(19),V(31));c.check(0x0023,[F(10),V(31)],'AVOID_RETURN');c.go('AVOID_RESUME')
 c.label('AVOID_PROBE_TIMER');c.get(19,AVOID_NEXT);c.check(0x001d,[V(20),V(19)],'AVOID_RETURN');a(0x0085,V(19),V(20));a(0x000a,V(19),I(1000));a(0xddc,I(AVOID_NEXT),V(19));a(0x0407,V(5),F(0),F(2),F(2),V(9),V(10),V(11));a(0x0407,V(5),F(0),F(35),F(2),V(17),V(19),V(31));c.check(0x06bd,[V(9),V(10),V(11),V(17),V(19),V(31),I(1),I(0),I(0),I(1),I(0)],'AVOID_TRY_LEFT');c.ret()
 c.label('AVOID_TRY_LEFT');a(0x0407,V(5),F(-15),F(25),F(12),V(17),V(19),V(31));c.check(0x06bd,[V(9),V(10),V(11),V(17),V(19),V(31),I(1),I(0),I(0),I(1),I(0)],'AVOID_TRY_RIGHT');c.go('AVOID_ISSUE')
@@ -568,13 +579,28 @@ c.label('REQUEST_EXIT');c.check(0x0448,[V(18),V(5)],'NOT_ABOARD')
 for st in [12,9]:
  nxt='EXIT_NOT_GROUND_'+str(st);c.eq(7,st,nxt);c.go('LEAVE_CJ');c.label(nxt)
 c.eq(7,23,'EXIT_NOT_HOVER')
-c.label('EXIT_BY_MODE');c.get(19,EXIT_MODE);c.eq(19,1,'EXIT_LAND_NOW');c.go('REQUEST_DEST_ROPE')
+c.label('EXIT_BY_MODE');c.get(19,FORCE_ROPE);c.eq(19,1,'EXIT_BY_SETTING');c.set(FORCE_ROPE,0);c.go('REQUEST_DEST_ROPE')
+c.label('EXIT_BY_SETTING');c.get(19,EXIT_MODE);c.eq(19,1,'EXIT_LAND_NOW');c.go('REQUEST_DEST_ROPE')
 c.label('EXIT_LAND_NOW');c.set(AUTO_EXIT,2);c.go('REQUEST_DEST_LAND')
 c.label('EXIT_NOT_HOVER')
 for st in [1,4,7,11,13,15,16,17]:
  nxt='EXIT_NOT_BUSY_'+str(st);c.eq(7,st,nxt);msg(c,'HCXWAIT');c.go('TICK');c.label(nxt)
 c.eq(7,22,'EXIT_HERE');c.set(AUTO_EXIT,1);msg(c,'HCXARR');c.go('TICK')
 c.label('EXIT_HERE');a(0x00aa,V(5),V(9),V(10),V(11));a(0x02ce,V(9),V(10),F(1000),V(28));a(0xddc,I(DEST_X),V(9));a(0xddc,I(DEST_Y),V(10));a(0xddc,I(DEST_Z),V(28));c.set(GROVE_WAIT,0);c.set(GROVE_NEXT_SCAN,0);c.set(AVOID_STAGE,0);c.set(AUTO_EXIT,1);c.call('UNFREEZE');a(0x01bd,V(21));state(c,21);msg(c,'HCXHERE');c.go('TICK')
+# v39b: while hovering over the destination, a failed rope drop (slope, height window, shaft)
+# moves the helicopter 6-8 m to another spot, re-hovers 16 m above the ground there and retries
+# after 3.5 s - up to 5 times - before reporting RPDFAIL.
+c.label('AWAIT_TICK');c.get(19,ROPE_PENDING);c.eq(19,1,'TICK')
+c.get(19,RETRY_AT);c.eq(19,0,'AWAIT_RETRY_WAIT')
+c.get(19,DROP_RESULT);c.eq(19,1,'TICK')
+c.get(19,ROPE_TRIES);a(0x000a,V(19),I(1));a(0xddc,I(ROPE_TRIES),V(19));c.check(0x0019,[V(19),I(5)],'AWAIT_REPOSITION')
+c.set(ROPE_PENDING,0);msg(c,'RPDFAIL');c.go('TICK')
+c.label('AWAIT_REPOSITION');c.call('UNFREEZE');c.get(26,DEST_X);c.get(27,DEST_Y)
+for k,(ox,oy) in enumerate([(0,6),(6,0),(0,-6),(-6,0),(8,8)],1):
+ nxt='AWAIT_OFFSET_'+str(k);c.eq(19,k,nxt);a(0x000b,V(26),F(ox));a(0x000b,V(27),F(oy));c.go('AWAIT_MOVE');c.label(nxt)
+c.label('AWAIT_MOVE');a(0x02ce,V(26),V(27),F(1000),V(28));a(0x000b,V(28),F(16));a(0x07bb,V(5),I(0));a(0x0853,V(5),I(3));a(0x04df,V(5),I(0));a(0x04a2,V(5),V(26),V(27),V(28),F(10),V(28));a(0x00ad,V(5),F(8))
+a(0x0085,V(19),V(20));a(0x000a,V(19),I(3500));a(0xddc,I(RETRY_AT),V(19));c.set(DROP_RESULT,-1);c.go('TICK')
+c.label('AWAIT_RETRY_WAIT');c.get(19,RETRY_AT);c.check(0x001d,[V(20),V(19)],'TICK');c.set(RETRY_AT,0);c.set(DROP_COMMAND,1);c.go('TICK')
 c.label('RESTORE_FLIGHT');a(0x0853,V(5),I(10));a(0x07bb,V(5),I(6));c.ret()
 c.label('BLOCK_HOVER');c.call('UNFREEZE');a(0x07bb,V(5),I(0));a(0x0853,V(5),I(10));a(0x00aa,V(5),V(9),V(10),V(11));a(0x04df,V(5),I(0));a(0x04a2,V(5),V(9),V(10),V(11),F(10),V(11));a(0x00ad,V(5),F(21));a(0x04df,V(5),I(1));c.ret()
 c.label('SET_LANDING_MISSION');c.call('UNFREEZE');a(0x04df,V(5),I(0));a(0x07bb,V(5),I(0));a(0x0853,V(5),I(3));c.get(19,LAND_FINAL);c.eq(19,1,'LAND_APPROACH_MISSION');c.call('SET_FINAL_LANDING');c.ret()

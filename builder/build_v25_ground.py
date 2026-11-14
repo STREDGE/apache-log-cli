@@ -143,12 +143,14 @@ s.check(0x0611,[V(0),S('ABSEIL')],'DROP_FRAME_SKIP');a(0x0093,V(11),V(15));a(0x0
 plat_ride()
 a(0x083c,V(0),F(0),F(0),V(9));s.check(0x0019,[V(15),I(2999)],'DROP_TICK')
 plat_delete()
-a(0x083c,V(0),F(0),F(0),F(0));a(0x00a1,V(0),V(2),V(3),V(4));a(0x01b4,I(0),I(1));s.check(0x056d,[V(17)],'DROP_NO_DUMMY');a(0x009b,V(17));s.label('DROP_NO_DUMMY');s.set(b.GROUND_PUB+4,-1);a(0x0574,V(1),I(0));s.set(b.FROZEN,0);s.set(b.STATE,3);a(0x0249,I(285));s.go('WAIT')
+a(0x083c,V(0),F(0),F(0),F(0));a(0x00a1,V(0),V(2),V(3),V(4));a(0x01b4,I(0),I(1));s.check(0x056d,[V(17)],'DROP_NO_DUMMY');a(0x009b,V(17));s.label('DROP_NO_DUMMY');s.set(b.GROUND_PUB+4,-1);a(0x0574,V(1),I(0));s.set(b.FROZEN,0);s.set(b.STATE,3);s.set(b.DROP_RESULT,0);s.set(b.ROPE_PENDING,0);a(0x0249,I(285));s.go('WAIT')
 s.label('DROP_ABORT')
 plat_delete()
 s.check(0x056d,[V(0)],'DROP_ABORT_CONTROL');s.check(0x8118,[V(0)],'DROP_ABORT_CONTROL');a(0x00a1,V(0),V(2),V(3),V(4));s.label('DROP_ABORT_CONTROL');a(0x01b4,I(0),I(1));s.check(0x056d,[V(17)],'DROP_FAIL_UNFREEZE');a(0x009b,V(17))
 s.label('DROP_FAIL_UNFREEZE');s.set(b.GROUND_PUB+4,-1);s.check(0x056e,[V(1)],'DROP_FAIL');a(0x0574,V(1),I(0));s.set(b.FROZEN,0)
-s.label('DROP_FAIL');s.eq(26,1,'DROP_FAIL_NO_MODEL');a(0x0249,I(285));s.label('DROP_FAIL_NO_MODEL');a(0x03e5,S('RPDFAIL'));s.go('WAIT')
+s.label('DROP_FAIL');s.eq(26,1,'DROP_FAIL_NO_MODEL');a(0x0249,I(285));s.label('DROP_FAIL_NO_MODEL');s.set(b.DROP_RESULT,1)
+# v39b: when the core manages the attempt it retries elsewhere and reports the final failure itself
+s.get(19,b.ROPE_PENDING);s.eq(19,1,'DROP_FAIL_SAY');s.go('WAIT');s.label('DROP_FAIL_SAY');a(0x03e5,S('RPDFAIL'));s.go('WAIT')
 
 s.label('LOAD_FAILED');a(0x0249,I(285));a(0x03e5,S('RGFAIL'));s.go('WAIT')
 s.label('NOHOLD');a(0x03e5,S('RGHOLD'));s.go('WAIT')
