@@ -805,13 +805,24 @@ w.shared[b.EXIT_MODE]=0;w.widget_released=b.EXIT_WIDGET;w.step(c,n=4);assert w.s
 w.car=[w.shared[b.DEST_X],w.shared[b.DEST_Y],w.shared[b.DEST_Z]+1.5];w.altitude=1.5;w.step(c,n=20)
 assert w.shared[b.STATE]==12 and calls(w,0x5cd) and calls(w,0x5cd)[-1][2][:2]==[1,c.v[5]] and w.locks[c.v[5]]==1,(w.shared[b.STATE],w.messages)
 passed('Exit button over the destination in LAND mode lands and then lets CJ out')
-# exit button during the flight -> get out here: destination becomes the current spot
+# v39.2: exit button in flight, ROPE mode -> freeze on the spot and abseil at once
 w,c,_=setup();summon(w,c);ground=VM('Helicover_Ground',w);w.incar[1]=c.v[5];w.marker=[1500.,150.,0.];command(w,c,11,ticks=8)
-w.step(c,ground,n=20);here=w.car[:2];w.shared[b.EXIT_MODE]=1;w.widget_released=b.EXIT_WIDGET;w.step(c,ground,n=2)
+w.step(c,ground,n=20);here=w.car.copy();w.shared[b.EXIT_MODE]=1;w.widget_released=b.EXIT_WIDGET;w.step(c,ground,n=3)
+assert w.frozen.get(c.v[5]) and w.shared[b.STATE]==23 and 'HCXHERE' not in w.messages
+drop=[x for x in calls(w,0x362) if x[2][0]==1];assert drop and math.dist(drop[0][2][1:3],here[:2])<4.,(drop,here)
+w.step(c,ground,n=80);assert 1 not in w.incar and w.control and w.shared[b.ROPE_PENDING]==0,(w.messages,)
+passed('Exit button in flight (ROPE): the helicopter stops dead and CJ abseils at once')
+# the abseil time scales with the height: ~6 m/s, 2-6 s
+motion=[x for x in calls(w,0x83c) if x[2][0]==1 and x[2][3]<0];span=motion[-1][0]-motion[0][0]
+height=here[2]-3.-.7;expected=min(6000.,max(2000.,height*1000./6.))
+assert abs(span-expected)<=200 and abs(-motion[0][2][3]-height*1000./expected)<.05,(span,expected,motion[0][2][3])
+passed('Abseil duration scales with the height (2-6 s)')
+# exit button in flight, LAND mode -> find a spot below, land, CJ leaves
+w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.marker=[1500.,150.,0.];command(w,c,11,ticks=8)
+w.step(c,n=20);here=w.car[:2];w.shared[b.EXIT_MODE]=0;w.widget_released=b.EXIT_WIDGET;w.step(c,n=2)
 assert w.shared[b.AUTO_EXIT]==1 and 'HCXHERE' in w.messages and math.dist([w.shared[b.DEST_X],w.shared[b.DEST_Y]],here)<20.
-fly_until(w,23,c,ground);w.step(c,ground,n=45)
-assert any(x[2][0]==1 for x in calls(w,0x362)) and 1 not in w.incar,'rope exit on arrival'
-passed('Exit button in flight finds a spot below and gets out with the selected method')
+fly_until(w,11,c);assert w.shared[b.STATE]==11
+passed('Exit button in flight (LAND): finds a spot below and starts the landing')
 # exit button on the ground -> CJ simply leaves
 w,c,_=setup();summon(w,c);to_destination(w,c);command(w,c,12,ticks=6)
 w.car=[w.shared[b.DEST_X],w.shared[b.DEST_Y],w.shared[b.DEST_Z]+1.5];w.altitude=1.5;w.step(c,n=20);assert w.shared[b.STATE]==12
@@ -843,6 +854,17 @@ w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.marker=[200.,150.,0.];w.los_fn=lam
 w.car=[205.,150.,80.];w.step(c,n=8);w.now+=13000;w.step(c,n=8)
 assert w.shared[b.STATE]==22 and 'HCNOPAD' in w.messages and 'HCBLOCK' not in w.messages,(w.shared[b.STATE],w.messages)
 fly_until(w,23,c);passed('No flat pad near the marker: hover over it for a rope exit instead of giving up')
+# v39.2: rope evacuation hangs the rope 6 m in front of CJ; standing still never lifts him
+w,c,_=setup();summon(w,c);ground=VM('Helicover_Ground',w);w.step(c,ground,n=3);w.car=[0.,-30.,40.]
+w.shared[b.CMD]=10
+for _ in range(120):
+ w.step(c,ground)
+ if w.shared[b.STATE]==3 and calls(w,0x503):break
+assert w.shared[b.STATE]==3,(w.shared[b.STATE],w.messages)
+rope=[w.car[0],w.car[1]-3.];assert 5.<math.dist(rope,w.player[:2])<7.,(rope,w.player)
+w.now+=8000;w.step(c,ground,n=20);assert w.control and w.incar.get(1)!=c.v[5],'standing still: not lifted'
+w.player=[rope[0],rope[1],.7];w.step(c,ground,n=10);assert w.control is False,'walked to the rope: lifted'
+passed('Rope evacuation lifts CJ only after he walks to the rope (6 m away)')
 # ---- v39-fire: fire control upgrade ----
 # menu order and value mapping
 w,c,p=setup(True);summon(w,c);launch=VM('Helicover',w);w.step(c,p,launch,n=15);w.events.append(6);w.step(c,p,n=5)

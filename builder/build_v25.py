@@ -28,6 +28,9 @@ OVERWATCH_DAMAGE=75;OVERWATCH_CADENCE=900;ORBIT_RADIUS=28.0
 # v39b robust exit: rope drop retries with repositioning, and a rope fallback when there is
 # nowhere to land. DROP_RESULT -1 running / 0 done / 1 failed (set by the ground worker).
 ROPE_PENDING=STATE+143;DROP_RESULT=STATE+144;ROPE_TRIES=STATE+145;RETRY_AT=STATE+146;FORCE_ROPE=STATE+147
+# v39.2: the hover point is CJ + 9 m along the helicopter's heading, so the tail rope (0,-3)
+# hangs 6 m in front of CJ - he is lifted only after walking to it, not while standing still.
+ROPE_PICKUP_AHEAD=9.0
 EXIT_WIDGET=0  # CTouchInterface widget of the on-screen enter/exit vehicle button (CPad::ExitVehicleJustDown)
 CRUISE_T=STATE+118;CR_UP=STATE+119;CR_DN=STATE+120
 CR_CMDZ=STATE+128  # v33: commanded z, integrated by steps (never rebuilt from the actual z)
@@ -201,7 +204,7 @@ c.label('ROPE_CJ_ABOARD');msg(c,'HCEXIT');c.go('TICK')
 c.label('ROPE_PREP');c.eq(0,425,'ROPE_SEATS');msg(c,'HCNOSEA');c.go('TICK')
 c.label('ROPE_SEATS');a(0x01ea,V(5),V(19));c.check(0x0019,[V(19),I(0)],'NO_SEATS')
 # v27: hover point = CJ + 3 m along the helicopter's heading, so the tail rope (0,-3) hangs on CJ.
-a(0x00aa,V(5),V(9),V(10),V(11));a(0x0407,V(5),F(0),F(3),F(0),V(26),V(27),V(28));a(0x0063,V(26),V(9));a(0x0063,V(27),V(10))
+a(0x00aa,V(5),V(9),V(10),V(11));a(0x0407,V(5),F(0),F(ROPE_PICKUP_AHEAD),F(0),V(26),V(27),V(28));a(0x0063,V(26),V(9));a(0x0063,V(27),V(10))
 a(0x00a0,V(18),V(9),V(10),V(28));a(0x005b,V(26),V(9));a(0x005b,V(27),V(10));a(0x000b,V(28),F(100));a(0x02ce,V(26),V(27),V(28),V(28));a(0x00a0,V(18),V(9),V(10),V(11));a(0x000b,V(11),F(26));a(0x02ce,V(9),V(10),V(11),V(31));a(0x0087,V(17),V(28));a(0x0063,V(17),V(31));c.check(0x0023,[F(5),V(17)],'BAD_SITE');c.check(0x0021,[V(17),F(-5)],'BAD_SITE');c.call('CHECK_SITE');c.eq(17,1,'BAD_SITE');c.call('UNFREEZE');c.call('RESTORE_FLIGHT');a(0x04df,V(5),I(0));a(0x0087,V(9),V(28));a(0x000b,V(9),F(15));a(0x0087,V(11),V(28));a(0x000b,V(11),F(15));a(0x0853,V(5),I(10));a(0x04a2,V(5),V(26),V(27),V(9),F(12),V(11));a(0x00ad,V(5),F(45));a(0x01bd,V(21));state(c,19);c.go('TICK')
 # v27: the native autopilot circles around a 3-5 m target instead of stopping. Within
 # 45 m (clear line of sight) freeze the helicopter and glide it by script at ~25 m/s
@@ -211,7 +214,7 @@ c.label('ROPE_FAR');a(0x0509,V(9),V(10),V(26),V(27),V(31));c.check(0x0023,[F(45)
 a(0x0087,V(19),V(28));a(0x000b,V(19),F(15));c.check(0x06bd,[V(9),V(10),V(11),V(26),V(27),V(19),I(1),I(0),I(0),I(1),I(0)],'ROPE_APPROACH_TIMEOUT')
 # SET_CAR_COORDINATES adds the model's base offset to z; measure it once so the glide does not climb.
 a(0x0574,V(5),I(1));c.set(FROZEN,1);a(0x00ab,V(5),V(9),V(10),V(11));a(0xddc,I(CR_CMDZ),V(11));a(0x00aa,V(5),V(17),V(19),V(31));a(0x0063,V(31),V(11));a(0xddc,I(GLIDE_C),V(31))
-a(0x0407,V(5),F(0),F(3),F(0),V(17),V(19),V(31));a(0x0063,V(17),V(9));a(0x0063,V(19),V(10));a(0x00a0,V(18),V(26),V(27),V(31));a(0x005b,V(26),V(17));a(0x005b,V(27),V(19))
+a(0x0407,V(5),F(0),F(ROPE_PICKUP_AHEAD),F(0),V(17),V(19),V(31));a(0x0063,V(17),V(9));a(0x0063,V(19),V(10));a(0x00a0,V(18),V(26),V(27),V(31));a(0x005b,V(26),V(17));a(0x005b,V(27),V(19))
 c.label('ROPE_GLIDE');a(0x00aa,V(5),V(9),V(10),V(11))
 a(0x0087,V(17),V(26));a(0x0063,V(17),V(9));a(0x0087,V(29),V(27));a(0x0063,V(29),V(10));a(0x0087,V(30),V(28));a(0x000b,V(30),F(15));a(0x0063,V(30),V(11))
 a(0x050a,F(0),F(0),F(0),V(17),V(29),V(30),V(31));c.check(0x0021,[V(31),F(.8)],'ROPE_ARRIVE')
@@ -585,6 +588,12 @@ c.label('EXIT_LAND_NOW');c.set(AUTO_EXIT,2);c.go('REQUEST_DEST_LAND')
 c.label('EXIT_NOT_HOVER')
 for st in [1,4,7,11,13,15,16,17]:
  nxt='EXIT_NOT_BUSY_'+str(st);c.eq(7,st,nxt);msg(c,'HCXWAIT');c.go('TICK');c.label(nxt)
+# v39.2 ROPE mode: freeze right where the helicopter is and drop immediately (retries with a
+# small shift only if the shaft is blocked or the height is outside 4-60 m).
+c.get(19,EXIT_MODE);c.eq(19,1,'EXIT_NOT_ROPE_NOW')
+c.label('EXIT_ROPE_NOW');a(0x00aa,V(5),V(9),V(10),V(11));a(0x0574,V(5),I(1));c.set(FROZEN,1);a(0x04ba,V(5),F(0));a(0x02ce,V(9),V(10),V(11),V(28))
+a(0xddc,I(DEST_X),V(9));a(0xddc,I(DEST_Y),V(10));a(0xddc,I(DEST_Z),V(28));c.set(AUTO_EXIT,0);c.set(DEST_NATIVE,0);state(c,23);a(6,V(7),I(23));c.go('REQUEST_DEST_ROPE')
+c.label('EXIT_NOT_ROPE_NOW')
 c.eq(7,22,'EXIT_HERE');c.set(AUTO_EXIT,1);msg(c,'HCXARR');c.go('TICK')
 c.label('EXIT_HERE');a(0x00aa,V(5),V(9),V(10),V(11));a(0x02ce,V(9),V(10),F(1000),V(28));a(0xddc,I(DEST_X),V(9));a(0xddc,I(DEST_Y),V(10));a(0xddc,I(DEST_Z),V(28));c.set(GROVE_WAIT,0);c.set(GROVE_NEXT_SCAN,0);c.set(AVOID_STAGE,0);c.set(AUTO_EXIT,1);c.call('UNFREEZE');a(0x01bd,V(21));state(c,21);msg(c,'HCXHERE');c.go('TICK')
 # v39b: while hovering over the destination, a failed rope drop (slope, height window, shaft)

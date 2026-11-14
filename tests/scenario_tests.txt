@@ -85,12 +85,15 @@ PASS: EVACUATION menu toggles the exit mode with one item
 PASS: Doors lock while CJ is aboard so the native exit cannot drop him
 PASS: Exit button over the destination in ROPE mode starts the rope descent
 PASS: Exit button over the destination in LAND mode lands and then lets CJ out
-PASS: Exit button in flight finds a spot below and gets out with the selected method
+PASS: Exit button in flight (ROPE): the helicopter stops dead and CJ abseils at once
+PASS: Abseil duration scales with the height (2-6 s)
+PASS: Exit button in flight (LAND): finds a spot below and starts the landing
 PASS: Exit button after landing lets CJ out
 PASS: A blocked rope drop moves a few metres and retries automatically
 PASS: After five failed rope attempts the player gets one clear message and stays aboard
 PASS: LAND mode falls back to the rope when there is no place to land
 PASS: No flat pad near the marker: hover over it for a rope exit instead of giving up
+PASS: Rope evacuation lifts CJ only after he walks to the rope (6 m away)
 PASS: FIRE CONTROL lists CEASE FIRE, PROTECT CJ, FOLLOW CJ SHOTS, WEAPONS FREE, OVERWATCH
 PASS: OVERWATCH: armed hostiles only, 75-damage precision rounds
 PASS: OVERWATCH leaves armed police alone unless CJ is wanted
