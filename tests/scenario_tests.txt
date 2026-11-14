@@ -34,8 +34,9 @@ PASS: CJ ascent avoids new animation streaming and tolerates an unavailable anim
 PASS: Missing resident PED animation cancels safely before disabling CJ control
 PASS: Fire worker omits passenger getter implicated by the AML crash log
 PASS: Rope command approaches a clear site, then starts deployment when hovering
-PASS: Rope command summons helicopter when no support is active
-PASS: CLEO menu rope action summons and starts the approach
+PASS: Evacuation commands without support show CALL SUPPORT first and do not summon
+PASS: CLEO menu rope action asks for support first, then starts the approach once called
+PASS: All message keys used by the scripts exist in Helicover.fxt
 PASS: Rope approach rejects blocked sites without spawning the team
 PASS: At elevated terrain, hovering 4m from pickup starts deployment at safe height
 PASS: Fifth rope is created during guard descent rather than waiting for it to end
@@ -64,7 +65,7 @@ PASS: Map flight rejects an inactive radar trace
 PASS: Map marker is read from libGTASA memory with 0DD8, never 0AB6
 PASS: Repeated map flight with delayed teleports keeps a steady cruise height
 PASS: Off-map or NaN marker coordinates are rejected
-PASS: Diagnostic breadcrumbs report the cruise step
+PASS: Release build shows no DBG breadcrumbs
 PASS: Four guards acquire separate eligible threats when available, with stronger checked bullets
 PASS: Map destination searches a nearby clear landing footprint
 PASS: Blocked descent shaft leaves CJ aboard with control enabled

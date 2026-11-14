@@ -15,7 +15,7 @@ ROPE_COMMAND=STATE+70;GROUND_PUB=STATE+71;GROUND_MOVE_NEXT=STATE+80;DROP_COMMAND
 GLIDE_C=STATE+116;STUCK_SINCE=STATE+117
 # v36 diagnostic breadcrumbs: 'DBG state*100+step' is printed whenever it changes, so a screenshot
 # of a frozen screen shows where the core was. Set DEBUG_BREADCRUMBS=False for a quiet build.
-DEBUG_BREADCRUMBS=True;DBG_CODE=STATE+130;DBG_LAST=STATE+131
+DEBUG_BREADCRUMBS=False;DBG_CODE=STATE+130;DBG_LAST=STATE+131
 DEST_NATIVE=STATE+133  # v37: 1 once the native pilot owns the final descent
 CRUISE_T=STATE+118;CR_UP=STATE+119;CR_DN=STATE+120
 CR_CMDZ=STATE+128  # v33: commanded z, integrated by steps (never rebuilt from the actual z)
@@ -44,6 +44,7 @@ MESSAGES={
  'HCGCLMB':'~y~EVAC~w~: cannot climb safely. Clear obstacles and retry.',
  'HCMAPOF':'~y~EVAC~w~: map marker flight is disabled: it crashes CLEO Android.',
  'HCDBG':'DBG ~1~',
+ 'HCNEED':'~y~HELICOVER~w~: call support first (HELICOVER > CALL SUPPORT).',
  'HCNOMAP':'~y~EVAC~w~: place a destination marker on the map first.',
  'HCCHOS':'~g~EVAC~w~: above destination. Choose LAND or ROPE EXIT.',
  'HCDWAIT':'~y~EVAC~w~: wait until the helicopter reaches the destination.',
@@ -90,8 +91,10 @@ c.set(ROPE_COMMAND,0)
 for key,val in [(STATE,0),(CMD,0),(OPEN,0),(MODEL,487),(CREW,2),(FIRE,0),(TOUCH,0),(HUD,1),(HP,0),(WEAPON_SETTING,0)]:c.set(key,val)
 c.label('IDLE');a(1,I(100));a(0x01bd,V(20));a(0xddc,I(HEART),V(20));c.get(8,CMD);c.set(CMD,0)
 c.eq(8,1,'IDLE_EVAC');a(6,V(25),I(0));c.go('LOAD')
-c.label('IDLE_EVAC');c.eq(8,5,'IDLE_ROPE');a(6,V(25),I(5));c.go('LOAD')
-c.label('IDLE_ROPE');c.eq(8,10,'IDLE_PATROL');a(6,V(25),I(11));c.go('LOAD')
+# v38: evacuation commands no longer summon support on their own; they ask for CALL SUPPORT first.
+c.label('IDLE_EVAC')
+for cmd in [5,6,7,8,9,10,11,12,13]:
+ nxt='IDLE_NEED_'+str(cmd);c.eq(8,cmd,nxt);msg(c,'HCNEED');c.go('IDLE');c.label(nxt)
 c.label('IDLE_PATROL');c.eq(8,14,'IDLE');a(6,V(25),I(12))
 c.label('LOAD');c.check(0x0256,[I(0)],'IDLE');a(0x077e,V(17));c.eq(17,0,'OUTDOORS');state(c,1)
 a(0x01f5,I(0),V(18));c.get(0,MODEL);c.get(19,CREW)
