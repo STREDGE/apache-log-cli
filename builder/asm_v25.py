@@ -11,7 +11,7 @@ LIB[0x00ab]={'id':'00AB','name':'SET_CAR_COORDINATES','num_params':4}
 LIB[0x0016]={'id':'0016','name':'DIV_INT_LVAR_BY_VAL','num_params':2}
 # CLEO Android: 0DD8 result = read_mem_addr addr size add_ib (destination first).
 LIB[0x0dd8]={'id':'0DD8','name':'READ_MEM_ADDR','num_params':4}
-for _op,_name,_n in [(0x01e5,'PRINT_WITH_NUMBER_NOW',4),(0x0107,'CREATE_OBJECT',5),(0x0108,'DELETE_OBJECT',1),(0x01bc,'SET_OBJECT_COORDINATES',4),(0x03ca,'DOES_OBJECT_EXIST',1),(0x0750,'SET_OBJECT_VISIBLE',2)]:
+for _op,_name,_n in [(0x020a,'SET_CAR_DOORS_LOCKED',2),(0x0a52,'IS_WIDGET_RELEASED',1),(0x01e5,'PRINT_WITH_NUMBER_NOW',4),(0x0107,'CREATE_OBJECT',5),(0x0108,'DELETE_OBJECT',1),(0x01bc,'SET_OBJECT_COORDINATES',4),(0x03ca,'DOES_OBJECT_EXIST',1),(0x0750,'SET_OBJECT_VISIBLE',2)]:
  LIB.setdefault(_op,{'id':'%04X'%_op,'name':_name,'num_params':_n})
 STATE=0x48454d00;CMD=STATE+1;HEART=STATE+2
 # Protocol: commands 1 summon, 2 follow, 3 hold, 4 depart.

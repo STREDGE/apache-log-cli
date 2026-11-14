@@ -17,6 +17,11 @@ GLIDE_C=STATE+116;STUCK_SINCE=STATE+117
 # of a frozen screen shows where the core was. Set DEBUG_BREADCRUMBS=False for a quiet build.
 DEBUG_BREADCRUMBS=False;DBG_CODE=STATE+130;DBG_LAST=STATE+131
 DEST_NATIVE=STATE+133  # v37: 1 once the native pilot owns the final descent
+# v39 exit button: EXIT_MODE 0 = land then leave, 1 = rope descent. AUTO_EXIT 1 = get out on
+# arrival over the destination, 2 = leave right after the landing. LOCK_HOLD = time until which
+# the doors stay unlocked so CJ's own leave-car task can finish.
+EXIT_MODE=STATE+134;AUTO_EXIT=STATE+135;LOCK_HOLD=STATE+136
+EXIT_WIDGET=0  # CTouchInterface widget of the on-screen enter/exit vehicle button (CPad::ExitVehicleJustDown)
 CRUISE_T=STATE+118;CR_UP=STATE+119;CR_DN=STATE+120
 CR_CMDZ=STATE+128  # v33: commanded z, integrated by steps (never rebuilt from the actual z)
 CR_DT=STATE+121;CR_V=STATE+122;CR_VT=STATE+123;CR_SLOW=STATE+124;CR_DX=STATE+125;CR_DY=STATE+126;CR_DZ=STATE+127
@@ -46,7 +51,10 @@ MESSAGES={
  'HCDBG':'DBG ~1~',
  'HCNEED':'~y~HELICOVER~w~: call support first (HELICOVER > CALL SUPPORT).',
  'HCNOMAP':'~y~EVAC~w~: place a destination marker on the map first.',
- 'HCCHOS':'~g~EVAC~w~: above destination. Choose LAND or ROPE EXIT.',
+ 'HCCHOS':'~g~EVAC~w~: above destination. Press the exit button to get out.',
+ 'HCXHERE':'~g~EVAC~w~: getting out here. Finding a clear spot below.',
+ 'HCXARR':'~g~EVAC~w~: you will get out on arrival.',
+ 'HCXWAIT':'~y~EVAC~w~: wait until the helicopter lands or hovers.',
  'HCDWAIT':'~y~EVAC~w~: wait until the helicopter reaches the destination.',
  'HCPAT':'~b~HELICOVER~w~: patrolling around CJ.',
  'HCAVOID':'~y~HELICOVER~w~: path blocked; holding for a clear route.',
@@ -88,7 +96,7 @@ c.label('INIT');a(0);c.set(AVOID_STAGE,0);c.set(AVOID_NEXT,0);c.set(BUSY,0);c.se
 for key in range(PUB,PUB+7):c.set(key,-1)
 for key in range(GROUND_PUB,GROUND_PUB+5):c.set(key,-1)
 c.set(ROPE_COMMAND,0)
-for key,val in [(STATE,0),(CMD,0),(OPEN,0),(MODEL,487),(CREW,2),(FIRE,0),(TOUCH,0),(HUD,1),(HP,0),(WEAPON_SETTING,0)]:c.set(key,val)
+for key,val in [(STATE,0),(CMD,0),(OPEN,0),(MODEL,487),(CREW,2),(FIRE,0),(TOUCH,0),(HUD,1),(HP,0),(WEAPON_SETTING,0),(EXIT_MODE,0),(AUTO_EXIT,0),(LOCK_HOLD,0)]:c.set(key,val)
 c.label('IDLE');a(1,I(100));a(0x01bd,V(20));a(0xddc,I(HEART),V(20));c.get(8,CMD);c.set(CMD,0)
 c.eq(8,1,'IDLE_EVAC');a(6,V(25),I(0));c.go('LOAD')
 # v38: evacuation commands no longer summon support on their own; they ask for CALL SUPPORT first.
@@ -134,7 +142,7 @@ c.label('TICK_NORMAL_WAIT');a(1,I(100))
 c.label('TICK_AFTER_WAIT')
 if DEBUG_BREADCRUMBS:
  c.get(19,STATE);a(0x0012,V(19),I(100));c.get(17,DBG_CODE);a(0x005a,V(19),V(17));c.get(17,DBG_LAST);c.check(0x803b,[V(19),V(17)],'DBG_SAME');a(0x01e5,S('HCDBG'),V(19),I(600000),I(1));a(0xddc,I(DBG_LAST),V(19));c.label('DBG_SAME')
-a(0x01bd,V(20));a(0xddc,I(HEART),V(20));healthcheck(c,'CLEANUP');c.call('CHANGE_MODEL');c.call('CHANGE_CREW');c.call('PUBLISH');c.get(7,STATE);a(0x0227,V(5),V(6));a(0xddc,I(HP),V(6));c.call('TRACK_COMBAT');c.call('FLIGHT_AVOID');c.call('UNSTICK');c.get(7,STATE)
+a(0x01bd,V(20));a(0xddc,I(HEART),V(20));healthcheck(c,'CLEANUP');c.call('CHANGE_MODEL');c.call('CHANGE_CREW');c.call('PUBLISH');c.get(7,STATE);a(0x0227,V(5),V(6));a(0xddc,I(HP),V(6));c.call('TRACK_COMBAT');c.call('FLIGHT_AVOID');c.call('UNSTICK');c.call('EXIT_BUTTON');c.get(7,STATE)
 c.get(19,FIRE);c.check(0x003b,[V(19),V(23)],'UPDATE_FIRE');c.go('HEALTH')
 c.label('UPDATE_FIRE');c.call('APPLY_FIRE')
 c.label('HEALTH');c.eq(7,15,'HEALTH_LANDED_CHECK');c.go('DISPATCH')
@@ -142,7 +150,7 @@ c.label('HEALTH_LANDED_CHECK');c.eq(7,12,'CHECK_HEALTH');c.go('DISPATCH')
 c.label('CHECK_HEALTH');c.check(0x0019,[V(6),I(350)],'LOW_HEALTH');c.go('DISPATCH')
 c.label('LOW_HEALTH');c.check(0x80db,[V(18),V(5)],'EMERGENCY');c.eq(24,0,'EMERGENCY');a(6,V(25),I(13));c.go('DEPART')
 c.label('DISPATCH');c.get(8,CMD);c.set(CMD,0)
-for command,label in [(2,'REQUEST_FOLLOW'),(3,'REQUEST_HOLD'),(4,'REQUEST_DEPART'),(5,'EVAC'),(6,'BOARD_CJ'),(7,'REQUEST_GROVE'),(8,'LEAVE_CJ'),(9,'REQUEST_TAKEOFF'),(10,'REQUEST_ROPE'),(11,'REQUEST_MAP'),(12,'REQUEST_DEST_LAND'),(13,'REQUEST_DEST_ROPE'),(14,'REQUEST_PATROL')]:
+for command,label in [(15,'REQUEST_EXIT'),(2,'REQUEST_FOLLOW'),(3,'REQUEST_HOLD'),(4,'REQUEST_DEPART'),(5,'EVAC'),(6,'BOARD_CJ'),(7,'REQUEST_GROVE'),(8,'LEAVE_CJ'),(9,'REQUEST_TAKEOFF'),(10,'REQUEST_ROPE'),(11,'REQUEST_MAP'),(12,'REQUEST_DEST_LAND'),(13,'REQUEST_DEST_ROPE'),(14,'REQUEST_PATROL')]:
  nxt='CMD_NEXT_'+str(command);c.eq(8,command,nxt);c.go(label);c.label(nxt)
 # Per-state continuous work.
 for st,label in [(7,'LANDING_TICK'),(11,'LANDING_TICK'),(15,'LANDING_TICK'),(8,'GROUND_TICK'),(9,'GROUND_TICK'),(12,'GROUND_TICK'),(14,'MUSTER_TICK'),(10,'TRAVEL_TICK'),(19,'ROPE_APPROACH_TICK'),(20,'GROVE_CLIMB_TICK'),(21,'MAP_TRAVEL_TICK'),(22,'DEST_APPROACH_TICK'),(24,'PATROL_TICK'),(25,'MAP_CLIMB_TICK'),(2,'FOLLOW_TICK')]:
@@ -214,9 +222,9 @@ c.label('LAND_VERIFY_TOUCHDOWN');c.check(0x0023,[F(18),V(31)],'LAND_TIMEOUT');a(
 c.get(17,LAND_STABLE);c.eq(17,0,'LAND_STABILITY_WAIT');a(0xddc,I(LAND_STABLE),V(20));c.go('TICK')
 c.label('LAND_STABILITY_WAIT');a(0x0085,V(19),V(20));a(0x0062,V(19),V(17));c.check(0x0019,[V(19),I(1000)],'TICK')
 a(0x04df,V(5),I(1));c.eq(7,7,'LANDED_OTHER');state(c,8);c.call('DEPLOY');c.go('TICK')
-c.label('LANDED_OTHER');state(c,12);a(6,V(24),I(3));c.call('PUBLISH');c.go('TICK')
+c.label('LANDED_OTHER');state(c,12);a(6,V(24),I(3));c.call('PUBLISH');c.get(19,AUTO_EXIT);c.eq(19,2,'TICK');c.set(AUTO_EXIT,0);a(6,V(7),I(12));c.go('LEAVE_CJ')
 c.label('LAND_TIMEOUT');c.set(LAND_STABLE,0);a(0x0085,V(17),V(20));a(0x0062,V(17),V(21));c.check(0x0019,[V(17),I(90000)],'TICK');c.go('LAND_BLOCKED')
-c.label('LAND_BLOCKED');c.set(DBG_CODE,8);c.call('BLOCK_HOVER');state(c,18);msg(c,'HCBLOCK');c.go('TICK')
+c.label('LAND_BLOCKED');c.set(AUTO_EXIT,0);c.set(DBG_CODE,8);c.call('BLOCK_HOVER');state(c,18);msg(c,'HCBLOCK');c.go('TICK')
 c.label('GROUND_TICK');c.check(0x0448,[V(18),V(5)],'GROUND_OUTSIDE');c.eq(7,8,'GROUND_WORK');a(6,V(25),I(9));c.go('START_MUSTER')
 c.label('GROUND_OUTSIDE');c.eq(7,9,'GROUND_WORK');state(c,8);c.call('DEPLOY')
 c.label('GROUND_WORK');c.eq(24,1,'TICK');c.get(19,FIRE_ACTIVE);c.eq(19,0,'TICK');a(0x0085,V(17),V(20));a(0x0062,V(17),V(22));c.check(0x0019,[V(17),I(800)],'TICK');a(0x0085,V(22),V(20));c.call('GUARD_TEAM');c.go('TICK')
@@ -228,8 +236,8 @@ c.label('NOT_LANDED');msg(c,'HCLOSE');c.go('TICK')
 c.label('LEAVE_CJ');c.eq(7,12,'LEAVE_CHECK_PHASE');c.go('LEAVE_ALLOWED')
 c.label('LEAVE_CHECK_PHASE');c.eq(24,3,'LEAVE_GROUND_CHECK');c.eq(7,9,'NOT_LANDED');c.go('LEAVE_ALLOWED')
 c.label('LEAVE_GROUND_CHECK');c.eq(24,1,'NOT_LANDED')
-c.label('LEAVE_ALLOWED');c.check(0x00db,[V(18),V(5)],'TICK');a(0x05cd,V(18),V(5));c.go('TICK')
-c.label('REQUEST_MAP');c.set(AVOID_STAGE,0);c.check(0x0448,[V(18),V(5)],'NOT_ABOARD')
+c.label('LEAVE_ALLOWED');c.check(0x00db,[V(18),V(5)],'TICK');a(0x020a,V(5),I(1));a(0x0085,V(19),V(20));a(0x000a,V(19),I(5000));a(0xddc,I(LOCK_HOLD),V(19));a(0x05cd,V(18),V(5));c.go('TICK')
+c.label('REQUEST_MAP');c.set(AVOID_STAGE,0);c.set(AUTO_EXIT,0);c.check(0x0448,[V(18),V(5)],'NOT_ABOARD')
 if MAP_MARKER:c.call('READ_WAYPOINT');c.eq(29,1,'NO_MAP')
 else:msg(c,'HCMAPOF');c.go('TICK')
 a(0xddc,I(DEST_X),V(26));a(0xddc,I(DEST_Y),V(27));a(0xddc,I(DEST_Z),V(28));c.set(GROVE_WAIT,0);c.set(GROVE_NEXT_SCAN,0);c.call('UNFREEZE');a(0x01bd,V(21));state(c,21);c.go('TICK')
@@ -284,7 +292,7 @@ for action,label in [(2,'FOLLOW'),(3,'HOLD'),(4,'DEPART'),(13,'DEPART'),(7,'GROV
 c.go('HOLD')
 c.label('WAIT_ABOARD');state(c,9);c.go('TICK')
 c.label('TAKEOFF');c.check(0x80db,[V(18),V(5)],'TAKEOFF_EXIT_FIRST');c.go('FOLLOW')
-c.label('GROVE');c.call('UNFREEZE');c.check(0x0448,[V(18),V(5)],'NOT_ABOARD');c.set(AVOID_STAGE,0);c.set(GROVE_STREAM,0);c.set(GROVE_WAIT,0);c.set(GROVE_NEXT_SCAN,0);a(0x01bd,V(21));state(c,10);c.go('TICK')
+c.label('GROVE');c.set(AUTO_EXIT,0);c.call('UNFREEZE');c.check(0x0448,[V(18),V(5)],'NOT_ABOARD');c.set(AVOID_STAGE,0);c.set(GROVE_STREAM,0);c.set(GROVE_WAIT,0);c.set(GROVE_NEXT_SCAN,0);a(0x01bd,V(21));state(c,10);c.go('TICK')
 c.label('GROVE_CLIMB_TICK');a(0x0819,V(4),V(19));c.check(0x0021,[V(19),F(40)],'GROVE_CLIMB_TIMEOUT');c.go('GROVE_CRUISE')
 c.label('GROVE_CLIMB_TIMEOUT');a(0x0085,V(17),V(20));a(0x0062,V(17),V(21));c.check(0x0019,[V(17),I(30000)],'TICK');c.call('BLOCK_HOVER');state(c,18);msg(c,'HCGCLMB');c.go('TICK')
 c.label('GROVE_CRUISE');c.set(AVOID_STAGE,0);c.set(GROVE_STREAM,0);c.set(GROVE_WAIT,0);c.set(GROVE_NEXT_SCAN,0);c.call('RESTORE_FLIGHT');a(0x0918,V(5),I(1));a(0x0825,V(5));a(0x04df,V(5),I(0));a(0x04a2,V(5),F(GROVE_X),F(GROVE_Y),F(75),F(45),F(90));a(0x00ad,V(5),F(30));state(c,10);c.go('TICK')
@@ -304,7 +312,8 @@ c.label('DEST_APPROACH_TICK');c.get(26,DEST_X);c.get(27,DEST_Y);c.get(28,DEST_Z)
 c.label('DEST_DESCEND');c.set(DBG_CODE,5);c.get(19,DEST_NATIVE);c.eq(19,0,'DEST_NATIVE_WAIT')
 c.call('UNFREEZE');a(0x04ba,V(5),F(0));a(0x07bb,V(5),I(0));a(0x0853,V(5),I(10));a(0x0087,V(9),V(28));a(0x000b,V(9),F(18));a(0x04df,V(5),I(0));a(0x04a2,V(5),V(26),V(27),V(9),F(10),V(9));a(0x00ad,V(5),F(12));c.set(DEST_NATIVE,1);a(0x01bd,V(21));c.go('TICK')
 c.label('DEST_NATIVE_WAIT');c.set(DBG_CODE,6);a(0x00aa,V(5),V(9),V(10),V(11));a(0x0509,V(9),V(10),V(26),V(27),V(31));c.check(0x0023,[F(8),V(31)],'DEST_NATIVE_TIMEOUT');a(0x0087,V(19),V(11));a(0x0063,V(19),V(28));c.check(0x0021,[V(19),F(12)],'DEST_NATIVE_TIMEOUT');c.check(0x0023,[F(23),V(19)],'DEST_NATIVE_TIMEOUT');a(0x02e3,V(5),V(19));c.check(0x0023,[F(4),V(19)],'DEST_NATIVE_TIMEOUT')
-c.label('DEST_NATIVE_ARRIVE');c.call('BLOCK_HOVER');c.set(DBG_CODE,7);state(c,23);msg(c,'HCCHOS');c.go('TICK')
+c.label('DEST_NATIVE_ARRIVE');c.call('BLOCK_HOVER');c.set(DBG_CODE,7);state(c,23);a(6,V(7),I(23));c.get(19,AUTO_EXIT);c.eq(19,1,'DEST_ARRIVE_ASK');c.set(AUTO_EXIT,0);c.go('EXIT_BY_MODE')
+c.label('DEST_ARRIVE_ASK');msg(c,'HCCHOS');c.go('TICK')
 c.label('DEST_NATIVE_TIMEOUT');a(0x0085,V(17),V(20));a(0x0062,V(17),V(21));c.check(0x0019,[V(17),I(25000)],'TICK');c.check(0x0023,[F(20),V(31)],'LAND_BLOCKED');c.go('DEST_NATIVE_ARRIVE')
 c.label('DEST_WAIT_TIMEOUT');a(0x0085,V(17),V(20));a(0x0062,V(17),V(21));c.check(0x0019,[V(17),I(60000)],'TICK');c.go('LAND_BLOCKED')
 c.label('TRAVEL_TICK');a(0x0007,V(26),F(GROVE_X));a(0x0007,V(27),F(GROVE_Y));c.call('CRUISE_STEP');c.check(0x0023,[F(180),V(19)],'TICK')
@@ -527,6 +536,25 @@ c.label('CR_MOVE');c.set(DBG_CODE,2);a(0x0063,V(31),V(11));c.get(30,CR_CMDZ);a(0
 for v,lo,hi in [(17,-3500,3500),(29,-3500,3500),(31,-200,2000)]:c.check(0x0021,[V(v),F(lo)],'CR_BAD_POS');c.check(0x0023,[F(hi),V(v)],'CR_BAD_POS')
 a(0xddc,I(CR_CMDZ),V(31));a(0x00ab,V(5),V(17),V(29),V(31));c.ret()
 c.label('CR_BAD_POS');c.set(DBG_CODE,99);c.ret()
+# v39: while CJ sits in the helicopter the doors are locked against the player (020A 4), so the
+# on-screen exit button no longer makes CJ jump out; the script reads that button (0A52 0) and
+# runs the selected exit method instead (command 15). Doors unlock when CJ is outside, and for
+# LOCK_HOLD ms after the script itself starts CJ's leave-car task.
+c.label('EXIT_BUTTON');c.check(0x0448,[V(18),V(5)],'EXIT_UNLOCK');c.get(19,LOCK_HOLD);c.check(0x001d,[V(20),V(19)],'EXIT_RET')
+a(0x020a,V(5),I(4));c.check(0x0a52,[I(EXIT_WIDGET)],'EXIT_RET');c.set(CMD,15);c.ret()
+c.label('EXIT_UNLOCK');a(0x020a,V(5),I(1))
+c.label('EXIT_RET');c.ret()
+c.label('REQUEST_EXIT');c.check(0x0448,[V(18),V(5)],'NOT_ABOARD')
+for st in [12,9]:
+ nxt='EXIT_NOT_GROUND_'+str(st);c.eq(7,st,nxt);c.go('LEAVE_CJ');c.label(nxt)
+c.eq(7,23,'EXIT_NOT_HOVER')
+c.label('EXIT_BY_MODE');c.get(19,EXIT_MODE);c.eq(19,1,'EXIT_LAND_NOW');c.go('REQUEST_DEST_ROPE')
+c.label('EXIT_LAND_NOW');c.set(AUTO_EXIT,2);c.go('REQUEST_DEST_LAND')
+c.label('EXIT_NOT_HOVER')
+for st in [1,4,7,11,13,15,16,17]:
+ nxt='EXIT_NOT_BUSY_'+str(st);c.eq(7,st,nxt);msg(c,'HCXWAIT');c.go('TICK');c.label(nxt)
+c.eq(7,22,'EXIT_HERE');c.set(AUTO_EXIT,1);msg(c,'HCXARR');c.go('TICK')
+c.label('EXIT_HERE');a(0x00aa,V(5),V(9),V(10),V(11));a(0x02ce,V(9),V(10),F(1000),V(28));a(0xddc,I(DEST_X),V(9));a(0xddc,I(DEST_Y),V(10));a(0xddc,I(DEST_Z),V(28));c.set(GROVE_WAIT,0);c.set(GROVE_NEXT_SCAN,0);c.set(AVOID_STAGE,0);c.set(AUTO_EXIT,1);c.call('UNFREEZE');a(0x01bd,V(21));state(c,21);msg(c,'HCXHERE');c.go('TICK')
 c.label('RESTORE_FLIGHT');a(0x0853,V(5),I(10));a(0x07bb,V(5),I(6));c.ret()
 c.label('BLOCK_HOVER');c.call('UNFREEZE');a(0x07bb,V(5),I(0));a(0x0853,V(5),I(10));a(0x00aa,V(5),V(9),V(10),V(11));a(0x04df,V(5),I(0));a(0x04a2,V(5),V(9),V(10),V(11),F(10),V(11));a(0x00ad,V(5),F(21));a(0x04df,V(5),I(1));c.ret()
 c.label('SET_LANDING_MISSION');c.call('UNFREEZE');a(0x04df,V(5),I(0));a(0x07bb,V(5),I(0));a(0x0853,V(5),I(3));c.get(19,LAND_FINAL);c.eq(19,1,'LAND_APPROACH_MISSION');c.call('SET_FINAL_LANDING');c.ret()
@@ -607,10 +635,13 @@ p.label('OPEN_EVAC');page(1)
 p.label('OPEN_SETUP');page(2)
 p.label('OPEN_INFO');page(8)
 p.label('PICK_EVAC')
-for index,label in [(0,'DO_ROPE'),(1,'DO_GROVE'),(2,'DO_MAP'),(3,'DO_DEST_LAND'),(4,'DO_DEST_ROPE'),(5,'DO_LEAVE'),(6,'DO_TAKEOFF'),(7,'OPEN_MAIN')]:pick(index,label)
+for index,label in [(0,'DO_ROPE'),(1,'DO_GROVE'),(2,'DO_MAP'),(3,'TOGGLE_EXIT'),(4,'DO_EXIT_NOW'),(5,'DO_TAKEOFF'),(6,'OPEN_MAIN')]:pick(index,label)
 p.go('MENU_POLL')
 p.label('DO_ROPE');p.set(CMD,10);a(1,I(200));p.go('CHECK_MENU_STATUS')
 p.label('OPEN_MAIN');page(0)
+# v39: one item switches the exit method used by the exit button and EXIT NOW
+p.label('TOGGLE_EXIT');p.get(9,EXIT_MODE);p.eq(9,0,'TOGGLE_TO_LAND');p.set(EXIT_MODE,1);a(6,V(3),I(-999));p.go('REFRESH')
+p.label('TOGGLE_TO_LAND');p.set(EXIT_MODE,0);a(6,V(3),I(-999));p.go('REFRESH')
 p.label('PICK_SETUP')
 for index,label in [(0,'OPEN_CREW'),(1,'OPEN_MODEL'),(2,'OPEN_FIRE'),(3,'OPEN_WEAPON'),(4,'OPEN_HUD'),(5,'DO_PATROL'),(6,'OPEN_MAIN')]:pick(index,label)
 p.go('MENU_POLL')
@@ -621,7 +652,7 @@ for key,pag,choices in [(CREW,3,[(0,0),(1,1),(2,2)]),(MODEL,4,[(0,487),(1,497),(
   nxt='OPTION_NEXT_'+str(pag)+'_'+str(idx);p.eq(1,idx,nxt);p.set(key,val);a(6,V(3),I(-999));p.go('REFRESH');p.label(nxt)
  p.go('OPEN_SETUP')
 p.label('PICK_INFO');p.go('OPEN_MAIN')
-for label,cmd in [('DO_CALL',1),('DO_FOLLOW',2),('DO_HOLD',3),('DO_DISMISS',4),('DO_EVAC',5),('DO_BOARD',6),('DO_GROVE',7),('DO_LEAVE',8),('DO_TAKEOFF',9),('DO_MAP',11),('DO_DEST_LAND',12),('DO_DEST_ROPE',13),('DO_PATROL',14)]:
+for label,cmd in [('DO_EXIT_NOW',15),('DO_CALL',1),('DO_FOLLOW',2),('DO_HOLD',3),('DO_DISMISS',4),('DO_EVAC',5),('DO_BOARD',6),('DO_GROVE',7),('DO_LEAVE',8),('DO_TAKEOFF',9),('DO_MAP',11),('DO_DEST_LAND',12),('DO_DEST_ROPE',13),('DO_PATROL',14)]:
  p.label(label)
  # No commands while spawning/departing. Ground muster can still be changed through EVAC.
  for st in [1,4,13]:
@@ -643,10 +674,10 @@ p.label('DRAW_0');p.get(8,STATE);a(0x0085,V(3),V(8))
 for st in STATES:
  nxt='DRAW_MAIN_NEXT_'+str(st);p.eq(8,st,nxt);a(0xdd0,V(4),L('MAIN_'+str(st)));p.go('SHOW_8');p.label(nxt)
 a(0xdd0,V(4),L('MAIN_0'));p.go('SHOW_8')
-p.label('DRAW_1');p.get(8,STATE);a(0x0085,V(3),V(8))
+p.label('DRAW_1');p.get(8,STATE);a(0x0085,V(3),V(8));p.get(9,EXIT_MODE)
 for st in STATES:
- nxt='DRAW_EVAC_NEXT_'+str(st);p.eq(8,st,nxt);a(0xdd0,V(4),L('EVAC_'+str(st)));p.go('SHOW_8');p.label(nxt)
-a(0xdd0,V(4),L('EVAC_0'));p.go('SHOW_8')
+ nxt='DRAW_EVAC_NEXT_'+str(st);land='DRAW_EVAC_LAND_'+str(st);p.eq(8,st,nxt);p.eq(9,1,land);a(0xdd0,V(4),L('EVAC_%d_1'%st));p.go('SHOW_7');p.label(land);a(0xdd0,V(4),L('EVAC_%d_0'%st));p.go('SHOW_7');p.label(nxt)
+a(0xdd0,V(4),L('EVAC_0_0'));p.go('SHOW_7')
 p.label('DRAW_2');a(0xdd0,V(4),L('SETUP_MENU'));p.go('SHOW_7')
 for pageid,key,values in [(3,CREW,[0,1,2]),(4,MODEL,[487,497,425]),(5,FIRE,[0,1,2,3]),(6,WEAPON_SETTING,[0,29,30,31,34]),(7,HUD,[1,0])]:
  p.label('DRAW_'+str(pageid));p.get(8,key);a(0x0085,V(3),V(8))
@@ -671,7 +702,8 @@ for st,title in STATES.items():
  if st==3:rows[2]='HOLD POSITION [ON]'
  p.blob('MAIN_'+str(st),'HELICOVER / '+title,rows)
 p.blob('OFFLINE_MENU','HELICOVER / OFFLINE',['INSTALL CORE + RESTART'])
-for st,title in STATES.items():p.blob('EVAC_'+str(st),'EVAC / '+title,['ROPE EVACUATION','FLY TO GROVE','FLY TO MAP MARKER','LAND AT DESTINATION','DESCEND BY ROPE','LEAVE HELICOPTER','TAKE OFF / FOLLOW','< BACK'])
+for st,title in STATES.items():
+ for mode in [0,1]:p.blob('EVAC_%d_%d'%(st,mode),'EVAC / '+title,['ROPE EVACUATION','FLY TO GROVE','FLY TO MAP MARKER','EXIT MODE: '+('ROPE' if mode else 'LAND'),'EXIT NOW','TAKE OFF / FOLLOW','< BACK'])
 p.blob('SETUP_MENU','HELICOVER / SETUP',['CREW >','HELICOPTER >','FIRE MODE >','WEAPONS >','STATUS MESSAGES >','PATROL AROUND CJ','< BACK'])
 for pg,title,values,labels in [(3,'CREW / LIVE',[0,1,2],['GROVE','ARMY','SWAT']), (4,'HELICOPTER / LIVE',[487,497,425],['MAVERICK','POLICE MAVERICK','HUNTER / NO EVAC']), (5,'FIRE CONTROL',[0,1,2,3],['CEASE FIRE','ALL NPC EXCEPT TEAM','FOLLOW CJ SHOTS','PROTECT CJ']), (6,'WEAPONS / LIVE',[0,29,30,31,34],['AUTO BY CREW','MP5','AK-47','M4','SNIPER RIFLE']), (7,'STATUS MESSAGES',[1,0],['ENABLED','DISABLED'])]:
  for val in values:

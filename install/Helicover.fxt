@@ -10,7 +10,10 @@ HCMAPOF ~y~EVAC~w~: map marker flight is disabled: it crashes CLEO Android.
 HCDBG DBG ~1~
 HCNEED ~y~HELICOVER~w~: call support first (HELICOVER > CALL SUPPORT).
 HCNOMAP ~y~EVAC~w~: place a destination marker on the map first.
-HCCHOS ~g~EVAC~w~: above destination. Choose LAND or ROPE EXIT.
+HCCHOS ~g~EVAC~w~: above destination. Press the exit button to get out.
+HCXHERE ~g~EVAC~w~: getting out here. Finding a clear spot below.
+HCXARR ~g~EVAC~w~: you will get out on arrival.
+HCXWAIT ~y~EVAC~w~: wait until the helicopter lands or hovers.
 HCDWAIT ~y~EVAC~w~: wait until the helicopter reaches the destination.
 HCPAT ~b~HELICOVER~w~: patrolling around CJ.
 HCAVOID ~y~HELICOVER~w~: path blocked; holding for a clear route.
