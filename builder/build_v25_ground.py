@@ -4,7 +4,22 @@ Experimental scripted reverse-animation ascent; gameplay is not tested on Androi
 from asm_v25 import *
 import build_v25 as b
 s=Script();a=s.add
-s.label('INIT');a(0)
+# v32: an invisible flat platform (a51_jetdoor) kept 0.45 m below CJ's feet during scripted rope
+# moves. CPedGeometryAnalyser::IsInAir looks 1.5 m below the ped centre for buildings, vehicles
+# or objects; with the platform there the game never switches CJ into the free-fall task.
+PLATFORM_MODEL=3095
+_plat=[0]
+def plat_create():
+ _plat[0]+=1;k=str(_plat[0]);skip='PLAT_CREATE_SKIP_'+k
+ a(6,V(6),I(-1));a(0x0247,I(PLATFORM_MODEL));a(0x038b);s.check(0x0248,[I(PLATFORM_MODEL)],skip)
+ a(0x00a0,V(0),V(12),V(13),V(14));a(0x000b,V(14),F(-1.45));a(0x0107,I(PLATFORM_MODEL),V(12),V(13),V(14),V(6));a(0x0750,V(6),I(0));s.label(skip)
+def plat_follow():
+ _plat[0]+=1;skip='PLAT_FOLLOW_SKIP_'+str(_plat[0])
+ s.check(0x03ca,[V(6)],skip);a(0x00a0,V(0),V(12),V(13),V(14));a(0x000b,V(14),F(-1.45));a(0x01bc,V(6),V(12),V(13),V(14));s.label(skip)
+def plat_delete():
+ _plat[0]+=1;skip='PLAT_DELETE_SKIP_'+str(_plat[0])
+ s.check(0x03ca,[V(6)],skip);a(0x0108,V(6));s.label(skip);a(6,V(6),I(-1));a(0x0249,I(PLATFORM_MODEL))
+s.label('INIT');a(0);a(6,V(6),I(-1))
 for i in range(5):s.set(b.GROUND_PUB+i,-1)
 s.set(b.ROPE_COMMAND,0);s.set(b.GROUND_MOVE_NEXT,0);s.set(b.DROP_COMMAND,0)
 s.label('WAIT');a(1,I(100));s.get(19,b.DROP_COMMAND);s.eq(19,1,'WAIT_PICKUP');s.set(b.DROP_COMMAND,0);s.go('DROP_START')
@@ -24,7 +39,7 @@ for i,(var,x,y) in enumerate([(20,-1.5,1.2),(21,1.5,1.2),(22,-1.5,-1.2),(23,1.5,
  a(0x0407,V(1),F(x),F(y),F(-1),V(10),V(11),V(12));a(0x0503,I(8),I(285),V(10),V(11),V(12),V(var));s.check(0x056d,[V(var)],'CLEANUP');a(0xddc,I(b.GROUND_PUB+i),V(var));a(0x01c5,V(var));a(0x08af,V(var),I(150));a(0x0223,V(var),I(150));a(0x035f,V(var),I(50));a(0x02e2,V(var),I(100))
  for typ in range(32):a(0x077a,V(var),I(2),I(typ))
  a(0x077a,V(var),I(0),I(0));a(0x077a,V(var),I(0),I(8))
-a(0x03e5,S('RGDEP'));a(0x01bd,V(27));a(0x000a,V(27),I(1500));a(6,V(25),I(-1));a(6,V(26),I(0));a(6,V(30),I(0));a(6,V(18),I(0))
+a(0x03e5,S('RGDEP'));a(0x01bd,V(27));a(0x000a,V(27),I(5000));a(6,V(25),I(-1));a(6,V(26),I(0));a(6,V(30),I(0));a(6,V(18),I(0))
 s.label('ACTIVE');a(1,I(500));s.check(0x0256,[I(0)],'CLEANUP');s.check(0x056e,[V(1)],'CLEANUP');s.check(0x8119,[V(1)],'CLEANUP');s.check(0x056d,[V(0)],'CLEANUP');s.get(19,b.STATE);s.eq(19,3,'CLEANUP');s.get(19,b.ROPE_COMMAND);s.eq(19,1,'CONTINUE');s.set(b.ROPE_COMMAND,0);s.go('CLEANUP')
 s.label('CONTINUE');a(0x01bd,V(19))
 # Refresh a fifth rope while waiting; the invisible temporary actor only provides the rope visual.
@@ -36,7 +51,7 @@ s.label('PICKUP_GATE');a(0x01bd,V(19));s.check(0x001d,[V(19),V(27)],'ACTIVE')
 s.label('PICKUP_CHECK')
 # Do not interrupt a descending guard: enter only after all living guards are on the ground.
 for var in [20,21,22,23]:
- skip='PICKUP_LANDED_SKIP_'+str(var);s.check(0x056d,[V(var)],skip);s.check(0x8118,[V(var)],skip);a(0x0819,V(var),V(19));s.check(0x0023,[F(2.5),V(19)],'UPDATE_FIRE');s.label(skip)
+ skip='PICKUP_LANDED_SKIP_'+str(var);s.check(0x056d,[V(var)],skip);s.check(0x8118,[V(var)],skip);a(0x00a0,V(var),V(10),V(11),V(12));a(0x02ce,V(10),V(11),V(12),V(13));a(0x0063,V(12),V(13));s.check(0x0023,[F(2.5),V(12)],'UPDATE_FIRE');s.label(skip)
 a(0x0407,V(1),F(0),F(-3.0),F(-1),V(10),V(11),V(12));a(0x02ce,V(10),V(11),V(12),V(12));a(0x000b,V(12),F(.7));a(0x00a0,V(0),V(13),V(14),V(15));a(0x050a,V(10),V(11),V(12),V(13),V(14),V(15),V(16));s.check(0x0023,[F(1.7),V(16)],'UPDATE_FIRE');s.go('CJ_ASCENT')
 s.label('UPDATE_FIRE');s.get(24,b.FIRE_TARGET);s.get(28,b.FIRE_ACTIVE);s.get(29,b.WPN)
 # Refresh fighting tasks only when target changes or the prior task nears expiry.
@@ -55,8 +70,14 @@ s.go('ACTIVE')
 # The reverse clip is cosmetic; vertical position is moved explicitly.
 s.label('CJ_ASCENT');s.check(0x0431,[V(1),I(0)],'NO_SEAT');s.check(0x04ee,[S('PED')],'ANIM_FAIL');s.check(0x056e,[V(1)],'CLEANUP');s.get(19,b.STATE);s.eq(19,3,'CLEANUP')
 # Save a ground position for cancellation and disable player control only during ascent.
-a(0x0407,V(1),F(0),F(-3),F(-1),V(2),V(3),V(4));a(0x02ce,V(2),V(3),V(4),V(4));a(0x000b,V(4),F(.7));a(0x0087,V(8),V(4));a(0x00aa,V(1),V(10),V(11),V(9));a(0x000b,V(9),F(-1));a(0x0063,V(9),V(8));a(0x0013,V(9),F(1000.0/1800.0));a(0x01b4,I(0),I(0));a(6,V(26),I(1));a(0x00a1,V(0),V(2),V(3),V(8));a(0x0605,V(0),S('ABSEIL'),S('PED'),F(4),I(1),I(1),I(1),I(1),I(-1));a(1,I(100));s.check(0x0611,[V(0),S('ABSEIL')],'CJ_ANIM_NOT_RUNNING');a(0x0614,V(0),S('ABSEIL'),F(.99));a(0x0393,V(0),S('ABSEIL'),F(-1));s.label('CJ_ANIM_NOT_RUNNING');a(0x01bd,V(16));a(0x03e5,S('RGUP'))
-s.label('CJ_UP_TICK');a(1,I(0));s.check(0x0256,[I(0)],'ASCENT_ABORT');s.check(0x056d,[V(0)],'ASCENT_ABORT');s.check(0x8118,[V(0)],'ASCENT_ABORT');s.check(0x056e,[V(1)],'ASCENT_ABORT');s.check(0x8119,[V(1)],'ASCENT_ABORT');s.get(19,b.STATE);s.eq(19,3,'ASCENT_ABORT');a(0x01bd,V(15));a(0x0062,V(15),V(16));s.check(0x0019,[V(15),I(1800)],'CJ_TIME_READY');a(6,V(15),I(1800));s.label('CJ_TIME_READY');s.check(0x0611,[V(0),S('ABSEIL')],'CJ_FRAME_ANIM_SKIP');a(0x0093,V(11),V(15));a(0x0013,V(11),F(1.0/1800.0));a(0x0007,V(12),F(1));a(0x0063,V(12),V(11));a(0x0614,V(0),S('ABSEIL'),V(12));s.label('CJ_FRAME_ANIM_SKIP');a(0x083c,V(0),F(0),F(0),V(9));s.check(0x0019,[V(15),I(1799)],'CJ_UP_TICK');a(0x083c,V(0),F(0),F(0),F(0));s.check(0x0431,[V(1),I(0)],'ASCENT_ABORT');a(0x0430,V(0),V(1),I(0));s.check(0x0448,[V(0),V(1)],'ASCENT_ABORT');a(0x01b4,I(0),I(1));a(6,V(26),I(0));a(0x03e5,S('RGABO'))
+a(0x0407,V(1),F(0),F(-3),F(-1),V(2),V(3),V(4));a(0x02ce,V(2),V(3),V(4),V(4));a(0x000b,V(4),F(.7));a(0x0087,V(8),V(4));a(0x00aa,V(1),V(10),V(11),V(9));a(0x000b,V(9),F(-1));a(0x0063,V(9),V(8));a(0x0013,V(9),F(1000.0/1800.0));a(0x01b4,I(0),I(0));a(6,V(26),I(1));a(0x00a1,V(0),V(2),V(3),V(8));a(0x0605,V(0),S('ABSEIL'),S('PED'),F(4),I(1),I(1),I(1),I(1),I(-1));a(1,I(100));s.check(0x0611,[V(0),S('ABSEIL')],'CJ_ANIM_NOT_RUNNING');a(0x0614,V(0),S('ABSEIL'),F(.99));a(0x0393,V(0),S('ABSEIL'),F(-1));s.label('CJ_ANIM_NOT_RUNNING')
+plat_create()
+a(0x01bd,V(16));a(0x03e5,S('RGUP'))
+s.label('CJ_UP_TICK');a(1,I(0));s.check(0x0256,[I(0)],'ASCENT_ABORT');s.check(0x056d,[V(0)],'ASCENT_ABORT');s.check(0x8118,[V(0)],'ASCENT_ABORT');s.check(0x056e,[V(1)],'ASCENT_ABORT');s.check(0x8119,[V(1)],'ASCENT_ABORT');s.get(19,b.STATE);s.eq(19,3,'ASCENT_ABORT');a(0x01bd,V(15));a(0x0062,V(15),V(16));s.check(0x0019,[V(15),I(1800)],'CJ_TIME_READY');a(6,V(15),I(1800));s.label('CJ_TIME_READY');s.check(0x0611,[V(0),S('ABSEIL')],'CJ_FRAME_ANIM_SKIP');a(0x0093,V(11),V(15));a(0x0013,V(11),F(1.0/1800.0));a(0x0007,V(12),F(1));a(0x0063,V(12),V(11));a(0x0614,V(0),S('ABSEIL'),V(12));s.label('CJ_FRAME_ANIM_SKIP')
+plat_follow()
+a(0x083c,V(0),F(0),F(0),V(9));s.check(0x0019,[V(15),I(1799)],'CJ_UP_TICK');a(0x083c,V(0),F(0),F(0),F(0))
+plat_delete()
+s.check(0x0431,[V(1),I(0)],'ASCENT_ABORT');a(0x0430,V(0),V(1),I(0));s.check(0x0448,[V(0),V(1)],'ASCENT_ABORT');a(0x01b4,I(0),I(1));a(6,V(26),I(0));a(0x03e5,S('RGABO'))
 # After CJ is aboard the extra four run to distinct ropes, ascend, then disappear.
 for var,x,y in [(20,-1.5,1.2),(21,1.5,1.2),(22,-1.5,-1.2),(23,1.5,-1.2)]:
  end='GUARD_UP_DONE_'+str(var);approach='GUARD_APPROACH_'+str(var);ready='GUARD_READY_'+str(var);loop='GUARD_ASCEND_'+str(var);newrope='GUARD_ROPE_NEW_'+str(var)
@@ -67,24 +88,35 @@ for var,x,y in [(20,-1.5,1.2),(21,1.5,1.2),(22,-1.5,-1.2),(23,1.5,-1.2)]:
  s.label(loop);a(1,I(0));s.check(0x0256,[I(0)],'CLEANUP');s.check(0x056e,[V(1)],'CLEANUP');s.check(0x8119,[V(1)],'CLEANUP');s.get(19,b.STATE);s.eq(19,3,'CLEANUP');s.check(0x056d,[V(var)],end);s.check(0x8118,[V(var)],end);a(0x01bd,V(15));a(0x0062,V(15),V(16));s.check(0x0019,[V(15),I(1800)],'GUARD_TIME_READY_'+str(var));a(6,V(15),I(1800));s.label('GUARD_TIME_READY_'+str(var));s.check(0x0611,[V(var),S('ABSEIL')],'GUARD_FRAME_ANIM_SKIP_'+str(var));a(0x0093,V(11),V(15));a(0x0013,V(11),F(1.0/1800.0));a(0x0007,V(12),F(1));a(0x0063,V(12),V(11));a(0x0614,V(var),S('ABSEIL'),V(12));s.label('GUARD_FRAME_ANIM_SKIP_'+str(var));a(0x083c,V(var),F(0),F(0),V(9));s.check(0x0019,[V(15),I(1799)],loop);a(0x083c,V(var),F(0),F(0),F(0))
  s.label(end);s.set(b.GROUND_PUB+var-20,-1);s.check(0x056d,[V(var)],'GUARD_REMOVED_'+str(var));a(0x009b,V(var));s.label('GUARD_REMOVED_'+str(var))
 s.go('CLEANUP')
-s.label('ASCENT_ABORT');s.eq(26,1,'CLEANUP');s.check(0x056d,[V(0)],'ASCENT_RESTORE');s.check(0x8118,[V(0)],'ASCENT_RESTORE');a(0x00a1,V(0),V(2),V(3),V(4))
+s.label('ASCENT_ABORT')
+plat_delete()
+s.eq(26,1,'CLEANUP');s.check(0x056d,[V(0)],'ASCENT_RESTORE');s.check(0x8118,[V(0)],'ASCENT_RESTORE');a(0x00a1,V(0),V(2),V(3),V(4))
 s.label('ASCENT_RESTORE');a(0x01b4,I(0),I(1));a(6,V(26),I(0));s.go('CLEANUP')
 s.label('NO_SEAT');a(0x03e5,S('RGSEAT'));s.go('ACTIVE')
 s.label('ANIM_FAIL');a(0x03e5,S('RGANIM'));s.go('CLEANUP')
-s.label('CLEANUP');s.eq(26,1,'CLEANUP_CONTROL_DONE');a(0x01b4,I(0),I(1));a(6,V(26),I(0));s.label('CLEANUP_CONTROL_DONE');s.check(0x056d,[V(17)],'CLEANUP_ROPE_DONE');a(0x009b,V(17));s.label('CLEANUP_ROPE_DONE');s.set(b.GROUND_PUB+4,-1);s.check(0x056e,[V(1)],'CLEANUP_HELI_DONE');a(0x0574,V(1),I(0));s.set(b.FROZEN,0);s.label('CLEANUP_HELI_DONE')
+s.label('CLEANUP')
+plat_delete()
+s.eq(26,1,'CLEANUP_CONTROL_DONE');a(0x01b4,I(0),I(1));a(6,V(26),I(0));s.label('CLEANUP_CONTROL_DONE');s.check(0x056d,[V(17)],'CLEANUP_ROPE_DONE');a(0x009b,V(17));s.label('CLEANUP_ROPE_DONE');s.set(b.GROUND_PUB+4,-1);s.check(0x056e,[V(1)],'CLEANUP_HELI_DONE');a(0x0574,V(1),I(0));s.set(b.FROZEN,0);s.label('CLEANUP_HELI_DONE')
 for i,var in enumerate([20,21,22,23]):
  skip='DELETE_'+str(var);s.set(b.GROUND_PUB+i,-1);s.check(0x056d,[V(var)],skip);a(0x009b,V(var));s.label(skip)
 a(0x0249,I(285));a(0x03e5,S('RGDONE'));s.go('WAIT')
 s.label('DROP_START');a(6,V(26),I(0));s.get(19,b.STATE);s.eq(19,23,'DROP_FAIL');s.get(1,b.PUB+1);s.get(0,b.PUB);s.check(0x0256,[I(0)],'WAIT');s.check(0x056e,[V(1)],'DROP_FAIL');s.check(0x8119,[V(1)],'DROP_FAIL');s.check(0x056d,[V(0)],'DROP_FAIL');s.check(0x0448,[V(0),V(1)],'DROP_FAIL');a(0x0407,V(1),F(0),F(-3),F(-1),V(2),V(3),V(8));a(0x02ce,V(2),V(3),V(8),V(4));a(0x000b,V(4),F(.7));a(0x0087,V(9),V(8));a(0x0063,V(9),V(4));s.check(0x0021,[V(9),F(8)],'DROP_FAIL');s.check(0x0023,[F(24),V(9)],'DROP_FAIL');a(0x0087,V(10),V(4));a(0x000b,V(10),F(1));s.check(0x06bd,[V(2),V(3),V(10),V(2),V(3),V(8),I(1),I(0),I(0),I(1),I(0)],'DROP_FAIL');a(0x0247,I(285));a(6,V(26),I(1));a(0x038b);a(1,I(0));s.check(0x0248,[I(285)],'DROP_FAIL');s.check(0x056e,[V(1)],'DROP_FAIL');a(0x0574,V(1),I(1));s.set(b.FROZEN,1);a(6,V(17),I(-1));a(0x0503,I(8),I(285),V(2),V(3),V(8),V(17));s.check(0x056d,[V(17)],'DROP_FAIL_UNFREEZE');a(0x0337,V(17),I(0));a(0x0619,V(17),I(0));a(0xddc,I(b.GROUND_PUB+4),V(17));a(0x01b4,I(0),I(0))
 # v28: 1 m below the frozen helicopter's centre is inside its hull, which held CJ until the
 # final ground warp ("teleport"). Start 3 m lower, below the skids, and recompute the descent speed.
-a(0x000b,V(8),F(-2));a(0x0087,V(9),V(8));a(0x0063,V(9),V(4));a(0x0362,V(0),V(2),V(3),V(8));s.check(0x04ee,[S('PED')],'DROP_ANIM_SKIP');a(0x0605,V(0),S('ABSEIL'),S('PED'),F(4),I(1),I(1),I(1),I(1),I(-1));s.label('DROP_ANIM_SKIP');a(0x0013,V(9),F(-1000.0/3000.0));a(0x01bd,V(16))
+a(0x000b,V(8),F(-2));a(0x0087,V(9),V(8));a(0x0063,V(9),V(4));a(0x0362,V(0),V(2),V(3),V(8));s.check(0x04ee,[S('PED')],'DROP_ANIM_SKIP');a(0x0605,V(0),S('ABSEIL'),S('PED'),F(4),I(1),I(1),I(1),I(1),I(-1));s.label('DROP_ANIM_SKIP')
+plat_create()
+a(0x0013,V(9),F(-1000.0/3000.0));a(0x01bd,V(16))
 s.label('DROP_TICK');a(1,I(0));s.check(0x0256,[I(0)],'DROP_ABORT');s.check(0x056d,[V(0)],'DROP_ABORT');s.check(0x8118,[V(0)],'DROP_ABORT');s.check(0x056e,[V(1)],'DROP_ABORT');s.get(19,b.STATE);s.eq(19,23,'DROP_ABORT');a(0x01bd,V(15));a(0x0062,V(15),V(16));s.check(0x0019,[V(15),I(3000)],'DROP_TIME_READY');a(6,V(15),I(3000));s.label('DROP_TIME_READY')
 # v31: like the ascent, drive the ABSEIL frame every tick (paused anim, time 0 -> .99 over 3 s);
 # without it the ped dropped into a free-fall pose.
 s.check(0x0611,[V(0),S('ABSEIL')],'DROP_FRAME_SKIP');a(0x0093,V(11),V(15));a(0x0013,V(11),F(.99/3000.0));a(0x0614,V(0),S('ABSEIL'),V(11));a(0x0393,V(0),S('ABSEIL'),F(0));s.label('DROP_FRAME_SKIP')
-a(0x083c,V(0),F(0),F(0),V(9));s.check(0x0019,[V(15),I(2999)],'DROP_TICK');a(0x083c,V(0),F(0),F(0),F(0));a(0x00a1,V(0),V(2),V(3),V(4));a(0x01b4,I(0),I(1));s.check(0x056d,[V(17)],'DROP_NO_DUMMY');a(0x009b,V(17));s.label('DROP_NO_DUMMY');s.set(b.GROUND_PUB+4,-1);a(0x0574,V(1),I(0));s.set(b.FROZEN,0);s.set(b.STATE,3);a(0x0249,I(285));s.go('WAIT')
-s.label('DROP_ABORT');s.check(0x056d,[V(0)],'DROP_ABORT_CONTROL');s.check(0x8118,[V(0)],'DROP_ABORT_CONTROL');a(0x00a1,V(0),V(2),V(3),V(4));s.label('DROP_ABORT_CONTROL');a(0x01b4,I(0),I(1));s.check(0x056d,[V(17)],'DROP_FAIL_UNFREEZE');a(0x009b,V(17))
+plat_follow()
+a(0x083c,V(0),F(0),F(0),V(9));s.check(0x0019,[V(15),I(2999)],'DROP_TICK')
+plat_delete()
+a(0x083c,V(0),F(0),F(0),F(0));a(0x00a1,V(0),V(2),V(3),V(4));a(0x01b4,I(0),I(1));s.check(0x056d,[V(17)],'DROP_NO_DUMMY');a(0x009b,V(17));s.label('DROP_NO_DUMMY');s.set(b.GROUND_PUB+4,-1);a(0x0574,V(1),I(0));s.set(b.FROZEN,0);s.set(b.STATE,3);a(0x0249,I(285));s.go('WAIT')
+s.label('DROP_ABORT')
+plat_delete()
+s.check(0x056d,[V(0)],'DROP_ABORT_CONTROL');s.check(0x8118,[V(0)],'DROP_ABORT_CONTROL');a(0x00a1,V(0),V(2),V(3),V(4));s.label('DROP_ABORT_CONTROL');a(0x01b4,I(0),I(1));s.check(0x056d,[V(17)],'DROP_FAIL_UNFREEZE');a(0x009b,V(17))
 s.label('DROP_FAIL_UNFREEZE');s.set(b.GROUND_PUB+4,-1);s.check(0x056e,[V(1)],'DROP_FAIL');a(0x0574,V(1),I(0));s.set(b.FROZEN,0)
 s.label('DROP_FAIL');s.eq(26,1,'DROP_FAIL_NO_MODEL');a(0x0249,I(285));s.label('DROP_FAIL_NO_MODEL');a(0x03e5,S('RPDFAIL'));s.go('WAIT')
 

@@ -48,11 +48,13 @@ PASS: A wedged helicopter is lifted out and resumes its order
 PASS: A slow hover close to CJ is not mistaken for being stuck
 PASS: Dismiss deletes a stuck on-screen helicopter and a new call works
 PASS: Rope descent starts below the hull and restores control on the ground
+PASS: Rope descent keeps an invisible platform under CJ so the game never starts free fall
+PASS: Pickup waits until every rope guard is on the ground
 PASS: Assembler rejects both inverted literal/local comparison forms
 PASS: CJ ascent advances smoothly over about 1.8 seconds at two frame rates
 PASS: Only guards who reach the ground receive running formation tasks
 PASS: Cruise climbs in place before passing tall buildings
-PASS: Cruise flies about 3x faster at a fixed clearance
+PASS: Cruise accelerates smoothly to about 3x speed at a fixed clearance
 PASS: Guards keep selected weapons in cease fire and without CJ shooting
 PASS: Map marker -> hover -> selected rope descent restores CJ control and preserves onboard team
 PASS: Map flight rejects an absent marker
