@@ -121,7 +121,9 @@ class VM:
    elif op==0x1e5:w.debug=getattr(w,'debug',[]);w.debug.append(vals[1])
    elif op==0x20a:w.locks=getattr(w,'locks',{});w.locks[vals[0]]=vals[1]
    elif base==0xa52:
-    hit=getattr(w,'widget_released',None)==vals[0];w.widget_released=None if hit else getattr(w,'widget_released',None);cond(hit)
+    if getattr(w,'release_frame',None) is not None:cond(vals[0]==0 and w.release_frame==w.now)  # one-frame event, like the real widget
+    else:
+     hit=getattr(w,'widget_released',None)==vals[0];w.widget_released=None if hit else getattr(w,'widget_released',None);cond(hit)
    elif op==0x77e:put(0,w.interior)
    elif op in [0x4c4,0x407]:
     xyz=w.coords(vals[0]) if op==0x4c4 else w.cars[vals[0]]['pos']
@@ -854,6 +856,23 @@ w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.marker=[200.,150.,0.];w.los_fn=lam
 w.car=[205.,150.,80.];w.step(c,n=8);w.now+=13000;w.step(c,n=8)
 assert w.shared[b.STATE]==22 and 'HCNOPAD' in w.messages and 'HCBLOCK' not in w.messages,(w.shared[b.STATE],w.messages)
 fly_until(w,23,c);passed('No flat pad near the marker: hover over it for a rope exit instead of giving up')
+# v39.3: the exit widget's release lasts one frame; the core ticks every 100 ms. Without the
+# per-frame fire worker the press is missed (the user's "works on the 3rd press"); with it the
+# first press is caught, and a second press within 1.5 s does not start another exit.
+def one_press(w,c,*vms):
+ w.frame_ms=16;w.step(c,*vms,n=1)
+ for _ in range(10):
+  if c.wake>w.now+16:break
+  w.step(c,*vms,n=1)
+ w.release_frame=w.now+16;w.step(c,*vms,n=1);w.release_frame=-1
+w,c,_=setup();summon(w,c);ground=VM('Helicover_Ground',w);w.step(c,ground,n=3);to_destination(w,c,ground)
+w.shared[b.EXIT_MODE]=1;one_press(w,c,ground);w.step(c,ground,n=30)
+assert w.shared[b.ROPE_PENDING]==0 and 1 in w.incar,'core alone misses a one-frame press'
+w,c,_=setup();summon(w,c);ground=VM('Helicover_Ground',w);f=VM('Helicover_Fire',w);w.step(c,ground,f,n=3);to_destination(w,c,ground,f)
+w.shared[b.EXIT_MODE]=1;one_press(w,c,ground,f);w.step(c,ground,f,n=30)
+assert any(x[2][0]==1 for x in calls(w,0x362)),'first press starts the abseil'
+cmds=w.shared[b.EXIT_LAST];one_press(w,c,ground,f);w.step(c,ground,f,n=5);assert w.shared[b.EXIT_LAST]==cmds,'debounced'
+passed('Exit works on the first press: per-frame polling of the one-frame widget release, with debounce')
 # v39.2: rope evacuation hangs the rope 6 m in front of CJ; standing still never lifts him
 w,c,_=setup();summon(w,c);ground=VM('Helicover_Ground',w);w.step(c,ground,n=3);w.car=[0.,-30.,40.]
 w.shared[b.CMD]=10
