@@ -253,12 +253,12 @@ w.calls.clear();steps(w,V,3);assert not orders(w,0x78f,team[0])
 passed('Stairs or a slope are walked, not vaulted')
 # ------------------------------------------------------------------ menu
 w,c,p=setup(True);launch=VM('Helicover',w);summon(w,c);w.step(c,p,launch,n=15)
-w.events.append(3);w.step(c,p,n=4);assert w.menu[-2]==b'TEAM ON FOOT >' and w.menu[-1]==b'< BACK'
-w.events.append(6);w.step(c,p,n=4);assert w.menu[2:]==[b'DEPLOY TEAM',b'TACTICS: BODYGUARD [ON]',b'TACTICS: ASSAULT',b'< BACK'],w.menu
-w.events.append(2);w.step(c,p,n=4);assert w.shared[b.TACTICS]==1 and w.menu[3:5]==[b'TACTICS: BODYGUARD',b'TACTICS: ASSAULT [ON]'],w.menu
-w.shared[b.ESCORT_ON]=1;w.step(c,p,n=4);assert w.menu[2]==b'RECALL TEAM',w.menu
-w.events.append(0);w.step(c,p,n=2);assert w.shared[b.CMD] in (17,0) and any(x[2]==[b.CMD,17] for x in calls(w,0xddc))
-passed('EVAC > TEAM ON FOOT: deploy/recall and BODYGUARD/ASSAULT tactics')
+assert w.menu[5]==b'DEPLOY TEAM ON FOOT',w.menu
+w.events.append(4);w.step(c,p,n=4);assert w.menu[5]==b'TEAM TACTICS: BODYGUARD',w.menu
+w.events.append(3);w.step(c,p,n=4);assert w.shared[b.TACTICS]==1 and w.menu[5]==b'TEAM TACTICS: ASSAULT',w.menu
+w.events.append(6);w.step(c,p,n=4);w.shared[b.ESCORT_ON]=1;w.step(c,p,n=4);assert w.menu[5]==b'RECALL TEAM',w.menu
+w.events.append(3);w.step(c,p,n=2);assert w.shared[b.CMD] in (17,0) and any(x[2]==[b.CMD,17] for x in calls(w,0xddc))
+passed('Main menu: one row deploys / recalls the team; SETTINGS switches BODYGUARD / ASSAULT')
 w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.shared[b.CMD]=16;w.step(c,n=5);assert 'HCEXIT' in w.messages and w.shared[b.STATE]!=19
 w,c,_=setup();summon(w,c);w.shared[b.ESCORT_ON]=1;w.shared[b.CMD]=16;w.step(c,n=5);assert 'SQALR' in w.messages
 w,c,_=setup();summon(w,c);w.shared[b.CMD]=17;w.step(c,n=5);assert 'SQNONE' in w.messages
@@ -330,6 +330,10 @@ w,c,f=gunner_world([(933,-12.,0.)]);w.traces=[{'start':[-12.,0.,1.],'end':[30.,3
 for _ in range(16):w.traces[0]['time']=w.now;w.step(c,f)
 assert w.shared[b.TB_SHOOTER]!=933,'a round that missed CJ by far names nobody'
 passed('Rounds that do not come down at CJ do not make anyone the shooter')
+w,c,f=gunner_world([(931,12.,0.)]);w.shared[b.GAME_OK]=0;w.calls.clear()
+for _ in range(20):w.shared[b.GAME_OK]=0;w.traces=[{'start':[12.,0.,1.],'end':[1.5,1.,.5],'time':w.now}];w.step(c,f)
+assert w.shared[b.TB_SHOOTER]!=931 and not [x for x in calls(w,0xdd8) if x[2][1]>=b.BULLET_TRACES_OFS],'unknown game build: bullet traces are not read'
+passed('On another game build the bullet traces are not read at all')
 w,c,f=gunner_world([(934,-20.,0.),(935,20.,0.),(936,0.,-20.)]);w.weapons.update({934:22,935:30,936:34})
 for n in (934,935,936):w.damage.add((1,n))
 w.step(c,f,n=16);order=[h for h,_ in gs(w)]

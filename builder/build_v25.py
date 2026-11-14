@@ -79,6 +79,10 @@ MAP_MARKER=True
 # stores the SetCoordBlip handle in gMobileMenu+0x68 and clears it to 0 (0 = none).
 WAYPOINT_OFS=0x8BE780+0x68   # gMobileMenu waypoint blip handle (int32, 0 = none)
 RADAR_TRACE_OFS=0xC21728     # CRadar::ms_RadarTrace[250], 48 bytes each
+# 1.0 public release: the memory reads above (map marker, bullet traces) are only valid for this
+# libGTASA build. The core checks two code words of CBulletTraces::AddTrace(CVector*,CVector*,int,
+# CEntity*) at start-up; on any other build GAME_OK stays 0 and those features switch off cleanly.
+GAME_OK=STATE+330;GAME_SIG=[(0x6E612C,-788364289),(0x6E6130,1828928495)]
 
 GROVE_X=2492.0;GROVE_Y=-1666.0
 STATES={25:'MAP CLIMB',24:'PATROLLING',21:'TO MAP POINT',22:'DEST APPROACH',23:'AWAITING EXIT',20:'CLIMB TO GROVE',19:'ROPE APPROACH',17:'CHANGING CREW',18:'LANDING BLOCKED',16:'CHANGING HELI',0:'READY',1:'LOADING',2:'FOLLOWING',3:'HOLDING',4:'DEPARTING',5:'LOAD FAILED',6:'GO OUTDOORS',7:'EVAC INBOUND',8:'TEAM COVERING',9:'CJ ON BOARD',10:'TO GROVE STREET',11:'GROVE LANDING',12:'LANDED',13:'DAMAGED / RTB',14:'TEAM BOARDING',15:'EMERGENCY LAND'}
@@ -90,7 +94,8 @@ MESSAGES={
  'HCGCLMB':'~y~EVAC~w~: cannot climb safely. Clear obstacles and retry.',
  'HCMAPOF':'~y~EVAC~w~: map marker flight is disabled: it crashes CLEO Android.',
  'HCDBG':'DBG ~1~',
- 'HCNEED':'~y~HELICOVER~w~: call support first (HELICOVER > CALL SUPPORT).',
+ 'HCNEED':'~y~HELICOVER~w~: call the helicopter first (menu > CALL HELICOPTER).',
+ 'HCVER':'~y~HELICOVER~w~: map marker flight is not supported on this game version.',
  'HCNOMAP':'~y~EVAC~w~: place a destination marker on the map first.',
  'HCCHOS':'~g~EVAC~w~: above destination. Press the exit button to get out.',
  'HCAIR':'~r~AIR THREAT!~w~ Returning fire on the police chopper.',
@@ -112,10 +117,10 @@ MESSAGES={
  'HCAVOID':'~y~HELICOVER~w~: path blocked; holding for a clear route.',
  'HCROPE':'~b~EVAC~w~: helicopter approaching for rope pickup.',
  'HCEVAC':'~b~EVAC~w~: landing nearby. Choose open, level ground.',
- 'HCTEAM':'~g~EVAC~w~: flank team deployed. Use BOARD CJ when close.',
- 'HCBOARD':'~g~EVAC~w~: CJ aboard. GROVE STREET recalls the team, then takes off.',
+ 'HCTEAM':'~g~HELICOVER~w~: crew guarding the helicopter. Get in when you are ready to go.',
+ 'HCBOARD':'~g~HELICOVER~w~: CJ aboard. Open the menu and choose where to fly.',
  'HCGROVE':'~g~EVAC~w~: team aboard. Heading to the Grove Street circle.',
- 'HCHOME':'~b~EVAC~w~: approaching Grove Street.', 'HCARRIV':'~g~EVAC~w~: landed. LEAVE HELICOPTER lets CJ out.',
+ 'HCHOME':'~b~EVAC~w~: approaching Grove Street.', 'HCARRIV':'~g~HELICOVER~w~: landed. Press the exit button to get out.',
  'HCDAMAG':'~r~HELICOVER~w~: critical damage. Retreating.',
  'HCMUST':'~b~EVAC~w~: team returning. Departure waits for living guards.',
  'HCEMERG':'~r~EVAC~w~: critical damage. Attempting a nearby emergency landing.',
@@ -123,9 +128,8 @@ MESSAGES={
  'HCNOSIT':'~y~EVAC~w~: landing site is obstructed or uneven. Move to open ground and retry.',
  'HCFAR':'~y~EVAC~w~: get within 12 metres of the landed helicopter.',
  'HCWAIT':'~y~EVAC~w~: waiting for the flank team. Clear their path or repeat the command.',
- 'HCIN':'~y~EVAC~w~: CJ must be sitting in the helicopter before flying to Grove Street.',
- 'HCOFF':'~r~HELICOVER~w~: copy all script files, then restart the game.',
- 'HCTAP':'~b~HELICOVER~w~: release, then tap the exact screen centre to open the panel.',
+ 'HCIN':'~y~HELICOVER~w~: get in the helicopter first.',
+ 'HCOFF':'~r~HELICOVER~w~: files missing. Copy all 7 files to the CLEO folder and restart the game.',
  'HCSWAP':'~b~HELICOVER~w~: helicopter changed. Crew and CJ transferred.',
  'HCSNO':'~y~HELICOVER~w~: Hunter has no passenger seat. CJ must leave first.',
  'HCSFAIL':'~r~HELICOVER~w~: change failed; the current helicopter was kept.',
@@ -133,7 +137,7 @@ MESSAGES={
  'HCCFAIL':'~r~HELICOVER~w~: crew change failed. Existing crew kept.',
  'HCBLOCK':'~y~EVAC~w~: landing unavailable. Clear the area and retry or choose FOLLOW CJ.',
  'HCLOSE':'~y~EVAC~w~: land first before boarding or leaving.',
- 'HCEXIT':'~y~EVAC~w~: exit the helicopter before TAKE OFF / FOLLOW.',
+ 'HCEXIT':'~y~HELICOVER~w~: get out of the helicopter first.',
  'SQALR':'~y~SQUAD~w~: the team is already on the ground.','SQNONE':'~y~SQUAD~w~: no team on the ground.',
  'SQFOOT':'~y~SQUAD~w~: CJ must be on foot to receive the team.','SQCREW':'~y~SQUAD~w~: wait until the crew is back aboard.',
  'HCFOCUS':'~r~SHOOTER ON CJ!~w~ Gunners focusing fire on him.',
@@ -152,11 +156,13 @@ def healthcheck(s,fail):
  s.check(0x0256,[I(0)],fail);s.check(0x056e,[V(5)],fail);alive(s,4,fail);s.check(0x8119,[V(5)],fail)
 
 c=Script();a=c.add
-c.label('INIT');a(0);c.set(AVOID_STAGE,0);c.set(AVOID_NEXT,0);c.set(BUSY,0);c.set(FROZEN,0);c.set(LSTAGE,0);c.set(CREWGEN,0);c.set(FIRE_TARGET,-1);c.set(FIRE_ACTIVE,0);c.set(TRACKED_TARGET,-1);c.set(STUCK_SINCE,0)
+c.label('INIT');a(0);c.set(GAME_OK,0)
+for _ofs,_val in GAME_SIG:a(0x0dd8,V(19),I(_ofs),I(4),I(1));c.check(0x0039,[V(19),I(_val)],'GAME_SIG_BAD')
+c.set(GAME_OK,1);c.label('GAME_SIG_BAD');c.set(AVOID_STAGE,0);c.set(AVOID_NEXT,0);c.set(BUSY,0);c.set(FROZEN,0);c.set(LSTAGE,0);c.set(CREWGEN,0);c.set(FIRE_TARGET,-1);c.set(FIRE_ACTIVE,0);c.set(TRACKED_TARGET,-1);c.set(STUCK_SINCE,0)
 for key in range(PUB,PUB+7):c.set(key,-1)
 for key in range(GROUND_PUB,GROUND_PUB+5):c.set(key,-1)
 c.set(ROPE_COMMAND,0)
-for key,val in [(STATE,0),(CMD,0),(OPEN,0),(MODEL,487),(CREW,2),(FIRE,0),(TOUCH,0),(HUD,1),(HP,0),(WEAPON_SETTING,0),(EXIT_MODE,0),(AUTO_EXIT,0),(LOCK_HOLD,0),(ROPE_PENDING,0),(DROP_RESULT,0),(ROPE_TRIES,0),(RETRY_AT,0),(FORCE_ROPE,0),(EXIT_PRESSED,0),(EXIT_LAST,0),(AIR_SEEN,0),(AIR_CALL_NEXT,0),(KILLS,0),(LAST_TGT,-1),(ENGAGED,0),(CLEAR_AT,0),(ORBIT_I,0),(ORBIT_NEXT,0),(TACTICS,0),(ESCORT_PENDING,0),(ST_I,0),(ST_NEXT,0),(HP_PREV,0),(HP_T,0),(EVADE_UNTIL,0),(HELI_SHOT_T,-100000)]:c.set(key,val)
+for key,val in [(STATE,0),(CMD,0),(OPEN,0),(MODEL,487),(CREW,2),(FIRE,3),(TOUCH,0),(HUD,1),(HP,0),(WEAPON_SETTING,0),(EXIT_MODE,0),(AUTO_EXIT,0),(LOCK_HOLD,0),(ROPE_PENDING,0),(DROP_RESULT,0),(ROPE_TRIES,0),(RETRY_AT,0),(FORCE_ROPE,0),(EXIT_PRESSED,0),(EXIT_LAST,0),(AIR_SEEN,0),(AIR_CALL_NEXT,0),(KILLS,0),(LAST_TGT,-1),(ENGAGED,0),(CLEAR_AT,0),(ORBIT_I,0),(ORBIT_NEXT,0),(TACTICS,0),(ESCORT_PENDING,0),(ST_I,0),(ST_NEXT,0),(HP_PREV,0),(HP_T,0),(EVADE_UNTIL,0),(HELI_SHOT_T,-100000)]:c.set(key,val)
 c.label('IDLE');a(1,I(100));a(0x01bd,V(20));a(0xddc,I(HEART),V(20));c.get(8,CMD);c.set(CMD,0)
 c.eq(8,1,'IDLE_EVAC');a(6,V(25),I(0));c.go('LOAD')
 # v38: evacuation commands no longer summon support on their own; they ask for CALL SUPPORT first.
@@ -355,13 +361,14 @@ c.label('LEAVE_CJ');c.eq(7,12,'LEAVE_CHECK_PHASE');c.go('LEAVE_ALLOWED')
 c.label('LEAVE_CHECK_PHASE');c.eq(24,3,'LEAVE_GROUND_CHECK');c.eq(7,9,'NOT_LANDED');c.go('LEAVE_ALLOWED')
 c.label('LEAVE_GROUND_CHECK');c.eq(24,1,'NOT_LANDED')
 c.label('LEAVE_ALLOWED');c.check(0x00db,[V(18),V(5)],'TICK');a(0x020a,V(5),I(1));a(0x0085,V(19),V(20));a(0x000a,V(19),I(5000));a(0xddc,I(LOCK_HOLD),V(19));a(0x05cd,V(18),V(5));c.go('TICK')
-c.label('REQUEST_MAP');c.set(AVOID_STAGE,0);c.set(AUTO_EXIT,0);c.check(0x0448,[V(18),V(5)],'NOT_ABOARD')
+c.label('REQUEST_MAP');c.set(AVOID_STAGE,0);c.set(AUTO_EXIT,0);c.check(0x0448,[V(18),V(5)],'NOT_ABOARD');c.get(19,GAME_OK);c.eq(19,1,'MAP_UNSUPPORTED')
 if MAP_MARKER:c.call('READ_WAYPOINT');c.eq(29,1,'NO_MAP')
 else:msg(c,'HCMAPOF');c.go('TICK')
 a(0xddc,I(DEST_X),V(26));a(0xddc,I(DEST_Y),V(27));a(0xddc,I(DEST_Z),V(28));c.set(GROVE_WAIT,0);c.set(GROVE_NEXT_SCAN,0);c.call('UNFREEZE');a(0x01bd,V(21));state(c,21);c.go('TICK')
 c.label('MAP_CLIMB_TICK');a(0x0819,V(4),V(19));c.check(0x0021,[V(19),F(40)],'MAP_CLIMB_TIMEOUT');c.get(26,DEST_X);c.get(27,DEST_Y);c.get(28,DEST_Z);c.call('RESTORE_FLIGHT');a(0x0087,V(9),V(28));a(0x000b,V(9),F(80));a(0x04a2,V(5),V(26),V(27),V(9),F(45),V(9));a(0x00ad,V(5),F(30));state(c,21);c.go('TICK')
 c.label('MAP_CLIMB_TIMEOUT');a(0x0085,V(17),V(20));a(0x0062,V(17),V(21));c.check(0x0019,[V(17),I(30000)],'TICK');c.call('BLOCK_HOVER');state(c,18);msg(c,'HCGCLMB');c.go('TICK')
 c.label('NO_MAP');msg(c,'HCNOMAP');c.go('TICK')
+c.label('MAP_UNSUPPORTED');msg(c,'HCVER');c.go('TICK')
 # Waypoint handle = index | counter<<16. Valid when index < 250, the trace's ReferenceIndex
 # (+20) equals the counter and bTrackingBlip (bit 1 of byte +41) is set; x/y at +8/+12.
 c.label('READ_WAYPOINT');c.set(DBG_CODE,10);a(6,V(29),I(0));a(0x0dd8,V(30),I(WAYPOINT_OFS),I(4),I(1));c.eq(30,-1,'WP_NOT_MINUS');c.ret()
@@ -790,115 +797,113 @@ p.label('ACQUIRE');p.get(0,0);p.eq(0,0,'WATCH');p.set(OPEN,0);p.set(0,1);a(6,V(1
 p.label('MENU_POLL');a(1,I(50));a(0x01bd,V(20));a(0xddc,I(PANELHEART),V(20));p.check(0x0256,[I(0)],'CLOSE');a(0x0df4,V(1),I(250));p.eq(1,-2,'PICK');p.go('CLOSE')
 p.label('PICK');p.eq(1,-1,'HAS_PICK');p.go('CHECK_MENU_STATUS')
 p.label('HAS_PICK');p.get(8,STATE)
-# Submenu dispatch; local 2 holds page index.
-for page,label in [(0,'PICK_MAIN'),(1,'PICK_EVAC'),(2,'PICK_SETUP'),(3,'PICK_CREW'),(4,'PICK_MODEL'),(5,'PICK_FIRE'),(6,'PICK_WEAPON'),(7,'PICK_HUD'),(8,'PICK_INFO'),(9,'PICK_TEAM')]:
+# v42 (public 1.0) menu: the main page follows the situation - no helicopter, busy, CJ on foot or CJ
+# aboard - so only the actions that make sense right now are shown. The CLEO menu has its own CLOSE.
+# Pages (local 2): 0 main, 1 gunners, 2 settings, 3 crew, 4 helicopter, 5 gun type, 6 dismiss confirm.
+# Local 3 = key of the drawn page (redrawn when it changes), 7 = situation of the drawn main page.
+NONE_STATES=[0,5,6];BUSY_STATES=[1,4,13,16,17]
+GROUND_STATES=[st for st in STATES if st not in NONE_STATES+BUSY_STATES]
+MODE_ROW={2:'MODE: FOLLOW CJ',3:'MODE: HOLD POSITION',24:'MODE: PATROL AROUND CJ'}
+FIRE_PAGE=[(3,'PROTECT CJ'),(4,'OVERWATCH (ARMED ONLY)'),(2,'FOLLOW MY SHOTS'),(1,'WEAPONS FREE'),(0,'CEASE FIRE')]
+def main_rows(st,sit,extra):
+ if sit==0:return ['CALL HELICOPTER','SETTINGS >']
+ if sit==1:return ['PLEASE WAIT...','GUNNERS >','SETTINGS >']
+ if sit==2:return [MODE_ROW.get(st,'FOLLOW CJ'),'GUNNERS >','ROPE PICKUP',('RECALL TEAM' if extra else 'DEPLOY TEAM ON FOOT'),'SETTINGS >','DISMISS HELICOPTER']
+ return ['FLY TO MAP MARKER','FLY TO GROVE STREET','GET OUT HERE','EXIT BY: '+('ROPE' if extra else 'LANDING'),'GUNNERS >','SETTINGS >']
+MAIN_VARIANTS=[(st,0,0) for st in NONE_STATES]+[(st,1,0) for st in BUSY_STATES]+[(st,sit,x) for st in GROUND_STATES for sit in (2,3) for x in (0,1)]
+for page,label in [(0,'PICK_MAIN'),(1,'PICK_FIRE'),(2,'PICK_SETUP'),(3,'PICK_CREW'),(4,'PICK_MODEL'),(5,'PICK_WEAPON'),(6,'PICK_DISMISS')]:
  nxt='PAGE_PICK_NEXT_'+str(page);p.eq(2,page,nxt);p.go(label);p.label(nxt)
 p.go('MENU_POLL')
 def page(n):
  a(6,V(2),I(n));a(6,V(3),I(-999));p.go('REFRESH')
 def pick(index,label):
  nxt='PICK_NOT_'+label+'_'+str(len(p.rows));p.eq(1,index,nxt);p.go(label);p.label(nxt)
+p.label('FORCE_REFRESH');a(6,V(3),I(-999));p.go('REFRESH')
 p.label('PICK_MAIN')
-for index,label in [(0,'DO_CALL'),(1,'DO_FOLLOW'),(2,'DO_HOLD'),(3,'OPEN_EVAC'),(4,'DO_DISMISS'),(5,'OPEN_SETUP'),(6,'OPEN_FIRE'),(7,'CLOSE')]:pick(index,label)
+for sit,actions in [(0,['DO_CALL','OPEN_SETUP']),(1,['FORCE_REFRESH','OPEN_FIRE','OPEN_SETUP']),(2,['DO_MODE_CYCLE','OPEN_FIRE','DO_ROPE','DO_TEAM_TOGGLE','OPEN_SETUP','OPEN_DISMISS']),(3,['DO_MAP','DO_GROVE','DO_EXIT_NOW','TOGGLE_EXIT','OPEN_FIRE','OPEN_SETUP'])]:
+ nxt='PICK_MAIN_SIT_'+str(sit);p.eq(7,sit,nxt)
+ for index,label in enumerate(actions):pick(index,label)
+ p.go('MENU_POLL');p.label(nxt)
 p.go('MENU_POLL')
-p.label('OPEN_EVAC');page(1)
-p.label('OPEN_SETUP');page(2)
-p.label('OPEN_INFO');page(8)
-p.label('PICK_EVAC')
-for index,label in [(0,'DO_ROPE'),(1,'DO_GROVE'),(2,'DO_MAP'),(3,'TOGGLE_EXIT'),(4,'DO_EXIT_NOW'),(5,'DO_TAKEOFF'),(6,'OPEN_TEAM'),(7,'OPEN_MAIN')]:pick(index,label)
-p.go('MENU_POLL')
-p.label('DO_ROPE');p.set(CMD,10);a(1,I(200));p.go('CHECK_MENU_STATUS')
-p.label('OPEN_MAIN');page(0)
-# v40 TEAM ON FOOT page: deploy / recall the escort team and choose its tactics
-p.label('OPEN_TEAM');page(9)
-p.label('PICK_TEAM')
-for index,label in [(0,'DO_TEAM_TOGGLE'),(1,'TACTIC_BODYGUARD'),(2,'TACTIC_ASSAULT'),(3,'OPEN_EVAC')]:pick(index,label)
-p.go('MENU_POLL')
+for label,n in [('OPEN_MAIN',0),('OPEN_FIRE',1),('OPEN_SETUP',2),('OPEN_CREW',3),('OPEN_MODEL',4),('OPEN_WEAPON',5),('OPEN_DISMISS',6)]:p.label(label);page(n)
+# FOLLOW -> HOLD -> PATROL -> FOLLOW; from any other state (landed, rope hover...) FOLLOW CJ
+p.label('DO_MODE_CYCLE');p.eq(8,2,'MODE_NOT_FOLLOW');p.go('DO_HOLD')
+p.label('MODE_NOT_FOLLOW');p.eq(8,3,'MODE_NOT_HOLD');p.go('DO_PATROL')
+p.label('MODE_NOT_HOLD');p.go('DO_FOLLOW')
 p.label('DO_TEAM_TOGGLE');p.get(9,ESCORT_ON);p.eq(9,1,'DO_TEAM_DEPLOY');p.go('DO_TEAM_RECALL')
-p.label('TACTIC_BODYGUARD');p.set(TACTICS,0);a(6,V(3),I(-999));p.go('REFRESH')
-p.label('TACTIC_ASSAULT');p.set(TACTICS,1);a(6,V(3),I(-999));p.go('REFRESH')
-# v39: one item switches the exit method used by the exit button and EXIT NOW
-p.label('TOGGLE_EXIT');p.get(9,EXIT_MODE);p.eq(9,0,'TOGGLE_TO_LAND');p.set(EXIT_MODE,1);a(6,V(3),I(-999));p.go('REFRESH')
-p.label('TOGGLE_TO_LAND');p.set(EXIT_MODE,0);a(6,V(3),I(-999));p.go('REFRESH')
+p.label('PICK_DISMISS');pick(0,'DO_DISMISS');p.go('OPEN_MAIN')
+# settings: three sub-pages and three one-tap switches
 p.label('PICK_SETUP')
-for index,label in [(0,'OPEN_CREW'),(1,'OPEN_MODEL'),(2,'OPEN_FIRE'),(3,'OPEN_WEAPON'),(4,'OPEN_HUD'),(5,'DO_PATROL'),(6,'OPEN_MAIN')]:pick(index,label)
+for index,label in [(0,'OPEN_CREW'),(1,'OPEN_MODEL'),(2,'OPEN_WEAPON'),(3,'TOGGLE_TACTICS'),(4,'TOGGLE_EXIT'),(5,'TOGGLE_HUD'),(6,'OPEN_MAIN')]:pick(index,label)
 p.go('MENU_POLL')
-for label,n in [('OPEN_CREW',3),('OPEN_MODEL',4),('OPEN_FIRE',5),('OPEN_WEAPON',6),('OPEN_HUD',7)]:p.label(label);page(n)
-for key,pag,choices in [(CREW,3,[(0,0),(1,1),(2,2)]),(MODEL,4,[(0,487),(1,497),(2,425)]),(FIRE,5,[(0,0),(1,3),(2,2),(3,1),(4,4)]),(WEAPON_SETTING,6,[(0,0),(1,29),(2,30),(3,31),(4,34)]),(HUD,7,[(0,1),(1,0)])]:
- label={3:'PICK_CREW',4:'PICK_MODEL',5:'PICK_FIRE',6:'PICK_WEAPON',7:'PICK_HUD'}[pag];p.label(label)
+for label,key in [('TOGGLE_TACTICS',TACTICS),('TOGGLE_EXIT',EXIT_MODE)]:
+ p.label(label);p.get(9,key);p.eq(9,0,label+'_OFF');p.set(key,1);p.go('FORCE_REFRESH');p.label(label+'_OFF');p.set(key,0);p.go('FORCE_REFRESH')
+p.label('TOGGLE_HUD');p.get(9,HUD);p.eq(9,1,'TOGGLE_HUD_ON');p.set(HUD,0);p.go('FORCE_REFRESH');p.label('TOGGLE_HUD_ON');p.set(HUD,1);p.go('FORCE_REFRESH')
+for key,pag,choices,back in [(FIRE,1,[(i,v) for i,(v,_) in enumerate(FIRE_PAGE)],'OPEN_MAIN'),(CREW,3,[(0,0),(1,1),(2,2)],'OPEN_SETUP'),(MODEL,4,[(0,487),(1,497),(2,425)],'OPEN_SETUP'),(WEAPON_SETTING,5,[(0,0),(1,29),(2,30),(3,31),(4,34)],'OPEN_SETUP')]:
+ label={1:'PICK_FIRE',3:'PICK_CREW',4:'PICK_MODEL',5:'PICK_WEAPON'}[pag];p.label(label)
  for idx,val in choices:
-  nxt='OPTION_NEXT_'+str(pag)+'_'+str(idx);p.eq(1,idx,nxt);p.set(key,val);a(6,V(3),I(-999));p.go('REFRESH');p.label(nxt)
- p.go('OPEN_SETUP')
-p.label('PICK_INFO');p.go('OPEN_MAIN')
-for label,cmd in [('DO_EXIT_NOW',15),('DO_CALL',1),('DO_FOLLOW',2),('DO_HOLD',3),('DO_DISMISS',4),('DO_EVAC',5),('DO_BOARD',6),('DO_GROVE',7),('DO_LEAVE',8),('DO_TAKEOFF',9),('DO_MAP',11),('DO_DEST_LAND',12),('DO_DEST_ROPE',13),('DO_PATROL',14),('DO_TEAM_DEPLOY',16),('DO_TEAM_RECALL',17)]:
+  nxt='OPTION_NEXT_'+str(pag)+'_'+str(idx);p.eq(1,idx,nxt);p.set(key,val);p.go('FORCE_REFRESH');p.label(nxt)
+ p.go(back)
+for label,cmd in [('DO_EXIT_NOW',15),('DO_CALL',1),('DO_FOLLOW',2),('DO_HOLD',3),('DO_DISMISS',4),('DO_GROVE',7),('DO_ROPE',10),('DO_MAP',11),('DO_PATROL',14),('DO_TEAM_DEPLOY',16),('DO_TEAM_RECALL',17)]:
  p.label(label)
- # No commands while spawning/departing. Ground muster can still be changed through EVAC.
+ # No commands while spawning/departing/retreating: the page is redrawn instead.
  for st in [1,4,13]:
-  nxt='ALLOW_'+label+'_'+str(st);p.eq(8,st,nxt);p.go('MENU_POLL');p.label(nxt)
- p.set(CMD,cmd);a(1,I(200));p.go('CHECK_MENU_STATUS')
-p.label('CHECK_MENU_STATUS');p.eq(2,0,'INFO_STATUS_CHECK');p.get(8,STATE);p.check(0x803b,[V(8),V(3)],'MENU_POLL');p.go('REFRESH')
-p.label('INFO_STATUS_CHECK');p.eq(2,1,'CREW_STATUS_CHECK');p.get(8,STATE);p.check(0x803b,[V(8),V(3)],'MENU_POLL');p.go('REFRESH')
-p.label('CREW_STATUS_CHECK');p.eq(2,3,'HELI_STATUS_CHECK');p.get(19,CREW);p.check(0x803b,[V(19),V(3)],'MENU_POLL');p.go('REFRESH')
-p.label('HELI_STATUS_CHECK');p.eq(2,4,'INFO_STATUS_PAGE');p.get(19,MODEL);p.check(0x803b,[V(19),V(3)],'MENU_POLL');p.go('REFRESH')
-p.label('INFO_STATUS_PAGE');p.eq(2,8,'TEAM_STATUS_CHECK');p.get(8,STATE);p.get(9,HP);a(0x0085,V(19),V(8));a(0x0012,V(19),I(10));p.check(0x0019,[V(9),I(350)],'INFO_CRITICAL');p.check(0x0019,[V(9),I(700)],'INFO_DAMAGED');a(0x000a,V(19),I(2));p.go('INFO_CHECK_KEY')
-p.label('INFO_DAMAGED');a(0x000a,V(19),I(1));p.go('INFO_CHECK_KEY')
-p.label('INFO_CRITICAL')
-p.label('INFO_CHECK_KEY');p.check(0x803b,[V(19),V(3)],'MENU_POLL');p.go('REFRESH')
-p.label('TEAM_STATUS_CHECK');p.eq(2,9,'MENU_POLL');p.get(8,ESCORT_ON);p.get(9,TACTICS);a(0x0012,V(8),I(10));a(0x005a,V(8),V(9));p.check(0x803b,[V(8),V(3)],'MENU_POLL');p.go('REFRESH')
+  nxt='ALLOW_'+label+'_'+str(st);p.eq(8,st,nxt);p.go('FORCE_REFRESH');p.label(nxt)
+ p.set(CMD,cmd);a(1,I(200))
+ if label=='DO_DISMISS':a(6,V(2),I(0))
+ p.go('CHECK_MENU_STATUS')
+# 6@ = key of the main page now (state*100 + situation*10 + team / exit method), 5@ = situation
+p.label('MAIN_KEY');p.get(8,STATE);a(6,V(5),I(2));a(6,V(12),I(0))
+for sit,group in [(0,NONE_STATES),(1,BUSY_STATES)]:
+ for st in group:nxt='MK_%d_%d'%(sit,st);p.eq(8,st,nxt);a(6,V(5),I(sit));p.go('MK_DONE');p.label(nxt)
+a(0x01f5,I(0),V(11));p.get(12,PUB+1);p.check(0x056e,[V(12)],'MK_GROUND');p.check(0x0448,[V(11),V(12)],'MK_GROUND');a(6,V(5),I(3));p.get(12,EXIT_MODE);p.go('MK_DONE')
+p.label('MK_GROUND');p.get(12,ESCORT_ON)
+p.label('MK_DONE');a(0x0085,V(6),V(8));a(0x0012,V(6),I(100));a(0x0085,V(11),V(5));a(0x0012,V(11),I(10));a(0x005a,V(6),V(11));a(0x005a,V(6),V(12));p.ret()
+p.label('SETUP_KEY');p.get(6,TACTICS);a(0x0012,V(6),I(100));p.get(11,EXIT_MODE);a(0x0012,V(11),I(10));a(0x005a,V(6),V(11));p.get(11,HUD);a(0x005a,V(6),V(11));p.ret()
+p.label('CHECK_MENU_STATUS');p.eq(2,0,'CMS_FIRE');p.call('MAIN_KEY');p.go('CMS_COMPARE')
+p.label('CMS_FIRE');p.eq(2,1,'CMS_SETUP');p.get(6,FIRE);p.go('CMS_COMPARE')
+p.label('CMS_SETUP');p.eq(2,2,'CMS_CREW');p.call('SETUP_KEY');p.go('CMS_COMPARE')
+p.label('CMS_CREW');p.eq(2,3,'CMS_MODEL');p.get(6,CREW);p.go('CMS_COMPARE')
+p.label('CMS_MODEL');p.eq(2,4,'CMS_WEAPON');p.get(6,MODEL);p.go('CMS_COMPARE')
+p.label('CMS_WEAPON');p.eq(2,5,'MENU_POLL');p.get(6,WEAPON_SETTING)
+p.label('CMS_COMPARE');p.check(0x803b,[V(6),V(3)],'MENU_POLL');p.go('REFRESH')
 p.label('REFRESH');a(0x0df3)
-for pageid in range(10):
+for pageid in range(7):
  nxt='DRAW_NEXT_'+str(pageid);p.eq(2,pageid,nxt);p.go('DRAW_'+str(pageid));p.label(nxt)
 p.go('CLOSE')
-p.label('DRAW_0');p.get(8,STATE);a(0x0085,V(3),V(8))
-for st in STATES:
- nxt='DRAW_MAIN_NEXT_'+str(st);p.eq(8,st,nxt);a(0xdd0,V(4),L('MAIN_'+str(st)));p.go('SHOW_8');p.label(nxt)
-a(0xdd0,V(4),L('MAIN_0'));p.go('SHOW_8')
-p.label('DRAW_1');p.get(8,STATE);a(0x0085,V(3),V(8));p.get(9,EXIT_MODE)
-for st in STATES:
- nxt='DRAW_EVAC_NEXT_'+str(st);land='DRAW_EVAC_LAND_'+str(st);p.eq(8,st,nxt);p.eq(9,1,land);a(0xdd0,V(4),L('EVAC_%d_1'%st));p.go('SHOW_8');p.label(land);a(0xdd0,V(4),L('EVAC_%d_0'%st));p.go('SHOW_8');p.label(nxt)
-a(0xdd0,V(4),L('EVAC_0_0'));p.go('SHOW_8')
-p.label('DRAW_2');a(0xdd0,V(4),L('SETUP_MENU'));p.go('SHOW_7')
-for pageid,key,values in [(3,CREW,[0,1,2]),(4,MODEL,[487,497,425]),(5,FIRE,[0,3,2,1,4]),(6,WEAPON_SETTING,[0,29,30,31,34]),(7,HUD,[1,0])]:
+p.label('DRAW_0');p.call('MAIN_KEY');a(0x0085,V(3),V(6));a(0x0085,V(7),V(5))
+for st,sit,x in MAIN_VARIANTS:
+ nxt='DRAW_MAIN_NEXT_%d_%d_%d'%(st,sit,x);p.eq(6,st*100+sit*10+x,nxt);a(0xdd0,V(4),L('MAIN_%d_%d_%d'%(st,sit,x)));p.go('SHOW_'+str(len(main_rows(st,sit,x))));p.label(nxt)
+a(6,V(7),I(0));a(0xdd0,V(4),L('MAIN_0_0_0'));p.go('SHOW_2')
+p.label('DRAW_2');p.call('SETUP_KEY');a(0x0085,V(3),V(6))
+for tac in (0,1):
+ for ex in (0,1):
+  for hud in (0,1):
+   nxt='DRAW_SETUP_NEXT_%d%d%d'%(tac,ex,hud);p.eq(6,tac*100+ex*10+hud,nxt);a(0xdd0,V(4),L('SETUP_%d%d%d'%(tac,ex,hud)));p.go('SHOW_7');p.label(nxt)
+a(0xdd0,V(4),L('SETUP_001'));p.go('SHOW_7')
+PREF_PAGES=[(1,FIRE,[v for v,_ in FIRE_PAGE],'GUNNERS / FIRE MODE',[n for _,n in FIRE_PAGE]),(3,CREW,[0,1,2],'SETTINGS / CREW',['GROVE STREET','ARMY','SWAT']),(4,MODEL,[487,497,425],'SETTINGS / HELICOPTER',['MAVERICK','POLICE MAVERICK','HUNTER (NO PASSENGERS)']),(5,WEAPON_SETTING,[0,29,30,31,34],'SETTINGS / GUN TYPE',['AUTO (BY CREW)','MP5','AK-47','M4','SNIPER RIFLE'])]
+for pageid,key,values,_,_ in PREF_PAGES:
  p.label('DRAW_'+str(pageid));p.get(8,key);a(0x0085,V(3),V(8))
  for val in values:
   nxt='DRAW_PREF_NEXT_'+str(pageid)+'_'+str(val);p.eq(8,val,nxt);a(0xdd0,V(4),L('PREF_'+str(pageid)+'_'+str(val)));p.go('SHOW_'+str(len(values)+1));p.label(nxt)
  a(0xdd0,V(4),L('PREF_'+str(pageid)+'_'+str(values[0])));p.go('SHOW_'+str(len(values)+1))
-p.label('DRAW_9');p.get(8,ESCORT_ON);p.get(9,TACTICS);a(0x0085,V(3),V(8));a(0x0012,V(3),I(10));a(0x005a,V(3),V(9))
-for esc in [0,1]:
- for tac in [0,1]:
-  nxt='DRAW_TEAM_NEXT_%d_%d'%(esc,tac);p.eq(3,esc*10+tac,nxt);a(0xdd0,V(4),L('TEAM_%d_%d'%(esc,tac)));p.go('SHOW_4');p.label(nxt)
-a(0xdd0,V(4),L('TEAM_0_0'));p.go('SHOW_4')
-p.label('DRAW_8');p.get(8,STATE);p.get(9,HP);a(0x0085,V(3),V(8));a(0x0012,V(3),I(10));a(6,V(19),I(0));p.check(0x0019,[V(9),I(350)],'INFO_BUILD');a(6,V(19),I(1));p.check(0x0019,[V(9),I(700)],'INFO_BUILD');a(6,V(19),I(2))
-p.label('INFO_BUILD');a(0x005a,V(3),V(19))
-for st in STATES:
- for hull in range(3):
-  nxt='INFO_NEXT_'+str(st)+'_'+str(hull);p.eq(3,st*10+hull,nxt);a(0xdd0,V(4),L('INFO_'+str(st)+'_'+str(hull)));p.go('SHOW_3');p.label(nxt)
-a(0xdd0,V(4),L('INFO_0_0'));p.go('SHOW_3')
-for count in [3,4,5,6,7,8]:p.label('SHOW_'+str(count));a(0xdf2,V(4),I(count));p.go('MENU_POLL')
+p.label('DRAW_6');a(6,V(3),I(-1));a(0xdd0,V(4),L('DISMISS_MENU'));p.go('SHOW_2')
+for count in range(1,9):p.label('SHOW_'+str(count));a(0xdf2,V(4),I(count));p.go('MENU_POLL')
 p.label('CORE_MISSING');a(0xdd0,V(4),L('OFFLINE_MENU'));a(0xdf2,V(4),I(1))
 p.label('OFFLINE_POLL');a(1,I(50));a(0x01bd,V(20));a(0xddc,I(PANELHEART),V(20));p.check(0x0256,[I(0)],'CLOSE');a(0xdf4,V(1),I(250));p.eq(1,-1,'CLOSE');p.go('OFFLINE_POLL')
 p.label('CLOSE');a(0xdf3);p.set(OPEN,0);p.set(0,0);a(6,V(10),I(0));p.go('WATCH')
 # All menus fit on one page (<=8 rows); metadata is appended beyond terminating branches.
-for st,title in STATES.items():
- rows=['CALL SUPPORT','FOLLOW CJ','HOLD POSITION','EVACUATION >','DISMISS SUPPORT','SETUP >','FIRE CONTROL >','CLOSE']
- if st in [1,4,13]:rows[0]='PLEASE WAIT'
- if st==2:rows[1]='FOLLOW CJ [ON]'
- if st==3:rows[2]='HOLD POSITION [ON]'
- p.blob('MAIN_'+str(st),'HELICOVER / '+title,rows)
-p.blob('OFFLINE_MENU','HELICOVER / OFFLINE',['INSTALL CORE + RESTART'])
-for st,title in STATES.items():
- for mode in [0,1]:p.blob('EVAC_%d_%d'%(st,mode),'EVAC / '+title,['ROPE EVACUATION','FLY TO GROVE','FLY TO MAP MARKER','EXIT MODE: '+('ROPE' if mode else 'LAND'),'EXIT NOW','TAKE OFF / FOLLOW','TEAM ON FOOT >','< BACK'])
-for esc in [0,1]:
- for tac in [0,1]:p.blob('TEAM_%d_%d'%(esc,tac),'TEAM ON FOOT',['RECALL TEAM' if esc else 'DEPLOY TEAM','TACTICS: BODYGUARD'+(' [ON]' if tac==0 else ''),'TACTICS: ASSAULT'+(' [ON]' if tac==1 else ''),'< BACK'])
-p.blob('SETUP_MENU','HELICOVER / SETUP',['CREW >','HELICOPTER >','FIRE MODE >','WEAPONS >','STATUS MESSAGES >','PATROL AROUND CJ','< BACK'])
-for pg,title,values,labels in [(3,'CREW / LIVE',[0,1,2],['GROVE','ARMY','SWAT']), (4,'HELICOPTER / LIVE',[487,497,425],['MAVERICK','POLICE MAVERICK','HUNTER / NO EVAC']), (5,'FIRE CONTROL',[0,3,2,1,4],['CEASE FIRE','PROTECT CJ','FOLLOW CJ SHOTS','WEAPONS FREE','OVERWATCH']), (6,'WEAPONS / LIVE',[0,29,30,31,34],['AUTO BY CREW','MP5','AK-47','M4','SNIPER RIFLE']), (7,'STATUS MESSAGES',[1,0],['ENABLED','DISABLED'])]:
+VERSION='1.0'
+for st,sit,x in MAIN_VARIANTS:p.blob('MAIN_%d_%d_%d'%(st,sit,x),('HELICOVER '+VERSION) if st==0 else 'HELICOVER / '+STATES[st],main_rows(st,sit,x))
+p.blob('OFFLINE_MENU','HELICOVER / OFFLINE',['COPY ALL FILES, RESTART GAME'])
+p.blob('DISMISS_MENU','SEND THE HELICOPTER AWAY?',['YES, DISMISS IT','NO, KEEP IT'])
+for tac in (0,1):
+ for ex in (0,1):
+  for hud in (0,1):p.blob('SETUP_%d%d%d'%(tac,ex,hud),'HELICOVER / SETTINGS',['CREW >','HELICOPTER >','GUN TYPE >','TEAM TACTICS: '+('ASSAULT' if tac else 'BODYGUARD'),'EXIT BY: '+('ROPE' if ex else 'LANDING'),'MESSAGES: '+('ON' if hud else 'OFF'),'< BACK'])
+for pg,_,values,title,labels in PREF_PAGES:
  for val in values:
   rows=[text+(' [ON]' if values[i]==val else '') for i,text in enumerate(labels)]+['< BACK']
   p.blob('PREF_'+str(pg)+'_'+str(val),title,rows)
-for st,title in STATES.items():
- for hull,hullname in [(0,'CRITICAL'),(1,'DAMAGED'),(2,'HEALTHY')]:
-  info='NO ACTIVE SUPPORT' if st in [0,1,5,6] else 'HULL: '+hullname
-  p.blob('INFO_'+str(st)+'_'+str(hull),'STATUS / '+title,[info,'EVAC: GROVE STREET','< BACK'])
 
 launch=Script();a=launch.add
 launch.label('ENTRY');a(0);a(1,I(400));launch.get(1,PANELHEART);a(1,I(250));launch.get(2,PANELHEART);launch.check(0x803b,[V(1),V(2)],'MISSING');launch.set(OPEN,1);a(0x004e)
@@ -1097,7 +1102,7 @@ def gunner_mode_check(P):
  f.label(P+'MODE_DONE')
 emit_score(f,'THREAT_SCORE',29,30,[0,2,3,4,5,6],dict(cx=8,cy=9,cz=10,tx=11,ty=12,tz=13,d=14,t1=15,t2=16,t3=17))
 emit_trace_scan(f,'TRACE_SCAN',dict(cx=8,cy=9,cz=10,hx=11,hy=12,hz=13,x=14,y=15,z=16,d=17,n=18,now=19,bx=20,by=21),'NOT_FRIEND',cj=0,heli=1)
-f.label('TRACE_TICK');f.get(30,TRACE_SCAN_T);a(0x01bd,V(31));a(0x0062,V(31),V(30));f.check(0x0019,[V(31),I(249)],'TRACE_TICK_RET');f.call('TRACE_SCAN')
+f.label('TRACE_TICK');f.get(30,GAME_OK);f.eq(30,1,'TRACE_TICK_RET');f.get(30,TRACE_SCAN_T);a(0x01bd,V(31));a(0x0062,V(31),V(30));f.check(0x0019,[V(31),I(249)],'TRACE_TICK_RET');f.call('TRACE_SCAN')
 f.label('TRACE_TICK_RET');f.ret()
 # 29@ handle, 30@ score: insert into the sorted list (higher first); uses 31@
 f.label('GS_INSERT')
@@ -1192,7 +1197,7 @@ f.label('PROTECT_KEEP_OLD');a(0x0085,V(29),V(24));alive(f,29,'PROTECT_NO_TARGET'
 f.label('PROTECT_NO_TARGET');a(6,V(29),I(-1));f.ret()
 
 # v39.4: 30@ = 1 and 22@..24@ = the shooter position when a fresh hostile round came down at CJ.
-f.label('AIR_SCAN');a(6,V(30),I(0));f.check(0x010f,[I(0),I(2)],'AIR_RET')
+f.label('AIR_SCAN');a(6,V(30),I(0));f.get(14,GAME_OK);f.eq(14,1,'AIR_RET');f.check(0x010f,[I(0),I(2)],'AIR_RET')
 a(0x00a0,V(0),V(8),V(9),V(10));a(0x00aa,V(1),V(11),V(12),V(13));a(0x01bd,V(31))
 for k in range(BULLET_TRACE_COUNT):
  base=BULLET_TRACES_OFS+k*BULLET_TRACE_SIZE;nxt='AIR_TRACE_NEXT_'+str(k)

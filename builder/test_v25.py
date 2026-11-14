@@ -71,7 +71,7 @@ class VM:
    elif op==0xdd8:
     assert vals[3]==1
     marker=getattr(w,'marker',None);addr,size=vals[1],vals[2];entry=b.RADAR_TRACE_OFS+5*48
-    mem={(b.WAYPOINT_OFS,4):(5|7<<16) if marker else 0,(b.WAYPOINT_OFS,2):5 if marker else 0xffff,(b.WAYPOINT_OFS+2,2):7 if marker else 0xffff,
+    mem={**{(ofs,4):val for ofs,val in b.GAME_SIG},(b.WAYPOINT_OFS,4):(5|7<<16) if marker else 0,(b.WAYPOINT_OFS,2):5 if marker else 0xffff,(b.WAYPOINT_OFS+2,2):7 if marker else 0xffff,
          (entry+20,2):getattr(w,'wp_ref',7),(entry+41,1):getattr(w,'wp_flags',0x42),(entry+8,4):marker[0] if marker else 0.,(entry+12,4):marker[1] if marker else 0.}
     for k,tr in enumerate(getattr(w,'traces',[])):
      tb=b.BULLET_TRACES_OFS+k*b.BULLET_TRACE_SIZE
@@ -336,10 +336,10 @@ assert calls(w,0x7bb)[-1][2]==[c.v[5],0] and calls(w,0x853)[-1][2]==[c.v[5],3]
 w.shared[b.CREW]=0;w.step(c,n=12);assert w.shared[b.ACREW]==0 and calls(w,0x743)[-1][2][1:4]==target
 passed('Changing helicopter or crew resumes the same native landing')
 
-w,c,p=setup(True);summon(w,c);launch=VM('Helicover',w);w.step(c,p,launch,n=15);w.events.append(3);w.step(c,p,n=4)
-assert w.menu[0]==b'EVAC / FOLLOWING'
-w.shared[b.CMD]=5;w.step(c,p,n=8);assert w.menu[0]==b'EVAC / EVAC INBOUND'
-passed('Evacuation menu updates status while it is open')
+w,c,p=setup(True);summon(w,c);launch=VM('Helicover',w);w.step(c,p,launch,n=15)
+assert w.menu[0]==b'HELICOVER / FOLLOWING'
+w.shared[b.CMD]=5;w.step(c,p,n=8);assert w.menu[0]==b'HELICOVER / EVAC INBOUND'
+passed('Main menu updates the status in its title while it is open')
 
 def fire_world():
  w,c,_=setup();summon(w,c);f=VM('Helicover_Fire',w);w.step(c,f,n=3);w.shared[b.FIRE]=3;return w,c,f
@@ -347,7 +347,7 @@ def target(w,typ=4,skin=20):
  npc=900;w.exists.add(npc);w.pos[npc]=[20.,0.,0.];w.skin[npc]=skin;w.pedtype[npc]=typ;w.random_char=npc;return npc
 def attacks(w):return [x for x in w.calls if x[1] in [0x74d,0x713,0x668]]
 w,c,f=fire_world();npc=target(w);w.step(c,f,n=7);assert not attacks(w)
-w.damage.add((1,npc));w.step(c,f,n=7);assert calls(w,0x74d) and all(x[2][1]==npc for x in calls(w,0x74d))
+w.damage.add((1,npc));w.step(c,f,n=14);assert calls(w,0x74d) and all(x[2][1]==npc for x in calls(w,0x74d))
 passed('Existing protection worker still issues target tasks for a simulated attacker')
 for typ,skin in [(8,105),(8,270),(4,105),(4,106),(4,107)]:
  w,c,f=fire_world();npc=target(w,typ=typ,skin=skin);w.damage.add((1,npc));w.wanted=6;w.step(c,f,n=7);assert not attacks(w)
@@ -379,9 +379,13 @@ w.civilians=[900,901];w.targeting=901;w.step(c,f,n=8)
 assert calls(w,0x74d) and all(x[2][1]==901 for x in calls(w,0x74d))
 passed('Follow-shots finds the game auto-aim target instead of the first nearby NPC')
 
-w,c,p=setup(True);summon(w,c);launch=VM('Helicover',w);w.step(c,p,launch,n=15);w.events.append(3);w.step(c,p,n=4)
-assert b'TAKE OFF / FOLLOW' in w.menu and w.menu[-1]==b'< BACK'
-passed('Evacuation menu exposes the new takeoff command')
+w,c,p=setup(True);launch=VM('Helicover',w);w.step(c,p,launch,n=15)
+assert w.menu[1]==b'CLOSE' and w.menu[2:]==[b'CALL HELICOPTER',b'SETTINGS >'],w.menu
+summon(w,c);w.step(c,p,n=4)
+assert w.menu[2:]==[b'MODE: FOLLOW CJ',b'GUNNERS >',b'ROPE PICKUP',b'DEPLOY TEAM ON FOOT',b'SETTINGS >',b'DISMISS HELICOPTER'],w.menu
+w.incar[1]=c.v[5];w.step(c,p,n=4)
+assert w.menu[2:]==[b'FLY TO MAP MARKER',b'FLY TO GROVE STREET',b'GET OUT HERE',b'EXIT BY: LANDING',b'GUNNERS >',b'SETTINGS >'],w.menu
+passed('Main menu shows only what fits the moment: call it; on foot - mode, gunners, rope, team; aboard - destinations and exit')
 
 w,c,f=fire_world();n=target(w);w.damage.add((1,n));w.step(c,f,n=12)
 assert calls(w,0x6bc) and all(x[2][1]==n for x in calls(w,0x74d))
@@ -389,8 +393,8 @@ w.shared[b.FIRE]=0;w.step(c,f,n=5);count=len(calls(w,0x6bc));w.step(c,f,n=6);ass
 passed('Protect CJ and cease-fire remain active after aim and takeoff changes')
 
 w,c,p=setup(True);summon(w,c);f=VM('Helicover_Fire',w);w.step(c,p,f,n=3);w.shared[b.FIRE]=3;w.step(c,p,f,n=5)
-launch=VM('Helicover',w);w.step(c,p,f,launch,n=15);w.events.append(5);w.step(c,p,f,n=4);w.events.append(3);w.step(c,p,f,n=4)
-assert w.menu[0]==b'WEAPONS / LIVE' and b'MP5' in w.menu
+launch=VM('Helicover',w);w.step(c,p,f,launch,n=15);w.events.append(4);w.step(c,p,f,n=4);w.events.append(2);w.step(c,p,f,n=4)
+assert w.menu[0]==b'SETTINGS / GUN TYPE' and b'MP5' in w.menu,w.menu
 w.events.append(1);w.step(c,p,f,n=12)
 assert w.shared[b.WEAPON_SETTING]==29 and w.shared[b.WPN]==29
 assert all(w.weapons[c.v[v]]==29 for v in [13,14,15,16]) and b'MP5 [ON]' in w.menu
@@ -418,9 +422,9 @@ squad=[w.shared[b.GROUND_PUB+i] for i in range(4)]
 assert len(set(squad))==4 and all(x in w.exists for x in squad), (squad,w.messages)
 assert len(calls(w,0x503))>=4 and all(c.v[i] in w.attach for i in [13,14,15,16])
 passed('Rope insertion creates four additional guards while aircraft guards remain attached')
-launch=VM('Helicover',w);w.step(c,p,fire,ground,launch,n=15);w.events.append(3);w.step(c,p,fire,ground,n=4)
-assert b'ROPE EVACUATION' in w.menu and b'FLY TO GROVE' in w.menu and b'LAND NEAR CJ' not in w.menu and b'BOARD CJ' not in w.menu and w.menu[-1]==b'< BACK'
-passed('Evacuation menu exposes rope insertion')
+launch=VM('Helicover',w);w.step(c,p,fire,ground,launch,n=15)
+assert b'ROPE PICKUP' in w.menu and b'FLY TO GROVE STREET' not in w.menu,w.menu
+passed('With CJ on foot the main menu offers the rope pickup, not destinations')
 w.random_char=squad[0];w.damage.add((1,squad[0]));w.shared[b.FIRE]=3;w.step(c,p,fire,ground,n=12)
 assert not any(x[2][1]==squad[0] for x in calls(w,0x74d))
 passed('Protect CJ does not target a member of the ground team')
@@ -486,10 +490,11 @@ for cmd in [5,7,10,11,12,13]:
  w,c,_=setup();ground=VM('Helicover_Ground',w);w.step(c,ground,n=3);w.shared[b.CMD]=cmd;w.step(c,ground,n=12)
  assert w.shared[b.STATE]==0 and not calls(w,0xa5) and 'HCNEED' in w.messages,(cmd,w.shared[b.STATE],w.messages)
 passed('Evacuation commands without support show CALL SUPPORT first and do not summon')
-w,c,p=setup(True);launch=VM('Helicover',w);w.step(c,p,launch,n=15);w.events.append(3);w.step(c,p,n=4);assert b'ROPE EVACUATION' in w.menu
-w.events.append(0);w.step(c,p,n=12);assert w.shared[b.STATE]==0 and not calls(w,0xa5) and 'HCNEED' in w.messages
-summon(w,c);w.events.append(3);w.step(c,p,n=4);w.events.append(0);w.step(c,p,n=12);assert w.shared[b.STATE]==19
-passed('CLEO menu rope action asks for support first, then starts the approach once called')
+w,c,p=setup(True);launch=VM('Helicover',w);w.step(c,p,launch,n=15);assert b'ROPE PICKUP' not in w.menu
+w.events.append(0);w.step(c,p,n=12);assert w.shared[b.STATE] in (1,2),w.shared[b.STATE]
+w.step(c,p,n=10);assert w.shared[b.STATE]==2 and b'ROPE PICKUP' in w.menu,w.menu
+w.events.append(2);w.step(c,p,n=12);assert w.shared[b.STATE]==19
+passed('Without a helicopter the menu only offers CALL HELICOPTER; once it is here the rope pickup works')
 # v38: every on-screen message key used by any script has text in Helicover.fxt
 import build_all
 assert not build_all.missing_keys(),build_all.missing_keys()
@@ -658,7 +663,12 @@ if b.MAP_MARKER:
  w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];command(w,c,11,ticks=6)
  assert w.shared[b.STATE]==2 and 'HCNOMAP' in w.messages
  passed('Map flight rejects an absent marker')
- assert all(x[2][1]==0x8BE7E8 for x in calls(w,0xdd8) if x[2][2]==4 and x[2][1]<0x8C0000),calls(w,0xdd8)
+ assert all(x[2][1]==0x8BE7E8 for x in calls(w,0xdd8) if x[2][2]==4 and x[2][1]<0x8C0000 and x[2][1] not in dict(b.GAME_SIG)),calls(w,0xdd8)
+ # other game builds: the start-up signature does not match -> no map reads, a clear message instead
+ sig=b.GAME_SIG;b.GAME_SIG=[(sig[0][0],12345),sig[1]]
+ w,c,_=setup();b.GAME_SIG=sig;summon(w,c);w.incar[1]=c.v[5];w.marker=[200.,150.,0.];w.calls.clear();command(w,c,11,ticks=6)
+ assert w.shared[b.GAME_OK]==0 and w.shared[b.STATE]==2 and 'HCVER' in w.messages and not [x for x in calls(w,0xdd8) if x[2][1]==b.WAYPOINT_OFS],w.messages
+ passed('On another game build the map marker is switched off with a message instead of reading foreign memory')
  for attr,val,name in [('wp_ref',8,'a stale waypoint handle'),('wp_flags',0x40,'an inactive radar trace')]:
   w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.marker=[200.,150.,0.];setattr(w,attr,val);command(w,c,11,ticks=6)
   assert w.shared[b.STATE]==2 and 'HCNOMAP' in w.messages
@@ -747,12 +757,13 @@ assert 901 not in assigned and 902 not in assigned and 900 in assigned,assigned
 passed('Target distribution excludes Grove and the additional ground squad')
 
 # Menu dispatch for patrol and map flight.
-w,c,p=setup(True);summon(w,c);launch=VM('Helicover',w);w.step(c,p,launch,n=15);w.events.append(5);w.step(c,p,n=5)
-assert b'PATROL AROUND CJ' in w.menu;w.events.append(5);w.step(c,p,n=12);assert w.shared[b.STATE]==24
-passed('CLEO setup menu starts patrol')
+w,c,p=setup(True);summon(w,c);launch=VM('Helicover',w);w.step(c,p,launch,n=15)
+for st,row in [(3,b'MODE: HOLD POSITION'),(24,b'MODE: PATROL AROUND CJ'),(2,b'MODE: FOLLOW CJ')]:
+ w.events.append(0);w.step(c,p,n=12);assert w.shared[b.STATE]==st and w.menu[2]==row,(st,w.shared[b.STATE],w.menu)
+passed('One MODE row cycles FOLLOW CJ -> HOLD POSITION -> PATROL AROUND CJ')
 if b.MAP_MARKER:
- w,c,p=setup(True);summon(w,c);w.incar[1]=c.v[5];w.marker=[200.,150.,0.];launch=VM('Helicover',w);w.step(c,p,launch,n=15);w.events.append(3);w.step(c,p,n=5)
- assert b'FLY TO MAP MARKER' in w.menu;w.events.append(2);w.step(c,p,n=12);assert w.shared[b.STATE]==21
+ w,c,p=setup(True);summon(w,c);w.incar[1]=c.v[5];w.marker=[200.,150.,0.];launch=VM('Helicover',w);w.step(c,p,launch,n=15)
+ assert w.menu[2]==b'FLY TO MAP MARKER';w.events.append(0);w.step(c,p,n=12);assert w.shared[b.STATE]==21
  passed('CLEO evacuation menu starts the marked route')
 
 # v31: a blocked cruise segment never teleports through geometry; it climbs instead.
@@ -795,11 +806,12 @@ def to_destination(w,c,*vms):
  w.incar[1]=c.v[5];w.marker=[200.,150.,0.];command(w,c,11,ticks=8);assert w.shared[b.STATE]==21
  w.car=[205.,150.,80.];w.step(c,*vms,n=8);fly_until(w,23,c,*vms)
 # menu: one item toggles LAND/ROPE; EXIT NOW replaces the two old destination items
-w,c,p=setup(True);summon(w,c);launch=VM('Helicover',w);w.step(c,p,launch,n=15);w.events.append(3);w.step(c,p,n=5)
-assert b'EXIT MODE: LAND' in w.menu and b'EXIT NOW' in w.menu and b'LAND AT DESTINATION' not in w.menu and b'DESCEND BY ROPE' not in w.menu,w.menu
-w.events.append(3);w.step(c,p,n=5);assert w.shared[b.EXIT_MODE]==1 and b'EXIT MODE: ROPE' in w.menu
-w.events.append(3);w.step(c,p,n=5);assert w.shared[b.EXIT_MODE]==0 and b'EXIT MODE: LAND' in w.menu
-passed('EVACUATION menu toggles the exit mode with one item')
+w,c,p=setup(True);summon(w,c);w.incar[1]=c.v[5];launch=VM('Helicover',w);w.step(c,p,launch,n=15)
+assert b'EXIT BY: LANDING' in w.menu and b'GET OUT HERE' in w.menu,w.menu
+w.events.append(3);w.step(c,p,n=5);assert w.shared[b.EXIT_MODE]==1 and b'EXIT BY: ROPE' in w.menu
+w.events.append(3);w.step(c,p,n=5);assert w.shared[b.EXIT_MODE]==0 and b'EXIT BY: LANDING' in w.menu
+w.events.append(5);w.step(c,p,n=5);assert w.menu[6]==b'EXIT BY: LANDING';w.events.append(4);w.step(c,p,n=5);assert w.shared[b.EXIT_MODE]==1 and w.menu[6]==b'EXIT BY: ROPE',w.menu
+passed('Aboard, one row toggles the exit method (also in SETTINGS)')
 # doors are locked against the player while CJ is aboard, unlocked when he is outside
 w,c,_=setup();summon(w,c);w.step(c,n=3);assert w.locks.get(c.v[5])==1
 w.incar[1]=c.v[5];w.step(c,n=3);assert w.locks[c.v[5]]==4
@@ -894,11 +906,16 @@ w.player=[rope[0],rope[1],.7];w.step(c,ground,n=10);assert w.control is False,'w
 passed('Rope evacuation lifts CJ only after he walks to the rope (6 m away)')
 # ---- v39-fire: fire control upgrade ----
 # menu order and value mapping
-w,c,p=setup(True);summon(w,c);launch=VM('Helicover',w);w.step(c,p,launch,n=15);w.events.append(6);w.step(c,p,n=5)
-assert w.menu[2:]==[b'CEASE FIRE [ON]',b'PROTECT CJ',b'FOLLOW CJ SHOTS',b'WEAPONS FREE',b'OVERWATCH',b'< BACK'],w.menu
-for idx,val in [(4,4),(3,1),(1,3),(2,2),(0,0)]:
+w,c,p=setup(True);summon(w,c);launch=VM('Helicover',w);w.step(c,p,launch,n=15);w.events.append(1);w.step(c,p,n=5)
+assert w.menu[2:]==[b'PROTECT CJ [ON]',b'OVERWATCH (ARMED ONLY)',b'FOLLOW MY SHOTS',b'WEAPONS FREE',b'CEASE FIRE',b'< BACK'],w.menu
+for idx,val in [(4,0),(3,1),(1,4),(2,2),(0,3)]:
  w.events.append(idx);w.step(c,p,n=5);assert w.shared[b.FIRE]==val and [r for r in w.menu if r.endswith(b'[ON]')]==[w.menu[2+idx]],(idx,val,w.shared[b.FIRE],w.menu)
-passed('FIRE CONTROL lists CEASE FIRE, PROTECT CJ, FOLLOW CJ SHOTS, WEAPONS FREE, OVERWATCH')
+w.events.append(5);w.step(c,p,n=5);assert w.menu[0]==b'HELICOVER / FOLLOWING'
+passed('GUNNERS page: PROTECT CJ by default, then OVERWATCH, FOLLOW MY SHOTS, WEAPONS FREE, CEASE FIRE; BACK returns to the main page')
+w.events.append(5);w.step(c,p,n=5);assert w.menu[0]==b'SEND THE HELICOPTER AWAY?' and w.shared[b.STATE]==2
+w.events.append(1);w.step(c,p,n=5);assert w.shared[b.STATE]==2 and w.menu[0]==b'HELICOVER / FOLLOWING'
+w.events.append(5);w.step(c,p,n=5);w.events.append(0);w.step(c,p,n=8);assert w.shared[b.STATE]==4,w.shared[b.STATE]
+passed('DISMISS HELICOPTER asks for confirmation; NO keeps it, YES sends it away')
 # OVERWATCH engages armed hostiles with heavy precision rounds, ignores unarmed civilians
 w,c,f=fire_world();w.shared[b.FIRE]=4;w.step(c,f,n=3);npc=target(w,typ=4);w.weapons[npc]=0;w.step(c,f,n=15)
 assert not attacks(w) and not calls(w,0x6bc),'unarmed civilian is not a target'

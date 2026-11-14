@@ -1,3 +1,17 @@
+HELICOVER 1.0 (ПУБЛИЧНАЯ ВЕРСИЯ) — УДОБНОЕ МЕНЮ И ПОДГОТОВКА К ПУБЛИКАЦИИ
+(файлы для публикации: папка release/ — README_RU.txt, README_EN.txt, LIBERTYCITY_RU.txt)
+- Меню перестроено по ситуации: без вертолёта — только CALL HELICOPTER и SETTINGS; CJ на земле —
+  MODE (одна строка переключает FOLLOW / HOLD / PATROL), GUNNERS >, ROPE PICKUP, DEPLOY/RECALL TEAM,
+  SETTINGS >, DISMISS (с подтверждением); CJ на борту — FLY TO MAP MARKER, FLY TO GROVE STREET,
+  GET OUT HERE, EXIT BY: LANDING/ROPE. Лишние строки CLOSE убраны (у меню CLEO своя кнопка CLOSE).
+- Убраны дубли: FIRE MODE в SETUP, TAKE OFF / FOLLOW (= FOLLOW CJ), недостижимая страница STATUS.
+- SETTINGS: CREW >, HELICOPTER >, GUN TYPE >, TEAM TACTICS, EXIT BY, MESSAGES — переключатели в одно касание.
+- Стрелки по умолчанию в режиме PROTECT CJ (раньше были выключены).
+- Исправлены подсказки, ссылавшиеся на несуществующие кнопки (BOARD CJ, LEAVE HELICOPTER и др.).
+- Защита от чужих версий игры: при старте проверяется подпись кода libGTASA; на другой сборке полёт к
+  метке и следы пуль отключаются с сообщением, вместо чтения чужой памяти.
+
+
 HELICOVER v41 — «ЖИВОЙ» ИИ: ДОСКА УГРОЗ, УКРЫТИЯ, ПОДАВЛЕНИЕ
 
 ИЗМЕНЕНИЯ v41

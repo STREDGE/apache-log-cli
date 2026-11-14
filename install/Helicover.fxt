@@ -8,7 +8,8 @@ HCRWAIT ~y~EVAC~w~: unable to reach a safe hover. Move to open ground and retry.
 HCGCLMB ~y~EVAC~w~: cannot climb safely. Clear obstacles and retry.
 HCMAPOF ~y~EVAC~w~: map marker flight is disabled: it crashes CLEO Android.
 HCDBG DBG ~1~
-HCNEED ~y~HELICOVER~w~: call support first (HELICOVER > CALL SUPPORT).
+HCNEED ~y~HELICOVER~w~: call the helicopter first (menu > CALL HELICOPTER).
+HCVER ~y~HELICOVER~w~: map marker flight is not supported on this game version.
 HCNOMAP ~y~EVAC~w~: place a destination marker on the map first.
 HCCHOS ~g~EVAC~w~: above destination. Press the exit button to get out.
 HCAIR ~r~AIR THREAT!~w~ Returning fire on the police chopper.
@@ -30,11 +31,11 @@ HCPAT ~b~HELICOVER~w~: patrolling around CJ.
 HCAVOID ~y~HELICOVER~w~: path blocked; holding for a clear route.
 HCROPE ~b~EVAC~w~: helicopter approaching for rope pickup.
 HCEVAC ~b~EVAC~w~: landing nearby. Choose open, level ground.
-HCTEAM ~g~EVAC~w~: flank team deployed. Use BOARD CJ when close.
-HCBOARD ~g~EVAC~w~: CJ aboard. GROVE STREET recalls the team, then takes off.
+HCTEAM ~g~HELICOVER~w~: crew guarding the helicopter. Get in when you are ready to go.
+HCBOARD ~g~HELICOVER~w~: CJ aboard. Open the menu and choose where to fly.
 HCGROVE ~g~EVAC~w~: team aboard. Heading to the Grove Street circle.
 HCHOME ~b~EVAC~w~: approaching Grove Street.
-HCARRIV ~g~EVAC~w~: landed. LEAVE HELICOPTER lets CJ out.
+HCARRIV ~g~HELICOVER~w~: landed. Press the exit button to get out.
 HCDAMAG ~r~HELICOVER~w~: critical damage. Retreating.
 HCMUST ~b~EVAC~w~: team returning. Departure waits for living guards.
 HCEMERG ~r~EVAC~w~: critical damage. Attempting a nearby emergency landing.
@@ -42,9 +43,8 @@ HCNOSEA ~y~EVAC~w~: Hunter has no passenger seat. Use Maverick or Police Maveric
 HCNOSIT ~y~EVAC~w~: landing site is obstructed or uneven. Move to open ground and retry.
 HCFAR ~y~EVAC~w~: get within 12 metres of the landed helicopter.
 HCWAIT ~y~EVAC~w~: waiting for the flank team. Clear their path or repeat the command.
-HCIN ~y~EVAC~w~: CJ must be sitting in the helicopter before flying to Grove Street.
-HCOFF ~r~HELICOVER~w~: copy all script files, then restart the game.
-HCTAP ~b~HELICOVER~w~: release, then tap the exact screen centre to open the panel.
+HCIN ~y~HELICOVER~w~: get in the helicopter first.
+HCOFF ~r~HELICOVER~w~: files missing. Copy all 7 files to the CLEO folder and restart the game.
 HCSWAP ~b~HELICOVER~w~: helicopter changed. Crew and CJ transferred.
 HCSNO ~y~HELICOVER~w~: Hunter has no passenger seat. CJ must leave first.
 HCSFAIL ~r~HELICOVER~w~: change failed; the current helicopter was kept.
@@ -52,7 +52,7 @@ HCCREW ~g~HELICOVER~w~: crew changed in place.
 HCCFAIL ~r~HELICOVER~w~: crew change failed. Existing crew kept.
 HCBLOCK ~y~EVAC~w~: landing unavailable. Clear the area and retry or choose FOLLOW CJ.
 HCLOSE ~y~EVAC~w~: land first before boarding or leaving.
-HCEXIT ~y~EVAC~w~: exit the helicopter before TAKE OFF / FOLLOW.
+HCEXIT ~y~HELICOVER~w~: get out of the helicopter first.
 SQALR ~y~SQUAD~w~: the team is already on the ground.
 SQNONE ~y~SQUAD~w~: no team on the ground.
 SQFOOT ~y~SQUAD~w~: CJ must be on foot to receive the team.

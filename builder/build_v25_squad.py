@@ -105,7 +105,7 @@ for ph,cells in [(1,MID_CELLS[:len(MID_CELLS)//2]),(2,MID_CELLS[len(MID_CELLS)//
  for x,y in cells:
   a(0x0087,V(26),V(9));a(0x000b,V(26),F(x));a(0x0087,V(27),V(10));a(0x000b,V(27),F(y));a(0x0a3e,V(26),V(27),V(11),F(4.6),F(4.6),F(10),V(29));s.call('CONSIDER');s.check(0x8019,[V(18),I(3)],'PERCEIVE_STORE')
  s.go('PERCEIVE_STORE')
-s.label('PH_3');s.get(19,b.TRACE_SCAN_T);a(0x0085,V(20),V(12));a(0x0062,V(20),V(19));s.check(0x0019,[V(20),I(600)],'PH_3_CARS');s.call('SQ_TRACE_SCAN');s.label('PH_3_CARS')
+s.label('PH_3');s.get(19,b.GAME_OK);s.eq(19,1,'PH_3_CARS');s.get(19,b.TRACE_SCAN_T);a(0x0085,V(20),V(12));a(0x0062,V(20),V(19));s.check(0x0019,[V(20),I(600)],'PH_3_CARS');s.call('SQ_TRACE_SCAN');s.label('PH_3_CARS')
 for dx,dy in [(-30,-30),(0,-30),(-30,0),(0,0)]:
  nxt=uid('CAR_NEXT');a(0x0087,V(26),V(9));a(0x000b,V(26),F(dx));a(0x0087,V(27),V(10));a(0x000b,V(27),F(dy));a(0x0087,V(28),V(26));a(0x000b,V(28),F(30));a(0x0087,V(31),V(27));a(0x000b,V(31),F(30))
  a(0x053e,V(26),V(27),V(28),V(31),I(-1),V(23));s.check(0x056e,[V(23)],nxt);s.check(0x803b,[V(23),V(1)],nxt);s.check(0x803b,[V(23),V(6)],nxt);a(0x046c,V(23),V(29));s.call('CONSIDER');s.check(0x8019,[V(18),I(3)],'PERCEIVE_STORE');s.label(nxt)
