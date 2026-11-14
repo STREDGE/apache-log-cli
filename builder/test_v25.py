@@ -468,12 +468,19 @@ assert not calls(w,0x503)
 w.car=[c.v[26],c.v[27],c.v[28]+18.];w.speed=0.;w.step(c,p,ground,n=12)
 assert w.shared[b.STATE]==3 and len(calls(w,0x503))>=4, (w.shared[b.STATE],w.messages)
 passed('Rope command approaches a clear site, then starts deployment when hovering')
-w,c,_=setup();ground=VM('Helicover_Ground',w);w.step(c,ground,n=3);w.shared[b.CMD]=10;w.step(c,ground,n=12)
-assert w.shared[b.STATE]==19 and c.v[5] in w.exists
-passed('Rope command summons helicopter when no support is active')
+# v38: without active support, evacuation commands ask for CALL SUPPORT instead of summoning.
+for cmd in [5,7,10,11,12,13]:
+ w,c,_=setup();ground=VM('Helicover_Ground',w);w.step(c,ground,n=3);w.shared[b.CMD]=cmd;w.step(c,ground,n=12)
+ assert w.shared[b.STATE]==0 and not calls(w,0xa5) and 'HCNEED' in w.messages,(cmd,w.shared[b.STATE],w.messages)
+passed('Evacuation commands without support show CALL SUPPORT first and do not summon')
 w,c,p=setup(True);launch=VM('Helicover',w);w.step(c,p,launch,n=15);w.events.append(3);w.step(c,p,n=4);assert b'ROPE EVACUATION' in w.menu
-w.events.append(0);w.step(c,p,n=12);assert w.shared[b.STATE]==19
-passed('CLEO menu rope action summons and starts the approach')
+w.events.append(0);w.step(c,p,n=12);assert w.shared[b.STATE]==0 and not calls(w,0xa5) and 'HCNEED' in w.messages
+summon(w,c);w.events.append(3);w.step(c,p,n=4);w.events.append(0);w.step(c,p,n=12);assert w.shared[b.STATE]==19
+passed('CLEO menu rope action asks for support first, then starts the approach once called')
+# v38: every on-screen message key used by any script has text in Helicover.fxt
+import build_all
+assert not build_all.missing_keys(),build_all.missing_keys()
+passed('All message keys used by the scripts exist in Helicover.fxt')
 w,c,_=setup();summon(w,c);w.siteclear=False;ground=VM('Helicover_Ground',w);w.step(c,ground,n=3)
 w.shared[b.CMD]=10;w.step(c,ground,n=6)
 assert w.shared[b.STATE]!=19 and not calls(w,0x503)
@@ -661,8 +668,11 @@ if b.MAP_MARKER:
  passed('Off-map or NaN marker coordinates are rejected')
  # v36: diagnostic breadcrumbs show the state and step (21xx while cruising to the marker)
  w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.marker=[800.,150.,0.];command(w,c,11,ticks=10)
- assert any(2101<=d<=2102 for d in getattr(w,'debug',[])),getattr(w,'debug',None)
- passed('Diagnostic breadcrumbs report the cruise step')
+ if b.DEBUG_BREADCRUMBS:
+  assert any(2101<=d<=2102 for d in getattr(w,'debug',[])),getattr(w,'debug',None)
+  passed('Diagnostic breadcrumbs report the cruise step')
+ else:
+  assert not calls(w,0x1e5);passed('Release build shows no DBG breadcrumbs')
 else:
  w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.marker=[200.,150.,0.];command(w,c,11,ticks=6)
  assert w.shared[b.STATE]==2 and 'HCMAPOF' in w.messages and not calls(w,0xab6)

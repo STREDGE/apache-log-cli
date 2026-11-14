@@ -8,6 +8,7 @@ HCRWAIT ~y~EVAC~w~: unable to reach a safe hover. Move to open ground and retry.
 HCGCLMB ~y~EVAC~w~: cannot climb safely. Clear obstacles and retry.
 HCMAPOF ~y~EVAC~w~: map marker flight is disabled: it crashes CLEO Android.
 HCDBG DBG ~1~
+HCNEED ~y~HELICOVER~w~: call support first (HELICOVER > CALL SUPPORT).
 HCNOMAP ~y~EVAC~w~: place a destination marker on the map first.
 HCCHOS ~g~EVAC~w~: above destination. Choose LAND or ROPE EXIT.
 HCDWAIT ~y~EVAC~w~: wait until the helicopter reaches the destination.
@@ -38,3 +39,15 @@ HCCFAIL ~r~HELICOVER~w~: crew change failed. Existing crew kept.
 HCBLOCK ~y~EVAC~w~: landing unavailable. Clear the area and retry or choose FOLLOW CJ.
 HCLOSE ~y~EVAC~w~: land first before boarding or leaving.
 HCEXIT ~y~EVAC~w~: exit the helicopter before TAKE OFF / FOLLOW.
+RGDEP SWAT: descending. Stay near the helicopter.
+RGDONE SWAT: ground team withdrawn.
+RGFAIL SWAT: model unavailable or heli moving.
+RGHOLD SWAT: use HOLD POSITION first.
+RGHIGH SWAT: heli must hover 12-22m above ground.
+RGMOVE SWAT: wait until the helicopter is nearly still.
+RGBLOCK SWAT: choose a clear open area.
+RGUP EVAC: ascending.
+RGABO EVAC: aboard. Team returning.
+RGSEAT EVAC: passenger seat unavailable.
+RGANIM EVAC: animation unavailable.
+RPDFAIL EVAC: rope descent unavailable here.
