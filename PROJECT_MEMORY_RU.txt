@@ -1,0 +1,116 @@
+ПАМЯТКА ПРОЕКТА (для Claude: прочитай целиком, если контекст был потерян)
+Дата составления: 15.11.2026. Актуальные версии: Helicover v40.1, Touch x4 v1.2.
+
+=====================================================================
+0. КАК СО МНОЙ РАБОТАТЬ (правила пользователя)
+=====================================================================
+- Всё делает Claude, а не пользователь. Собрать, протестировать, закоммитить, создать PR,
+  самому его смержить, синхронизировать ветку, отправить zip файлом в чат.
+- Репозиторий: github.com/STREDGE/apache-log-cli, рабочая ветка ccr-f74fdfb1-wyqqiu.
+  Цикл: коммит -> push в рабочую ветку -> PR в master -> merge -> git fetch + ff-merge master в ветку
+  -> push. PR #19..#24 уже влиты.
+- Отвечать по-русски, кратко, по делу. Пользователь играет на Android-планшете (arm64),
+  присылает скриншоты и логи. Компьютера у пользователя нет: всё должно ставиться с телефона.
+- Нельзя коммитить файлы игры (libGTASA.so, apk и т.п.) в репозиторий.
+
+=====================================================================
+1. ИГРА И ОКРУЖЕНИЕ ПОЛЬЗОВАТЕЛЯ
+=====================================================================
+- GTA San Andreas Android, 64-бит (arm64), пакет com.rockstargames.gtasa.
+- Стоит AML (Android Mod Loader, RusJJ, Core 1.4). Моды AML лежат в
+  /storage/emulated/0/Android_unprotected/data/com.rockstargames.gtasa/mods/
+  Там же SAUtils 1.6 (libSAUtils64.so), SanLTD Activator, MoreSettings.
+- CLEO Android для скриптов .csa/.csi. Скрипты Helicover копируются в папку CLEO.
+- Копия libGTASA.so пользователя (для анализа) была в scratchpad сессии: gtasa/libGTASA.so.
+  Если её нет, попросить пользователя прислать libGTASA.so (запакованным в zip, файл больше 30 МБ).
+
+=====================================================================
+2. HELICOVER — CLEO-МОД (вертолёт поддержки + охрана)
+=====================================================================
+Структура репозитория:
+- builder/asm_v25.py         — ассемблер CLEO (таблица опкодов sa_mobile.json + добавленные через
+                               LIB.setdefault: 0634,07A5,0667,0633,081A,0856,06AC,05F5,0350,05BA,0639,
+                               078F TASK_CLIMB,0637 GO_TO_COORD_WHILE_SHOOTING,05C5 TASK_DUCK и др.)
+- builder/build_v25.py       — Core (вертолёт, состояния), Panel (меню CLEO), Launcher (.csi), Fire
+                               (бортовые стрелки). Тексты MESSAGES -> Helicover.fxt.
+- builder/build_v25_ground.py— наземный скрипт: верёвки, спуск CJ, ROPE EVAC, команда TEAM ON FOOT.
+- builder/build_v25_squad.py — v40: «мозг» команды на земле (Helicover_Squad.csa).
+- builder/build_all.py       — ВСЕГДА собирать через него: собирает всё, проверяет FXT-ключи,
+                               копирует в install/ и sources/.
+- builder/test_v25.py        — мок-VM тесты (106 сценариев).
+- builder/test_v40_squad.py  — тесты отряда/вертолёта v40 (50 сценариев).
+- builder/check_wait_loops.py— статический поиск циклов без WAIT (должно быть 0).
+- install/ — 7 файлов для папки CLEO: Helicover.csi, Helicover.fxt, Helicover_Core.csa,
+  Helicover_Panel.csa, Helicover_Fire.csa, Helicover_Ground.csa, Helicover_Squad.csa.
+- README_RU.txt — журнал изменений для пользователя (v26 ... v40.1).
+- tests/ — отчёты тестов.
+Команды: cd builder && python3 build_all.py && python3 test_v25.py && python3 test_v40_squad.py
+         && python3 check_wait_loops.py
+Zip для пользователя: install/ + README_RU.txt -> Helicover_vXX_android.zip.
+
+Ключевые технические факты:
+- Общие переменные CLEO (0DDC/0DDD) от STATE=0x48456A00 (+1..+219), список в начале build_v25.py.
+- Состояния Core: 0 READY, 2 FOLLOWING, 3 HOLDING, 8 TEAM COVERING, 19 ROPE APPROACH, 21 TO MAP POINT,
+  23 AWAITING EXIT, 24 PATROLLING и т.д. (словарь STATES).
+- Метка карты читается из памяти: gMobileMenu+0x68 (WAYPOINT_OFS=0x8BE780+0x68), RADAR_TRACE_OFS=0xC21728.
+  0AB6 на CLEO Android вылетает — не использовать.
+- Следы пуль CBulletTraces: 0xCFA500 (ответный огонь по полицейскому вертолёту, v39.4).
+- Кнопка выхода (виджет 0) опрашивается каждый кадр в Fire-скрипте (v39.3).
+- Платформа-объект 3095 под ногами CJ при спуске/подъёме по верёвке (нет падения).
+
+История (кратко): v26 фикс вылета режима огня; ... v37 финальный спуск нативным пилотом;
+v38 FXT-проверка; v39 кнопка выхода = высадка (ROPE/LAND), FIRE CONTROL (CEASE FIRE, PROTECT CJ,
+FOLLOW CJ SHOTS, WEAPONS FREE, OVERWATCH); v39.3 выход с первого нажатия («идеально»);
+v39.4 PROTECT CJ стреляет по полицейскому вертолёту при 3+ звёздах.
+
+v40 (PR #22) — тактический ИИ и умный вертолёт:
+- Helicover_Squad.csa ведёт бойцов на ногах (команда TEAM ON FOOT, четвёрка ROPE EVAC, экипаж после
+  посадки). Остальные скрипты уступают, пока свеж SQ_HEART.
+- Меню: EVACUATION > TEAM ON FOOT > DEPLOY / RECALL TEAM, TACTICS: BODYGUARD / ASSAULT.
+  Команды Core: 16 deploy, 17 recall. ESCORT_ON/ESCORT_CMD/ESCORT_PENDING.
+- Восприятие угроз (правила огня из FIRE CONTROL), строй ромб/клин, бег/спринт, сектора,
+  посадка в машину CJ, догон вне экрана, медик, доклады CONTACT/MAN DOWN/AREA SECURE,
+  кольцо вокруг CJ при HP<35, ожидание снаружи интерьеров.
+- Вертолёт FOLLOW: кружит 30 м/24 м вокруг CJ, пропускает точки без обзора; погоня за быстрой
+  машиной; уклонение при уроне >120 за 2 с.
+v40.1 (PR #23) — по отзыву «ASSAULT как широкий BODYGUARD, не перелезают ограды, призраки»:
+- ASSAULT: перебежки (один бежит со стрельбой 0637, второй прикрывает с колена, смена каждые 3 с),
+  фланговые со стрельбой на ходу, на месте — на колено; отдельные доклады SQA*.
+- Ограды: зонд колено/голова/приземление -> TASK_CLIMB; лестницы и склоны не прыгает.
+- Восприятие разбито на 4 тика, дешёвая классификация, цели бортовых стрелков тоже учитываются.
+- Боевая орбита: смена точки при закрытом обзоре не чаще 1,2 с (раньше каждый тик — дёрганье),
+  деревья не считаются помехой.
+
+ОТКРЫТО / ЖДЁМ ОТ ПОЛЬЗОВАТЕЛЯ:
+- v40.1 в игре ещё не проверялась. Проверить: штурм перебежками, перелезание оград, остались ли
+  «призраки» (мигающие педы при стрельбе вертолёта). Если остались — спросить, кто мигает:
+  охрана, стрелки в вертолёте или прохожие/враги.
+
+=====================================================================
+3. TOUCH x4 — AML-МОД МУЛЬТИТАЧА НА 4 ПАЛЬЦА (папка touch4/)
+=====================================================================
+- Файл для пользователя: libMultiTouch64.so -> папка mods AML. Лог: mods/touch4_log.txt.
+  Настройка: Настройки > Mods Settings > «4-Finger Touch: On/Off» (через SAUtils), сохраняется в
+  Android_unprotected/data/com.rockstargames.gtasa/configs/net.helicover.touch4.ini.
+- Исходники: touch4/touch4.c (C без libc), touch4/gtasa_offsets.h (смещения из libGTASA
+  пользователя), touch4/build.sh (clang --target=aarch64-linux-android21 + lld, заглушки libc/libdl),
+  touch4/test_touch4.py (эмуляция arm64 через unicorn на настоящем libGTASA.so: 381 проверка).
+  Запуск: sh touch4/build.sh; python3 touch4/test_touch4.py путь/к/libGTASA.so
+- Как работает: снимает лимиты 2 пальцев в libGTASA (OS_PointerGetNumber, проверки индексов,
+  Points[2] -> 4 записи через GOT, m_nMaxTouches=4), при первом касании через JNI ставит
+  Use2Touches=false (APK менять не нужно), сам ведёт все 4 пальца по pointer id
+  (MotionEvent.getPointerId) и подаёт их в игру через AND_TouchEvent из хука ProcessEvents.
+  Перед любыми изменениями сверяет все байты кода; при несовпадении — «nothing changed».
+- v1.0 базовая; v1.1 пальцы по pointer id (не «теряются»), пункт в Mods Settings (ISAUtils слот 3
+  AddClickableItem, проверено по исходникам SAUtils 1.6); v1.2 (PR #24) — не нужна новая
+  исполняемая память: переходники внутри .so, заглушка multitouch4 = ldr x16,<mt2+16>; br x16.
+  Причина v1.2: на телефоне был лог «no executable page near libGTASA».
+- Статус: пользователь подтвердил — v1.2 «очень хорошо всё работает».
+
+=====================================================================
+4. ПОЛЕЗНОЕ ПРО СРЕДУ CLAUDE
+=====================================================================
+- Сеть: raw.githubusercontent.com доступен; api.github.com и github.com напрямую — нет.
+  Полная база опкодов SA: raw.githubusercontent.com/sannybuilder/library/master/sa_mobile/sa_mobile.json
+  Заголовок SAUtils: raw.githubusercontent.com/AndroidModLoader/SAUtils/main/isautils.h
+- Python-пакеты, ставившиеся в сессии: unicorn, capstone, pyelftools (androguard не нужен больше).
