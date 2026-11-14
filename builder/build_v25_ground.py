@@ -70,7 +70,8 @@ s.go('ACTIVE')
 # The reverse clip is cosmetic; vertical position is moved explicitly.
 s.label('CJ_ASCENT');s.check(0x0431,[V(1),I(0)],'NO_SEAT');s.check(0x04ee,[S('PED')],'ANIM_FAIL');s.check(0x056e,[V(1)],'CLEANUP');s.get(19,b.STATE);s.eq(19,3,'CLEANUP')
 # Save a ground position for cancellation and disable player control only during ascent.
-a(0x0407,V(1),F(0),F(-3),F(-1),V(2),V(3),V(4));a(0x02ce,V(2),V(3),V(4),V(4));a(0x000b,V(4),F(.7));a(0x0087,V(8),V(4));a(0x00aa,V(1),V(10),V(11),V(9));a(0x000b,V(9),F(-3));a(0x0063,V(9),V(8));a(0x0013,V(9),F(1000.0/1500.0));a(0x01b4,I(0),I(0));a(6,V(26),I(1))
+a(0x0407,V(1),F(0),F(-3),F(-1),V(2),V(3),V(4));a(0x02ce,V(2),V(3),V(4),V(4));a(0x000b,V(4),F(.7));a(0x0087,V(8),V(4));# v35: stop 4.5 m below the helicopter centre, clear of the tail boom above the rope, then warp in
+a(0x00aa,V(1),V(10),V(11),V(9));a(0x000b,V(9),F(-4.5));a(0x0063,V(9),V(8));a(0x0013,V(9),F(1000.0/1500.0));a(0x01b4,I(0),I(0));a(6,V(26),I(1))
 # v33: no snap to the rope point (that was the abrupt frame change). CJ drifts onto the rope line
 # during the climb (5@/7@ horizontal speed) and the clip blends in more slowly.
 a(0x00a0,V(0),V(12),V(13),V(14));a(0x0087,V(5),V(2));a(0x0063,V(5),V(12));a(0x0013,V(5),F(1000.0/1500.0));a(0x0087,V(7),V(3));a(0x0063,V(7),V(13));a(0x0013,V(7),F(1000.0/1500.0))

@@ -547,6 +547,7 @@ for _ in range(80):
  if w.incar.get(1)==c.v[5]:break
 assert w.incar.get(1)==c.v[5] and not [x for x in calls(w,0xa1) if x[2][0]==1]
 drift=[x for x in calls(w,0x83c) if x[2][0]==1 and x[2][3]>0];assert drift and drift[0][2][1]<0,'moves toward the rope'
+assert abs(drift[0][2][3]-(18.-4.5-.7)/1.5)<.05,('v35: climb ends 4.5 m below the hull centre',drift[0][2][3])
 aboard=w.now
 for _ in range(80):
  w.step(c,ground)
