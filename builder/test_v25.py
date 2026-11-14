@@ -118,6 +118,7 @@ class VM:
     pos=[vals[1],vals[2],vals[3]+getattr(w,'car_z_offset',1.2)]
     if getattr(w,'teleport_delay',False):w.pending_car=(vals[0],pos)
     else:w.cars[vals[0]]['pos']=pos
+   elif op==0x1e5:w.debug=getattr(w,'debug',[]);w.debug.append(vals[1])
    elif op==0x77e:put(0,w.interior)
    elif op in [0x4c4,0x407]:
     xyz=w.coords(vals[0]) if op==0x4c4 else w.cars[vals[0]]['pos']
@@ -203,7 +204,7 @@ class VM:
    elif op==0xdf4:put(0,w.events.popleft() if w.events else -1)
    elif op==0xde0:put(0,int(vals[1] in w.touches and w.now-w.touches[vals[1]]>=vals[2]))
    else:
-    assert op in [0x247,0x38b,0x39f,0x1c5,0x8af,0x54a,0x446,0x77a,0x168,0x165,0x7e0,0x957,0x35f,0x825,0x918,0x7bb,0x249,0x4df,0x726,0x780,0x4a2,0x743,0x164,0x1c2,0x1c3,0x1b9,0x687,0x74d,0x5d3,0x4eb,0x637,0x667,0x792,0x619,0x83c,0x99a,0x4ba,0x668,0x713,0x6bc,0xaf,0x7db,0x4e4,0xad,0x853,0x337,0x4ed,0x605,0x614,0x393],hex(op)
+    assert op in [0x1e5,0x247,0x38b,0x39f,0x1c5,0x8af,0x54a,0x446,0x77a,0x168,0x165,0x7e0,0x957,0x35f,0x825,0x918,0x7bb,0x249,0x4df,0x726,0x780,0x4a2,0x743,0x164,0x1c2,0x1c3,0x1b9,0x687,0x74d,0x5d3,0x4eb,0x637,0x667,0x792,0x619,0x83c,0x99a,0x4ba,0x668,0x713,0x6bc,0xaf,0x7db,0x4e4,0xad,0x853,0x337,0x4ed,0x605,0x614,0x393],hex(op)
   raise AssertionError('loop without WAIT')
 def setup(panel=False):
  w=World();c=VM('Helicover_Core',w);p=VM('Helicover_Panel',w) if panel else None;v=[c]+([p] if p else []);w.step(*v,n=3);return w,c,p
@@ -650,6 +651,15 @@ if b.MAP_MARKER:
  for _ in range(200):w.step(c);heights.append(w.car[2])
  assert max(heights)<40. and max(heights[-100:])-min(heights[-100:])<.5,(max(heights),heights[-100:][:3],heights[-1])
  passed('Repeated map flight with delayed teleports keeps a steady cruise height')
+ # v36: a marker read outside the map (or NaN) is rejected before any world query
+ for bad in [[9999.,0.,0.],[float('nan'),0.,0.]]:
+  w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.marker=bad;command(w,c,11,ticks=6)
+  assert w.shared[b.STATE]==2 and 'HCNOMAP' in w.messages
+ passed('Off-map or NaN marker coordinates are rejected')
+ # v36: diagnostic breadcrumbs show the state and step (21xx while cruising to the marker)
+ w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.marker=[800.,150.,0.];command(w,c,11,ticks=10)
+ assert any(2101<=d<=2102 for d in getattr(w,'debug',[])),getattr(w,'debug',None)
+ passed('Diagnostic breadcrumbs report the cruise step')
 else:
  w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.marker=[200.,150.,0.];command(w,c,11,ticks=6)
  assert w.shared[b.STATE]==2 and 'HCMAPOF' in w.messages and not calls(w,0xab6)

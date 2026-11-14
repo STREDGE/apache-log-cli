@@ -63,6 +63,8 @@ PASS: Map flight rejects a stale waypoint handle
 PASS: Map flight rejects an inactive radar trace
 PASS: Map marker is read from libGTASA memory with 0DD8, never 0AB6
 PASS: Repeated map flight with delayed teleports keeps a steady cruise height
+PASS: Off-map or NaN marker coordinates are rejected
+PASS: Diagnostic breadcrumbs report the cruise step
 PASS: Four guards acquire separate eligible threats when available, with stronger checked bullets
 PASS: Map destination searches a nearby clear landing footprint
 PASS: Blocked descent shaft leaves CJ aboard with control enabled
