@@ -8,6 +8,9 @@ LIB={int(c['id'],16):c for e in json.load(open(ROOT/'sa_mobile.json'))['extensio
 LIB[0x0df4]={'id':'0DF4','name':'GET_MENU_TOUCHED_ITEM_INDEX','num_params':2}
 # Native SA command (self, x, y, z), absent from the trimmed library snapshot.
 LIB[0x00ab]={'id':'00AB','name':'SET_CAR_COORDINATES','num_params':4}
+LIB[0x0016]={'id':'0016','name':'DIV_INT_LVAR_BY_VAL','num_params':2}
+# CLEO Android: 0DD8 result = read_mem_addr addr size add_ib (destination first).
+LIB[0x0dd8]={'id':'0DD8','name':'READ_MEM_ADDR','num_params':4}
 STATE=0x48454d00;CMD=STATE+1;HEART=STATE+2
 # Protocol: commands 1 summon, 2 follow, 3 hold, 4 depart.
 # States 0 ready, 1 loading, 2 follow, 3 hold, 4 depart, 5 model error, 6 outdoors required.

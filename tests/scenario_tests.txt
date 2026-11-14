@@ -53,14 +53,21 @@ PASS: CJ ascent advances smoothly over about 1.8 seconds at two frame rates
 PASS: Only guards who reach the ground receive running formation tasks
 PASS: Grove flight waits for safe climb and reports a stalled ascent
 PASS: Guards keep selected weapons in cease fire and without CJ shooting
-PASS: Disabled map marker flight reports instead of executing 0AB6
+PASS: Map marker -> hover -> selected rope descent restores CJ control and preserves onboard team
+PASS: Map flight rejects an absent marker
+PASS: Map flight rejects a stale waypoint handle
+PASS: Map flight rejects an inactive radar trace
+PASS: Map marker is read from libGTASA memory with 0DD8, never 0AB6
 PASS: Four guards acquire separate eligible threats when available, with stronger checked bullets
+PASS: Map destination searches a nearby clear landing footprint
 PASS: Blocked descent shaft leaves CJ aboard with control enabled
 PASS: Patrol changes position around CJ and can return to follow
 PASS: Patrol summons a helicopter if none is active
 PASS: Follow reissues its order if the helicopter is far from CJ
+PASS: Marked destination hover -> choose landing preserves CJ aboard
 PASS: Target distribution excludes Grove and the additional ground squad
 PASS: CLEO setup menu starts patrol
+PASS: CLEO evacuation menu starts the marked route
 PASS: Blocked forward cruise chooses a side detour then resumes the Grove route
 PASS: When both detours are obstructed, cruise reports a blocked route
 PASS: Pilot can reposition to keep an active threat in view

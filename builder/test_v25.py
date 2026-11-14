@@ -64,6 +64,12 @@ class VM:
    elif base in [0x39,0x3b]:cond(vals[0]==vals[1])
    elif base in [0x19,0x1d,0x21,0x23,0x25]:cond(vals[0]>vals[1])
    elif base==0x256:cond(w.playing)
+   elif op==0xdd8:
+    assert vals[3]==1
+    marker=getattr(w,'marker',None);addr,size=vals[1],vals[2];entry=b.RADAR_TRACE_OFS+5*48
+    mem={(b.WAYPOINT_OFS,4):(5|7<<16) if marker else -1,(b.WAYPOINT_OFS,2):5 if marker else 0xffff,(b.WAYPOINT_OFS+2,2):7 if marker else 0xffff,
+         (entry+20,2):getattr(w,'wp_ref',7),(entry+41,1):getattr(w,'wp_flags',0x42),(entry+8,4):marker[0] if marker else 0.,(entry+12,4):marker[1] if marker else 0.}
+    put(0,mem[(addr,size)])
    elif base==0xab6:
     marker=getattr(w,'marker',None)
     for i in range(3):put(i,marker[i] if marker else 0.)
@@ -95,6 +101,7 @@ class VM:
    elif op in [0x12,0x13,0x6b]:put(0,vals[0]*vals[1])
    elif op==0x63:put(0,vals[0]-vals[1])
    elif op==0x73:put(0,vals[0]/vals[1])
+   elif op==0x16:put(0,int(vals[0]/vals[1]))
    elif op==0x1bd:put(0,w.now)
    elif op==0x1f5:put(1,1)
    elif op==0x1b4:w.control=bool(vals[1])
@@ -571,6 +578,14 @@ if b.MAP_MARKER:
  w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];command(w,c,11,ticks=6)
  assert w.shared[b.STATE]==2 and 'HCNOMAP' in w.messages
  passed('Map flight rejects an absent marker')
+ for attr,val,name in [('wp_ref',8,'a stale waypoint handle'),('wp_flags',0x40,'an inactive radar trace')]:
+  w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.marker=[200.,150.,0.];setattr(w,attr,val);command(w,c,11,ticks=6)
+  assert w.shared[b.STATE]==2 and 'HCNOMAP' in w.messages
+  passed('Map flight rejects '+name)
+ w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.marker=[200.,150.,0.];command(w,c,11,ticks=6)
+ assert [w.shared[b.DEST_X],w.shared[b.DEST_Y]]==[200.,150.] and not calls(w,0xab6)
+ assert all(x[2][3]==1 for x in calls(w,0xdd8))
+ passed('Map marker is read from libGTASA memory with 0DD8, never 0AB6')
 else:
  w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.marker=[200.,150.,0.];command(w,c,11,ticks=6)
  assert w.shared[b.STATE]==2 and 'HCMAPOF' in w.messages and not calls(w,0xab6)
