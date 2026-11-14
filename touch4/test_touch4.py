@@ -3,10 +3,11 @@
 
 usage: python3 touch4/test_touch4.py path/to/libGTASA.so [path/to/libMultiTouch64.so]
 
-Checks: the install patches exactly what it should (and nothing when the game code differs),
-the NVEventMultiTouchEvent4 stub reaches the mod, fingers 1-2 go to the original 2-finger
-handler, fingers 3-4 are delivered through AND_TouchEvent from the ProcessEvents hook, and
-the relocated ProcessEvents prologue resumes the original function with the right stack.
+Checks: the install patches exactly what it should (and nothing when the game code differs);
+the first touch switches Java to 4 fingers; every finger keeps its game slot by its Android
+pointer id while other fingers go up and down; touches reach AND_TouchEvent from the
+ProcessEvents hook and the relocated prologues resume the original functions; the SAUtils
+"Mods Settings" item switches back to the game's own 2-finger code and is saved to a file.
 """
 import os, re, struct, sys
 from unicorn import Uc, UcError, UC_ARCH_ARM64, UC_MODE_ARM, UC_HOOK_CODE, UC_PROT_ALL, UC_PROT_READ, UC_PROT_WRITE, UC_PROT_EXEC, UC_HOOK_MEM_WRITE_PROT, UC_HOOK_MEM_FETCH_PROT
@@ -32,6 +33,14 @@ STACK = 0x6100000000
 SENT = 0x6200000000
 DATA = 0x6300000000
 ENV = 0x6400000000
+SAU = 0x6500000000
+EVENT = 0x6600000000          # the MotionEvent jobject
+ACT = 0x7417                  # the activity jobject
+CLS_ACT, CLS_EVENT, FID, MID, AML_HANDLE = 0xc1a55, 0xc1a5e, 0xf1d, 0x31d, 0xa31
+GAME_DIR = '/storage/emulated/0/Android_unprotected/data/com.rockstargames.gtasa/'
+CFG = GAME_DIR + 'configs/net.helicover.touch4.ini'
+CFG_ALT = GAME_DIR + 'mods/touch4.ini'
+LOG = GAME_DIR + 'mods/touch4_log.txt'
 RET = 0xd65f03c0
 XREG = [UC_ARM64_REG_X0, UC_ARM64_REG_X1, UC_ARM64_REG_X2, UC_ARM64_REG_X3, UC_ARM64_REG_X4, UC_ARM64_REG_X5, UC_ARM64_REG_X6, UC_ARM64_REG_X7]
 R_RELATIVE, R_GLOB_DAT, R_JUMP_SLOT, R_ABS64 = 1027, 1025, 1026, 257
@@ -46,11 +55,13 @@ def prot_of(flags):
     return p
 
 class Emu:
-    def __init__(self, page, tweak=None):
+    def __init__(self, page, tweak=None, fs=None, has_sautils=True, deny=()):
         self.page = page
         self.uc = uc = Uc(UC_ARCH_ARM64, UC_MODE_ARM)
-        self.mprotects, self.mmaps, self.files, self.mt2, self.touches, self.pe_tail = [], [], {}, [], [], []
-        self.jni_calls, self.jni_fail = [], False
+        self.mprotects, self.mmaps, self.mt2, self.touches, self.pe_tail = [], [], [], [], []
+        self.fs, self.fds, self.deny = dict(fs or {}), {}, deny
+        self.jni_calls, self.jni_fail, self.pid_fail, self.flips, self.ids = [], False, False, [], [0, 1, 2, 3]
+        self.has_sautils, self.sau_add = has_sautils, []
         self.imports = {}
         self.gta = self.load(GTA, GTA_BASE, tweak)
         self.mod = self.load(MOD, MOD_BASE)
@@ -70,6 +81,11 @@ class Emu:
         # fake JNIEnv: ENV -> function table of 229 recording stubs
         uc.mem_write(ENV, struct.pack('<Q', ENV + 0x100))
         uc.mem_write(ENV + 0x100, b''.join(struct.pack('<Q', self.stub_for('jni:%d' % i)) for i in range(229)))
+        # fake SAUtils interface object: SAU -> vtable of recording stubs
+        uc.mem_map(SAU, 0x1000)
+        uc.mem_write(SAU, struct.pack('<Q', SAU + 0x100))
+        uc.mem_write(SAU + 0x100, b''.join(struct.pack('<Q', self.stub_for('sau:%d' % i)) for i in range(80)))
+        self.getif = self.stub_for('aml:GetInterface')
         uc.hook_add(UC_HOOK_CODE, self.on_touch, begin=g + C['OFF_AND_TOUCH'], end=g + C['OFF_AND_TOUCH'])
         uc.hook_add(UC_HOOK_CODE, self.on_pe_tail, begin=g + C['OFF_PROCESS_EVENTS'] + 16, end=g + C['OFF_PROCESS_EVENTS'] + 16)
         uc.hook_add(UC_HOOK_MEM_WRITE_PROT, self.on_bad, None)
@@ -129,26 +145,45 @@ class Emu:
             self.uc.mem_write(addr, code)
         return self.imports[name]
 
+    def cstr(self, a): return bytes(self.uc.mem_read(a, 300)).split(b'\0')[0].decode()
+
     def on_stub(self, uc, addr, size, _):
         names = {v: k for k, v in self.imports.items()}
         if addr not in names: return
-        n = names[addr]; x = [uc.reg_read(XREG[i]) for i in range(6)]
+        n = names[addr]; x = [uc.reg_read(XREG[i]) for i in range(8)]
         ret = 0
         if n.startswith('jni:'):
             slot = int(n[4:])
             self.jni_calls.append(slot)
             assert x[0] == ENV, 'JNI call without env'
-            if slot == 31: ret = 0xc1a55
+            if slot == 31: ret = CLS_EVENT if x[1] == EVENT else CLS_ACT
+            elif slot == 33:
+                assert x[1] == CLS_EVENT and [self.cstr(x[2]), self.cstr(x[3])] == ['getPointerId', '(I)I']
+                ret = 0 if self.pid_fail else MID
+                self.jni_exc = self.pid_fail
+            elif slot == 51:
+                assert x[1] == EVENT and x[2] == MID
+                ret = self.ids[struct.unpack('<i', bytes(uc.mem_read(x[3], 4)))[0]]
             elif slot == 94:
-                f = [bytes(uc.mem_read(x[i], 40)).split(b'\0')[0].decode() for i in (2, 3)]
-                assert x[1] == 0xc1a55 and f == ['Use2Touches', 'Z'], f
-                ret = 0 if self.jni_fail else 0xf1d
+                assert x[1] == CLS_ACT and [self.cstr(x[2]), self.cstr(x[3])] == ['Use2Touches', 'Z']
+                ret = 0 if self.jni_fail else FID
                 self.jni_exc = self.jni_fail
             elif slot == 228: ret = int(getattr(self, 'jni_exc', False))
             elif slot == 17: self.jni_exc = False
-            elif slot == 105: self.flips = getattr(self, 'flips', []) + [(x[1], x[2], x[3] & 0xff)]
-            elif slot == 23: assert x[1] == 0xc1a55
+            elif slot == 105: self.flips.append((x[1], x[2], x[3] & 0xff))
+            elif slot == 23: assert x[1] in (CLS_ACT, CLS_EVENT)
             else: raise AssertionError('unexpected JNI slot %d' % slot)
+        elif n.startswith('sau:'):
+            assert n == 'sau:3' and x[0] == SAU, 'unexpected SAUtils call ' + n
+            sw = [self.cstr(struct.unpack('<Q', bytes(uc.mem_read(x[6] + 8 * i, 8)))[0]) for i in range(2)]
+            self.sau_add.append((x[1] & 0xff, self.cstr(x[2]), x[3] & 0xffffffff, x[4] & 0xffffffff, x[5] & 0xffffffff, sw, x[7]))
+            ret = 40
+        elif n == 'aml:GetInterface':
+            ret = SAU if self.cstr(x[0]) == 'SAUtils' and self.has_sautils else 0
+        elif n == 'dlopen': ret = AML_HANDLE if self.cstr(x[0]) == 'libAML.so' else 0
+        elif n == 'dlsym':
+            assert x[0] == AML_HANDLE and self.cstr(x[1]) == 'GetInterface'
+            ret = self.getif
         elif n == 'getpagesize': ret = self.page
         elif n == 'mprotect':
             assert x[0] % self.page == 0 and x[1] % self.page == 0, ('unaligned mprotect', hex(x[0]), hex(x[1]))
@@ -165,11 +200,20 @@ class Emu:
             self.mmaps.append((hint, ret))
         elif n == 'munmap': uc.mem_unmap(x[0], x[1])
         elif n == 'open':
-            path = bytes(uc.mem_read(x[0], 300)).split(b'\0')[0].decode()
-            ret = 3 if path.startswith('/storage/emulated/0/Android_unprotected/') else (1 << 64) - 1
-            if ret == 3: self.files[path] = b''; self.last = path
-        elif n == 'write': self.files[self.last] += bytes(uc.mem_read(x[1], x[2])); ret = x[2]
-        elif n in ('close', 'dladdr'): ret = 0
+            path, flags = self.cstr(x[0]), x[1]
+            ok = path.startswith('/storage/emulated/0/Android_unprotected/') and not any(d in path for d in self.deny)
+            if ok and flags & 0o100: self.fs[path] = b'' if flags & 0o1000 else self.fs.get(path, b'')
+            if ok and path in self.fs:
+                ret = 3 + len(self.fds) + 10 * len(self.fs); self.fds[ret] = [path, 0]
+            else: ret = (1 << 64) - 1
+        elif n == 'read':
+            path, pos = self.fds[x[0]]; d = self.fs[path][pos:pos + x[2]]
+            uc.mem_write(x[1], d); self.fds[x[0]][1] += len(d); ret = len(d)
+        elif n == 'write': self.fs[self.fds[x[0]][0]] += bytes(uc.mem_read(x[1], x[2])); ret = x[2]
+        elif n == 'close': del self.fds[x[0]]
+        elif n == 'dladdr':   # the .so path AML loaded us from
+            self.uc.mem_write(DATA + 0x300, (GAME_DIR + 'lib/libMultiTouch64.so\0').encode())
+            self.uc.mem_write(x[1], struct.pack('<QQQQ', DATA + 0x300, MOD_BASE, 0, 0)); ret = 1
         elif n == 'dl_iterate_phdr': return
         else: raise AssertionError('unexpected import ' + n)
         uc.reg_write(UC_ARM64_REG_X0, ret)
@@ -190,7 +234,7 @@ class Emu:
         for i, v in enumerate(regs): uc.reg_write(XREG[i], v & 0xffffffffffffffff)
         if stack:
             sp -= 8 * len(stack) + (8 * len(stack)) % 16
-            for i, v in enumerate(stack): uc.mem_write(sp + 8 * i, struct.pack('<Q', v & 0xffffffff))
+            for i, v in enumerate(stack): uc.mem_write(sp + 8 * i, struct.pack('<Q', v & 0xffffffffffffffff))
         for i, reg in enumerate((UC_ARM64_REG_X23, UC_ARM64_REG_X24, UC_ARM64_REG_X25, UC_ARM64_REG_X26, UC_ARM64_REG_X27, UC_ARM64_REG_X28)):
             uc.reg_write(reg, 0x2300 + i)
         uc.reg_write(UC_ARM64_REG_SP, sp)
@@ -202,7 +246,25 @@ class Emu:
 
     def r32(self, off): return struct.unpack('<I', bytes(self.uc.mem_read(GTA_BASE + off, 4)))[0]
     def r64(self, off): return struct.unpack('<Q', bytes(self.uc.mem_read(GTA_BASE + off, 8)))[0]
-    def log(self): return b''.join(self.files.values()).decode()
+    def log(self): return self.fs.get(LOG, b'').decode()
+    def ints(self, off, n=2): return struct.unpack('<%di' % n, bytes(self.uc.mem_read(GTA_BASE + off, 4 * n)))
+    # Java -> native entries
+    def mt2_entry(self, action, count, x0=0, y0=0, x1=0, y1=0, ids=None, thiz=ACT):
+        if ids is not None: self.ids = ids
+        return self.call(GTA_BASE + C['OFF_MT2'], ENV, thiz, action, count, x0, y0, x1, y1, EVENT)
+    def mt4(self, action, count, *xy, ids=None):
+        if ids is not None: self.ids = list(ids) + [99] * (4 - len(ids))
+        xy = list(xy) + [0] * (8 - len(xy))
+        return self.call(GTA_BASE + C['OFF_MT4_STUB'], ENV, ACT, action, count, *xy, EVENT)
+    def frame(self):
+        self.touches.clear(); n = len(self.pe_tail)
+        r = self.call(GTA_BASE + C['OFF_PROCESS_EVENTS'], 1)
+        check(r == 0x55 and len(self.pe_tail) == n + 1, 'original ProcessEvents resumed')
+        sp, saved, x0 = self.pe_tail[-1]
+        check(sp % 16 == 0, 'stack aligned in original ProcessEvents')
+        check(saved == (0x2300 + 5, 0x2300 + 4, 0x2300 + 3, 0x2300 + 2, 0x2300 + 1, 0x2300), 'prologue stored x28..x23')
+        check(x0 == 1, 'bool argument passed on')
+        return list(self.touches)
 
 PASS = 0
 def check(cond, what):
@@ -210,17 +272,20 @@ def check(cond, what):
     if not cond: raise AssertionError(what)
     PASS += 1
 
+def load(e):
+    e.call(MOD_BASE + e.mod['OnModLoad'])
+    return e
+
 def test_install(page):
     e = Emu(page)
-    orig_got = e.r64(C['OFF_POINTS_GOT'])
-    check(orig_got == GTA_BASE + C['OFF_POINTS'], 'GOT relocated in emulator')
-    e.call(MOD_BASE + e.mod['OnModLoad'])
+    check(e.r64(C['OFF_POINTS_GOT']) == GTA_BASE + C['OFF_POINTS'], 'GOT relocated in emulator')
+    load(e)
     log = e.log()
     check('4-finger input enabled' in log, 'install log: ' + log)
-    check(list(e.files) == ['/storage/emulated/0/Android_unprotected/data/com.rockstargames.gtasa/mods/touch4_log.txt'], 'log path')
+    check(set(e.fs) == {LOG}, 'only the log is written: %r' % list(e.fs))
     for off, expect, patch in C['PATCHES']:
         check(e.r32(off) == patch, 'patch at %x' % off)
-    check(struct.unpack('<i', bytes(e.uc.mem_read(GTA_BASE + C['OFF_MAX_TOUCHES'], 4)))[0] == 4, 'm_nMaxTouches')
+    check(e.ints(C['OFF_MAX_TOUCHES'], 1) == (4,), 'm_nMaxTouches')
     got = e.r64(C['OFF_POINTS_GOT'])
     check(MOD_BASE <= got < MOD_BASE + 0x100000, 'Points GOT -> mod array')
     check(bytes(e.uc.mem_read(got, 56)) == bytes(e.uc.mem_read(GTA_BASE + C['OFF_POINTS'], 56)), 'Points copied')
@@ -231,133 +296,178 @@ def test_install(page):
     tramp = GTA_BASE + C['OFF_MT4_STUB'] + imm * 4
     check(any(r == tramp for h, r in e.mmaps), 'B lands on the mmap page')
     check(e.r32(C['OFF_PROCESS_EVENTS']) == 0x58000051 and e.r32(C['OFF_PROCESS_EVENTS'] + 4) == 0xd61f0220, 'ProcessEvents hooked')
-    # protections restored: text R+X, GOT page read-only
+    check(e.r32(C['OFF_MT2']) == 0x58000051, '2-finger entry hooked')
     last = {}
-    for a, n, p in e.mprotects:
-        last[a] = p
-    got_page = (GTA_BASE + C['OFF_POINTS_GOT']) // page * page
-    check(last.get(got_page) == 1, 'GOT page back to read-only')
+    for a, n, p in e.mprotects: last[a] = p
+    check(last.get((GTA_BASE + C['OFF_POINTS_GOT']) // page * page) == 1, 'GOT page back to read-only')
     for off, _, _ in C['PATCHES']:
-        pg = (GTA_BASE + off) // page * page
-        check(last.get(pg) == 5, 'text page %x back to R+X' % off)
+        check(last.get((GTA_BASE + off) // page * page) == 5, 'text page %x back to R+X' % off)
+    # SAUtils "Mods Settings" item
+    check(len(e.sau_add) == 1, 'one SAUtils item')
+    typ, name, init, mn, mx, sw, cb = e.sau_add[0]
+    check((typ, name, init, mn, mx, sw) == (5, '4-Finger Touch', 1, 0, 1, ['Off', 'On']), 'item %r' % (e.sau_add[0],))
+    check(MOD_BASE <= cb < MOD_BASE + 0x100000, 'callback in the mod')
+    check('Mods Settings item id 40' in log, 'item logged')
     return e
 
 def test_touches(e):
-    S = GTA_BASE + C['OFF_MT4_STUB']
-    PE = GTA_BASE + C['OFF_PROCESS_EVENTS']
-    def mt(action, count, *xy):
-        xy = list(xy) + [0] * (8 - len(xy))
-        return e.call(S, 0xe0e0, 0x7417, action, count, *xy, 0xbeef)  # last = MotionEvent (13th arg)
-    def frame():
-        e.touches.clear(); n = len(e.pe_tail)
-        r = e.call(PE, 1)
-        check(r == 0x55 and len(e.pe_tail) == n + 1, 'original ProcessEvents resumed')
-        sp, saved, x0 = e.pe_tail[-1]
-        check(sp % 16 == 0, 'stack aligned in original ProcessEvents')
-        check(saved == (0x2300 + 5, 0x2300 + 4, 0x2300 + 3, 0x2300 + 2, 0x2300 + 1, 0x2300), 'prologue stored x28..x23')
-        check(x0 == 1, 'bool argument passed on')
-        return list(e.touches)
-    check(mt(0, 1, 100, 200) == 1, 'returns true')
-    check(e.mt2[-1] == (0, 1, 100, 200, 0, 0), 'finger 1 to original')
-    check(frame() == [], 'nothing extra for 1 finger')
-    mt(0x105, 2, 100, 200, 300, 400)
-    check(e.mt2[-1] == (0x105, 2, 100, 200, 300, 400), 'finger 2 to original unchanged')
-    mt(0x205, 3, 100, 200, 300, 400, 500, 600)
-    check(e.mt2[-1] == (2, 2, 100, 200, 300, 400), 'finger 3 down is a MOVE for fingers 1-2, count 2')
-    mt(2, 3, 101, 200, 300, 400, 510, 600)
-    mt(2, 3, 102, 200, 300, 400, 510, 600)   # finger 3 did not move: no event
-    mt(0x305, 4, 102, 200, 300, 400, 510, 600, 700, 800)
-    check(e.mt2[-1] == (2, 2, 102, 200, 300, 400), 'finger 4 down for fingers 1-2')
-    check(frame() == [(2, 2, 500, 600), (3, 2, 510, 600), (2, 3, 700, 800)], 'fingers 3,4 down + move delivered in order')
-    check(frame() == [], 'queue drained')
-    mt(2, 4, 102, 200, 300, 400, 520, 610, 700, 810)
-    mt(0x306, 4, 102, 200, 300, 400, 520, 610, 705, 815)
-    check(e.mt2[-1] == (2, 2, 102, 200, 300, 400), 'finger 4 up is a MOVE for 1-2')
-    mt(2, 3, 102, 200, 300, 400, 520, 610)
-    check(frame() == [(3, 2, 520, 610), (3, 3, 700, 810), (1, 3, 705, 815)], 'finger 4 up at its last point')
-    mt(0x206, 3, 102, 200, 300, 400, 530, 620)
-    check(frame() == [(1, 2, 530, 620)], 'finger 3 up')
-    # finger 3 back, then all fingers up at once (ACTION_UP from the system)
-    mt(0x205, 3, 102, 200, 300, 400, 540, 640)
-    mt(1, 3, 102, 200, 300, 400, 540, 640)
-    check(e.mt2[-1] == (1, 2, 102, 200, 300, 400), 'ACTION_UP passed to original')
-    check(frame() == [(2, 2, 540, 640), (1, 2, 540, 640)], 'up on ACTION_UP')
+    # first touch: Java still in 2-finger mode; the mod switches it and takes the touch itself
+    check(e.mt2_entry(0, 1, 100, 200, ids=[0]) == 1, 'returns true')
+    check(e.flips == [(ACT, FID, 0)], 'Use2Touches = false')
+    check(e.mt2 == [], 'original 2-finger code not used any more')
+    check(e.frame() == [(2, 0, 100, 200)], 'finger A down in slot 0')
+    check(e.frame() == [], 'queue drained')
+    e.mt4(0x105, 2, 100, 200, 300, 400, ids=[0, 1])
+    check(e.frame() == [(2, 1, 300, 400)], 'B down in slot 1')
+    e.mt4(0x205, 3, 100, 200, 300, 400, 500, 600, ids=[0, 1, 2])
+    e.mt4(2, 3, 100, 200, 300, 400, 500, 600)                     # nothing moved: no event
+    e.mt4(0x305, 4, 101, 200, 300, 400, 500, 600, 700, 800, ids=[0, 1, 2, 3])
+    check(e.frame() == [(2, 2, 500, 600), (3, 0, 101, 200), (2, 3, 700, 800)], 'C, D down; A moved')
+    # A (the first finger) goes up: B, C, D shift to indexes 0-2 but keep their slots
+    e.mt4(0x006, 4, 102, 200, 300, 400, 500, 600, 700, 800)
+    check(e.frame() == [(1, 0, 102, 200)], 'A up where it is')
+    e.mt4(2, 3, 300, 400, 500, 600, 700, 800, ids=[1, 2, 3])
+    check(e.frame() == [], 'no jumps after the index shift')
+    e.mt4(2, 3, 300, 400, 510, 600, 700, 800)
+    check(e.frame() == [(3, 2, 510, 600)], 'C still moves in slot 2')
+    # a new finger E gets pointer id 0 and index 0: takes the free slot 0
+    e.mt4(0x005, 4, 50, 60, 300, 400, 510, 600, 700, 800, ids=[0, 1, 2, 3])
+    check(e.frame() == [(2, 0, 50, 60)], 'E down in free slot 0')
+    # C (index 2) goes up
+    e.mt4(0x206, 4, 50, 60, 300, 400, 515, 605, 700, 800)
+    e.mt4(2, 3, 50, 60, 300, 400, 700, 800, ids=[0, 1, 3])
+    check(e.frame() == [(1, 2, 515, 605)], 'C up at its last point, D untouched')
+    # F gets id 2 and index 2 again
+    e.mt4(0x205, 4, 50, 60, 300, 400, 900, 100, 700, 800, ids=[0, 1, 2, 3])
+    check(e.frame() == [(2, 2, 900, 100)], 'F down in slot 2')
+    # a 5th finger (id 4) is outside the 4 indexes Java sends; when B (id 1) lifts it comes in
+    e.mt4(0x405, 4, 50, 60, 300, 400, 900, 100, 700, 800)
+    check(e.frame() == [], '5th finger ignored while 4 are down')
+    e.mt4(0x106, 4, 50, 60, 300, 400, 900, 100, 700, 800)
+    e.mt4(2, 4, 50, 60, 900, 100, 700, 800, 10, 20, ids=[0, 2, 3, 4])
+    check(e.frame() == [(1, 1, 300, 400), (2, 1, 10, 20)], 'B up, 5th finger takes slot 1')
+    # everything up (ACTION_UP)
+    e.mt4(1, 4, 50, 60, 900, 100, 700, 800, 10, 20)
+    check(e.frame() == [(1, 0, 50, 60), (1, 1, 10, 20), (1, 2, 900, 100), (1, 3, 700, 800)], 'all up')
     # cancel
-    mt(0x205, 3, 1, 2, 3, 4, 5, 6)
-    mt(3, 3, 1, 2, 3, 4, 5, 6)
-    check(frame() == [(2, 2, 5, 6), (4, 2, 5, 6)], 'cancel on ACTION_CANCEL')
-    # a lower finger leaves: indexes shift, finger 3 vanishes from index 2
-    mt(0x205, 3, 1, 2, 3, 4, 5, 6)
-    mt(6, 3, 1, 2, 3, 4, 5, 6)
-    mt(2, 2, 3, 4, 5, 6)
-    check(frame() == [(2, 2, 5, 6), (1, 2, 5, 6)], 'index 2 gone -> up at last point')
-    # 4 fingers A B C D, B goes up: C and D move to indexes 1 and 2
-    mt(0x205, 3, 1, 1, 2, 2, 3, 3)
-    mt(0x305, 4, 1, 1, 2, 2, 3, 3, 4, 4)
-    frame()
-    mt(0x106, 4, 1, 1, 2, 2, 3, 3, 4, 4)
-    check(e.mt2[-1] == (0x106, 2, 1, 1, 2, 2), 'finger 2 up passed to original')
-    mt(2, 3, 1, 1, 3, 3, 4, 4)
-    check(frame() == [(1, 2, 3, 3), (1, 3, 4, 4), (2, 2, 4, 4)], 'lower finger up: slot 2 restarts with D, slot 3 ends')
-    # a new finger E takes index 1 again: C, D move back up
-    mt(0x105, 4, 1, 1, 5, 5, 3, 3, 4, 4)
-    check(frame() == [(1, 2, 4, 4), (2, 2, 3, 3), (2, 3, 4, 4)], 'lower finger down: slots 2,3 restart')
-    mt(1, 4, 1, 1, 5, 5, 3, 3, 4, 4)
-    check(frame() == [(1, 2, 3, 3), (1, 3, 4, 4)], 'all up')
+    e.mt4(0, 1, 5, 6, ids=[0])
+    e.mt4(3, 1, 5, 6)
+    check(e.frame() == [(2, 0, 5, 6), (4, 0, 5, 6)], 'cancel')
+    # a new finger under an id that is still in a slot (its up was lost): restarted
+    e.mt4(0, 1, 8, 8, ids=[0])
+    e.mt4(0x105, 2, 8, 8, 6, 6, ids=[0, 1])
+    e.mt4(0x105, 2, 8, 8, 7, 7, ids=[0, 1])
+    check(e.frame() == [(2, 0, 8, 8), (2, 1, 6, 6), (1, 1, 6, 6), (2, 1, 7, 7)], 'reused id restarts its slot')
+    e.mt4(1, 2, 8, 8, 7, 7)
+    e.frame()
+    # a new gesture while a slot is still down (lost up): ended first
+    e.mt4(0, 1, 1, 1, ids=[0])
+    e.mt4(0, 1, 2, 2, ids=[0])
+    check(e.frame() == [(2, 0, 1, 1), (1, 0, 1, 1), (2, 0, 2, 2)], 'ACTION_DOWN ends a stale slot')
+    e.mt4(1, 1, 2, 2)
+    e.frame()
+    check(e.jni_calls.count(33) == 1, 'getPointerId looked up once')
     # queue flood while the game is paused keeps room for down/up
-    mt(0x205, 3, 1, 2, 3, 4, 0, 0)
-    for i in range(1, 700): mt(2, 3, 1, 2, 3, 4, i, i)
-    mt(0x206, 3, 1, 2, 3, 4, 999, 999)
-    t = frame()
-    check(t[0] == (2, 2, 0, 0) and t[-1] == (1, 2, 999, 999) and len(t) <= 512, 'flood keeps down and up (%d events)' % len(t))
+    e.mt4(0, 1, 0, 0, ids=[0])
+    for i in range(1, 700): e.mt4(2, 1, i, i)
+    e.mt4(1, 1, 999, 999)
+    t = e.frame()
+    check(t[0] == (2, 0, 0, 0) and t[-1] == (1, 0, 999, 999) and len(t) <= 512, 'flood keeps down and up (%d events)' % len(t))
 
-def test_switch(page, fail=False):
-    e = Emu(page)
-    e.jni_fail = fail
-    e.call(MOD_BASE + e.mod['OnModLoad'])
-    check('4-finger input enabled' in e.log(), 'installed')
-    check(e.r32(C['OFF_MT2']) == 0x58000051, '2-finger entry hooked')
-    M2 = GTA_BASE + C['OFF_MT2']
-    act = 0x7417
-    check(e.call(M2, ENV, act, 0, 1, 10, 20, 0, 0) == 1, '2-finger entry returns the original result')
-    check(e.mt2 == [(0, 1, 10, 20, 0, 0)], 'touch still handled by the original 2-finger code')
-    if fail:
-        check(e.jni_calls == [31, 94, 228, 17, 23] and not getattr(e, 'flips', []), 'missing field: exception cleared, nothing set')
-        check('staying with 2 fingers' in e.log(), 'failure logged')
-        e.call(M2, ENV, act, 2, 1, 11, 21, 0, 0)
-        check(e.jni_calls == [31, 94, 228, 17, 23], 'no retry after failure')
-        check(e.mt2[-1] == (2, 1, 11, 21, 0, 0), 'touches keep working')
-        return
-    check(e.jni_calls == [31, 94, 228, 105, 23], 'JNI sequence %r' % e.jni_calls)
-    check(e.flips == [(act, 0xf1d, 0)], 'Use2Touches set to false on the activity')
-    check('the game now gets up to 4 fingers' in e.log(), 'switch logged')
-    # from now on Java uses multiTouchEvent4; the original 2-finger code is reached without JNI
-    e.call(GTA_BASE + C['OFF_MT4_STUB'], ENV, act, 2, 1, 12, 22, 0, 0, 0, 0, 0, 0, 0xbeef)
-    check(e.mt2[-1] == (2, 1, 12, 22, 0, 0) and len(e.jni_calls) == 5, '4-finger path does not switch again')
-    # a new activity instance (Use2Touches true again) is switched too
-    e.call(M2, ENV, 0x7418, 0, 1, 1, 2, 0, 0)
-    check(e.flips[-1] == (0x7418, 0xf1d, 0) and e.log().count('up to 4 fingers') == 1, 'new activity switched, logged once')
+def test_menu(page):
+    e = load(Emu(page))
+    cb = e.sau_add[0][6]
+    e.mt2_entry(0, 1, 10, 20, ids=[0])
+    check(e.frame() == [(2, 0, 10, 20)], '4-finger mode on')
+    # Mods Settings -> Off (SAUtils calls back on the game thread when the screen closes)
+    e.call(cb, 1, 0, 0)
+    check(e.fs.get(CFG) == b'[Preferences]\nEnabled = 0\n', 'saved Off')
+    check('menu: 4-Finger Touch Off' in e.log(), 'Off logged')
+    e.uc.mem_write(GTA_BASE + C['OFF_LAST_ACTION'], struct.pack('<2i', 2, 3))
+    e.uc.mem_write(GTA_BASE + C['OFF_LAST_X'], struct.pack('<2i', 7, 8))
+    e.uc.mem_write(GTA_BASE + C['OFF_LAST_Y'], struct.pack('<2i', 9, 10))
+    e.mt4(2, 1, 11, 21)
+    check(e.flips[-1] == (ACT, FID, 1), 'Use2Touches = true again')
+    check(e.mt2 == [(2, 1, 11, 21, 0, 0)], 'touch handed to the original 2-finger code')
+    check(e.ints(C['OFF_LAST_ACTION']) == (1, 1) and e.ints(C['OFF_LAST_X']) == (0, 0) and e.ints(C['OFF_LAST_Y']) == (0, 0), 'game 2-finger state reset')
+    check(e.frame() == [(1, 0, 10, 20)], 'our finger released')
+    n = len(e.flips)
+    e.mt2_entry(1, 1, 11, 21)
+    check(e.mt2[-1] == (1, 1, 11, 21, 0, 0) and len(e.flips) == n, 'Off: game handles touches, no switching')
+    check(e.frame() == [], 'nothing from the mod while Off')
+    # back On
+    e.call(cb, 0, 1, 0)
+    check(e.fs.get(CFG) == b'[Preferences]\nEnabled = 1\n', 'saved On')
+    m = len(e.mt2)
+    e.mt2_entry(0, 1, 30, 40, ids=[0])
+    check(e.flips[-1] == (ACT, FID, 0) and len(e.mt2) == m, 'On again: switched to 4 fingers')
+    check(e.frame() == [(2, 0, 30, 40)], 'tracked by the mod again')
+
+def test_config(page):
+    e = load(Emu(page, fs={CFG: b'[Preferences]\nEnabled = 0\n'}))
+    check(e.sau_add[0][2] == 0, 'menu shows Off')
+    check('switched off in Mods Settings' in e.log(), 'Off logged at start')
+    e.mt2_entry(0, 1, 5, 5, ids=[0])
+    check(e.flips == [] and e.mt2 == [(0, 1, 5, 5, 0, 0)], 'Off from the file: game keeps 2 fingers')
+    # no configs folder: falls back to the mods folder, both ways
+    e = load(Emu(page, deny=('/configs/',)))
+    e.call(e.sau_add[0][6], 1, 0, 0)
+    check(e.fs.get(CFG_ALT) == b'[Preferences]\nEnabled = 0\n' and CFG not in e.fs, 'saved next to the mods')
+    e = load(Emu(page, deny=('/configs/',), fs={CFG_ALT: b'Enabled=0'}))
+    check(e.sau_add[0][2] == 0, 'read from the mods folder')
+
+def test_no_sautils_and_fallbacks(page):
+    # mods folder not writable: the log goes next to the loaded .so
+    e = load(Emu(page, deny=('mods/touch4_log',)))
+    check(LOG not in e.fs and '4-finger input enabled' in e.fs.get(GAME_DIR + 'lib/touch4_log.txt', b'').decode(), 'log next to the .so')
+    e = load(Emu(page, has_sautils=False))
+    check('SAUtils not found' in e.log() and '4-finger input enabled' in e.log(), 'works without SAUtils')
+    e.mt2_entry(0, 1, 1, 2, ids=[0])
+    check(e.frame() == [(2, 0, 1, 2)], 'tracked')
+    # getPointerId missing: fingers follow their index
+    e = load(Emu(page))
+    e.pid_fail = True
+    e.mt2_entry(0, 1, 1, 2, ids=[0])
+    check('getPointerId not available' in e.log(), 'logged')
+    e.mt4(0x105, 2, 1, 2, 3, 4)
+    check(e.frame() == [(2, 0, 1, 2), (2, 1, 3, 4)], 'still tracked by index')
+    check(e.jni_calls.count(33) == 1 and 51 not in e.jni_calls, 'lookup not retried')
+    # Use2Touches missing: stays on the game's 2-finger code, no retries
+    e = load(Emu(page))
+    e.jni_fail = True
+    e.mt2_entry(0, 1, 10, 20, ids=[0])
+    check(e.jni_calls == [31, 94, 228, 17, 23] and e.flips == [], 'exception cleared, nothing set')
+    check(e.mt2 == [(0, 1, 10, 20, 0, 0)] and 'staying with 2 fingers' in e.log(), 'handled by the game')
+    e.mt2_entry(2, 1, 11, 21)
+    check(len(e.jni_calls) == 5 and e.mt2[-1] == (2, 1, 11, 21, 0, 0), 'no retry')
+    # a new activity instance (Use2Touches true again) is switched too, logged once
+    e = load(Emu(page))
+    e.mt2_entry(0, 1, 1, 1, ids=[0])
+    e.mt2_entry(1, 1, 1, 1, thiz=ACT + 1)
+    check(e.flips == [(ACT, FID, 0), (ACT + 1, FID, 0)] and e.log().count('up to 4 fingers') == 1, 'new activity switched')
 
 def test_refuses(page):
-    def tweak(img): img[C['OFF_PROCESS_EVENTS']] ^= 1
-    e = Emu(page, tweak)
-    before = {off: e.r32(off) for off, _, _ in C['PATCHES']}
-    got = e.r64(C['OFF_POINTS_GOT'])
-    e.call(MOD_BASE + e.mod['OnModLoad'])
-    check('nothing changed' in e.log(), 'refusal logged: ' + e.log())
-    check(all(e.r32(o) == v for o, v in before.items()) and e.r64(C['OFF_POINTS_GOT']) == got, 'nothing patched')
-    check(e.r32(C['OFF_MT4_STUB']) == 0x320003e0 and not e.mprotects, 'stub and protections untouched')
-    check(e.r32(C['OFF_MT2']) == 0xd101c3ff, '2-finger entry untouched')
-    e.call(MOD_BASE + e.mod['OnModLoad'])  # second call is ignored
-    check(e.r32(C['OFF_MT4_STUB']) == 0x320003e0, 'second OnModLoad ignored')
+    for what, tweak in (('ProcessEvents', lambda img: img.__setitem__(C['OFF_PROCESS_EVENTS'], img[C['OFF_PROCESS_EVENTS']] ^ 1)),
+                        ('state', lambda img: img.__setitem__(0x31e7e0, img[0x31e7e0] ^ 1))):
+        e = Emu(page, tweak)
+        before = {off: e.r32(off) for off, _, _ in C['PATCHES']}
+        got = e.r64(C['OFF_POINTS_GOT'])
+        load(e)
+        check('nothing changed' in e.log(), 'refusal logged: ' + e.log())
+        check(all(e.r32(o) == v for o, v in before.items()) and e.r64(C['OFF_POINTS_GOT']) == got, 'nothing patched (%s)' % what)
+        check(e.r32(C['OFF_MT4_STUB']) == 0x320003e0 and not e.mprotects, 'stub and protections untouched')
+        check(e.r32(C['OFF_MT2']) == 0xd101c3ff, '2-finger entry untouched')
+        check(e.sau_add == [], 'no menu item when nothing was installed')
+        load(e)  # second call is ignored
+        check(e.r32(C['OFF_MT4_STUB']) == 0x320003e0, 'second OnModLoad ignored')
 
 def test_modinfo():
     e = Emu(4096)
     p = e.call(MOD_BASE + e.mod['__GetModInfo'])
     raw = bytes(e.uc.mem_read(p, 176))
     f = [raw[i:j].split(b'\0')[0].decode() for i, j in ((0, 48), (48, 96), (96, 120), (120, 168))]
-    check(f == ['net.helicover.touch4', 'Touch x4', '1.0', 'Helicover'], 'ModInfo strings %r' % f)
-    check(struct.unpack('<4H', raw[168:176]) == (1, 0, 0, 0), 'ModInfo version')
+    check(f == ['net.helicover.touch4', 'Touch x4', '1.1', 'Helicover'], 'ModInfo strings %r' % f)
+    check(struct.unpack('<4H', raw[168:176]) == (1, 1, 0, 0), 'ModInfo version')
     check(bytes(e.uc.mem_read(p + 176, 336)) == b'\0' * 336, 'ModInfo padding zero')
 
 if __name__ == '__main__':
@@ -365,9 +475,9 @@ if __name__ == '__main__':
         print('SKIP: pass the path to libGTASA.so'); sys.exit(0)
     test_modinfo()
     for page in (4096, 16384):
-        e = test_install(page)
-        test_touches(e)
-        test_switch(page)
-        test_switch(page, fail=True)
+        test_touches(test_install(page))
+        test_menu(page)
+        test_config(page)
+        test_no_sautils_and_fallbacks(page)
         test_refuses(page)
     print('PASS', PASS)
