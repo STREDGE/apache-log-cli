@@ -51,6 +51,8 @@ SQ_THREATS=STATE+161;SQ_T=STATE+162  # SQ_T..SQ_T+3 = current threats (char hand
 SQ_MSG_NEXT=STATE+166;SQ_MEDIC_NEXT=STATE+167;SQ_CONTACT=STATE+168;SQ_CLEAR_AT=STATE+169;SQ_SCAN_NEXT=STATE+170;SQ_GROUP=STATE+171
 SQ_SLOT=STATE+172;SQ_SLOT_SIZE=10   # per guard slot: TASK NEXT TX TY LX LY LT DEAD TGT spare
 # v40 overwatch flight: station index/time, hull sampling and evasive manoeuvre deadline
+# v40.3 gunner brain: each gunner's previous target, last announced heavy-weapon threat
+GT_PREV=STATE+225;DANGER_SEEN=STATE+229;GC_TIME=STATE+250;GC_CAND=STATE+230  # GC_CAND..+16: this round's checked candidates (4 squad threats + 13 cells), -1 = none
 ST_I=STATE+215;ST_NEXT=STATE+216;HP_PREV=STATE+217;HP_T=STATE+218;EVADE_UNTIL=STATE+219
 EXIT_WIDGET=0  # CTouchInterface widget of the on-screen enter/exit vehicle button (CPad::ExitVehicleJustDown)
 CRUISE_T=STATE+118;CR_UP=STATE+119;CR_DN=STATE+120
@@ -126,6 +128,7 @@ MESSAGES={
  'HCEXIT':'~y~EVAC~w~: exit the helicopter before TAKE OFF / FOLLOW.',
  'SQALR':'~y~SQUAD~w~: the team is already on the ground.','SQNONE':'~y~SQUAD~w~: no team on the ground.',
  'SQFOOT':'~y~SQUAD~w~: CJ must be on foot to receive the team.','SQCREW':'~y~SQUAD~w~: wait until the crew is back aboard.',
+ 'HCRPG':'~r~RPG!~w~ Heavy weapon - gunners, take him down!',
  'HCEVADE':'~r~HELICOVER~w~: taking fire - evasive manoeuvre.',
 }
 # Generate state updates; panel prints messages when the state changes.
@@ -886,7 +889,9 @@ launch.label('MISSING');a(0x03e5,S('HCOFF'));a(0x004e)
 
 # Dedicated fire worker: no global faction hatred and no automatic armed turrets.
 f=Script();a=f.add
-f.label('INIT');a(0);f.set(FIRENEXT,0);f.set(FIREGEN,-1);f.set(FWANTED,-1);f.set(FIRE_ACTIVE,0);f.set(FIRE_TARGET,-1);f.set(FIRE_TASK_TARGET,-1);f.set(FIRE_TASK_PHASE,-1);f.set(FIRE_TASK_MODE,-1);f.set(FIRE_TASK_NEXT,0);f.set(FIRE_SCAN_NEXT,0);a(6,V(26),I(-1));a(6,V(27),I(0));a(6,V(29),I(-1))
+f.label('INIT');a(0);f.set(DANGER_SEEN,-1);f.set(GC_TIME,-100000)
+for i in range(4):f.set(GT_PREV+i,-1)
+f.set(FIRENEXT,0);f.set(FIREGEN,-1);f.set(FWANTED,-1);f.set(FIRE_ACTIVE,0);f.set(FIRE_TARGET,-1);f.set(FIRE_TASK_TARGET,-1);f.set(FIRE_TASK_PHASE,-1);f.set(FIRE_TASK_MODE,-1);f.set(FIRE_TASK_NEXT,0);f.set(FIRE_SCAN_NEXT,0);a(6,V(26),I(-1));a(6,V(27),I(0));a(6,V(29),I(-1))
 f.label('WAIT');a(1,I(0));a(0x01bd,V(30));a(0xddc,I(FIREHEART),V(30));f.check(0x0a52,[I(EXIT_WIDGET)],'EXIT_POLL_DONE');a(0xddc,I(EXIT_PRESSED),V(30));f.label('EXIT_POLL_DONE');f.get(30,BUSY);f.eq(30,0,'WAIT');f.get(30,STATE)
 for stateid in [0,1,5,6,16]:
  nxt='FSTATE_NEXT_'+str(stateid);f.eq(30,stateid,nxt);f.go('WAIT');f.label(nxt)
@@ -965,8 +970,11 @@ f.label('STOP_COMBAT_END');f.set(FIRE_TARGET,-1);f.ret()
 f.label('SHOOT_CHAR');f.set(CLEAR_AT,0);f.get(30,LAST_TGT);f.check(0x003b,[V(30),V(29)],'SC_NEW_TARGET');f.go('SC_KNOWN')
 f.label('SC_NEW_TARGET');a(0xddc,I(LAST_TGT),V(29));f.get(30,ENGAGED);f.eq(30,0,'SC_KNOWN');f.set(ENGAGED,1);msg(f,'HCCONT')
 f.label('SC_KNOWN');f.set(FIRE_ACTIVE,1);a(0xddc,I(FIRE_TARGET),V(29));f.get(30,FIRE_TASK_MODE);f.eq(30,1,'CHAR_ISSUE_TASKS');f.get(30,FIRE_TASK_TARGET);f.check(0x003b,[V(30),V(29)],'CHAR_ISSUE_TASKS');f.get(30,FIRE_TASK_PHASE);f.check(0x003b,[V(30),V(28)],'CHAR_ISSUE_TASKS');f.get(30,FIRE_TASK_NEXT);a(0x01bd,V(31));f.check(0x001d,[V(31),V(30)],'CHAR_PRECISE')
-f.label('CHAR_ISSUE_TASKS');f.set(FIRE_TASK_MODE,1);a(0xddc,I(FIRE_TASK_TARGET),V(29));a(0xddc,I(FIRE_TASK_PHASE),V(28));a(0x01bd,V(31));a(0x000a,V(31),I(1800));a(0xddc,I(FIRE_TASK_NEXT),V(31))
-for i in range(4):f.set(GUARD_TARGET+i,-1)
+# v40.3: the candidate check runs in its own frame (at most every 1.5 s); the gunners are assigned
+# on the next frame, so the two heavy parts never land on the same frame.
+f.label('CHAR_ISSUE_TASKS');f.get(30,GC_TIME);a(0x01bd,V(31));a(0x0062,V(31),V(30));f.check(0x0019,[V(31),I(1500)],'CIT_GO');a(0x01bd,V(31));a(0xddc,I(GC_TIME),V(31));a(0xddc,I(GC_TIME+1),V(29));f.call('GUNNER_ROUND');f.get(29,GC_TIME+1);f.ret()
+f.label('CIT_GO');f.set(FIRE_TASK_MODE,1);a(0xddc,I(FIRE_TASK_TARGET),V(29));a(0xddc,I(FIRE_TASK_PHASE),V(28));a(0x01bd,V(31));a(0x000a,V(31),I(1800));a(0xddc,I(FIRE_TASK_NEXT),V(31))
+for i in range(4):f.get(31,GUARD_TARGET+i);a(0xddc,I(GT_PREV+i),V(31));f.set(GUARD_TARGET+i,-1)
 for var in [3,4,5,6]:
  f.call('SELECT_GUARD_TARGET_'+str(var));a(0xddc,I(GUARD_TARGET+var-3),V(29))
  skip='SHOOT_CHAR_SKIP_'+str(var);alive(f,var,skip);f.check(0x00db,[V(var),V(1)],'SHOOT_CHAR_ONFOOT_'+str(var));f.check(0x8a32,[V(var)],'SHOOT_CHAR_ONFOOT_'+str(var));a(0x0713,V(var),V(29),I(-1),F(0),F(0),F(0),F(150),I(0),I(1 if var in [3,5] else 0),I(100));f.go(skip)
@@ -1053,31 +1061,48 @@ def scan_vehicles(cells,half,check,prefix):
  for index,(x,y) in enumerate(cells):
   nxt=prefix+'_CAR_NEXT_'+str(index);a(0x00a0,V(0),V(8),V(9),V(10));a(0x0087,V(11),V(8));a(0x0087,V(12),V(9));a(0x000b,V(8),F(x-half));a(0x000b,V(9),F(y-half));a(0x000b,V(11),F(x+half));a(0x000b,V(12),F(y+half));a(0x053e,V(8),V(9),V(11),V(12),I(-1),V(23));f.call(check);f.eq(30,1,nxt);f.ret();f.label(nxt)
 
-# v40.2 gunner targeting: every door gunner picks a target nobody else has, on HIS side of the
-# helicopter (right door: 3/5, left door: 4/6) and with a clear line from his own seat. Candidates:
-# the primary threat, the ground squad's threats, then the scan cells. Without one on his side he
-# takes any free target, and only then shares the primary. FOLLOW CJ SHOTS keeps CJ's target.
+# v40.3 gunner brain. Once per round (GUNNER_ROUND) the candidates - the ground squad's four threats
+# and the 13 scan cells - are de-duplicated and checked against the fire mode and range a single time.
+# Each gunner then, in order: (1) a rocket launcher / minigun holder, up to two gunners on the same one
+# (RPG! call); (2) his own previous target while it is still valid and in view; (3) a free target on
+# HIS side (right door 3/5, left door 4/6) with a clear line from his seat; (4) any free target;
+# (5) the shared primary. FOLLOW CJ SHOTS keeps CJ's target.
 SCAN_CELLS=[(0,0),(-12,0),(12,0),(0,-12),(0,12),(-24,0),(24,0),(0,-24),(0,24),(-40,-40),(40,-40),(-40,40),(40,40)]
+GC_N=4+len(SCAN_CELLS)
+def gunner_mode_check(P):
+ f.eq(25,3,P+'NOT_PROTECT');f.call('CHECK_PROTECT_NPC');f.go(P+'MODE_DONE')
+ f.label(P+'NOT_PROTECT');f.eq(25,4,P+'NOT_OVERWATCH');f.call('CHECK_ARMED_HOSTILE');f.go(P+'MODE_DONE')
+ f.label(P+'NOT_OVERWATCH');f.call('NOT_FRIEND')
+ f.label(P+'MODE_DONE')
+f.label('GUNNER_ROUND')
+for e in range(GC_N):
+ P='GCR_%d_'%e;bad=P+'BAD';nxt=P+'NEXT'
+ if e<4:f.get(29,SQ_T+e)
+ else:
+  x,y=SCAN_CELLS[e-4];a(0x00a0,V(0),V(8),V(9),V(10));a(0x000b,V(8),F(x));a(0x000b,V(9),F(y));a(0x0a3e,V(8),V(9),V(10),F(8),F(8),F(40),V(29))
+ alive(f,29,bad);f.get(31,FIRE_TASK_TARGET);f.check(0x803b,[V(29),V(31)],bad)
+ for j in range(e):f.get(31,GC_CAND+j);f.check(0x803b,[V(29),V(31)],bad)
+ gunner_mode_check(P);f.eq(30,1,bad);f.call('TARGET_IN_RANGE');f.eq(30,1,bad);a(0xddc,I(GC_CAND+e),V(29));f.go(nxt)
+ f.label(bad);f.set(GC_CAND+e,-1);f.label(nxt)
+f.ret()
 for guard in [3,4,5,6]:
  f.label('SELECT_GUARD_TARGET_'+str(guard))
  f.eq(25,2,'SG_SCAN_'+str(guard));f.get(29,FIRE_TASK_TARGET);f.ret();f.label('SG_SCAN_'+str(guard))
+ pool=[FIRE_TASK_TARGET]+[GC_CAND+e for e in range(GC_N)]
+ for n,key in enumerate(pool):
+  nxt='SG_DANGER_%d_%d'%(guard,n);f.get(29,key);f.call('GUNNER_DANGER_%d'%guard);f.eq(30,1,nxt);f.ret();f.label(nxt)
+ f.get(29,GT_PREV+guard-3);f.call('GUNNER_PREV_%d'%guard);f.eq(30,1,'SG_PREV_LOST_%d'%guard);f.ret();f.label('SG_PREV_LOST_%d'%guard)
  for side in [1,0]:
-  for n,key in enumerate([FIRE_TASK_TARGET]+[SQ_T+i for i in range(4)]):
+  for n,key in enumerate(pool):
    nxt='SG_NEXT_%d_%d_%d'%(guard,side,n);f.get(29,key);f.call('GUNNER_OK_%d_%d'%(guard,side));f.eq(30,1,nxt);f.ret();f.label(nxt)
-  for index,(x,y) in enumerate(SCAN_CELLS):
-   nxt='SG_CELL_%d_%d_%d'%(guard,side,index);a(0x00a0,V(0),V(8),V(9),V(10));a(0x000b,V(8),F(x));a(0x000b,V(9),F(y));a(0x0a3e,V(8),V(9),V(10),F(8),F(8),F(40),V(29))
-   f.call('GUNNER_OK_%d_%d'%(guard,side));f.eq(30,1,nxt);f.ret();f.label(nxt)
  f.get(29,FIRE_TASK_TARGET);f.ret()
+ # light checks for an already validated candidate: alive, not taken, (side), clear line from his seat
  for side in [1,0]:
   P='GOK_%d_%d_'%(guard,side);fail=P+'FAIL'
   f.label('GUNNER_OK_%d_%d'%(guard,side));a(6,V(30),I(0));alive(f,29,fail)
   for prior in range(guard-3):f.get(31,GUARD_TARGET+prior);f.check(0x803b,[V(29),V(31)],fail)
-  f.eq(25,3,P+'NOT_PROTECT');f.call('CHECK_PROTECT_NPC');f.go(P+'MODE_DONE')
-  f.label(P+'NOT_PROTECT');f.eq(25,4,P+'NOT_OVERWATCH');f.call('CHECK_ARMED_HOSTILE');f.go(P+'MODE_DONE')
-  f.label(P+'NOT_OVERWATCH');f.call('NOT_FRIEND')
-  f.label(P+'MODE_DONE');f.eq(30,1,fail);f.call('TARGET_IN_RANGE');f.eq(30,1,fail)
+  a(0x00a0,V(29),V(11),V(12),V(13))
   if side:
-   # 11-13 = target (from TARGET_IN_RANGE); compare its distance to points 6 m right / left of the heli
    a(0x0407,V(1),F(6),F(0),F(0),V(14),V(15),V(16));a(0x0407,V(1),F(-6),F(0),F(0),V(17),V(18),V(19))
    a(0x050a,V(11),V(12),V(13),V(14),V(15),V(16),V(20));a(0x050a,V(11),V(12),V(13),V(17),V(18),V(19),V(21))
    f.check(0x0025,[V(21),V(20)] if guard in (3,5) else [V(20),V(21)],fail)
@@ -1085,6 +1110,23 @@ for guard in [3,4,5,6]:
   f.check(0x06bd,[V(14),V(15),V(16),V(11),V(12),V(17),I(1),I(0),I(0),I(0),I(0)],fail)
   a(6,V(30),I(1));f.ret()
   f.label(fail);a(6,V(30),I(0));f.ret()
+ # previous target: full check (it may have stopped being a threat), then the light ones
+ P='GPV_%d_'%guard;fail=P+'FAIL'
+ f.label('GUNNER_PREV_%d'%guard);a(6,V(30),I(0));alive(f,29,fail);gunner_mode_check(P);f.eq(30,1,fail);f.call('TARGET_IN_RANGE');f.eq(30,1,fail);f.call('GUNNER_OK_%d_0'%guard);f.ret()
+ f.label(fail);a(6,V(30),I(0));f.ret()
+ # heavy weapon: rocket launchers 35/36 or minigun 38, at most two gunners on it
+ P='GDG_%d_'%guard;fail=P+'FAIL'
+ f.label('GUNNER_DANGER_%d'%guard);a(6,V(30),I(0));alive(f,29,fail);a(0x0470,V(29),V(21))
+ f.eq(21,35,P+'W36');f.go(P+'HEAVY');f.label(P+'W36');f.eq(21,36,P+'W38');f.go(P+'HEAVY');f.label(P+'W38');f.eq(21,38,fail)
+ f.label(P+'HEAVY');a(6,V(22),I(0))
+ for prior in range(guard-3):
+  nx=P+'PRIOR_%d'%prior;f.get(31,GUARD_TARGET+prior);f.check(0x003b,[V(29),V(31)],nx);a(0x000a,V(22),I(1));f.label(nx)
+ f.check(0x0019,[V(22),I(1)],P+'ROOM');f.go(fail);f.label(P+'ROOM')
+ a(0x00a0,V(29),V(11),V(12),V(13));a(0x00a0,V(guard),V(14),V(15),V(16));a(0x0087,V(17),V(13));a(0x000b,V(17),F(.5))
+ f.check(0x06bd,[V(14),V(15),V(16),V(11),V(12),V(17),I(1),I(0),I(0),I(0),I(0)],fail)
+ f.get(31,DANGER_SEEN);f.check(0x803b,[V(29),V(31)],P+'SAID');a(0xddc,I(DANGER_SEEN),V(29));msg(f,'HCRPG')
+ f.label(P+'SAID');a(6,V(30),I(1));f.ret()
+ f.label(fail);a(6,V(30),I(0));f.ret()
 
 f.label('FIND_PROTECT_NPC');a(0x0085,V(24),V(29))
 scan_foot(near_cells,2.0,12,'CHECK_ATTACKER_NPC','NEAR_ATTACK')

@@ -52,4 +52,6 @@ PASS: Door gunners take a target on their own side: right door right, left door 
 PASS: A gunner without a clear line from his seat leaves that target to someone else
 PASS: Gunners also use the threats the ground squad has found
 PASS: With four threats around, the four gunners never double up
+PASS: RPG: two gunners focus the rocket launcher at once, with an RPG! call
+PASS: A gunner finishes the target he started instead of hopping to a newer one
 Mocked script execution only: real pathing, cover and gunfire are not tested.

@@ -51,7 +51,7 @@ class VM:
  def run(self):
   if self.done or self.w.now<self.wake:return
   w=self.w
-  for _ in range(5000):
+  for _ in range(getattr(self,"budget",5000)):
    op,aa,nxt=self.code[self.ip];self.ip=nxt;vals=[self.v[v] if t==3 else v for t,v in aa]
    def put(i,v):assert aa[i][0]==3;self.v[aa[i][1]]=v
    def cond(val):self.cond=self.cond and (not val if op&0x8000 else val)
