@@ -51,7 +51,8 @@ PASS: Rope descent starts below the hull and restores control on the ground
 PASS: Assembler rejects both inverted literal/local comparison forms
 PASS: CJ ascent advances smoothly over about 1.8 seconds at two frame rates
 PASS: Only guards who reach the ground receive running formation tasks
-PASS: Grove flight waits for safe climb and reports a stalled ascent
+PASS: Cruise climbs in place before passing tall buildings
+PASS: Cruise flies about 3x faster at a fixed clearance
 PASS: Guards keep selected weapons in cease fire and without CJ shooting
 PASS: Map marker -> hover -> selected rope descent restores CJ control and preserves onboard team
 PASS: Map flight rejects an absent marker
@@ -68,8 +69,8 @@ PASS: Marked destination hover -> choose landing preserves CJ aboard
 PASS: Target distribution excludes Grove and the additional ground squad
 PASS: CLEO setup menu starts patrol
 PASS: CLEO evacuation menu starts the marked route
-PASS: Blocked forward cruise chooses a side detour then resumes the Grove route
-PASS: When both detours are obstructed, cruise reports a blocked route
+PASS: Blocked cruise segment climbs in place instead of passing through
+PASS: Destination approach cruises over the pad and sinks vertically to a hover
 PASS: Pilot can reposition to keep an active threat in view
-PASS: New hold command cancels an active detour without ejecting CJ
+PASS: New hold command stops the scripted cruise without ejecting CJ
 Mocked script execution only: actual GTA flight, collisions, gunfire, animations and Android behavior are not tested.
