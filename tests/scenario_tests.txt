@@ -100,5 +100,8 @@ PASS: OVERWATCH: armed hostiles only, 75-damage precision rounds
 PASS: OVERWATCH leaves armed police alone unless CJ is wanted
 PASS: Gunner callouts: CONTACT, TARGET DOWN with kill count, AREA CLEAR, mode reports
 PASS: Callouts stay silent when STATUS MESSAGES is disabled
+PASS: PROTECT CJ at 3+ stars returns fire at the police chopper shooting CJ
+PASS: Return fire lasts 3 s after the chopper stops shooting
+PASS: Air threat ignores low wanted levels, ground shooters, our own gunners and stale rounds
 PASS: Combat orbit circles the threat at 28 m and 25 m above it
 Mocked script execution only: actual GTA flight, collisions, gunfire, animations and Android behavior are not tested.

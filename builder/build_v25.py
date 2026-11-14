@@ -35,6 +35,13 @@ ROPE_PICKUP_AHEAD=9.0
 # missed most presses. The fire worker (WAIT 0, every frame) stamps EXIT_PRESSED with the time;
 # the core accepts a stamp younger than 600 ms and debounces commands for 1.5 s (EXIT_LAST).
 EXIT_PRESSED=STATE+148;EXIT_LAST=STATE+149
+# v39.4 air threat: script searches cannot return helicopters (053E/073E accept only cars and
+# bikes) nor peds inside vehicles (0A3E/02DD skip them), and police choppers fire by themselves
+# (CHeli::ProcessControl -> FireOneInstantHitRound -> CBulletTraces::AddTrace). So in PROTECT CJ
+# at 3+ stars the fire worker reads CBulletTraces::aTraces (16 x 44 bytes, image-relative) with
+# 0DD8 and returns fire at the start point of a fresh round that came down at CJ from >=10 m above.
+BULLET_TRACES_OFS=0xCFA500;BULLET_TRACE_SIZE=44;BULLET_TRACE_COUNT=16
+AIR_X=STATE+150;AIR_Y=STATE+151;AIR_Z=STATE+152;AIR_SEEN=STATE+153;AIR_CALL_NEXT=STATE+154
 EXIT_WIDGET=0  # CTouchInterface widget of the on-screen enter/exit vehicle button (CPad::ExitVehicleJustDown)
 CRUISE_T=STATE+118;CR_UP=STATE+119;CR_DN=STATE+120
 CR_CMDZ=STATE+128  # v33: commanded z, integrated by steps (never rebuilt from the actual z)
@@ -66,6 +73,7 @@ MESSAGES={
  'HCNEED':'~y~HELICOVER~w~: call support first (HELICOVER > CALL SUPPORT).',
  'HCNOMAP':'~y~EVAC~w~: place a destination marker on the map first.',
  'HCCHOS':'~g~EVAC~w~: above destination. Press the exit button to get out.',
+ 'HCAIR':'~r~AIR THREAT!~w~ Returning fire on the police chopper.',
  'HCCONT':'~r~CONTACT!~w~ Door gunners engaging.',
  'HCKILL':'~g~TARGET DOWN~w~ - kills: ~1~',
  'HCCLEAR':'~g~AREA CLEAR.~w~ Gunners holding.',
@@ -120,7 +128,7 @@ c.label('INIT');a(0);c.set(AVOID_STAGE,0);c.set(AVOID_NEXT,0);c.set(BUSY,0);c.se
 for key in range(PUB,PUB+7):c.set(key,-1)
 for key in range(GROUND_PUB,GROUND_PUB+5):c.set(key,-1)
 c.set(ROPE_COMMAND,0)
-for key,val in [(STATE,0),(CMD,0),(OPEN,0),(MODEL,487),(CREW,2),(FIRE,0),(TOUCH,0),(HUD,1),(HP,0),(WEAPON_SETTING,0),(EXIT_MODE,0),(AUTO_EXIT,0),(LOCK_HOLD,0),(ROPE_PENDING,0),(DROP_RESULT,0),(ROPE_TRIES,0),(RETRY_AT,0),(FORCE_ROPE,0),(EXIT_PRESSED,0),(EXIT_LAST,0),(KILLS,0),(LAST_TGT,-1),(ENGAGED,0),(CLEAR_AT,0),(ORBIT_I,0),(ORBIT_NEXT,0)]:c.set(key,val)
+for key,val in [(STATE,0),(CMD,0),(OPEN,0),(MODEL,487),(CREW,2),(FIRE,0),(TOUCH,0),(HUD,1),(HP,0),(WEAPON_SETTING,0),(EXIT_MODE,0),(AUTO_EXIT,0),(LOCK_HOLD,0),(ROPE_PENDING,0),(DROP_RESULT,0),(ROPE_TRIES,0),(RETRY_AT,0),(FORCE_ROPE,0),(EXIT_PRESSED,0),(EXIT_LAST,0),(AIR_SEEN,0),(AIR_CALL_NEXT,0),(KILLS,0),(LAST_TGT,-1),(ENGAGED,0),(CLEAR_AT,0),(ORBIT_I,0),(ORBIT_NEXT,0)]:c.set(key,val)
 c.label('IDLE');a(1,I(100));a(0x01bd,V(20));a(0xddc,I(HEART),V(20));c.get(8,CMD);c.set(CMD,0)
 c.eq(8,1,'IDLE_EVAC');a(6,V(25),I(0));c.go('LOAD')
 # v38: evacuation commands no longer summon support on their own; they ask for CALL SUPPORT first.
@@ -811,7 +819,8 @@ f.label('MODE_READY');f.call('KILL_CHECK');f.label('ARM_GUARDS');f.get(30,FIRENE
 for var in [3,4,5,6]:
  skip='ARM_SKIP_'+str(var);alive(f,var,skip);a(0x0470,V(var),V(30));f.check(0x803b,[V(30),V(7)],skip);a(0x01b2,V(var),V(7),I(30000));a(0x01b9,V(var),V(7));a(0x02e2,V(var),I(100));a(0x07dd,V(var),I(100));f.label(skip)
 f.eq(25,0,'ACTIVE_MODE');f.go('WAIT')
-f.label('ACTIVE_MODE');f.eq(25,3,'CHECK_ALL_MODE');f.call('REFRESH_PROTECT_POLICE');f.call('FIND_PROTECT_NPC');alive(f,29,'NO_TARGET');f.call('SHOOT_CHAR');f.go('WAIT')
+f.label('ACTIVE_MODE');f.eq(25,3,'CHECK_ALL_MODE');f.call('REFRESH_PROTECT_POLICE');f.call('AIR_SCAN');f.eq(30,1,'PROTECT_GROUND');f.call('AIR_CALLOUT');f.call('SHOOT_COORD');f.go('WAIT')
+f.label('PROTECT_GROUND');f.call('FIND_PROTECT_NPC');alive(f,29,'NO_TARGET');f.call('SHOOT_CHAR');f.go('WAIT')
 f.label('CHECK_ALL_MODE');f.eq(25,1,'FOLLOW_SHOTS');f.call('FIND_ANY_NPC');alive(f,29,'NO_TARGET');f.call('SHOOT_CHAR');f.go('WAIT')
 f.label('NO_TARGET');f.call('STOP_COMBAT');f.call('CLEAR_CHECK');f.go('WAIT')
 # v39-fire OVERWATCH: precision fire on armed hostiles only (guns/grenades; police only when wanted)
@@ -973,6 +982,27 @@ f.go('PROTECT_NO_TARGET')
 f.label('PROTECT_KEEP_OLD');a(0x0085,V(29),V(24));alive(f,29,'PROTECT_NO_TARGET');f.call('CHECK_PROTECT_NPC');f.eq(30,1,'PROTECT_NO_TARGET');f.call('TARGET_IN_RANGE');f.eq(30,1,'PROTECT_NO_TARGET');f.ret()
 f.label('PROTECT_NO_TARGET');a(6,V(29),I(-1));f.ret()
 
+# v39.4: 30@ = 1 and 22@..24@ = the shooter position when a fresh hostile round came down at CJ.
+f.label('AIR_SCAN');a(6,V(30),I(0));f.check(0x010f,[I(0),I(2)],'AIR_RET')
+a(0x00a0,V(0),V(8),V(9),V(10));a(0x00aa,V(1),V(11),V(12),V(13));a(0x01bd,V(31))
+for k in range(BULLET_TRACE_COUNT):
+ base=BULLET_TRACES_OFS+k*BULLET_TRACE_SIZE;nxt='AIR_TRACE_NEXT_'+str(k)
+ a(0x0dd8,V(14),I(base+24),I(1),I(1));f.eq(14,1,nxt)
+ a(0x0dd8,V(14),I(base+28),I(4),I(1));a(0x0085,V(15),V(31));a(0x0062,V(15),V(14));f.check(0x8019,[V(15),I(1500)],nxt)
+ a(0x0dd8,V(16),I(base+12),I(4),I(1));a(0x0dd8,V(17),I(base+16),I(4),I(1));a(0x0dd8,V(18),I(base+20),I(4),I(1))
+ a(0x050a,V(8),V(9),V(10),V(16),V(17),V(18),V(19));f.check(0x0023,[F(12),V(19)],nxt)
+ a(0x0dd8,V(16),I(base),I(4),I(1));a(0x0dd8,V(17),I(base+4),I(4),I(1));a(0x0dd8,V(18),I(base+8),I(4),I(1))
+ for v,lo,hi in [(16,-3100,3100),(17,-3100,3100),(18,-100,1500)]:f.check(0x0021,[V(v),F(lo)],nxt);f.check(0x0023,[F(hi),V(v)],nxt)
+ a(0x0087,V(19),V(18));a(0x0063,V(19),V(10));f.check(0x0021,[V(19),F(10)],nxt)
+ a(0x050a,V(11),V(12),V(13),V(16),V(17),V(18),V(19));f.check(0x0021,[V(19),F(15)],nxt)
+ a(0x050a,V(8),V(9),V(10),V(16),V(17),V(18),V(19));f.check(0x0023,[F(220),V(19)],nxt)
+ a(0xddc,I(AIR_X),V(16));a(0xddc,I(AIR_Y),V(17));a(0xddc,I(AIR_Z),V(18));a(0xddc,I(AIR_SEEN),V(31));f.go('AIR_USE');f.label(nxt)
+f.get(14,AIR_SEEN);f.eq(14,0,'AIR_RECENT');f.ret()
+f.label('AIR_RECENT');a(0x0085,V(15),V(31));a(0x0062,V(15),V(14));f.check(0x8019,[V(15),I(3000)],'AIR_RET')
+f.label('AIR_USE');f.get(22,AIR_X);f.get(23,AIR_Y);f.get(24,AIR_Z);a(6,V(30),I(1))
+f.label('AIR_RET');f.ret()
+f.label('AIR_CALLOUT');f.set(ENGAGED,1);f.set(CLEAR_AT,0);f.get(30,AIR_CALL_NEXT);a(0x01bd,V(31));f.check(0x001d,[V(31),V(30)],'AIR_CALL_RET');a(0x000a,V(31),I(10000));a(0xddc,I(AIR_CALL_NEXT),V(31));msg(f,'HCAIR')
+f.label('AIR_CALL_RET');a(6,V(30),I(1));f.ret()
 f.label('FIND_ARMED_HOSTILE');alive(f,29,'ARMED_SCAN');f.call('CHECK_ARMED_HOSTILE');f.eq(30,1,'ARMED_SCAN');f.call('TARGET_IN_RANGE');f.eq(30,1,'ARMED_SCAN');f.ret()
 f.label('ARMED_SCAN')
 scan_foot(wide_cells,20.2,120,'CHECK_ARMED_HOSTILE','OVW')
