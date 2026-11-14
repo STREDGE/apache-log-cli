@@ -70,23 +70,46 @@ s.go('ACTIVE')
 # The reverse clip is cosmetic; vertical position is moved explicitly.
 s.label('CJ_ASCENT');s.check(0x0431,[V(1),I(0)],'NO_SEAT');s.check(0x04ee,[S('PED')],'ANIM_FAIL');s.check(0x056e,[V(1)],'CLEANUP');s.get(19,b.STATE);s.eq(19,3,'CLEANUP')
 # Save a ground position for cancellation and disable player control only during ascent.
-a(0x0407,V(1),F(0),F(-3),F(-1),V(2),V(3),V(4));a(0x02ce,V(2),V(3),V(4),V(4));a(0x000b,V(4),F(.7));a(0x0087,V(8),V(4));a(0x00aa,V(1),V(10),V(11),V(9));a(0x000b,V(9),F(-1));a(0x0063,V(9),V(8));a(0x0013,V(9),F(1000.0/1800.0));a(0x01b4,I(0),I(0));a(6,V(26),I(1));a(0x00a1,V(0),V(2),V(3),V(8));a(0x0605,V(0),S('ABSEIL'),S('PED'),F(4),I(1),I(1),I(1),I(1),I(-1));a(1,I(100));s.check(0x0611,[V(0),S('ABSEIL')],'CJ_ANIM_NOT_RUNNING');a(0x0614,V(0),S('ABSEIL'),F(.99));a(0x0393,V(0),S('ABSEIL'),F(-1));s.label('CJ_ANIM_NOT_RUNNING')
+a(0x0407,V(1),F(0),F(-3),F(-1),V(2),V(3),V(4));a(0x02ce,V(2),V(3),V(4),V(4));a(0x000b,V(4),F(.7));a(0x0087,V(8),V(4));a(0x00aa,V(1),V(10),V(11),V(9));a(0x000b,V(9),F(-1));a(0x0063,V(9),V(8));a(0x0013,V(9),F(1000.0/1800.0));a(0x01b4,I(0),I(0));a(6,V(26),I(1))
+# v33: no snap to the rope point (that was the abrupt frame change). CJ drifts onto the rope line
+# during the climb (5@/7@ horizontal speed) and the clip blends in more slowly.
+a(0x00a0,V(0),V(12),V(13),V(14));a(0x0087,V(5),V(2));a(0x0063,V(5),V(12));a(0x0013,V(5),F(1000.0/1800.0));a(0x0087,V(7),V(3));a(0x0063,V(7),V(13));a(0x0013,V(7),F(1000.0/1800.0))
+a(0x0605,V(0),S('ABSEIL'),S('PED'),F(2),I(1),I(1),I(1),I(1),I(-1));a(1,I(100));s.check(0x0611,[V(0),S('ABSEIL')],'CJ_ANIM_NOT_RUNNING');a(0x0614,V(0),S('ABSEIL'),F(.99));a(0x0393,V(0),S('ABSEIL'),F(-1));s.label('CJ_ANIM_NOT_RUNNING')
 plat_create()
 a(0x01bd,V(16));a(0x03e5,S('RGUP'))
 s.label('CJ_UP_TICK');a(1,I(0));s.check(0x0256,[I(0)],'ASCENT_ABORT');s.check(0x056d,[V(0)],'ASCENT_ABORT');s.check(0x8118,[V(0)],'ASCENT_ABORT');s.check(0x056e,[V(1)],'ASCENT_ABORT');s.check(0x8119,[V(1)],'ASCENT_ABORT');s.get(19,b.STATE);s.eq(19,3,'ASCENT_ABORT');a(0x01bd,V(15));a(0x0062,V(15),V(16));s.check(0x0019,[V(15),I(1800)],'CJ_TIME_READY');a(6,V(15),I(1800));s.label('CJ_TIME_READY');s.check(0x0611,[V(0),S('ABSEIL')],'CJ_FRAME_ANIM_SKIP');a(0x0093,V(11),V(15));a(0x0013,V(11),F(1.0/1800.0));a(0x0007,V(12),F(1));a(0x0063,V(12),V(11));a(0x0614,V(0),S('ABSEIL'),V(12));s.label('CJ_FRAME_ANIM_SKIP')
 plat_follow()
-a(0x083c,V(0),F(0),F(0),V(9));s.check(0x0019,[V(15),I(1799)],'CJ_UP_TICK');a(0x083c,V(0),F(0),F(0),F(0))
+a(0x083c,V(0),V(5),V(7),V(9));s.check(0x0019,[V(15),I(1799)],'CJ_UP_TICK');a(0x083c,V(0),F(0),F(0),F(0))
 plat_delete()
 s.check(0x0431,[V(1),I(0)],'ASCENT_ABORT');a(0x0430,V(0),V(1),I(0));s.check(0x0448,[V(0),V(1)],'ASCENT_ABORT');a(0x01b4,I(0),I(1));a(6,V(26),I(0));a(0x03e5,S('RGABO'))
-# After CJ is aboard the extra four run to distinct ropes, ascend, then disappear.
-for var,x,y in [(20,-1.5,1.2),(21,1.5,1.2),(22,-1.5,-1.2),(23,1.5,-1.2)]:
- end='GUARD_UP_DONE_'+str(var);approach='GUARD_APPROACH_'+str(var);ready='GUARD_READY_'+str(var);loop='GUARD_ASCEND_'+str(var);newrope='GUARD_ROPE_NEW_'+str(var)
- s.check(0x056d,[V(var)],end);s.check(0x8118,[V(var)],end);a(0x0407,V(1),F(x),F(y),F(-1),V(2),V(3),V(4));a(0x02ce,V(2),V(3),V(4),V(4));a(0x000b,V(4),F(.7));a(0x01bd,V(18));a(0x000a,V(18),I(8000))
- s.label(approach);a(1,I(500));s.check(0x0256,[I(0)],'CLEANUP');s.check(0x056e,[V(1)],'CLEANUP');s.check(0x8119,[V(1)],'CLEANUP');s.get(19,b.STATE);s.eq(19,3,'CLEANUP');s.check(0x056d,[V(var)],end);s.check(0x8118,[V(var)],end);a(0x00a0,V(var),V(10),V(11),V(12));a(0x050a,V(2),V(3),V(4),V(10),V(11),V(12),V(15));s.check(0x0023,[F(2),V(15)],'GUARD_NOT_AT_'+str(var));s.go(ready)
- s.label('GUARD_NOT_AT_'+str(var));a(0x01bd,V(19));s.check(0x001d,[V(19),V(18)],'GUARD_WALK_'+str(var));s.go(end);s.label('GUARD_WALK_'+str(var));a(0x04eb,V(var),I(0));a(0x05d3,V(var),V(2),V(3),V(4),I(6),I(1200));s.go(approach)
- s.label(ready);s.check(0x056d,[V(17)],newrope);a(0x009b,V(17));s.label(newrope);a(0x0407,V(1),F(x),F(y),F(-1),V(10),V(11),V(12));a(0x0503,I(8),I(285),V(10),V(11),V(12),V(17));a(0xddc,I(b.GROUND_PUB+4),V(17));s.check(0x056d,[V(17)],'GUARD_NOROPE_'+str(var));a(0x0337,V(17),I(0));a(0x0619,V(17),I(0));s.label('GUARD_NOROPE_'+str(var));a(0x0087,V(8),V(4));a(0x00aa,V(1),V(10),V(11),V(9));a(0x000b,V(9),F(-1));a(0x0063,V(9),V(8));a(0x0013,V(9),F(1000.0/1800.0));a(0x00a1,V(var),V(2),V(3),V(8));a(0x0605,V(var),S('ABSEIL'),S('PED'),F(4),I(1),I(1),I(1),I(1),I(-1));a(1,I(100));s.check(0x0611,[V(var),S('ABSEIL')],'GUARD_ANIM_NOT_RUNNING_'+str(var));a(0x0614,V(var),S('ABSEIL'),F(.99));a(0x0393,V(var),S('ABSEIL'),F(-1));s.label('GUARD_ANIM_NOT_RUNNING_'+str(var));a(0x01bd,V(16))
- s.label(loop);a(1,I(0));s.check(0x0256,[I(0)],'CLEANUP');s.check(0x056e,[V(1)],'CLEANUP');s.check(0x8119,[V(1)],'CLEANUP');s.get(19,b.STATE);s.eq(19,3,'CLEANUP');s.check(0x056d,[V(var)],end);s.check(0x8118,[V(var)],end);a(0x01bd,V(15));a(0x0062,V(15),V(16));s.check(0x0019,[V(15),I(1800)],'GUARD_TIME_READY_'+str(var));a(6,V(15),I(1800));s.label('GUARD_TIME_READY_'+str(var));s.check(0x0611,[V(var),S('ABSEIL')],'GUARD_FRAME_ANIM_SKIP_'+str(var));a(0x0093,V(11),V(15));a(0x0013,V(11),F(1.0/1800.0));a(0x0007,V(12),F(1));a(0x0063,V(12),V(11));a(0x0614,V(var),S('ABSEIL'),V(12));s.label('GUARD_FRAME_ANIM_SKIP_'+str(var));a(0x083c,V(var),F(0),F(0),V(9));s.check(0x0019,[V(15),I(1799)],loop);a(0x083c,V(var),F(0),F(0),F(0))
- s.label(end);s.set(b.GROUND_PUB+var-20,-1);s.check(0x056d,[V(var)],'GUARD_REMOVED_'+str(var));a(0x009b,V(var));s.label('GUARD_REMOVED_'+str(var))
+# v33: once CJ is aboard the four rope guards return together: sprint to their ropes (<= 2.5 s),
+# then all rise at once in 1.2 s with the reversed ABSEIL clip, and board (are removed).
+GR=[(20,-1.5,1.2),(21,1.5,1.2),(22,-1.5,-1.2),(23,1.5,-1.2)]
+def gr_alive(var,skip):s.check(0x056d,[V(var)],skip);s.check(0x8118,[V(var)],skip)
+def gr_rope(x,y,dx,dy,dz):a(0x0407,V(1),F(x),F(y),F(-1),V(dx),V(dy),V(dz));a(0x02ce,V(dx),V(dy),V(dz),V(dz));a(0x000b,V(dz),F(.7))
+def gr_checks():s.check(0x0256,[I(0)],'CLEANUP');s.check(0x056e,[V(1)],'CLEANUP');s.check(0x8119,[V(1)],'CLEANUP');s.get(19,b.STATE);s.eq(19,3,'CLEANUP')
+for var,x,y in GR:
+ skip='GR_RUN_SKIP_'+str(var);gr_alive(var,skip);gr_rope(x,y,10,11,12);a(0x04eb,V(var),I(0));a(0x05d3,V(var),V(10),V(11),V(12),I(7),I(2500));s.label(skip)
+a(0x01bd,V(18));a(0x000a,V(18),I(2500))
+s.label('GR_WAIT');a(1,I(100));gr_checks();a(6,V(19),I(1))
+for var,x,y in GR:
+ skip='GR_AT_'+str(var);gr_alive(var,skip);gr_rope(x,y,10,11,12);a(0x00a0,V(var),V(13),V(14),V(15));a(0x050a,V(10),V(11),V(12),V(13),V(14),V(15),V(16));s.check(0x0021,[V(16),F(2)],skip);a(6,V(19),I(0));s.label(skip)
+s.eq(19,1,'GR_NOT_ALL');s.go('GR_RISE')
+s.label('GR_NOT_ALL');a(0x01bd,V(15));s.check(0x001d,[V(15),V(18)],'GR_WAIT')
+s.label('GR_RISE');a(0x00aa,V(1),V(10),V(11),V(9));a(0x000b,V(9),F(-1));a(0x0007,V(8),F(0))
+for var,x,y in GR:
+ skip='GR_PLACE_'+str(var);gr_alive(var,skip);gr_rope(x,y,2,3,4);a(0x0087,V(8),V(4));a(0x00a1,V(var),V(2),V(3),V(4));a(0x0605,V(var),S('ABSEIL'),S('PED'),F(2),I(1),I(1),I(1),I(1),I(-1));s.label(skip)
+a(0x0063,V(9),V(8));a(0x0013,V(9),F(1000.0/1200.0));a(1,I(100))
+for var,x,y in GR:
+ skip='GR_ANIM_'+str(var);gr_alive(var,skip);s.check(0x0611,[V(var),S('ABSEIL')],skip);a(0x0614,V(var),S('ABSEIL'),F(.99));a(0x0393,V(var),S('ABSEIL'),F(-1));s.label(skip)
+a(0x01bd,V(16))
+s.label('GR_TICK');a(1,I(0));gr_checks();a(0x01bd,V(15));a(0x0062,V(15),V(16));s.check(0x0019,[V(15),I(1200)],'GR_T_OK');a(6,V(15),I(1200));s.label('GR_T_OK')
+a(0x0093,V(11),V(15));a(0x0013,V(11),F(1.0/1200.0));a(0x0007,V(12),F(1));a(0x0063,V(12),V(11))
+for var,x,y in GR:
+ skip='GR_UP_'+str(var);anim='GR_UP_ANIM_'+str(var);gr_alive(var,skip);s.check(0x0611,[V(var),S('ABSEIL')],anim);a(0x0614,V(var),S('ABSEIL'),V(12));s.label(anim);a(0x083c,V(var),F(0),F(0),V(9));s.label(skip)
+s.check(0x0019,[V(15),I(1199)],'GR_TICK')
+for var,x,y in GR:
+ skip='GR_STOP_'+str(var);gr_alive(var,skip);a(0x083c,V(var),F(0),F(0),F(0));s.label(skip)
 s.go('CLEANUP')
 s.label('ASCENT_ABORT')
 plat_delete()

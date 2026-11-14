@@ -22,6 +22,7 @@ class World:
  def step(self,*vms,n=1):
   for _ in range(n):
    delta=getattr(self,'frame_ms',100);self.now+=delta
+   if getattr(self,'pending_car',None):car,pos=self.pending_car;self.cars[car]['pos']=pos;self.pending_car=None
    for actor,velocity in self.velocity.items():
     if actor in self.incar:continue
     if actor==1:self.player=[self.player[i]+velocity[i]*delta/1000. for i in range(3)]
@@ -113,7 +114,10 @@ class VM:
     w.velocity.pop(vals[0],None)
     if vals[0]==1:w.player=vals[1:4].copy()
     else:w.pos[vals[0]]=vals[1:4].copy()
-   elif op==0xab:w.cars[vals[0]]['pos']=[vals[1],vals[2],vals[3]+getattr(w,'car_z_offset',1.2)]
+   elif op==0xab:
+    pos=[vals[1],vals[2],vals[3]+getattr(w,'car_z_offset',1.2)]
+    if getattr(w,'teleport_delay',False):w.pending_car=(vals[0],pos)
+    else:w.cars[vals[0]]['pos']=pos
    elif op==0x77e:put(0,w.interior)
    elif op in [0x4c4,0x407]:
     xyz=w.coords(vals[0]) if op==0x4c4 else w.cars[vals[0]]['pos']
@@ -216,6 +220,12 @@ def near_cj_landing(w,c):
  w.step(c,n=14)
  assert w.shared[b.STATE]==8
 
+def fly_until(w,state,*vms,limit=600):
+ # v33: the frozen helicopter keeps its own commanded height, so tests let it fly instead of teleporting it.
+ for _ in range(limit):
+  if w.shared[b.STATE]==state:return
+  w.step(*vms)
+ raise AssertionError(('never reached',state,w.shared[b.STATE],w.messages))
 def start_grove(w,c):
  near_cj_landing(w,c)
  w.player=w.car.copy()
@@ -259,7 +269,7 @@ assert calls(w,0x4e4)[-1][2]==[b.GROVE_X,b.GROVE_Y]
 assert calls(w,0x7bb)[-1][2]==[car,0] and calls(w,0xad)[-1][2]==[car,21.]
 w.car=[b.GROVE_X+60,b.GROVE_Y,75];w.step(c,n=8)
 assert w.shared[b.STATE]==22
-w.car=[w.shared[b.DEST_X],w.shared[b.DEST_Y],w.shared[b.DEST_Z]+18.];w.speed=0;w.step(c,n=6);assert w.shared[b.STATE]==23
+w.speed=0;fly_until(w,23,c)
 command(w,c,12,ticks=6);assert w.shared[b.STATE]==11
 mission=calls(w,0x743)[-1][2]
 assert mission[0:3]==[car,b.GROVE_X,b.GROVE_Y]
@@ -276,7 +286,7 @@ w,c,_=setup();summon(w,c);start_grove(w,c)
 w.clear_fn=lambda x,y:not (abs(x-b.GROVE_X)<.2 and abs(y-b.GROVE_Y)<.2)
 w.car=[b.GROVE_X+60,b.GROVE_Y,75];w.step(c,n=8)
 assert w.shared[b.STATE]==22 and w.shared[b.DEST_X]==b.GROVE_X+6
-w.car=[w.shared[b.DEST_X],w.shared[b.DEST_Y],w.shared[b.DEST_Z]+18.];w.speed=0;w.step(c,n=6);command(w,c,12,ticks=6)
+w.speed=0;fly_until(w,23,c);command(w,c,12,ticks=6)
 assert w.shared[b.STATE]==11 and calls(w,0x743)[-1][2][1:3]==[b.GROVE_X+6,b.GROVE_Y]
 passed('Grove chooses a nearby point in the circle when the centre is obstructed')
 
@@ -330,7 +340,7 @@ w.shared[b.FIRE]=1;w.step(c,f,n=7);assert attacks(w)
 w.shared[b.FIRE]=0;w.step(c,f,n=3);count=len(attacks(w));w.step(c,f,n=5);assert len(attacks(w))==count
 passed('Fire mode selection still enables and stops issuing tasks in the mock')
 
-w,c,_=setup();summon(w,c);start_grove(w,c);w.car=[b.GROVE_X+60,b.GROVE_Y,75];w.step(c,n=8);assert w.shared[b.STATE]==22;w.car=[w.shared[b.DEST_X],w.shared[b.DEST_Y],w.shared[b.DEST_Z]+18.];w.speed=0;w.step(c,n=6);command(w,c,12,ticks=6);w.car=[c.v[26],c.v[27],14.85];w.altitude=1.5;w.step(c,n=14)
+w,c,_=setup();summon(w,c);start_grove(w,c);w.car=[b.GROVE_X+60,b.GROVE_Y,75];w.step(c,n=8);assert w.shared[b.STATE]==22;w.speed=0;fly_until(w,23,c);command(w,c,12,ticks=6);w.car=[c.v[26],c.v[27],14.85];w.altitude=1.5;w.step(c,n=14)
 assert w.shared[b.STATE]==12;command(w,c,8,ticks=5);assert 1 not in w.incar
 w.player=[2400.,-1600.,13.]
 for v in [13,14,15,16]:w.pos[c.v[v]]=w.player.copy()
@@ -340,7 +350,7 @@ assert all(c.v[v] in w.attach for v in [13,14,15,16])
 assert calls(w,0x918)[-1][2]==[c.v[5],1] and calls(w,0x726)[-1][2][1]==1
 passed('All four onboard guards remain attached after Grove and follow takeoff')
 
-w,c,_=setup();summon(w,c);start_grove(w,c);w.car=[b.GROVE_X+60,b.GROVE_Y,75];w.step(c,n=8);assert w.shared[b.STATE]==22;w.car=[w.shared[b.DEST_X],w.shared[b.DEST_Y],w.shared[b.DEST_Z]+18.];w.speed=0;w.step(c,n=6);command(w,c,12,ticks=6);w.car=[c.v[26],c.v[27],14.85];w.altitude=1.5;w.step(c,n=14)
+w,c,_=setup();summon(w,c);start_grove(w,c);w.car=[b.GROVE_X+60,b.GROVE_Y,75];w.step(c,n=8);assert w.shared[b.STATE]==22;w.speed=0;fly_until(w,23,c);command(w,c,12,ticks=6);w.car=[c.v[26],c.v[27],14.85];w.altitude=1.5;w.step(c,n=14)
 assert w.incar.get(1)==c.v[5] and w.shared[b.STATE]==12
 before=len(calls(w,0x4a2));command(w,c,9,ticks=8)
 assert w.shared[b.STATE]==12 and w.incar.get(1)==c.v[5] and 'HCEXIT' in w.messages and len(calls(w,0x4a2))==before
@@ -526,6 +536,25 @@ squad=[w.shared[b.GROUND_PUB+i] for i in range(4)];w.ped_heights={squad[2]:6.}
 w.now+=6000;w.player=[0.,-3.,.7];w.step(c,ground,n=10);assert w.control and w.incar.get(1)!=c.v[5]
 w.ped_heights={};w.step(c,ground,n=10);assert w.control is False
 passed('Pickup waits until every rope guard is on the ground')
+# v33: CJ standing 1 m off the rope drifts onto it during the climb (no snap), then the four
+# rope guards sprint back and rise together, all aboard within ~4 s of CJ.
+w,c,_=setup();summon(w,c);command(w,c,3,ticks=5);w.car=[0.,0.,18.];w.speed=0
+ground=VM('Helicover_Ground',w);w.step(c,ground,n=3);w.shared[b.ROPE_COMMAND]=1;w.step(c,ground,n=6)
+squad=[w.shared[b.GROUND_PUB+i] for i in range(4)]
+w.now+=6000;w.player=[1.,-3.,.7]
+for _ in range(80):
+ w.step(c,ground)
+ if w.incar.get(1)==c.v[5]:break
+assert w.incar.get(1)==c.v[5] and not [x for x in calls(w,0xa1) if x[2][0]==1]
+drift=[x for x in calls(w,0x83c) if x[2][0]==1 and x[2][3]>0];assert drift and drift[0][2][1]<0,'moves toward the rope'
+aboard=w.now
+for _ in range(80):
+ w.step(c,ground)
+ if all(ch not in w.exists for ch in squad):break
+assert all(ch not in w.exists for ch in squad) and w.now-aboard<=4500,(w.now-aboard)
+rises=[x for x in calls(w,0x83c) if x[2][0] in squad and x[2][3]>0]
+starts={ch:min(x[0] for x in rises if x[2][0]==ch) for ch in squad};assert max(starts.values())-min(starts.values())<=100,starts
+passed('Rope guards return together and fast; CJ drifts onto the rope without a snap')
 # Reject the literal/local argument swap observed in the crash log.
 from asm_v25 import Script, V, F
 for opcode,args in [(0x0023,(V(19),F(12.0))),(0x0021,(F(1.5),V(8)))]:
@@ -552,7 +581,8 @@ for frame_ms in [16,33]:
  assert len(motion)>40,(frame_ms,len(motion))
  assert all(x[2][3]>0 for x in motion[:-1]) and motion[-1][2][3]==0
  assert 1700 <= motion[-1][0]-motion[0][0] <= 1900,(frame_ms,motion[-1][0]-motion[0][0])
- assert len([x for x in calls(w,0xa1) if x[2][0]==1])==1
+ assert not [x for x in calls(w,0xa1) if x[2][0]==1]  # v33: no snap to the rope point
+ assert all(abs(x[2][1])<1e-6 and abs(x[2][2])<1e-6 for x in motion)  # CJ already on the rope line in this test
  frames=[x[2][2] for x in calls(w,0x614) if x[2][0]==1]
  assert len(frames)>40 and frames[-1]<frames[1]
 passed('CJ ascent advances smoothly over about 1.8 seconds at two frame rates')
@@ -595,7 +625,7 @@ if b.MAP_MARKER:
  w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.marker=[200.,150.,0.];ground=VM('Helicover_Ground',w);w.step(c,ground,n=3)
  command(w,c,11,ticks=8);assert w.shared[b.STATE]==21
  w.car=[205.,150.,80.];w.step(c,ground,n=8);assert w.shared[b.STATE]==22,(w.shared[b.STATE],w.messages)
- w.car=[w.shared[b.DEST_X],w.shared[b.DEST_Y],w.shared[b.DEST_Z]+18.];w.speed=0;w.step(c,ground,n=8);assert w.shared[b.STATE]==23
+ w.speed=0;fly_until(w,23,c,ground)
  command(w,c,13,ticks=3);w.step(c,ground,n=45)
  assert w.control and 1 not in w.incar and w.shared[b.STATE]==3,(w.shared[b.STATE],w.messages,w.control)
  assert all(c.v[i] in w.attach for i in [13,14,15,16])
@@ -612,6 +642,13 @@ if b.MAP_MARKER:
  assert [w.shared[b.DEST_X],w.shared[b.DEST_Y]]==[200.,150.] and not calls(w,0xab6)
  assert all(x[2][3]==1 for x in calls(w,0xdd8))
  passed('Map marker is read from libGTASA memory with 0DD8, never 0AB6')
+ # v33: repeated FLY TO MAP MARKER with a one-frame teleport delay must not make the helicopter climb away.
+ w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.marker=[2000.,150.,0.];w.teleport_delay=True
+ for _ in range(3):command(w,c,11,ticks=40)
+ heights=[]
+ for _ in range(200):w.step(c);heights.append(w.car[2])
+ assert max(heights)<40. and max(heights[-100:])-min(heights[-100:])<.5,(max(heights),heights[-100:][:3],heights[-1])
+ passed('Repeated map flight with delayed teleports keeps a steady cruise height')
 else:
  w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.marker=[200.,150.,0.];command(w,c,11,ticks=6)
  assert w.shared[b.STATE]==2 and 'HCMAPOF' in w.messages and not calls(w,0xab6)
@@ -656,7 +693,7 @@ if b.MAP_MARKER:
  # A marked destination can also be landed at after the hover choice.
  w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.marker=[200.,150.,0.];command(w,c,11,ticks=8);assert w.shared[b.STATE]==21
  w.car=[205.,150.,80.];w.step(c,n=8);assert w.shared[b.STATE]==22
- w.car=[w.shared[b.DEST_X],w.shared[b.DEST_Y],w.shared[b.DEST_Z]+18.];w.speed=0;w.step(c,n=8);assert w.shared[b.STATE]==23
+ w.speed=0;fly_until(w,23,c)
  command(w,c,12,ticks=6);assert w.shared[b.STATE]==11
  w.car=[w.shared[b.DEST_X],w.shared[b.DEST_Y],w.shared[b.DEST_Z]+1.5];w.altitude=1.5;w.step(c,n=15)
  assert w.shared[b.STATE]==12 and w.incar.get(1)==c.v[5]
