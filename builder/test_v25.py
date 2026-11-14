@@ -103,6 +103,7 @@ class VM:
     w.velocity.pop(vals[0],None)
     if vals[0]==1:w.player=vals[1:4].copy()
     else:w.pos[vals[0]]=vals[1:4].copy()
+   elif op==0xab:w.cars[vals[0]]['pos']=[vals[1],vals[2],vals[3]+getattr(w,'car_z_offset',1.2)]
    elif op==0x77e:put(0,w.interior)
    elif op in [0x4c4,0x407]:
     xyz=w.coords(vals[0]) if op==0x4c4 else w.cars[vals[0]]['pos']
@@ -122,7 +123,7 @@ class VM:
     for i,v in enumerate(w.lookat):put(i,v)
    elif op==0x81a:pass
    elif op==0x819:put(1,getattr(w,'ped_heights',{}).get(vals[0],0.) if vals[0] in w.pos else w.altitude)
-   elif op==0x2e3:put(1,w.speed)
+   elif op==0x2e3:put(1,0. if w.frozen.get(vals[0]) else w.speed)
    elif op in [0x227,0x226]:put(1,w.health[vals[0]])
    elif op==0x4dd:put(1,w.armor[vals[0]])
    elif op==0x35f:w.armor[vals[0]]=min(100,w.armor[vals[0]]+vals[1])
@@ -460,9 +461,26 @@ assert w.shared[b.STATE]==3 and len(calls(w,0x503))>=4, (w.shared[b.STATE],w.mes
 passed('At elevated terrain, hovering 4m from pickup starts deployment at safe height')
 assert len(calls(w,0x503))>=5 and w.shared[b.GROUND_PUB+4] in w.exists and w.now<ground.v[27]
 passed('Fifth rope is created during guard descent rather than waiting for it to end')
-w,c,_=setup();summon(w,c);w.shared[b.CMD]=10;w.step(c,n=6);assert w.shared[b.STATE]==19
+w,c,_=setup();summon(w,c);w.car=[0.,-90.,28.];w.shared[b.CMD]=10;w.step(c,n=6);assert w.shared[b.STATE]==19
 w.now+=36000;w.step(c,n=5);assert w.shared[b.STATE]==18 and 'HCRWAIT' in w.messages
 passed('A stalled rope approach reports failure after 35 seconds')
+# v27: inside 45 m the helicopter is frozen and glided by script to the hover point; no circling.
+w,c,_=setup();summon(w,c);ground=VM('Helicover_Ground',w);w.step(c,ground,n=3);w.car=[20.,-30.,40.];w.speed=9.
+w.shared[b.CMD]=10;w.step(c,ground,n=4)
+assert w.shared[b.FROZEN]==1 and w.frozen.get(c.v[5]),(w.shared[b.STATE],w.messages)
+for _ in range(80):
+ w.step(c,ground)
+ if w.shared[b.STATE]!=19:break
+assert w.shared[b.STATE]==3,(w.shared[b.STATE],w.messages)
+hx,hy,hz=w.car;assert abs(hz-(c.v[28]+15.))<.05 and math.dist([hx,hy],[c.v[26],c.v[27]])<.05,(w.car,c.v[26:29])
+w.step(c,ground,n=12);assert len(calls(w,0x503))>=4,w.messages
+passed('Rope approach glides from 45 m to an exact hover without circling, compensating the z offset')
+w,c,_=setup();summon(w,c);w.car=[0.,-200.,40.];w.shared[b.CMD]=10;w.step(c,n=6)
+assert w.shared[b.STATE]==19 and not w.frozen.get(c.v[5]) and calls(w,0x4a2)[-1][2][1:3]==[c.v[26],c.v[27]]
+passed('Beyond 45 m the native autopilot flies the approach at higher speed')
+w,c,_=setup();summon(w,c);w.car=[0.,-30.,40.];w.los_fn=lambda a,z:not(abs(a[1]+30.)<.01 and abs(a[2]-40.)<.01);w.shared[b.CMD]=10;w.step(c,n=8)
+assert w.shared[b.STATE]==19 and not w.frozen.get(c.v[5])
+passed('An obstructed glide path keeps the native approach instead of teleporting through it')
 # Reject the literal/local argument swap observed in the crash log.
 from asm_v25 import Script, V, F
 for opcode,args in [(0x0023,(V(19),F(12.0))),(0x0021,(F(1.5),V(8)))]:
@@ -518,19 +536,24 @@ w.shared[b.FIRE]=2;w.shooting=False;w.step(c,f,n=15)
 assert all(w.weapons[c.v[v]]==31 for v in [13,14,15,16])
 passed('Guards keep selected weapons in cease fire and without CJ shooting')
 
-# Map flight snapshots the marker, reaches a hover, then allows a rope descent.
-w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.marker=[200.,150.,0.];ground=VM('Helicover_Ground',w);w.step(c,ground,n=3)
-command(w,c,11,ticks=8);assert w.shared[b.STATE]==25
-w.altitude=50;w.step(c,n=8);assert w.shared[b.STATE]==21
-w.car=[205.,150.,80.];w.step(c,ground,n=8);assert w.shared[b.STATE]==22,(w.shared[b.STATE],w.messages)
-w.car=[w.shared[b.DEST_X],w.shared[b.DEST_Y],w.shared[b.DEST_Z]+18.];w.speed=0;w.step(c,ground,n=8);assert w.shared[b.STATE]==23
-command(w,c,13,ticks=3);w.step(c,ground,n=45)
-assert w.control and 1 not in w.incar and w.shared[b.STATE]==3,(w.shared[b.STATE],w.messages,w.control)
-assert all(c.v[i] in w.attach for i in [13,14,15,16])
-passed('Map marker -> hover -> selected rope descent restores CJ control and preserves onboard team')
-w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];command(w,c,11,ticks=6)
-assert w.shared[b.STATE]==2 and 'HCNOMAP' in w.messages
-passed('Map flight rejects an absent marker')
+if b.MAP_MARKER:
+ # Map flight snapshots the marker, reaches a hover, then allows a rope descent.
+ w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.marker=[200.,150.,0.];ground=VM('Helicover_Ground',w);w.step(c,ground,n=3)
+ command(w,c,11,ticks=8);assert w.shared[b.STATE]==25
+ w.altitude=50;w.step(c,n=8);assert w.shared[b.STATE]==21
+ w.car=[205.,150.,80.];w.step(c,ground,n=8);assert w.shared[b.STATE]==22,(w.shared[b.STATE],w.messages)
+ w.car=[w.shared[b.DEST_X],w.shared[b.DEST_Y],w.shared[b.DEST_Z]+18.];w.speed=0;w.step(c,ground,n=8);assert w.shared[b.STATE]==23
+ command(w,c,13,ticks=3);w.step(c,ground,n=45)
+ assert w.control and 1 not in w.incar and w.shared[b.STATE]==3,(w.shared[b.STATE],w.messages,w.control)
+ assert all(c.v[i] in w.attach for i in [13,14,15,16])
+ passed('Map marker -> hover -> selected rope descent restores CJ control and preserves onboard team')
+ w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];command(w,c,11,ticks=6)
+ assert w.shared[b.STATE]==2 and 'HCNOMAP' in w.messages
+ passed('Map flight rejects an absent marker')
+else:
+ w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.marker=[200.,150.,0.];command(w,c,11,ticks=6)
+ assert w.shared[b.STATE]==2 and 'HCMAPOF' in w.messages and not calls(w,0xab6)
+ passed('Disabled map marker flight reports instead of executing 0AB6')
 # Distinct threats are assigned separately when candidates occupy different scan cells.
 w,c,f=fire_world();w.civilians=[]
 for npc,x,y in [(900,0.,0.),(901,-12.,0.),(902,12.,0.),(903,0.,12.)]:
@@ -541,11 +564,14 @@ assert len(set(assigned))==4 and all(x in w.civilians for x in assigned),assigne
 assert any(x[2][-1]==18 for x in calls(w,0x6bc))
 passed('Four guards acquire separate eligible threats when available, with stronger checked bullets')
 
-# Search a nearby landing candidate when the exact map marker is obstructed.
-w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.marker=[200.,150.,0.];w.clear_fn=lambda x,y:not(abs(x-200.)<.2 and abs(y-150.)<.2)
-command(w,c,11,ticks=8);assert w.shared[b.STATE]==25;w.altitude=50;w.step(c,n=8);w.car=[205.,150.,80.];w.step(c,n=8)
-assert w.shared[b.STATE]==22 and (w.shared[b.DEST_X],w.shared[b.DEST_Y])!=(200.,150.)
-passed('Map destination searches a nearby clear landing footprint')
+if b.MAP_MARKER:
+ # Search a nearby landing candidate when the exact map marker is obstructed.
+ w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.marker=[200.,150.,0.];w.clear_fn=lambda x,y:not(abs(x-200.)<.2 and abs(y-150.)<.2)
+ command(w,c,11,ticks=8);assert w.shared[b.STATE]==25;w.altitude=50;w.step(c,n=8);w.car=[205.,150.,80.];w.step(c,n=8)
+ assert w.shared[b.STATE]==22 and (w.shared[b.DEST_X],w.shared[b.DEST_Y])!=(200.,150.)
+ passed('Map destination searches a nearby clear landing footprint')
+else:
+ pass
 # A blocked rope shaft must not pull CJ out of the helicopter or disable control.
 w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.shared[b.STATE]=23;w.car=[0.,0.,18.];w.siteclear=False
 ground=VM('Helicover_Ground',w);w.step(c,ground,n=4);w.shared[b.DROP_COMMAND]=1;w.step(c,ground,n=8)
@@ -564,14 +590,17 @@ w,c,_=setup();summon(w,c);w.car=[200.,0.,25.];before=len(calls(w,0x726));w.now+=
 assert len(calls(w,0x726))>before
 passed('Follow reissues its order if the helicopter is far from CJ')
 
-# A marked destination can also be landed at after the hover choice.
-w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.marker=[200.,150.,0.];command(w,c,11,ticks=8);assert w.shared[b.STATE]==25
-w.altitude=50.;w.step(c,n=8);w.car=[205.,150.,80.];w.step(c,n=8);assert w.shared[b.STATE]==22
-w.car=[w.shared[b.DEST_X],w.shared[b.DEST_Y],w.shared[b.DEST_Z]+18.];w.speed=0;w.step(c,n=8);assert w.shared[b.STATE]==23
-command(w,c,12,ticks=6);assert w.shared[b.STATE]==11
-w.car=[w.shared[b.DEST_X],w.shared[b.DEST_Y],w.shared[b.DEST_Z]+1.5];w.altitude=1.5;w.step(c,n=15)
-assert w.shared[b.STATE]==12 and w.incar.get(1)==c.v[5]
-passed('Marked destination hover -> choose landing preserves CJ aboard')
+if b.MAP_MARKER:
+ # A marked destination can also be landed at after the hover choice.
+ w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.marker=[200.,150.,0.];command(w,c,11,ticks=8);assert w.shared[b.STATE]==25
+ w.altitude=50.;w.step(c,n=8);w.car=[205.,150.,80.];w.step(c,n=8);assert w.shared[b.STATE]==22
+ w.car=[w.shared[b.DEST_X],w.shared[b.DEST_Y],w.shared[b.DEST_Z]+18.];w.speed=0;w.step(c,n=8);assert w.shared[b.STATE]==23
+ command(w,c,12,ticks=6);assert w.shared[b.STATE]==11
+ w.car=[w.shared[b.DEST_X],w.shared[b.DEST_Y],w.shared[b.DEST_Z]+1.5];w.altitude=1.5;w.step(c,n=15)
+ assert w.shared[b.STATE]==12 and w.incar.get(1)==c.v[5]
+ passed('Marked destination hover -> choose landing preserves CJ aboard')
+else:
+ pass
 # Protect CJ excludes Grove and ground squad while distributing targets.
 w,c,f=fire_world();w.civilians=[]
 for npc,x,skin,typ in [(900,0.,20,7),(901,-12.,105,7),(902,12.,20,7)]:
@@ -585,9 +614,10 @@ passed('Target distribution excludes Grove and the additional ground squad')
 w,c,p=setup(True);summon(w,c);launch=VM('Helicover',w);w.step(c,p,launch,n=15);w.events.append(5);w.step(c,p,n=5)
 assert b'PATROL AROUND CJ' in w.menu;w.events.append(5);w.step(c,p,n=12);assert w.shared[b.STATE]==24
 passed('CLEO setup menu starts patrol')
-w,c,p=setup(True);summon(w,c);w.incar[1]=c.v[5];w.marker=[200.,150.,0.];launch=VM('Helicover',w);w.step(c,p,launch,n=15);w.events.append(3);w.step(c,p,n=5)
-assert b'FLY TO MAP MARKER' in w.menu;w.events.append(2);w.step(c,p,n=12);assert w.shared[b.STATE]==25
-passed('CLEO evacuation menu starts the marked route')
+if b.MAP_MARKER:
+ w,c,p=setup(True);summon(w,c);w.incar[1]=c.v[5];w.marker=[200.,150.,0.];launch=VM('Helicover',w);w.step(c,p,launch,n=15);w.events.append(3);w.step(c,p,n=5)
+ assert b'FLY TO MAP MARKER' in w.menu;w.events.append(2);w.step(c,p,n=12);assert w.shared[b.STATE]==25
+ passed('CLEO evacuation menu starts the marked route')
 
 # A forward obstruction produces a clear side detour, then resumes the destination.
 w,c,_=setup();summon(w,c);start_grove(w,c)
