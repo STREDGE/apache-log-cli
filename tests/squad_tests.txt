@@ -48,4 +48,8 @@ PASS: Taking heavy fire: evasive manoeuvre widens the circle to 50 m and climbs 
 PASS: CJ driving fast: the helicopter switches to the native chase
 PASS: Combat orbit: a point without a view of the threat is flown 15 m higher and the next one is tried
 PASS: Combat orbit with no clear view moves on at most every 1.2 s instead of thrashing every tick
+PASS: Door gunners take a target on their own side: right door right, left door left
+PASS: A gunner without a clear line from his seat leaves that target to someone else
+PASS: Gunners also use the threats the ground squad has found
+PASS: With four threats around, the four gunners never double up
 Mocked script execution only: real pathing, cover and gunfire are not tested.

@@ -292,5 +292,31 @@ pts={(round(x[2][1]),round(x[2][2])) for x in calls(w,0x4a2)[n:] if abs(x[2][5]-
 assert len(pts)<=4,pts
 passed('Combat orbit with no clear view moves on at most every 1.2 s instead of thrashing every tick')
 
+# ------------------------------------------------------------------ door gunners (v40.2)
+fw=g['fire_world']
+def gunner_world(npcs):
+ w,c,f=fw();w.civilians=[]
+ for npc,x,y in npcs:
+  w.exists.add(npc);w.pos[npc]=[x,y,0.];w.skin[npc]=20;w.pedtype[npc]=7;w.civilians.append(npc)
+ return w,c,f
+w,c,f=gunner_world([(910,24.,0.),(911,-24.,0.)]);w.step(c,f,n=16)
+gt=[w.shared[b.GUARD_TARGET+i] for i in range(4)]
+assert gt[0]==910 and gt[1]==911,gt
+passed('Door gunners take a target on their own side: right door right, left door left')
+w,c,f=gunner_world([(911,-2.,0.),(910,12.,0.),(912,24.,0.)])  # 911 left = primary; 910 right, scanned first, but blocked
+g3=None
+def los(a,z):
+ return not(g3 and abs(a[0]-g3[0])<.01 and abs(a[1]-g3[1])<.01 and abs(z[0]-12.)<.1 and abs(z[1])<.1)
+w.los_fn=los;g3=w.coords(c.v[13]);w.step(c,f,n=16)
+assert w.shared[b.GUARD_TARGET]==912,[w.shared[b.GUARD_TARGET+i] for i in range(4)]
+passed('A gunner without a clear line from his seat leaves that target to someone else')
+w,c,f=gunner_world([(911,-24.,0.)]);w.exists.add(920);w.pos[920]=[30.,-45.,0.];w.pedtype[920]=7;w.skin[920]=20;w.damage.add((1,920))
+w.shared[b.SQ_T]=920;w.step(c,f,n=16)
+assert w.shared[b.GUARD_TARGET]==920,[w.shared[b.GUARD_TARGET+i] for i in range(4)]
+passed('Gunners also use the threats the ground squad has found')
+w,c,f=gunner_world([(900,0.,0.),(901,-12.,0.),(902,12.,0.),(903,0.,12.)]);w.step(c,f,n=16)
+gt=[w.shared[b.GUARD_TARGET+i] for i in range(4)];assert len(set(gt))==4,gt
+passed('With four threats around, the four gunners never double up')
+
 text='\n'.join(results)+'\nMocked script execution only: real pathing, cover and gunfire are not tested.\n'
 (b.OUT/'squad_tests.txt').write_text(text);print(text)
