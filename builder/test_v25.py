@@ -817,5 +817,38 @@ w,c,_=setup();summon(w,c);to_destination(w,c);command(w,c,12,ticks=6)
 w.car=[w.shared[b.DEST_X],w.shared[b.DEST_Y],w.shared[b.DEST_Z]+1.5];w.altitude=1.5;w.step(c,n=20);assert w.shared[b.STATE]==12
 before=len(calls(w,0x5cd));w.widget_released=b.EXIT_WIDGET;w.step(c,n=3);assert len(calls(w,0x5cd))>before
 passed('Exit button after landing lets CJ out')
+# ---- v39-fire: fire control upgrade ----
+# menu order and value mapping
+w,c,p=setup(True);summon(w,c);launch=VM('Helicover',w);w.step(c,p,launch,n=15);w.events.append(6);w.step(c,p,n=5)
+assert w.menu[2:]==[b'CEASE FIRE [ON]',b'PROTECT CJ',b'FOLLOW CJ SHOTS',b'WEAPONS FREE',b'OVERWATCH',b'< BACK'],w.menu
+for idx,val in [(4,4),(3,1),(1,3),(2,2),(0,0)]:
+ w.events.append(idx);w.step(c,p,n=5);assert w.shared[b.FIRE]==val and [r for r in w.menu if r.endswith(b'[ON]')]==[w.menu[2+idx]],(idx,val,w.shared[b.FIRE],w.menu)
+passed('FIRE CONTROL lists CEASE FIRE, PROTECT CJ, FOLLOW CJ SHOTS, WEAPONS FREE, OVERWATCH')
+# OVERWATCH engages armed hostiles with heavy precision rounds, ignores unarmed civilians
+w,c,f=fire_world();w.shared[b.FIRE]=4;w.step(c,f,n=3);npc=target(w,typ=4);w.weapons[npc]=0;w.step(c,f,n=15)
+assert not attacks(w) and not calls(w,0x6bc),'unarmed civilian is not a target'
+w.weapons[npc]=30;w.step(c,f,n=20)
+assert attacks(w) and calls(w,0x6bc) and all(x[2][-1]==b.OVERWATCH_DAMAGE for x in calls(w,0x6bc)),[x[2][-1] for x in calls(w,0x6bc)][:5]
+passed('OVERWATCH: armed hostiles only, 75-damage precision rounds')
+w,c,f=fire_world();w.shared[b.FIRE]=4;w.step(c,f,n=3);npc=target(w,typ=6);w.weapons[npc]=22;w.step(c,f,n=15);assert not attacks(w)
+w.wanted=2;w.step(c,f,n=15);assert attacks(w)
+passed('OVERWATCH leaves armed police alone unless CJ is wanted')
+# callouts: contact, kill counter, area clear, mode report
+w,c,f=fire_world();w.shared[b.FIRE]=1;npc=target(w,typ=7);w.step(c,f,n=15)
+assert 'HCCONT' in w.messages and w.messages.count('HCCONT')==1 and 'HCFM1' in w.messages,w.messages
+w.dead.add(npc);w.step(c,f,n=5);assert w.shared[b.KILLS]==1 and 1 in getattr(w,'debug',[]),(w.shared[b.KILLS],getattr(w,'debug',None))
+w.exists.discard(npc);w.step(c,f,n=40);assert 'HCCLEAR' in w.messages and w.shared[b.ENGAGED]==0,w.messages
+passed('Gunner callouts: CONTACT, TARGET DOWN with kill count, AREA CLEAR, mode reports')
+w,c,f=fire_world();w.shared[b.HUD]=0;w.shared[b.FIRE]=1;npc=target(w,typ=7);w.step(c,f,n=15);w.dead.add(npc);w.step(c,f,n=5)
+assert not [m for m in w.messages if m.startswith('HCC') or m.startswith('HCFM')] and not getattr(w,'debug',[]),w.messages
+passed('Callouts stay silent when STATUS MESSAGES is disabled')
+# combat orbit around the threat at 28 m, 25 m above it, moving between points
+w,c,f=fire_world();npc=target(w,typ=7,skin=20);w.damage.add((1,npc));w.step(c,f,n=10)
+pts=set()
+for _ in range(80):
+ w.step(c,f);m=calls(w,0x4a2)[-1][2];pts.add((round(m[1],1),round(m[2],1)))
+ assert abs(math.dist(m[1:3],w.pos[npc][:2])-b.ORBIT_RADIUS)<.5 and abs(m[3]-(w.pos[npc][2]+25.))<.01,m
+assert len(pts)>=3,pts
+passed('Combat orbit circles the threat at 28 m and 25 m above it')
 text='\n'.join(results)+'\nMocked script execution only: actual GTA flight, collisions, gunfire, animations and Android behavior are not tested.\n'
 (b.OUT/'scenario_tests.txt').write_text(text);print(text)
