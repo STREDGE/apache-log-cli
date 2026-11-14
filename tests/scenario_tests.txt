@@ -81,4 +81,10 @@ PASS: Destination: scripted cruise to overhead, then native vertical descent to 
 PASS: A stalled native descent still offers LAND / ROPE after 25 s
 PASS: Pilot can reposition to keep an active threat in view
 PASS: New hold command stops the scripted cruise without ejecting CJ
+PASS: EVACUATION menu toggles the exit mode with one item
+PASS: Doors lock while CJ is aboard so the native exit cannot drop him
+PASS: Exit button over the destination in ROPE mode starts the rope descent
+PASS: Exit button over the destination in LAND mode lands and then lets CJ out
+PASS: Exit button in flight finds a spot below and gets out with the selected method
+PASS: Exit button after landing lets CJ out
 Mocked script execution only: actual GTA flight, collisions, gunfire, animations and Android behavior are not tested.

@@ -119,6 +119,9 @@ class VM:
     if getattr(w,'teleport_delay',False):w.pending_car=(vals[0],pos)
     else:w.cars[vals[0]]['pos']=pos
    elif op==0x1e5:w.debug=getattr(w,'debug',[]);w.debug.append(vals[1])
+   elif op==0x20a:w.locks=getattr(w,'locks',{});w.locks[vals[0]]=vals[1]
+   elif base==0xa52:
+    hit=getattr(w,'widget_released',None)==vals[0];w.widget_released=None if hit else getattr(w,'widget_released',None);cond(hit)
    elif op==0x77e:put(0,w.interior)
    elif op in [0x4c4,0x407]:
     xyz=w.coords(vals[0]) if op==0x4c4 else w.cars[vals[0]]['pos']
@@ -777,5 +780,42 @@ w.step(c,n=5);assert w.frozen.get(c.v[5])
 command(w,c,3,ticks=8);assert w.shared[b.STATE]==3 and not w.frozen.get(c.v[5]) and w.incar.get(1)==c.v[5]
 passed('New hold command stops the scripted cruise without ejecting CJ')
 
+# ---- v39: exit button and exit mode ----
+def to_destination(w,c,*vms):
+ w.incar[1]=c.v[5];w.marker=[200.,150.,0.];command(w,c,11,ticks=8);assert w.shared[b.STATE]==21
+ w.car=[205.,150.,80.];w.step(c,*vms,n=8);fly_until(w,23,c,*vms)
+# menu: one item toggles LAND/ROPE; EXIT NOW replaces the two old destination items
+w,c,p=setup(True);summon(w,c);launch=VM('Helicover',w);w.step(c,p,launch,n=15);w.events.append(3);w.step(c,p,n=5)
+assert b'EXIT MODE: LAND' in w.menu and b'EXIT NOW' in w.menu and b'LAND AT DESTINATION' not in w.menu and b'DESCEND BY ROPE' not in w.menu,w.menu
+w.events.append(3);w.step(c,p,n=5);assert w.shared[b.EXIT_MODE]==1 and b'EXIT MODE: ROPE' in w.menu
+w.events.append(3);w.step(c,p,n=5);assert w.shared[b.EXIT_MODE]==0 and b'EXIT MODE: LAND' in w.menu
+passed('EVACUATION menu toggles the exit mode with one item')
+# doors are locked against the player while CJ is aboard, unlocked when he is outside
+w,c,_=setup();summon(w,c);w.step(c,n=3);assert w.locks.get(c.v[5])==1
+w.incar[1]=c.v[5];w.step(c,n=3);assert w.locks[c.v[5]]==4
+passed('Doors lock while CJ is aboard so the native exit cannot drop him')
+# exit button over the destination, ROPE mode -> rope descent starts at once
+w,c,_=setup();summon(w,c);ground=VM('Helicover_Ground',w);w.step(c,ground,n=3);to_destination(w,c,ground)
+w.shared[b.EXIT_MODE]=1;w.widget_released=b.EXIT_WIDGET;w.step(c,ground,n=45)
+assert any(x[2][0]==1 for x in calls(w,0x362)) and w.control and 1 not in w.incar,(w.messages,)
+passed('Exit button over the destination in ROPE mode starts the rope descent')
+# exit button over the destination, LAND mode -> lands, then CJ leaves automatically
+w,c,_=setup();summon(w,c);to_destination(w,c)
+w.shared[b.EXIT_MODE]=0;w.widget_released=b.EXIT_WIDGET;w.step(c,n=4);assert w.shared[b.STATE]==11
+w.car=[w.shared[b.DEST_X],w.shared[b.DEST_Y],w.shared[b.DEST_Z]+1.5];w.altitude=1.5;w.step(c,n=20)
+assert w.shared[b.STATE]==12 and calls(w,0x5cd) and calls(w,0x5cd)[-1][2][:2]==[1,c.v[5]] and w.locks[c.v[5]]==1,(w.shared[b.STATE],w.messages)
+passed('Exit button over the destination in LAND mode lands and then lets CJ out')
+# exit button during the flight -> get out here: destination becomes the current spot
+w,c,_=setup();summon(w,c);ground=VM('Helicover_Ground',w);w.incar[1]=c.v[5];w.marker=[1500.,150.,0.];command(w,c,11,ticks=8)
+w.step(c,ground,n=20);here=w.car[:2];w.shared[b.EXIT_MODE]=1;w.widget_released=b.EXIT_WIDGET;w.step(c,ground,n=2)
+assert w.shared[b.AUTO_EXIT]==1 and 'HCXHERE' in w.messages and math.dist([w.shared[b.DEST_X],w.shared[b.DEST_Y]],here)<20.
+fly_until(w,23,c,ground);w.step(c,ground,n=45)
+assert any(x[2][0]==1 for x in calls(w,0x362)) and 1 not in w.incar,'rope exit on arrival'
+passed('Exit button in flight finds a spot below and gets out with the selected method')
+# exit button on the ground -> CJ simply leaves
+w,c,_=setup();summon(w,c);to_destination(w,c);command(w,c,12,ticks=6)
+w.car=[w.shared[b.DEST_X],w.shared[b.DEST_Y],w.shared[b.DEST_Z]+1.5];w.altitude=1.5;w.step(c,n=20);assert w.shared[b.STATE]==12
+before=len(calls(w,0x5cd));w.widget_released=b.EXIT_WIDGET;w.step(c,n=3);assert len(calls(w,0x5cd))>before
+passed('Exit button after landing lets CJ out')
 text='\n'.join(results)+'\nMocked script execution only: actual GTA flight, collisions, gunfire, animations and Android behavior are not tested.\n'
 (b.OUT/'scenario_tests.txt').write_text(text);print(text)
