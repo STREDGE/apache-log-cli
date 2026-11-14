@@ -26,9 +26,12 @@ def plat_delete():
  s.check(0x03ca,[V(6)],skip);a(0x0108,V(6));s.label(skip);a(6,V(6),I(-1));a(0x0249,I(PLATFORM_MODEL))
 s.label('INIT');a(0);a(6,V(6),I(-1))
 for i in range(5):s.set(b.GROUND_PUB+i,-1)
-s.set(b.ROPE_COMMAND,0);s.set(b.GROUND_MOVE_NEXT,0);s.set(b.DROP_COMMAND,0)
-s.label('WAIT');a(1,I(100));s.get(19,b.DROP_COMMAND);s.eq(19,1,'WAIT_PICKUP');s.set(b.DROP_COMMAND,0);s.go('DROP_START')
-s.label('WAIT_PICKUP');s.get(19,b.ROPE_COMMAND);s.eq(19,1,'WAIT');s.set(b.ROPE_COMMAND,0);s.get(19,b.STATE);s.eq(19,3,'NOHOLD');s.get(1,b.PUB+1);s.get(0,b.PUB);s.check(0x0256,[I(0)],'WAIT');s.check(0x056e,[V(1)],'NOHOLD');s.check(0x8119,[V(1)],'NOHOLD');s.check(0x056d,[V(0)],'NOHOLD');s.check(0x80db,[V(0),V(1)],'BLOCKED')
+s.set(b.ROPE_COMMAND,0);s.set(b.GROUND_MOVE_NEXT,0);s.set(b.DROP_COMMAND,0);s.set(b.SQ_ROPE,0);s.set(b.ESCORT_ON,0);s.set(b.ESCORT_CMD,0)
+s.label('WAIT');a(1,I(100));s.get(19,b.ESCORT_CMD);s.eq(19,1,'WAIT_ESCORT_OTHER');s.set(b.ESCORT_CMD,0);s.set(b.ESCORT_ON,2);s.go('PICKUP_VALIDATE')
+s.label('WAIT_ESCORT_OTHER');s.eq(19,0,'WAIT_ESCORT_CLEAR');s.go('WAIT_DROP_CHECK');s.label('WAIT_ESCORT_CLEAR');s.set(b.ESCORT_CMD,0)
+s.label('WAIT_DROP_CHECK');s.get(19,b.DROP_COMMAND);s.eq(19,1,'WAIT_PICKUP');s.set(b.DROP_COMMAND,0);s.go('DROP_START')
+s.label('WAIT_PICKUP');s.get(19,b.ROPE_COMMAND);s.eq(19,1,'WAIT');s.set(b.ROPE_COMMAND,0)
+s.label('PICKUP_VALIDATE');s.get(19,b.STATE);s.eq(19,3,'NOHOLD');s.get(1,b.PUB+1);s.get(0,b.PUB);s.check(0x0256,[I(0)],'WAIT');s.check(0x056e,[V(1)],'NOHOLD');s.check(0x8119,[V(1)],'NOHOLD');s.check(0x056d,[V(0)],'NOHOLD');s.check(0x80db,[V(0),V(1)],'BLOCKED')
 a(0x00aa,V(1),V(2),V(3),V(4));a(0x00a0,V(0),V(5),V(6),V(7));a(0x0509,V(2),V(3),V(5),V(6),V(8));s.check(0x0023,[F(55),V(8)],'BLOCKED');a(0x01bd,V(31));a(0x000a,V(31),I(15000))
 s.label('WAIT_STABLE');a(0x02e3,V(1),V(8));s.check(0x0023,[F(1.5),V(8)],'WAIT_STABLE_RETRY');s.go('WAIT_STABLE_DONE')
 s.label('WAIT_STABLE_RETRY');a(0x01bd,V(19));s.check(0x001d,[V(19),V(31)],'WAIT_STABLE_CONTINUE');s.go('MOVING')
@@ -44,8 +47,9 @@ for i,(var,x,y) in enumerate([(20,-1.5,1.2),(21,1.5,1.2),(22,-1.5,-1.2),(23,1.5,
  a(0x0407,V(1),F(x),F(y),F(-1),V(10),V(11),V(12));a(0x0503,I(8),I(285),V(10),V(11),V(12),V(var));s.check(0x056d,[V(var)],'CLEANUP');a(0xddc,I(b.GROUND_PUB+i),V(var));a(0x01c5,V(var));a(0x08af,V(var),I(150));a(0x0223,V(var),I(150));a(0x035f,V(var),I(50));a(0x02e2,V(var),I(100))
  for typ in range(32):a(0x077a,V(var),I(2),I(typ))
  a(0x077a,V(var),I(0),I(0));a(0x077a,V(var),I(0),I(8))
-a(0x03e5,S('RGDEP'));a(0x01bd,V(27));a(0x000a,V(27),I(5000));a(6,V(25),I(-1));a(6,V(26),I(0));a(6,V(30),I(0));a(6,V(18),I(0))
-s.label('ACTIVE');a(1,I(500));s.check(0x0256,[I(0)],'CLEANUP');s.check(0x056e,[V(1)],'CLEANUP');s.check(0x8119,[V(1)],'CLEANUP');s.check(0x056d,[V(0)],'CLEANUP');s.get(19,b.STATE);s.eq(19,3,'CLEANUP');s.get(19,b.ROPE_COMMAND);s.eq(19,1,'CONTINUE');s.set(b.ROPE_COMMAND,0);s.go('CLEANUP')
+s.get(19,b.ESCORT_ON);s.eq(19,2,'PICKUP_DEPLOYED');s.go('ESCORT_LAND')
+s.label('PICKUP_DEPLOYED');a(0x03e5,S('RGDEP'));a(0x01bd,V(27));a(0x000a,V(27),I(5000));a(6,V(25),I(-1));a(6,V(26),I(0));a(6,V(30),I(0));a(6,V(18),I(0))
+s.label('ACTIVE');a(1,I(500));s.set(b.SQ_ROPE,1);s.check(0x0256,[I(0)],'CLEANUP');s.check(0x056e,[V(1)],'CLEANUP');s.check(0x8119,[V(1)],'CLEANUP');s.check(0x056d,[V(0)],'CLEANUP');s.get(19,b.STATE);s.eq(19,3,'CLEANUP');s.get(19,b.ROPE_COMMAND);s.eq(19,1,'CONTINUE');s.set(b.ROPE_COMMAND,0);s.go('CLEANUP')
 s.label('CONTINUE');a(0x01bd,V(19))
 # Refresh a fifth rope while waiting; the invisible temporary actor only provides the rope visual.
 s.check(0x001d,[V(19),V(18)],'PICKUP_GATE')
@@ -69,11 +73,13 @@ a(6,V(7),I(0));s.get(19,b.GROUND_MOVE_NEXT);a(0x01bd,V(15));s.check(0x001d,[V(15
 for var,x,y in [(20,-2.5,-2.0),(21,2.5,-2.0),(22,-6.,1.),(23,6.,1.)]:
  skip='WORK_SKIP_'+str(var);walk='WALK_'+str(var);watch='WATCH_'+str(var);fire='FIRE_'+str(var)
  s.check(0x056d,[V(var)],skip);s.check(0x8118,[V(var)],skip);a(0x0819,V(var),V(19));s.check(0x0023,[F(2.5),V(19)],skip);a(0x0470,V(var),V(19));s.check(0x003b,[V(19),V(29)],'ARM_'+str(var));s.go('ARM_DONE_'+str(var));s.label('ARM_'+str(var));a(0x01b2,V(var),V(29),I(30000));a(0x01b9,V(var),V(29));s.label('ARM_DONE_'+str(var))
+ # v40: the squad worker gives the orders while its heartbeat is fresh
+ s.get(19,b.SQ_HEART);a(0x0085,V(16),V(15));a(0x0062,V(16),V(19));s.check(0x0019,[V(16),I(1000)],skip)
  s.eq(28,1,walk);s.check(0x056d,[V(24)],walk);s.check(0x8118,[V(24)],walk);s.eq(31,1,skip);a(0x074d,V(var),V(24),I(2000));s.go(skip)
  s.label(walk);a(0x04c4,V(0),F(x),F(y),F(0),V(10),V(11),V(12));a(0x00a0,V(var),V(13),V(14),V(15));a(0x050a,V(10),V(11),V(12),V(13),V(14),V(15),V(16));s.check(0x0021,[V(16),F(3)],watch);s.eq(7,1,skip);a(0x04eb,V(var),I(0));a(0x05d3,V(var),V(10),V(11),V(12),I(6),I(1800));s.go(skip);s.label(watch);a(0x04eb,V(var),I(1));s.label(skip)
 s.go('ACTIVE')
 # The reverse clip is cosmetic; vertical position is moved explicitly.
-s.label('CJ_ASCENT');s.check(0x0431,[V(1),I(0)],'NO_SEAT');s.check(0x04ee,[S('PED')],'ANIM_FAIL');s.check(0x056e,[V(1)],'CLEANUP');s.get(19,b.STATE);s.eq(19,3,'CLEANUP')
+s.label('CJ_ASCENT');s.set(b.SQ_ROPE,0);s.check(0x0431,[V(1),I(0)],'NO_SEAT');s.check(0x04ee,[S('PED')],'ANIM_FAIL');s.check(0x056e,[V(1)],'CLEANUP');s.get(19,b.STATE);s.eq(19,3,'CLEANUP')
 # Save a ground position for cancellation and disable player control only during ascent.
 a(0x0407,V(1),F(0),F(-3),F(-1),V(2),V(3),V(4));a(0x02ce,V(2),V(3),V(4),V(4));a(0x000b,V(4),F(.7));a(0x0087,V(8),V(4));# v35: stop 4.5 m below the helicopter centre, clear of the tail boom above the rope, then warp in
 a(0x00aa,V(1),V(10),V(11),V(9));a(0x000b,V(9),F(-4.5));a(0x0063,V(9),V(8));a(0x0013,V(9),F(1000.0/1500.0));a(0x01b4,I(0),I(0));a(6,V(26),I(1))
@@ -94,6 +100,7 @@ GR=[(20,-1.5,1.2),(21,1.5,1.2),(22,-1.5,-1.2),(23,1.5,-1.2)]
 def gr_alive(var,skip):s.check(0x056d,[V(var)],skip);s.check(0x8118,[V(var)],skip)
 def gr_rope(x,y,dx,dy,dz):a(0x0407,V(1),F(x),F(y),F(-1),V(dx),V(dy),V(dz));a(0x02ce,V(dx),V(dy),V(dz),V(dz));a(0x000b,V(dz),F(.7))
 def gr_checks():s.check(0x0256,[I(0)],'CLEANUP');s.check(0x056e,[V(1)],'CLEANUP');s.check(0x8119,[V(1)],'CLEANUP');s.get(19,b.STATE);s.eq(19,3,'CLEANUP')
+s.label('GR_RETURN');s.set(b.SQ_ROPE,0)
 for var,x,y in GR:
  skip='GR_RUN_SKIP_'+str(var);gr_alive(var,skip);gr_rope(x,y,10,11,12);a(0x04eb,V(var),I(0));a(0x05d3,V(var),V(10),V(11),V(12),I(7),I(2500));s.label(skip)
 a(0x01bd,V(18));a(0x000a,V(18),I(2500))
@@ -123,12 +130,17 @@ s.eq(26,1,'CLEANUP');s.check(0x056d,[V(0)],'ASCENT_RESTORE');s.check(0x8118,[V(0
 s.label('ASCENT_RESTORE');a(0x01b4,I(0),I(1));a(6,V(26),I(0));s.go('CLEANUP')
 s.label('NO_SEAT');a(0x03e5,S('RGSEAT'));s.go('ACTIVE')
 s.label('ANIM_FAIL');a(0x03e5,S('RGANIM'));s.go('CLEANUP')
-s.label('CLEANUP')
+s.label('CLEANUP');s.set(b.SQ_ROPE,0)
 plat_delete()
 s.eq(26,1,'CLEANUP_CONTROL_DONE');a(0x01b4,I(0),I(1));a(6,V(26),I(0));s.label('CLEANUP_CONTROL_DONE');s.check(0x056d,[V(17)],'CLEANUP_ROPE_DONE');a(0x009b,V(17));s.label('CLEANUP_ROPE_DONE');s.set(b.GROUND_PUB+4,-1);s.check(0x056e,[V(1)],'CLEANUP_HELI_DONE');a(0x0574,V(1),I(0));s.set(b.FROZEN,0);s.label('CLEANUP_HELI_DONE')
 for i,var in enumerate([20,21,22,23]):
  skip='DELETE_'+str(var);s.set(b.GROUND_PUB+i,-1);s.check(0x056d,[V(var)],skip);a(0x009b,V(var));s.label(skip)
-a(0x0249,I(285));a(0x03e5,S('RGDONE'));s.go('WAIT')
+# v40 escort bookkeeping: 3 recalled (resume FOLLOW), 1 picked up / withdrawn, 4 lost, else plain rope work
+a(0x0249,I(285));s.get(19,b.ESCORT_ON);s.set(b.ESCORT_ON,0)
+s.eq(19,3,'CL_NOT_RECALL');a(0x03e5,S('SQBACK'));s.check(0x0256,[I(0)],'WAIT');s.check(0x056d,[V(0)],'WAIT');s.check(0x056e,[V(1)],'WAIT');s.check(0x8448,[V(0),V(1)],'WAIT');s.set(b.CMD,2);s.go('WAIT')
+s.label('CL_NOT_RECALL');s.eq(19,1,'CL_NOT_ESCORT');a(0x03e5,S('SQBACK'));s.go('WAIT')
+s.label('CL_NOT_ESCORT');s.eq(19,4,'CL_PLAIN');s.go('WAIT')
+s.label('CL_PLAIN');a(0x03e5,S('RGDONE'));s.go('WAIT')
 s.label('DROP_START');a(6,V(26),I(0));s.get(19,b.STATE);s.eq(19,23,'DROP_FAIL');s.get(1,b.PUB+1);s.get(0,b.PUB);s.check(0x0256,[I(0)],'WAIT');s.check(0x056e,[V(1)],'DROP_FAIL');s.check(0x8119,[V(1)],'DROP_FAIL');s.check(0x056d,[V(0)],'DROP_FAIL');s.check(0x0448,[V(0),V(1)],'DROP_FAIL');a(0x0407,V(1),F(0),F(-3),F(-1),V(2),V(3),V(8));a(0x02ce,V(2),V(3),V(8),V(4));a(0x000b,V(4),F(.7));a(0x0087,V(9),V(8));a(0x0063,V(9),V(4));s.check(0x0021,[V(9),F(4)],'DROP_FAIL');s.check(0x0023,[F(60),V(9)],'DROP_FAIL');a(0x0087,V(10),V(4));a(0x000b,V(10),F(1));s.check(0x06bd,[V(2),V(3),V(10),V(2),V(3),V(8),I(1),I(0),I(0),I(1),I(0)],'DROP_FAIL');a(0x0247,I(285));a(6,V(26),I(1));a(0x038b);a(1,I(0));s.check(0x0248,[I(285)],'DROP_FAIL');s.check(0x056e,[V(1)],'DROP_FAIL');a(0x0574,V(1),I(1));s.set(b.FROZEN,1);a(6,V(17),I(-1));a(0x0503,I(8),I(285),V(2),V(3),V(8),V(17));s.check(0x056d,[V(17)],'DROP_FAIL_UNFREEZE');a(0x0337,V(17),I(0));a(0x0619,V(17),I(0));a(0xddc,I(b.GROUND_PUB+4),V(17));a(0x01b4,I(0),I(0))
 # v28: 1 m below the frozen helicopter's centre is inside its hull, which held CJ until the
 # final ground warp ("teleport"). Start 3 m lower, below the skids, and recompute the descent speed.
@@ -155,12 +167,55 @@ s.label('DROP_FAIL');s.eq(26,1,'DROP_FAIL_NO_MODEL');a(0x0249,I(285));s.label('D
 # v39b: when the core manages the attempt it retries elsewhere and reports the final failure itself
 s.get(19,b.ROPE_PENDING);s.eq(19,1,'DROP_FAIL_SAY');s.go('WAIT');s.label('DROP_FAIL_SAY');a(0x03e5,S('RPDFAIL'));s.go('WAIT')
 
-s.label('LOAD_FAILED');a(0x0249,I(285));a(0x03e5,S('RGFAIL'));s.go('WAIT')
-s.label('NOHOLD');a(0x03e5,S('RGHOLD'));s.go('WAIT')
-s.label('ALTITUDE');a(0x03e5,S('RGHIGH'));s.go('WAIT')
-s.label('MOVING');a(0x03e5,S('RGMOVE'));s.go('WAIT')
-s.label('BLOCKED');a(0x03e5,S('RGBLOCK'));s.go('WAIT')
+# ---------------------------------------------------------------- v40 escort team
+# The four rope guards stay on the ground with CJ (the squad worker leads them) while the helicopter
+# returns to FOLLOW / overwatch. Ends with a recall (rope extraction), a rope pickup of CJ with the
+# team covering, a withdrawal (CJ boarded another way, support leaving) or the loss of the team.
+s.label('ESCORT_LAND');a(0x01bd,V(27));a(0x000a,V(27),I(12000))
+s.label('ESCORT_LAND_WAIT');a(1,I(200));gr_checks();a(6,V(19),I(1))
+for var in [20,21,22,23]:
+ skip='ESCORT_LANDED_'+str(var);gr_alive(var,skip);a(0x0819,V(var),V(12));s.check(0x0021,[V(12),F(2.5)],skip);a(6,V(19),I(0));s.label(skip)
+s.eq(19,1,'ESCORT_LAND_TIMER');s.go('ESCORT_READY')
+s.label('ESCORT_LAND_TIMER');a(0x01bd,V(15));s.check(0x001d,[V(15),V(27)],'ESCORT_LAND_WAIT')
+s.label('ESCORT_READY');s.get(29,b.WPN)
+for var in [20,21,22,23]:
+ skip='ESCORT_ARM_'+str(var);gr_alive(var,skip);a(0x01b2,V(var),V(29),I(30000));a(0x01b9,V(var),V(29));s.label(skip)
+s.set(b.SQ_ROPE,1);s.set(b.ESCORT_ON,1);a(0x0574,V(1),I(0));s.set(b.FROZEN,0);a(0x03e5,S('SQIN'));s.set(b.CMD,2)
+s.label('ESCORT_LOOP');a(1,I(250));s.set(b.SQ_ROPE,1);s.check(0x0256,[I(0)],'CLEANUP');s.check(0x056d,[V(0)],'CLEANUP');s.check(0x8118,[V(0)],'CLEANUP')
+s.check(0x056e,[V(1)],'ESCORT_WITHDRAW');s.check(0x8119,[V(1)],'ESCORT_WITHDRAW');s.get(19,b.STATE)
+for st in [0,4,5,13]:
+ nxt='ESCORT_STATE_'+str(st);s.eq(19,st,nxt);s.go('ESCORT_WITHDRAW');s.label(nxt)
+a(6,V(19),I(0))
+for var in [20,21,22,23]:
+ skip='ESCORT_ALIVE_'+str(var);gr_alive(var,skip);a(6,V(19),I(1));s.label(skip)
+s.eq(19,1,'ESCORT_LOST')
+# CJ asked for a rope pickup: the team on the ground covers him exactly like a rope evacuation
+s.get(19,b.ROPE_COMMAND);s.eq(19,1,'ESCORT_NO_PICKUP');s.set(b.ROPE_COMMAND,0);s.get(19,b.STATE);s.eq(19,3,'ESCORT_LOOP')
+a(6,V(17),I(-1));a(6,V(18),I(0));a(6,V(25),I(-1));a(6,V(26),I(0));a(6,V(30),I(0));a(0x01bd,V(27));a(0x000a,V(27),I(3000));a(0x03e5,S('SQCOVER'));s.go('ACTIVE')
+s.label('ESCORT_NO_PICKUP');s.get(19,b.ESCORT_CMD);s.eq(19,2,'ESCORT_NO_RECALL');s.set(b.ESCORT_CMD,0);s.get(19,b.STATE);s.eq(19,3,'ESCORT_LOOP');s.set(b.ESCORT_ON,3)
+for var,x,y in GR:
+ skip='ESCORT_OUT_CAR_'+str(var);gr_alive(var,skip);s.check(0x00df,[V(var)],skip);gr_rope(x,y,10,11,12);a(0x0362,V(var),V(10),V(11),V(12));s.label(skip)
+s.go('GR_RETURN')
+s.label('ESCORT_NO_RECALL');s.eq(19,3,'ESCORT_NO_EXTRACT');s.set(b.ESCORT_CMD,0);s.go('ESCORT_WITHDRAW')
+s.label('ESCORT_NO_EXTRACT');s.check(0x0448,[V(0),V(1)],'ESCORT_LOOP')
+# CJ is in the helicopter, the helicopter is gone or support is leaving: the team runs to the
+# helicopter and boards (is removed) at the door or once out of sight; 15 s at most.
+s.label('ESCORT_WITHDRAW');s.set(b.SQ_ROPE,0);a(0x01bd,V(27));a(0x000a,V(27),I(15000));a(6,V(18),I(0))
+s.label('WD_TICK');a(1,I(250));s.check(0x0256,[I(0)],'CLEANUP');a(6,V(19),I(0));a(0x01bd,V(15));a(6,V(16),I(0));s.check(0x001d,[V(15),V(18)],'WD_ORDERS_DONE');a(6,V(16),I(1));a(0x0085,V(18),V(15));a(0x000a,V(18),I(1000));s.label('WD_ORDERS_DONE')
+for i,var in enumerate([20,21,22,23]):
+ skip='WD_SKIP_'+str(var);board='WD_BOARD_'+str(var);gr_alive(var,skip);a(6,V(19),I(1));s.check(0x82cb,[V(var)],'WD_CLOSE_'+str(var));s.go(board)
+ s.label('WD_CLOSE_'+str(var));s.check(0x056e,[V(1)],skip);s.check(0x8119,[V(1)],skip);a(0x00aa,V(1),V(10),V(11),V(12));a(0x00a0,V(var),V(13),V(14),V(9));a(0x0509,V(10),V(11),V(13),V(14),V(8));s.check(0x0021,[V(8),F(5)],board)
+ s.eq(16,1,skip);a(0x02ce,V(10),V(11),V(12),V(12));a(0x05d3,V(var),V(10),V(11),V(12),I(7),I(4000));s.go(skip)
+ s.label(board);a(0x009b,V(var));s.set(b.GROUND_PUB+i,-1);a(6,V(var),I(-1));s.label(skip)
+s.eq(19,1,'CLEANUP');a(0x01bd,V(15));s.check(0x001d,[V(15),V(27)],'WD_TICK');s.go('CLEANUP')
+s.label('ESCORT_LOST');s.set(b.ESCORT_ON,4);a(0x03e5,S('SQLOST'));s.go('CLEANUP')
+
+s.label('LOAD_FAILED');s.set(b.ESCORT_ON,0);a(0x0249,I(285));a(0x03e5,S('RGFAIL'));s.go('WAIT')
+s.label('NOHOLD');s.set(b.ESCORT_ON,0);a(0x03e5,S('RGHOLD'));s.go('WAIT')
+s.label('ALTITUDE');s.set(b.ESCORT_ON,0);a(0x03e5,S('RGHIGH'));s.go('WAIT')
+s.label('MOVING');s.set(b.ESCORT_ON,0);a(0x03e5,S('RGMOVE'));s.go('WAIT')
+s.label('BLOCKED');s.set(b.ESCORT_ON,0);a(0x03e5,S('RGBLOCK'));s.go('WAIT')
 if __name__=='__main__':
  report=s.build('Helicover_Ground','csa');print(report)
  with (OUT/'validation.txt').open('a') as validation:validation.write(report+'\n')
- with (OUT/'Helicover.fxt').open('a') as f:f.write('RGDEP SWAT: descending. Stay near the helicopter.\nRGDONE SWAT: ground team withdrawn.\nRGFAIL SWAT: model unavailable or heli moving.\nRGHOLD SWAT: use HOLD POSITION first.\nRGHIGH SWAT: heli must hover 12-22m above ground.\nRGMOVE SWAT: wait until the helicopter is nearly still.\nRGBLOCK SWAT: choose a clear open area.\nRGUP EVAC: ascending.\nRGABO EVAC: aboard. Team returning.\nRGSEAT EVAC: passenger seat unavailable.\nRGANIM EVAC: animation unavailable.\nRPDFAIL EVAC: rope descent unavailable here.\n')
+ with (OUT/'Helicover.fxt').open('a') as f:f.write('RGDEP SWAT: descending. Stay near the helicopter.\nRGDONE SWAT: ground team withdrawn.\nRGFAIL SWAT: model unavailable or heli moving.\nRGHOLD SWAT: use HOLD POSITION first.\nRGHIGH SWAT: heli must hover 12-22m above ground.\nRGMOVE SWAT: wait until the helicopter is nearly still.\nRGBLOCK SWAT: choose a clear open area.\nRGUP EVAC: ascending.\nRGABO EVAC: aboard. Team returning.\nRGSEAT EVAC: passenger seat unavailable.\nRGANIM EVAC: animation unavailable.\nRPDFAIL EVAC: rope descent unavailable here.\nSQIN ~g~SQUAD~w~: team on the ground. Escorting CJ.\nSQBACK ~g~SQUAD~w~: team back aboard.\nSQLOST ~r~SQUAD~w~: escort team lost.\nSQCOVER ~g~SQUAD~w~: team covering your extraction.\n')
