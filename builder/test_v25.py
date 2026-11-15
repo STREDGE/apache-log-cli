@@ -1,5 +1,5 @@
 """Tests final CLEO bytecode with mocked game opcodes, not an Android/GTA emulator."""
-import struct,json,math,sys
+import struct,json,math,sys,random
 from collections import defaultdict,deque
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).parent))
@@ -12,6 +12,7 @@ class World:
   self.incar={};self.attach={};self.pos={};self.model={};self.skin={};self.health=defaultdict(lambda:1000)
   self.weapons=defaultdict(int);self.velocity={};self.speed=0;self.altitude=25;self.siteclear=True;self.auto_board=True;self.ground_fn=lambda x,y,z: 13.35 if 2400<x<2600 and -1750<y< -1600 else 0.;self.clear_fn=lambda x,y: True
   self.random_char=-1;self.civilians=[];self.traffic=[];self.seats={};self.damage=set();self.messages=[];self.cars={};self.current_car=None;self.fallback_car=self.car.copy();self.heading=72.;self.attached_reports_incar=True;self.shooting=False;self.targeting=-1;self.camera=[0.,-5.,2.];self.lookat=[100.,-5.,2.];self.ray_block_distance=None;self.pedtype={};self.armor=defaultdict(int);self.wanted=0;self.shooting_chars=set();self.actor_heading=defaultdict(float);self.frozen={};self.accuracy={};self.attack_rate={};self.create_calls=0;self.fail_create_after=None
+  self.teleports=[];self.russian=False;self.visible_fn=None;self.rng=random.Random(7)
  @property
  def car(self):
   return self.cars[self.current_car]['pos'] if getattr(self,'current_car',None) in getattr(self,'cars',{}) else getattr(self,'fallback_car',[0.,-45.,28.])
@@ -28,6 +29,35 @@ class World:
     if actor==1:self.player=[self.player[i]+velocity[i]*delta/1000. for i in range(3)]
     elif actor in self.pos:self.pos[actor]=[self.pos[actor][i]+velocity[i]*delta/1000. for i in range(3)]
    for vm in vms:vm.run()
+ @staticmethod
+ def seg_dist(a,b2,p):
+  """Distance from point p to the segment a-b2."""
+  d=[b2[i]-a[i] for i in range(3)];l2=sum(x*x for x in d)
+  s=0. if l2<1e-9 else max(0.,min(1.,sum((p[i]-a[i])*d[i] for i in range(3))/l2))
+  return math.dist(p,[a[i]+d[i]*s for i in range(3)])
+ def visible(self,who):
+  """IS_CHAR_ON_SCREEN / IS_CAR_ON_SCREEN: a position function (camera model) when set, else the global flag."""
+  if self.visible_fn is not None:return bool(self.visible_fn(self.cars[who]['pos'] if who in self.cars else self.coords(who)))
+  return self.onscreen and who not in getattr(self,'offscreen',set())
+ def note_teleport(self,op,who,old,new):
+  """Position jumps of more than 3 m (SET_CHAR_COORDINATES, WARP..., SET_CAR_COORDINATES): the detector for 'no teleports'."""
+  d=math.dist(old,new)
+  if d>3.:self.teleports.append({'op':op,'who':who,'dist':d,'visible':self.visible(who),'time':self.now,'from':list(old),'to':list(new)})
+ def engine_trace(self,start,end):
+  """CBulletTraces::AddTrace(start,end,weaponType,victim) as libGTASA does it: a random 2-5 m piece somewhere on the bullet path."""
+  d=[end[i]-start[i] for i in range(3)];length=math.sqrt(sum(x*x for x in d))
+  if length<.01:return None
+  u=[x/length for x in d];s=length*self.rng.random();piece=2.+3.*self.rng.random();rem=length-s
+  piece=rem if piece>=rem else 2.+3.*self.rng.random()
+  return {'start':[start[i]+u[i]*s for i in range(3)],'end':[start[i]+u[i]*(s+piece) for i in range(3)],'time':self.now}
+ def ped_bullet(self,start,end):
+  """A bullet fired by a ped (or CJ): leaves an engine-style trace."""
+  tr=self.engine_trace(start,end)
+  if tr:self.traces=[x for x in getattr(self,'traces',[]) if self.now-x['time']<300]+[tr]
+  return tr
+ def exact_bullet(self,start,end):
+  """FIRE_SINGLE_BULLET / police helicopter: FireOneInstantHitRound adds the exact start and end."""
+  tr={'start':list(start),'end':list(end),'time':self.now};self.traces=[x for x in getattr(self,'traces',[]) if self.now-x['time']<300]+[tr];return tr
  def coords(self,char):
   if char in self.incar:return self.cars[self.incar[char]]['pos'].copy()
   if char in self.attach:return [self.cars[self.attach[char][0]]['pos'][i]+self.attach[char][1][i] for i in range(3)]
@@ -71,7 +101,7 @@ class VM:
    elif op==0xdd8:
     assert vals[3]==1
     marker=getattr(w,'marker',None);addr,size=vals[1],vals[2];entry=b.RADAR_TRACE_OFS+5*48
-    mem={**{(ofs,4):val for ofs,val in b.GAME_SIG},(b.WAYPOINT_OFS,4):(5|7<<16) if marker else 0,(b.WAYPOINT_OFS,2):5 if marker else 0xffff,(b.WAYPOINT_OFS+2,2):7 if marker else 0xffff,
+    mem={**{(ofs,4):val for ofs,val in b.GAME_SIG},(0xCE1771,1):1 if getattr(w,'russian',False) else 0,(b.WAYPOINT_OFS,4):(5|7<<16) if marker else 0,(b.WAYPOINT_OFS,2):5 if marker else 0xffff,(b.WAYPOINT_OFS+2,2):7 if marker else 0xffff,
          (entry+20,2):getattr(w,'wp_ref',7),(entry+41,1):getattr(w,'wp_flags',0x42),(entry+8,4):marker[0] if marker else 0.,(entry+12,4):marker[1] if marker else 0.}
     for k,tr in enumerate(getattr(w,'traces',[])):
      tb=b.BULLET_TRACES_OFS+k*b.BULLET_TRACE_SIZE
@@ -88,7 +118,7 @@ class VM:
    elif base==0x611:cond(getattr(w,'animation_available',True))
    elif base in [0x56d,0x56e,0x3ca]:cond(vals[0] in w.exists)
    elif base in [0x118,0x119]:cond(vals[0] in w.dead)
-   elif base in [0x2ca,0x2cb]:cond(w.onscreen and vals[0] not in getattr(w,'offscreen',set()))
+   elif base in [0x2ca,0x2cb]:cond(w.visible(vals[0]))
    elif base in [0xdb,0x448]:cond(w.incar.get(vals[0])==vals[1] or (base==0xdb and w.attached_reports_incar and vals[0] in w.attach and w.attach[vals[0]][0]==vals[1]))
    elif base==0xdf:cond(vals[0] in w.incar or (w.attached_reports_incar and vals[0] in w.attach))
    elif base==0xa32:cond(vals[0] in w.attach)
@@ -98,7 +128,7 @@ class VM:
    elif base==0x457:cond(w.targeting==vals[1])
    elif base==0x431:cond((vals[0],vals[1]) not in w.seats)
    elif base==0x205:cond(all(abs(w.coords(vals[0])[i]-w.car[i])<=vals[2+i] for i in range(3)))
-   elif base==0x6bd:cond(w.siteclear and w.clear_fn(vals[0],vals[1]) and getattr(w,'los_fn',lambda a,b:True)(vals[:3],vals[3:6]) and (w.ray_block_distance is None or math.dist(vals[:3],vals[3:6])<w.ray_block_distance))
+   elif base==0x6bd:cond(w.siteclear and w.clear_fn(vals[0],vals[1]) and getattr(w,'los_fn',lambda a,b:True)(vals[:3],vals[3:6]) and (w.ray_block_distance is None or math.dist(vals[:3],vals[3:6])<w.ray_block_distance) and not (vals[8] and any(w.seg_dist(vals[:3],vals[3:6],pos)<rad for pos,rad in getattr(w,'blockers',[]))))
    elif base in [0x51a,0x51c]:cond((vals[0],vals[1]) in w.damage)
    elif op==0xddd:put(0,w.shared[vals[1]])
    elif op==0xddc:w.shared[vals[0]]=vals[1]
@@ -115,11 +145,11 @@ class VM:
    elif op==0x1b4:w.control=bool(vals[1])
    elif op==0x83c:w.velocity[vals[0]]=vals[1:4]
    elif op==0xa1:
-    w.velocity.pop(vals[0],None)
+    w.velocity.pop(vals[0],None);w.note_teleport(0xa1,vals[0],w.coords(vals[0]),vals[1:4])
     if vals[0]==1:w.player=vals[1:4].copy()
     else:w.pos[vals[0]]=vals[1:4].copy()
    elif op==0xab:
-    pos=[vals[1],vals[2],vals[3]+getattr(w,'car_z_offset',1.2)]
+    pos=[vals[1],vals[2],vals[3]+getattr(w,'car_z_offset',1.2)];w.note_teleport(0xab,vals[0],w.cars[vals[0]]['pos'],pos)
     if getattr(w,'teleport_delay',False):w.pending_car=(vals[0],pos)
     else:w.cars[vals[0]]['pos']=pos
    elif op==0x1e5:w.debug=getattr(w,'debug',[]);w.debug.append(vals[1])
@@ -163,7 +193,7 @@ class VM:
    elif op==0x7e4:
     for i,v in enumerate([-2.,-5.,-1.,2.,5.,2.]):put(i+1,v)
    elif op==0x574:w.frozen[vals[0]]=bool(vals[1])
-   elif op==0x88c:w.cars[vals[0]]['pos']=vals[1:4].copy()
+   elif op==0x88c:w.note_teleport(0x88c,vals[0],w.cars[vals[0]]['pos'],vals[1:4]);w.cars[vals[0]]['pos']=vals[1:4].copy()
    elif op==0x1ea:put(1,0 if w.model.get(vals[0])==425 else 3)
    elif op==0x73f:put(7,w.random_char)
    elif op==0x503:
@@ -199,7 +229,7 @@ class VM:
     w.incar.pop(vals[0],None);w.attach[vals[0]]=(vals[1],vals[2:5].copy());w.weapons[vals[0]]=vals[-1]
    elif op==0x465:w.pos[vals[0]]=w.coords(vals[0]);w.attach.pop(vals[0],None)
    elif op in [0x36a,0x430]:w.attach.pop(vals[0],None);w.incar[vals[0]]=vals[1]
-   elif op==0x362:w.pos[vals[0]]=vals[1:4].copy();w.incar.pop(vals[0],None);w.attach.pop(vals[0],None)
+   elif op==0x362:w.note_teleport(0x362,vals[0],w.coords(vals[0]),vals[1:4]);w.pos[vals[0]]=vals[1:4].copy();w.incar.pop(vals[0],None);w.attach.pop(vals[0],None)
    elif op==0x5ca:
     if w.auto_board:w.attach.pop(vals[0],None);w.incar[vals[0]]=vals[1]
    elif op==0x5cd:

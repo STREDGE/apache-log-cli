@@ -41,9 +41,10 @@ def check(name):
     for v in nodes:
         if v not in idx:sc(v)
     return res
-# Reviewed cycles that are bounded at run time: RAY_STEP counts to 11; EVAC <-> START_MUSTER
+# Reviewed cycles that are bounded at run time: RAY_STEP counts to 11; TRACE_SCAN_LOOP steps through the
+# 16 bullet-trace entries (address += 44 on every path); EVAC <-> START_MUSTER
 # always reaches TICK (WAIT) for every value of the phase variable 24@.
-REVIEWED={'Helicover_Fire':{'RAY_STEP'},'Helicover_Core':{'EVAC'}}
+REVIEWED={'Helicover_Fire':{'RAY_STEP','TRACE_SCAN_LOOP'},'Helicover_Core':{'EVAC'}}
 def label_names(name,comp):
     labels=json.loads((OUT/(name+'.meta.json')).read_text())['labels'];inv={}
     for k,v in labels.items():inv.setdefault(v,set()).add(k)

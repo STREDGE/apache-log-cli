@@ -321,17 +321,29 @@ passed('With four threats around, the four gunners never double up')
 # ------------------------------------------------------------------ v41 threat board: door gunners
 def gs(w):return [(w.shared[b.GS_H+i],w.shared[b.GS_S+i]) for i in range(8) if w.shared[b.GS_H+i]!=-1]
 def gtargets(w):return [w.shared[b.GUARD_TARGET+i] for i in range(4)]
-w,c,f=gunner_world([(930,-12.,0.),(931,12.,0.),(932,0.,12.),(933,0.,-12.)]);w.messages.clear()
-for _ in range(34):w.traces=[{'start':[12.,0.,1.],'end':[1.5,1.,.5],'time':w.now}];w.step(c,f)
+w,c,f=gunner_world([(930,-12.,0.),(931,12.,0.),(932,0.,12.),(933,0.,-12.)]);w.weapons.update({930:30,931:30,932:30,933:30});w.messages.clear()
+for _ in range(34):w.ped_bullet([12.,0.,1.],[1.5,1.,.5]);w.step(c,f)
 assert w.shared[b.TB_SHOOTER]==931 and gs(w)[0][0]==931 and gs(w)[0][1]>=120,(w.shared[b.TB_SHOOTER],gs(w))
 assert gtargets(w).count(931)==2 and len(set(gtargets(w)))==3 and 'HCFOCUS' in w.messages,(gtargets(w),w.messages)
-passed('A round that lands at CJ names its shooter from the bullet trace: top of the board, two gunners on him, call-out')
-w,c,f=gunner_world([(933,-12.,0.)]);w.traces=[{'start':[-12.,0.,1.],'end':[30.,30.,0.],'time':0}]
-for _ in range(16):w.traces[0]['time']=w.now;w.step(c,f)
+passed('A shot at CJ names its shooter from the bullet trace (the engine stores a random 2-5 m piece of the path, not its ends): top of the board, two gunners on him, call-out')
+for dist in (6.,20.,60.,85.):
+ hits=0
+ for seed in range(6):
+  w,c,f=gunner_world([(931,dist,0.)]);w.weapons[931]=30;w.rng.seed(seed)
+  for _ in range(40):w.ped_bullet([dist,0.,1.],[0.4,0.3,.5]);w.step(c,f)
+  hits+=w.shared[b.TB_SHOOTER]==931
+ assert hits>=5,(dist,hits)
+passed('The shooter is found at 6, 20, 60 and 85 m, whatever random piece of the path the engine recorded')
+w,c,f=gunner_world([(933,-12.,0.)]);w.weapons[933]=30
+for _ in range(16):w.ped_bullet([-12.,0.,1.],[30.,30.,0.]);w.step(c,f)
 assert w.shared[b.TB_SHOOTER]!=933,'a round that missed CJ by far names nobody'
 passed('Rounds that do not come down at CJ do not make anyone the shooter')
-w,c,f=gunner_world([(931,12.,0.)]);w.shared[b.GAME_OK]=0;w.calls.clear()
-for _ in range(20):w.shared[b.GAME_OK]=0;w.traces=[{'start':[12.,0.,1.],'end':[1.5,1.,.5],'time':w.now}];w.step(c,f)
+w,c,f=gunner_world([(934,25.,0.)]);w.weapons[934]=0
+for _ in range(30):w.ped_bullet([25.,0.,1.],[0.4,0.3,.5]);w.step(c,f)
+assert w.shared[b.TB_SHOOTER]!=934,'an unarmed bystander on the line is not the shooter'
+passed('An unarmed bystander standing on the back-ray is not mistaken for the shooter')
+w,c,f=gunner_world([(931,12.,0.)]);w.weapons[931]=30;w.shared[b.GAME_OK]=0;w.calls.clear()
+for _ in range(20):w.shared[b.GAME_OK]=0;w.ped_bullet([12.,0.,1.],[1.5,1.,.5]);w.step(c,f)
 assert w.shared[b.TB_SHOOTER]!=931 and not [x for x in calls(w,0xdd8) if x[2][1]>=b.BULLET_TRACES_OFS],'unknown game build: bullet traces are not read'
 passed('On another game build the bullet traces are not read at all')
 w,c,f=gunner_world([(934,-20.,0.),(935,20.,0.),(936,0.,-20.)]);w.weapons.update({934:22,935:30,936:34})
@@ -363,13 +375,64 @@ passed('A target that ducks behind cover gets suppressive fire at his last seen 
 for _ in range(30):w.step(c,f)  # 4 s after he was last seen, before the 5 s hand-over
 assert w.shared[b.GT_SUPP]==0,'suppression ends after about 4 s'
 passed('Suppression stops after about 4 s instead of wasting rounds on a wall')
+w,c,f=gunner_world([(950,20.,0.),(951,-20.,0.)]);w.weapons.update({950:30,951:30});w.shooting_chars={950,951};w.actor_heading[950]=90.;w.actor_heading[951]=90.
+for n in (950,951):w.damage.add((1,n))
+w.step(c,f,n=16);sc=dict(gs(w));assert sc[950]-sc[951]==60,sc
+passed('A gunman who is shooting AND turned towards CJ outranks one shooting the other way (+60), with no bullet trace needed')
+# ------------------------------------------------------------------ 1.2 FOLLOW MY SHOTS (gunners fire where CJ fires)
+def cj_fire(w,c,f,frames,every=6,target=(24.,0.,1.),muzzle=(.5,0.,.7),sample=None,after=12):
+ """CJ fires every `every` frames (IS_CHAR_SHOOTING is a one-frame pulse); each shot leaves an engine-style trace."""
+ out=[]
+ for i in range(frames):
+  shot=i%every==0;w.shooting=shot
+  if shot:w.ped_bullet(list(muzzle),list(target))
+  w.step(c,f)
+  if sample and i>=after:out.append(sample(w))
+ w.shooting=False;return out
+def follow_world(npcs):
+ w,c,f=gunner_world(npcs);w.shared[b.FIRE]=2;w.frame_ms=33;w.step(c,f,n=3)
+ for n,*_ in npcs:w.weapons[n]=30
+ return w,c,f
+def fired_at(w,since):return [x[2][3:6] for x in calls(w,0x6bc) if x[0]>=since]
+w,c,f=follow_world([(940,24.,0.)]);w.blockers=[((24.,0.,1.),.6)]   # the ped is solid for line-of-sight checks that include peds
+ok=cj_fire(w,c,f,90,sample=lambda w:940 in gtargets(w) and w.shared[b.FIRE_ACTIVE]==1)
+assert sum(ok)>=.9*len(ok),(sum(ok),len(ok))
+ends=fired_at(w,0);assert ends and all(22.<e[0]<27. and abs(e[1])<1.5 for e in ends[-5:]),ends[-5:]
+passed('FOLLOW MY SHOTS: single shots (one-frame IS_CHAR_SHOOTING pulses) keep the gunners on his target without flicker')
+t0=w.now;w.step(c,f,n=60)
+assert w.shared[b.FIRE_ACTIVE]==0 and not fired_at(w,t0+1000),(w.shared[b.FIRE_ACTIVE],len(fired_at(w,t0+1000)))
+passed('FOLLOW MY SHOTS: about a second after CJ stops, the gunners stop too')
+w,c,f=follow_world([])
+w.los_fn=lambda a,z:not((a[0]<15.<=z[0]) or (z[0]<15.<=a[0]))
+cj_fire(w,c,f,60,target=(14.9,0.,.9));ends=fired_at(w,0)
+assert ends and all(13.5<e[0]<16.5 and abs(e[1])<1.5 for e in ends),ends[:5]
+passed('FOLLOW MY SHOTS, free aim at a wall: the gunners fire at the point where his line meets the wall')
+w,c,f=follow_world([]);cj_fire(w,c,f,60,target=(120.,0.,40.))
+assert not calls(w,0x6bc),'shots at the sky / far scenery do not draw gunner fire'
+passed('FOLLOW MY SHOTS: nothing on his line within 170 m (the sky) - no rounds wasted')
+w,c,f=follow_world([(940,24.,0.)]);w.targeting=940;w.blockers=[((24.,0.,1.),.6)]
+for i in range(60):
+ w.shooting=i%6==0;w.step(c,f)
+assert 940 in gtargets(w) or w.shared[b.FIRE_ACTIVE]==1,(gtargets(w),w.shared[b.FIRE_ACTIVE])
+passed('FOLLOW MY SHOTS without any bullet trace (grenade, flamethrower): the game\'s lock-on target still draws fire')
+w,c,f=follow_world([]);w.shared[b.GROUND_PUB]=941;w.exists.add(941);w.pos[941]=[1.5,1.,0.]
+for i in range(60):w.ped_bullet([1.6,1.2,1.],[30.,5.,1.]);w.step(c,f)
+assert w.shared[b.FIRE_ACTIVE]==0 and not calls(w,0x6bc),'a guard shooting next to CJ is not CJ shooting'
+passed('FOLLOW MY SHOTS: a guard firing next to CJ (CJ not shooting) does not start the gunners')
+w,c,f=follow_world([(940,24.,0.)]);w.blockers=[((24.,0.,1.),.6)];w.shared[b.GROUND_PUB]=941;w.exists.add(941);w.pos[941]=[-.8,1.,0.]
+for i in range(90):
+ w.shooting=i%6==0
+ if w.shooting:w.ped_bullet([.5,0.,.7],[24.,0.,1.])
+ w.ped_bullet([-.9,1.,1.],[-30.,2.,1.]);w.step(c,f)
+ends=fired_at(w,0);assert ends and all(e[0]>10. for e in ends),ends[:6]
+passed('FOLLOW MY SHOTS: with a guard firing the other way next to him, the gunners still follow CJ\'s own line')
 # ------------------------------------------------------------------ v41 pilot
 w,c,f=gunner_world([]);w.messages.clear()
-for _ in range(4):w.traces=[{'start':[70.,0.,0.],'end':list(w.car),'time':w.now},{'start':[70.,5.,0.],'end':[w.car[0]+2,w.car[1],w.car[2]],'time':w.now}];w.step(c,f)
+for _ in range(6):w.ped_bullet([70.,0.,0.],list(w.car));w.ped_bullet([70.,5.,0.],[w.car[0]+2,w.car[1],w.car[2]]);w.step(c,f)
 assert w.shared[b.EVADE_UNTIL]>w.now and 'HCSHOT' in w.messages,(w.shared[b.EVADE_UNTIL],w.now,w.messages)
 passed('Rounds hitting the helicopter make the pilot break away at once, before the hull is damaged')
-w,c,f=gunner_world([]);w.traces=[{'start':list(w.car),'end':[w.car[0]+30,w.car[1],0.],'time':0}]
-for _ in range(4):w.traces[0]['time']=w.now;w.step(c,f)
+w,c,f=gunner_world([])
+for _ in range(6):w.exact_bullet(list(w.car),[w.car[0]+30,w.car[1],0.]);w.ped_bullet(list(w.car),[w.car[0]+30,w.car[1]+3,0.]);w.step(c,f)
 assert w.shared[b.EVADE_UNTIL]<=w.now,'our own gunners firing from the helicopter are not "taking fire"'
 passed('The gunners\' own rounds leaving the helicopter do not trigger evasion')
 fire_world,target=g['fire_world'],g['target']
@@ -401,9 +464,9 @@ def squad_scene(npcs):
   w.exists.add(n);w.pos[n]=[x,y,0.];w.pedtype[n]=7;w.skin[n]=20;w.weapons[n]=wpn;w.civilians.append(n)
   if hostile:w.damage.add((1,n))
  return w,V,team
-w,V,team=squad_scene([(980,20.,0.,30,True),(981,-40.,0.,22,False)]);w.messages.clear();steps(w,V,8)
+w,V,team=squad_scene([(980,20.,0.,30,True),(981,-40.,0.,22,False)]);w.weapons[981]=30;V=V+(VM('Helicover_Fire',w),);w.messages.clear();steps(w,V,8)
 assert w.shared[b.SQ_T]==980 and 981 not in [w.shared[b.SQ_T+i] for i in range(4)] and 'SQCR' in w.messages,([w.shared[b.SQ_T+i] for i in range(4)],w.messages)
-for _ in range(45):w.traces=[{'start':[-40.,0.,1.],'end':[1.5,-1.,.5],'time':w.now}];steps(w,V,1)
+for _ in range(45):w.ped_bullet([-40.,0.,1.],[1.5,-1.,.5]);steps(w,V,1)
 assert w.shared[b.TB_SHOOTER]==981 and w.shared[b.SQ_T]==981 and w.shared[b.SQ_T+1]==980,([w.shared[b.SQ_T+i] for i in range(4)],[w.shared[b.SQ_SC+i] for i in range(4)])
 assert 'SQXL' in w.messages and last(w,0x634,team[0])[1]==981,(w.messages,orders(w,0x634,team[0])[-2:])
 passed('Squad: the man firing at CJ from 40 m (found only through his bullet traces) jumps to the top of the list, guard 0 takes him, "Shots at CJ - left!"')
@@ -485,7 +548,7 @@ def noisy_fight(level,secs=12):
  w,V,team=squad_scene([(980+i,x,y,30,True) for i,(x,y) in enumerate([(20,0),(-20,0),(0,20),(0,-20)])])
  for n in range(980,984):w.shooting_chars.add(n)
  w.shared[b.HUD]=level;w.health[1]=60;w.messages.clear();n0=len(w.messages)
- for _ in range(secs*10):w.traces=[{'start':[-20.,0.,1.],'end':[1.,1.,.5],'time':w.now}];steps(w,V,1)
+ for _ in range(secs*10):w.ped_bullet([-20.,0.,1.],[1.,1.,.5]);steps(w,V,1)
  return w,V,team
 w,V,team=noisy_fight(2)
 assert 2<=len(w.messages)<=6,w.messages
@@ -522,12 +585,12 @@ w,c,f=gunner_world([(900+i,x,y) for i,(x,y) in enumerate([(20,0),(-20,0),(0,20),
 for n in range(900,908):w.weapons[n]=30;w.damage.add((1,n))
 for i in range(4):w.shared[b.SQ_T+i]=904+i
 def fire_run():
- for _ in range(200):w.traces=[{'start':[20.,0.,1.],'end':w.player.copy(),'time':w.now}];w.step(c,f)
+ for _ in range(200):w.ped_bullet([20.,0.,1.],w.player.copy());w.step(c,f)
 fpeak=peak_of(f,fire_run)
 w,V,team=squad_scene([(980+i,x,y,30,True) for i,(x,y) in enumerate([(20,0),(-20,0),(0,20),(0,-20),(14,14),(-14,-14)])])
 for n in range(980,986):w.shooting_chars.add(n)
 def squad_run():
- for _ in range(200):w.traces=[{'start':[-20.,0.,1.],'end':w.player.copy(),'time':w.now}];steps(w,V,1)
+ for _ in range(200):w.ped_bullet([-20.,0.,1.],w.player.copy());steps(w,V,1)
 speak=peak_of(V[2],squad_run)
 assert fpeak<=3600 and speak<=2000,(fpeak,speak)
 passed('Frame cost in a busy fight (8 threats, rounds at CJ): fire worker peak %d, squad worker peak %d script instructions'%(fpeak,speak))

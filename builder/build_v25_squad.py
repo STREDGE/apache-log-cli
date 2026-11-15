@@ -20,7 +20,7 @@ Registers: 0 CJ, 1 heli, 2-5 guards, 6 CJ car/-1, 7 tactics, 8 fire mode, 9-11 C
 from asm_v25 import *
 import build_v25 as b
 from msg_v42 import say
-from threat_v41 import emit_score,emit_trace_scan,SHOOTER_FRESH_MS,SCORE_FOCUS
+from threat_v41 import emit_score,SHOOTER_FRESH_MS,SCORE_FOCUS
 s=Script();a=s.add
 FIELDS={'TASK':0,'NEXT':1,'TX':2,'TY':3,'LX':4,'LY':5,'LT':6,'DEAD':7,'TGT':8,'COVER':9}
 # TASK values: -1 not set up, 0 idle, 1 moving, 2 sector watch, 3 shooting, 4 entering car,
@@ -109,7 +109,7 @@ for ph,cells in [(1,MID_CELLS[:len(MID_CELLS)//2]),(2,MID_CELLS[len(MID_CELLS)//
  for x,y in cells:
   a(0x0087,V(26),V(9));a(0x000b,V(26),F(x));a(0x0087,V(27),V(10));a(0x000b,V(27),F(y));a(0x0a3e,V(26),V(27),V(11),F(4.6),F(4.6),F(10),V(29));s.call('CONSIDER');s.check(0x8019,[V(18),I(3)],'PERCEIVE_STORE')
  s.go('PERCEIVE_STORE')
-s.label('PH_3');s.get(19,b.GAME_OK);s.eq(19,1,'PH_3_CARS');s.get(19,b.TRACE_SCAN_T);a(0x0085,V(20),V(12));a(0x0062,V(20),V(19));s.check(0x0019,[V(20),I(600)],'PH_3_CARS');s.call('SQ_TRACE_SCAN');s.label('PH_3_CARS')
+s.label('PH_3')
 for dx,dy in [(-30,-30),(0,-30),(-30,0),(0,0)]:
  nxt=uid('CAR_NEXT');a(0x0087,V(26),V(9));a(0x000b,V(26),F(dx));a(0x0087,V(27),V(10));a(0x000b,V(27),F(dy));a(0x0087,V(28),V(26));a(0x000b,V(28),F(30));a(0x0087,V(31),V(27));a(0x000b,V(31),F(30))
  a(0x053e,V(26),V(27),V(28),V(31),I(-1),V(23));s.check(0x056e,[V(23)],nxt);s.check(0x803b,[V(23),V(1)],nxt);s.check(0x803b,[V(23),V(6)],nxt);a(0x046c,V(23),V(29));s.call('CONSIDER');s.check(0x8019,[V(18),I(3)],'PERCEIVE_STORE');s.label(nxt)
@@ -168,14 +168,6 @@ call_table('CT0_',False)
 s.label('CALL_THROTTLED');call_table('CT1_',True)
 s.label('CALL_RET');s.ret()
 emit_score(s,'SQ_SCORE',29,30,[0,2,3,4,5],dict(cx=9,cy=10,cz=11,tx=20,ty=21,tz=22,d=23,t1=24,t2=25,t3=26))
-# 30@ = 1 when 29@ is not CJ, the pilot, the crew or the team (uses 31@)
-s.label('SQ_NOT_FRIEND');a(6,V(30),I(0));s.check(0x803b,[V(29),V(0)],'SNF_RET');a(0x089f,V(29),V(31));s.eq(31,8,'SNF_OK')
-for i in range(2,7):s.get(31,b.PUB+i);s.check(0x803b,[V(29),V(31)],'SNF_RET')
-for i in range(5):s.get(31,b.GROUND_PUB+i);s.check(0x803b,[V(29),V(31)],'SNF_RET')
-s.label('SNF_OK');a(6,V(30),I(1))
-s.label('SNF_RET');s.ret()
-emit_trace_scan(s,'SQ_TRACE_SCAN',dict(cx=9,cy=10,cz=11,hx=19,hy=20,hz=21,x=22,y=23,z=24,d=25,n=26,now=27,bx=28,by=31),'SQ_NOT_FRIEND',cj=0,heli=1)
-
 # 29@ candidate: append to the threat list when it is new, there is room and CLASSIFY accepts it.
 s.label('CONSIDER');s.check(0x0019,[V(18),I(3)],'CON_ROOM');s.ret()
 s.label('CON_ROOM')

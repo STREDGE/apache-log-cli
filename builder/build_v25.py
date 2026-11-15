@@ -58,7 +58,9 @@ GT_PREV=STATE+225;FOCUS_SEEN=STATE+229;GC_TIME=STATE+250;GC_CAND=STATE+230  # GC
 from msg_v42 import say,MSG_UNTIL,MSG_PRIO,LEVEL_ALL
 import msg_v42 as _mv;assert _mv.HUD==HUD
 from threat_v41 import TB_SHOOTER,TB_SHOOTER_T,HELI_SHOT_T,TRACE_SCAN_T,SHOOTER_FRESH_MS,SCORE_FOCUS,emit_score,emit_trace_scan
-import threat_v41 as _tv;assert _tv.STATE==STATE
+from threat_v41 import CJ_SHOT_T,CJ_AIM_X,CJ_AIM_Y,CJ_AIM_Z,CJ_AIM_PX,CJ_AIM_PY,CJ_AIM_PZ,CJ_AIM_T,CJ_AIM_E,TB_SEARCH_T
+import threat_v41 as _tv;assert _tv.STATE==STATE and _tv.GROUND_PUB==GROUND_PUB
+TS_SAVE=STATE+380   # 4 slots: registers the trace scan borrows
 PREV_HP=STATE+356;PREV_HP_T=STATE+360;GT_YIELD=STATE+364;LS_X=STATE+340;LS_Y=STATE+344;LS_Z=STATE+348;LS_T=STATE+352  # gunner hit tracking / guard last-seen
 NOTICE_SKIP=STATE+335;HELLO_AT=STATE+336;KILL_NEXT=STATE+337
 GS_H=STATE+256;GS_S=STATE+264            # 8 handles / scores, best first
@@ -938,7 +940,7 @@ launch.label('MISSING');a(0x03e5,S('HCOFF'));a(0x004e)
 
 # Dedicated fire worker: no global faction hatred and no automatic armed turrets.
 f=Script();a=f.add
-f.label('INIT');a(0);f.set(FOCUS_SEEN,-1);f.set(GC_TIME,-100000);f.set(TB_SHOOTER,-1);f.set(TB_SHOOTER_T,-100000);f.set(TRACE_SCAN_T,-100000)
+f.label('INIT');a(0);f.set(FOCUS_SEEN,-1);f.set(GC_TIME,-100000);f.set(TB_SHOOTER,-1);f.set(TB_SHOOTER_T,-100000);f.set(TRACE_SCAN_T,-100000);f.set(CJ_SHOT_T,-100000);f.set(CJ_AIM_T,-100000);f.set(CJ_AIM_E,0);f.set(TB_SEARCH_T,-100000)
 for i in range(4):f.set(GT_PREV+i,-1);f.set(GT_SUPP+i,0);f.set(SUP_T+i,-100000)
 f.set(FIRENEXT,0);f.set(FIREGEN,-1);f.set(FWANTED,-1);f.set(FIRE_ACTIVE,0);f.set(FIRE_TARGET,-1);f.set(FIRE_TASK_TARGET,-1);f.set(FIRE_TASK_PHASE,-1);f.set(FIRE_TASK_MODE,-1);f.set(FIRE_TASK_NEXT,0);f.set(FIRE_SCAN_NEXT,0);a(6,V(26),I(-1));a(6,V(27),I(0));a(6,V(29),I(-1))
 f.label('WAIT');a(1,I(0));a(0x01bd,V(30));a(0xddc,I(FIREHEART),V(30));f.check(0x0a52,[I(EXIT_WIDGET)],'EXIT_POLL_DONE');a(0xddc,I(EXIT_PRESSED),V(30));f.label('EXIT_POLL_DONE');f.get(30,BUSY);f.eq(30,0,'WAIT');f.get(30,STATE)
@@ -964,7 +966,7 @@ for var in [3,4,5,6]:
  for typ in range(7,17):
   if typ!=8:a(0x077a,V(var),I(4),I(typ))
  f.label('MODE_RESPECT_'+str(var));a(0x077a,V(var),I(0),I(0));a(0x077a,V(var),I(0),I(8));f.label(skip)
-f.label('MODE_READY');f.call('KILL_CHECK');f.call('TRACE_TICK');f.label('ARM_GUARDS');f.get(30,FIRENEXT);a(0x01bd,V(31));f.check(0x001d,[V(31),V(30)],'WAIT');f.eq(25,4,'ARM_FAST');a(0x000a,V(31),I(OVERWATCH_CADENCE));f.go('ARM_NEXT_SET');f.label('ARM_FAST');a(0x000a,V(31),I(150));f.label('ARM_NEXT_SET');a(0xddc,I(FIRENEXT),V(31))
+f.label('MODE_READY');f.call('KILL_CHECK');f.call('CJ_POLL');f.call('TRACE_TICK');f.label('ARM_GUARDS');f.get(30,FIRENEXT);a(0x01bd,V(31));f.check(0x001d,[V(31),V(30)],'WAIT');f.eq(25,4,'ARM_FAST');a(0x000a,V(31),I(OVERWATCH_CADENCE));f.go('ARM_NEXT_SET');f.label('ARM_FAST');a(0x000a,V(31),I(150));f.label('ARM_NEXT_SET');a(0xddc,I(FIRENEXT),V(31))
 for var in [3,4,5,6]:
  skip='ARM_SKIP_'+str(var);alive(f,var,skip);a(0x0470,V(var),V(30));f.check(0x803b,[V(30),V(7)],skip);a(0x01b2,V(var),V(7),I(30000));a(0x01b9,V(var),V(7));a(0x02e2,V(var),I(100));a(0x07dd,V(var),I(100));f.label(skip)
 f.eq(25,0,'ACTIVE_MODE');f.go('WAIT')
@@ -974,12 +976,24 @@ f.label('CHECK_ALL_MODE');f.eq(25,1,'FOLLOW_SHOTS');f.call('FIND_ANY_NPC');alive
 f.label('NO_TARGET');f.call('STOP_COMBAT');f.call('CLEAR_CHECK');f.go('WAIT')
 # v39-fire OVERWATCH: precision fire on armed hostiles only (guns/grenades; police only when wanted)
 f.label('OVERWATCH_MODE');f.eq(25,4,'WAIT');f.call('FIND_ARMED_HOSTILE');alive(f,29,'NO_TARGET');f.call('SHOOT_CHAR');f.go('WAIT')
-f.label('FOLLOW_SHOTS');f.eq(25,2,'OVERWATCH_MODE');f.check(0x02e0,[V(0)],'SILENCE');a(6,V(27),I(1))
-# Aiming at a friendly suppresses assistance even before the camera ray is evaluated.
+f.label('FOLLOW_SHOTS');f.eq(25,2,'OVERWATCH_MODE')
+# 1.2: CJ_POLL stamps CJ_SHOT_T every frame; the gunners stay on his fire for 0.9 s after his last shot
+# (the old code asked IS_CHAR_SHOOTING once per 150 ms, a one-frame flag, and fell silent in between)
+f.get(30,CJ_SHOT_T);a(0x01bd,V(31));a(0x0062,V(31),V(30));f.check(0x0019,[V(31),I(900)],'FS_ACTIVE');f.go('SILENCE')
+f.label('FS_ACTIVE');a(6,V(27),I(1))
+# Aiming at a friendly suppresses assistance even before the shot line is evaluated.
 for var in [2,3,4,5,6]:
  skip='AIM_FRIEND_SKIP_'+str(var);alive(f,var,skip);f.check(0x8457,[I(0),V(var)],'SILENCE');f.label(skip)
-# Check the game's actual auto-aim target across nearby cells before estimating a free-aim ray.
-f.call('FIND_CJ_AIMED');alive(f,29,'AIM_RAY');f.call('SHOOT_CHAR');f.go('WAIT')
+# His own shot line from the bullet traces (CJ_TRACE in the trace scan) is the primary source: it is exact
+# for auto-aim, free aim and drive-by alike. Without a fresh line: the game's lock-on target, then the camera.
+f.get(30,CJ_AIM_T);a(0x01bd,V(31));a(0x0062,V(31),V(30));f.check(0x0019,[V(31),I(900)],'AIM_LINE');f.go('AIM_LOCK')
+f.label('AIM_LINE');f.get(14,CJ_AIM_X);f.get(15,CJ_AIM_Y);f.get(16,CJ_AIM_Z);f.get(8,CJ_AIM_PX);f.get(9,CJ_AIM_PY);f.get(10,CJ_AIM_PZ);a(0x00a0,V(0),V(22),V(23),V(24))
+# t = (CJ - P1).u ; origin = P1 + u*(t + 1): the point of his line nearest to him, one metre ahead
+a(0x0087,V(18),V(22));a(0x0063,V(18),V(8));a(0x006b,V(18),V(14));a(0x0087,V(19),V(23));a(0x0063,V(19),V(9));a(0x006b,V(19),V(15));a(0x005b,V(18),V(19))
+a(0x0087,V(19),V(24));a(0x0063,V(19),V(10));a(0x006b,V(19),V(16));a(0x005b,V(18),V(19));a(0x000b,V(18),F(1.0))
+for origin,direction in [(8,14),(9,15),(10,16)]:a(0x0087,V(21),V(direction));a(0x006b,V(21),V(18));a(0x005b,V(origin),V(21))
+f.go('RAY_INIT')
+f.label('AIM_LOCK');f.call('FIND_CJ_AIMED');alive(f,29,'AIM_RAY');f.call('SHOOT_CHAR');f.go('WAIT')
 f.label('AIM_RAY');a(0x068d,V(8),V(9),V(10));a(0x068e,V(11),V(12),V(13))
 for dest,point,origin in [(14,11,8),(15,12,9),(16,13,10)]:a(0x0087,V(dest),V(point));a(0x0063,V(dest),V(origin))
 a(0x050a,V(8),V(9),V(10),V(11),V(12),V(13),V(17));f.check(0x0021,[V(17),F(.01)],'SILENCE')
@@ -987,17 +1001,23 @@ for var in [14,15,16]:a(0x0073,V(var),V(17))
 # Start the ray just ahead of CJ so a third-person camera does not hit CJ's back.
 a(0x00a0,V(0),V(22),V(23),V(24));a(0x050a,V(8),V(9),V(10),V(22),V(23),V(24),V(18));a(0x000b,V(18),F(1.5))
 for origin,direction in [(8,14),(9,15),(10,16)]:a(0x0087,V(21),V(direction));a(0x006b,V(21),V(18));a(0x005b,V(origin),V(21))
-a(0x0007,V(18),F(0));a(0x0007,V(19),F(180));a(6,V(20),I(0))
+f.label('RAY_INIT');a(0x0007,V(18),F(0));a(0x0007,V(19),F(180));a(6,V(20),I(0))
 f.label('RAY_STEP');a(0x0087,V(21),V(18));a(0x005b,V(21),V(19));a(0x0013,V(21),F(.5))
 for point,origin,direction in [(22,8,14),(23,9,15),(24,10,16)]:a(0x0087,V(point),V(direction));a(0x006b,V(point),V(21));a(0x005b,V(point),V(origin))
 f.check(0x06bd,[V(8),V(9),V(10),V(22),V(23),V(24),I(1),I(1),I(1),I(1),I(0)],'RAY_BLOCKED');a(0x0087,V(18),V(21));f.go('RAY_NEXT')
 f.label('RAY_BLOCKED');a(0x0087,V(19),V(21))
 f.label('RAY_NEXT');a(0x000a,V(20),I(1));f.check(0x0019,[V(20),I(11)],'RAY_STEP')
 for point,origin,direction in [(22,8,14),(23,9,15),(24,10,16)]:a(0x0087,V(point),V(direction));a(0x006b,V(point),V(19));a(0x005b,V(point),V(origin))
+# nothing blocked his line within 170 m: he is shooting at the sky or far scenery - do not waste rounds
+f.check(0x0023,[F(170),V(19)],'SILENCE')
 # Reject a coordinate at or immediately beside CJ or our team.
 for var in [0,2,3,4,5,6]:
  skip='COORD_FRIEND_SKIP_'+str(var);alive(f,var,skip);a(0x00a0,V(var),V(11),V(12),V(13));a(0x050a,V(11),V(12),V(13),V(22),V(23),V(24),V(30));f.check(0x0021,[V(30),F(3)],'SILENCE');f.label(skip)
-f.call('SHOOT_COORD');f.go('WAIT')
+# a character (or the driver of a car) at the point of impact: fire at him, else at the point itself
+a(0x0a3e,V(22),V(23),V(24),F(2.5),F(2.5),F(3),V(29));alive(f,29,'FS_CAR');f.call('NOT_FRIEND');f.eq(30,1,'FS_CAR');f.call('SHOOT_CHAR');f.go('WAIT')
+f.label('FS_CAR');a(0x0087,V(14),V(22));a(0x000b,V(14),F(-3));a(0x0087,V(15),V(23));a(0x000b,V(15),F(-3));a(0x0087,V(16),V(22));a(0x000b,V(16),F(3));a(0x0087,V(17),V(23));a(0x000b,V(17),F(3));a(0x053e,V(14),V(15),V(16),V(17),I(-1),V(29))
+f.check(0x056e,[V(29)],'FS_COORD');f.check(0x803b,[V(29),V(1)],'FS_COORD');a(0x046c,V(29),V(29));alive(f,29,'FS_COORD');f.call('NOT_FRIEND');f.eq(30,1,'FS_COORD');f.call('SHOOT_CHAR');f.go('WAIT')
+f.label('FS_COORD');f.call('SHOOT_COORD');f.go('WAIT')
 f.label('SILENCE');f.eq(27,1,'WAIT');a(6,V(27),I(0));f.set(FIRE_ACTIVE,0);f.set(FIRE_TARGET,-1);f.set(FIRE_TASK_TARGET,-1);f.set(FIRE_TASK_MODE,-1)
 for var in [3,4,5,6]:
  skip='SILENCE_SKIP_'+str(var);alive(f,var,skip);a(0x0687,V(var));f.label(skip)
@@ -1130,9 +1150,22 @@ def gunner_mode_check(P):
  f.label(P+'NOT_OVERWATCH');f.call('NOT_FRIEND')
  f.label(P+'MODE_DONE')
 emit_score(f,'THREAT_SCORE',29,30,[0,2,3,4,5,6],dict(cx=8,cy=9,cz=10,tx=11,ty=12,tz=13,d=14,t1=15,t2=16,t3=17))
-emit_trace_scan(f,'TRACE_SCAN',dict(cx=8,cy=9,cz=10,hx=11,hy=12,hz=13,x=14,y=15,z=16,d=17,n=18,now=19,bx=20,by=21),'NOT_FRIEND',cj=0,heli=1)
-f.label('TRACE_TICK');f.get(30,GAME_OK);f.eq(30,1,'TRACE_TICK_RET');f.get(30,TRACE_SCAN_T);a(0x01bd,V(31));a(0x0062,V(31),V(30));f.check(0x0019,[V(31),I(249)],'TRACE_TICK_RET');f.call('TRACE_SCAN')
+emit_trace_scan(f,'TRACE_SCAN',dict(cx=8,cy=9,cz=10,hx=11,hy=12,hz=13,px=14,py=15,pz=16,ux=17,uy=18,uz=19,ad=22,n=23,t1=20,t2=21,t3=24,t4=29,t5=30,t6=31),'NOT_FRIEND',cj=0,heli=1)
+# the scan borrows 22-24 and 29 (29 = the target the protect / follow modes keep between frames): save and restore them
+f.label('TRACE_RUN')
+for i,r in enumerate((22,23,24,29)):a(0xddc,I(TS_SAVE+i),V(r))
+f.call('TRACE_SCAN')
+for i,r in enumerate((22,23,24,29)):f.get(r,TS_SAVE+i)
+f.ret()
+# every 100 ms in every fire mode: shooters at CJ, hits on the helicopter, CJ's own shot line
+f.label('TRACE_TICK');f.get(30,GAME_OK);f.eq(30,1,'TRACE_TICK_RET');f.get(30,TRACE_SCAN_T);a(0x01bd,V(31));a(0x0062,V(31),V(30));f.check(0x0019,[V(31),I(99)],'TRACE_TICK_RET');f.call('TRACE_RUN')
 f.label('TRACE_TICK_RET');f.ret()
+# every frame: IS_CHAR_SHOOTING is a one-frame flag, so CJ_SHOT_T is stamped here and, for 250 ms after a shot,
+# the traces are read every frame (a trace lives 75-300 ms)
+f.label('CJ_POLL');f.get(30,GAME_OK);f.eq(30,1,'CJ_POLL_RET');f.check(0x02e0,[V(0)],'CJ_POLL_IDLE');a(0x01bd,V(31));a(0xddc,I(CJ_SHOT_T),V(31))
+f.label('CJ_POLL_IDLE');f.get(30,CJ_SHOT_T);a(0x01bd,V(31));a(0x0062,V(31),V(30));f.check(0x0019,[V(31),I(250)],'CJ_POLL_RET')
+f.get(30,TRACE_SCAN_T);a(0x01bd,V(31));a(0x0062,V(31),V(30));f.check(0x0019,[V(31),I(20)],'CJ_POLL_RET');f.call('TRACE_RUN')
+f.label('CJ_POLL_RET');f.ret()
 # 29@ handle, 30@ score: insert into the sorted list (higher first); uses 31@
 f.label('GS_INSERT')
 for gp in range(GS_N):
