@@ -1072,7 +1072,34 @@ w,c,f=fire_world();npc=target(w,typ=7,skin=102);w.weapons[npc]=30;w.actor_headin
 assert not attacks(w) and aims(w,npc),'PROTECT ME: the same man is covered - weapons on him - but not fired at'
 w,c,f=fire_world();w.shared[b.FIRE]=4;npc=target(w,typ=4);w.weapons[npc]=30;w.actor_heading[npc]=270.;w.step(c,f,n=20);assert not attacks(w) and not aims(w),'an armed civilian is nobody\'s target'
 passed('ARMED ONLY: an armed gang member is engaged even with his back to CJ (PROTECT ME only covers him); unarmed gang members and armed civilians are not targets')
-# the gunners hate nobody (the game would open fire on its own otherwise): every kind of person is cleared for each of them
+# end to end at 30 fps: from a stranger's first round at CJ to the first round of ours. A man the gunners already kept a weapon on is
+# answered in 0.15-0.3 s; one who was nobody until he fired (55 m away) within half a second
+def reaction(x,frames):
+ w,c,f=fire_world();w.frame_ms=33;npc=target(w,typ=7,skin=102);w.pos[npc]=[x,0.,0.];w.weapons[npc]=30;w.health[npc]=100000;w.actor_heading[npc]=270.   # armed, his back to CJ
+ w.step(c,f,n=frames);assert not attacks(w)
+ t0=w.now;w.shot_at={npc:[w.player[0],w.player[1],1.]};w.shooting_chars={npc}
+ for _ in range(40):
+  w.step(c,f)
+  if attacks(w):break
+ assert attacks(w) and not invariants(w),(x,frames);return w.now-t0
+covered=[reaction(20.,30+k) for k in range(6)];cold=[reaction(55.,30+k) for k in range(6)]
+assert all(130<=t<=330 for t in covered) and all(130<=t<=500 for t in cold),(covered,cold)
+passed('From a stranger\'s first round at CJ to the gunners\' first round at 30 fps: %d-%d ms for a man they already had a weapon on, %d-%d ms for a man who was nobody until he fired'%(min(covered),max(covered),min(cold),max(cold)))
+# a car on a collision course with CJ at 72 km/h, an unarmed man at the wheel: the driver is fired at while the car is still far away
+w,c,f=fire_world();w.frame_ms=33;drv,car=962,963;w.exists.update({drv,car});w.cars[car]={'pos':[90.,0.,0.],'heading':90.,'vel':[-20.,0.,0.]};w.model[car]=400;w.incar[drv]=car
+w.traffic=[car];w.seats[(car,-1)]=drv;w.pedtype[drv]=4;w.skin[drv]=20;w.weapons[drv]=0;w.health[drv]=100000;w.health[car]=1000;first=None
+while w.cars[car]['pos'][0]>19.:
+ w.cars[car]['pos'][0]-=20.*.033;w.step(c,f)
+ if first is None and attacks(w):first=w.cars[car]['pos'][0]
+assert first is not None and first>=30. and len(attacks(w))>=6 and {r.target for r in w.brain.rounds}=={drv} and not invariants(w),(first,len(attacks(w)))
+n_ram=len(attacks(w))
+w,c,f=fire_world();w.frame_ms=33;w.exists.update({drv,car});w.cars[car]={'pos':[90.,30.,0.],'heading':90.,'vel':[-20.,0.,0.]};w.model[car]=400;w.incar[drv]=car
+w.traffic=[car];w.seats[(car,-1)]=drv;w.pedtype[drv]=4;w.skin[drv]=20;w.weapons[drv]=0;w.health[drv]=100000;w.health[car]=1000
+while w.cars[car]['pos'][0]>-40.:
+ w.cars[car]['pos'][0]-=20.*.033;w.step(c,f)
+assert not attacks(w),'the same car driving past 30 m away is nobody\'s business'
+passed('A car driven straight at CJ at 72 km/h: the gunners fire at the driver from %d m on (2 s before it would hit), %d rounds before it is close; a car driving past is left alone'%(first,n_ram))
+# the gunners hate nobody (the game would open fire on its own otherwise): every kind of person is cleared for each of them when he is created
 w,c,f=fire_world()
 for g_ in [w.shared[b.PUB+i] for i in range(3,7)]:
  assert {x[2][2] for x in calls(w,0x77a) if x[2][0]==g_ and x[2][1]==2}==set(range(32)),g_

@@ -9,12 +9,14 @@ PASS: Stalled approach reports blocked without restarting the mission or telepor
 PASS: Final descent is ordered once after coming close and slow
 PASS: Changing helicopter or crew resumes the same native landing
 PASS: Main menu updates the status in its title while it is open
-PASS: Existing protection worker still issues target tasks for a simulated attacker
-PASS: Existing protection worker still excludes Grove actors in the mock
-PASS: Fire mode selection still enables and stops issuing tasks in the mock
+PASS: The fire worker asks the brain: a passer-by is left alone; the man who hurts CJ gets the gunners' weapons on him and their rounds (30 damage each, each one let go by the brain); no gunner is ever given a task that fires the game's own weapon
+PASS: Friends come from the game, not from a list of models: an armed Grove man looking at CJ is left alone, an armed Balla looking at CJ is engaged
+PASS: HOLD FIRE: no weapon comes up and no round goes, even at a man who has hurt CJ; with PROTECT ME they open fire, and HOLD FIRE stops them within 0.3 s
+PASS: The brain mod gone: the fire worker never runs its opcode (an unregistered opcode would have its parameters executed as code) and nobody fires
+PASS: No brain, no Helicover: without the mod's answer to the handshake the helicopter is not called (CALL and PATROL), the player is told to install the mod, and nothing is created; with the mod it comes as before
 PASS: All four onboard guards remain attached after Grove and follow takeoff
 PASS: Takeoff-follow requests CJ to exit; no unintended hover with CJ aboard
-PASS: Follow-shots finds the game auto-aim target instead of the first nearby NPC
+PASS: WHERE I SHOOT: the man CJ has locked on and is firing at is the gunners' man, not the first passer-by near him
 PASS: Main menu shows only what fits the moment: call it; on foot - three modes (marked), gunner fire, rope, squad, dismiss; aboard - destinations and the two exit-button switches
 PASS: Protect CJ and cease-fire remain active after aim and takeoff changes
 PASS: Weapon menu changes all four live guards to MP5
@@ -23,9 +25,9 @@ PASS: All weapon selections update the four guards in the mock
 PASS: Gesture activation is removed; CLEO menu invocation still opens the panel
 PASS: Rope insertion creates four additional guards while aircraft guards remain attached
 PASS: With CJ on foot and the rope out the rope row is the cancel, and there are no destinations
-PASS: Protect CJ does not target a member of the ground team
+PASS: One of our own ground team is never a target, whatever the game says he did to CJ
 PASS: Ground team receives CJ-relative formation tasks after descent
-PASS: Ground team attacks the hostile selected by Protect CJ in the mock
+PASS: The rope worker gives its team no fire order of its own (only the squad worker, with the brain behind it, puts a guard on a man): the gunners deal with the man who hurt CJ, and the pilot is told who the fight is about
 PASS: FOLLOW with the rope out cancels the pickup: the cover team climbs back aboard, then the helicopter follows - nobody is handed to the game
 PASS: A team that is let go in view is never handed to the game: unarmed, walking away, still ours and no longer a target list entry
 PASS: The guards who were let go are removed as soon as nobody sees them
@@ -70,14 +72,14 @@ PASS: Map marker is read from libGTASA memory with 0DD8, never 0AB6
 PASS: Repeated map flight with delayed teleports keeps a steady cruise height
 PASS: Off-map or NaN marker coordinates are rejected
 PASS: Release build shows no DBG breadcrumbs
-PASS: Four guards acquire separate eligible threats when available, with stronger checked bullets
+PASS: Four attackers, two on each side of the helicopter: each of the four gunners has a man of his own and hits him
 PASS: Map destination searches a nearby clear landing footprint
 PASS: Blocked descent shaft leaves CJ aboard with control enabled
 PASS: Patrol changes position around CJ and can return to follow
 PASS: Patrol summons a helicopter if none is active
 PASS: Follow reissues its order if the helicopter is far from CJ
 PASS: Marked destination hover -> choose landing preserves CJ aboard
-PASS: Target distribution excludes Grove and the additional ground squad
+PASS: Three armed men looking at CJ - a Balla, a Grove man and one of our ground team: only the Balla is engaged
 PASS: Three explicit mode rows: FOLLOW ME / HOLD HERE / PATROL AROUND ME - one tap each, the active one marked [X]
 PASS: CLEO evacuation menu starts the marked route
 PASS: Blocked cruise segment climbs in place instead of passing through
@@ -99,15 +101,20 @@ PASS: LAND mode falls back to the rope when there is no place to land
 PASS: No flat pad near the marker: hover over it for a rope exit instead of giving up
 PASS: Exit works on the first press: per-frame polling of the one-frame widget release, with debounce
 PASS: Rope evacuation lifts CJ only after he walks to the rope (6 m away)
-PASS: GUNNER FIRE page: PROTECT ME by default, then ARMED ONLY, WHERE I SHOOT, FIRE AT ALL, HOLD FIRE; BACK returns to the main page
+PASS: GUNNER FIRE page: four rules - PROTECT ME (default), ARMED ONLY, WHERE I SHOOT, HOLD FIRE (the old FIRE AT ALL is gone) - and two switches: POLICE fire back / never fire, MISSIONS defend only / as usual; BACK returns to the main page
 PASS: DISMISS HELICOPTER asks for confirmation; NO keeps it, YES sends it away
-PASS: OVERWATCH: armed hostiles only, 75-damage precision rounds
-PASS: OVERWATCH leaves armed police alone unless CJ is wanted
-PASS: Gunner callouts: CONTACT, TARGET DOWN with kill count, AREA CLEAR, mode reports
+PASS: ARMED ONLY: an armed gang member is engaged even with his back to CJ (PROTECT ME only covers him); unarmed gang members and armed civilians are not targets
+PASS: From a stranger's first round at CJ to the gunners' first round at 30 fps: 165-264 ms for a man they already had a weapon on, 165-264 ms for a man who was nobody until he fired
+PASS: A car driven straight at CJ at 72 km/h: the gunners fire at the driver from 35 m on (2 s before it would hit), 11 rounds before it is close; a car driving past is left alone
+PASS: Door gunners are given no hatred of anybody: they fire only the rounds the brain lets go
+PASS: HOLD FIRE: no rounds, weapons down, and the pilot is told of no fight; back on PROTECT ME the most dangerous man is his business again
+PASS: No helicopter any more in the middle of a fight: the gunners' fight is over at once (no stale "engaged" flag or pilot target for the next call)
+PASS: "Area clear" is not called while a threat is left (an attacker who stopped firing but still stands armed, turned to CJ); it is called once he is no danger
+PASS: A crewman out of his door gets no rounds from the fire worker (he is a guard on foot then); the men in the doors go on firing
+PASS: Police: without stars a policeman is nobody; with stars he is covered and fired at only after he has fired (POLICE: FIRE BACK); with POLICE: NEVER FIRE not even then
+PASS: Gunner callouts: CONTACT once when somebody attacks, TARGET DOWN with the kill count when a man dies under their fire, AREA CLEAR 3 s after the last dangerous man is gone, and a report for each fire rule
 PASS: Callouts stay silent when STATUS MESSAGES is disabled
-PASS: PROTECT CJ at 3+ stars returns fire at the police chopper shooting CJ
-PASS: Return fire lasts 3 s after the chopper stops shooting
-PASS: Air threat ignores low wanted levels, ground shooters, our own gunners and stale rounds
+PASS: A stranger's round that passes within 6 m of the helicopter stamps the time the pilot's evasion looks at (it used to be read from the bullet traces); rounds elsewhere and our own fire do not
 PASS: Combat orbit circles the threat at 28 m and 25 m above it
 PASS: All on-screen texts: radio style (coloured source or alert, then the message), at most 66 characters, no removed buttons
 Mocked script execution only: actual GTA flight, collisions, gunfire, animations and Android behavior are not tested.

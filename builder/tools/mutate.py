@@ -215,7 +215,7 @@ M17=[
  (B,"a(0x0667,V(var),V(17),V(18),V(19),I(1500));a(0xddc,I(G_AIM+g),V(10))","a(0xddc,I(G_AIM+g),V(10))",'17 gunner: weapon on the man'),
  (B,"a(0x000a,V(31),I(700));a(0xddc,I(G_AIM_T+g),V(31))","a(0x000a,V(31),I(700000));a(0xddc,I(G_AIM_T+g),V(31))",'17 gunner: the aim follows a moving man'),
  (B,"rest(var,'REST2_'+str(var));f.set(G_AIM+g,-1)","f.set(G_AIM+g,-1)",'17 gunner: weapon down when the brain says rest'),
- (B,"for typ in range(32):a(0x077a,V(var),I(2),I(typ))","for typ in range(0):a(0x077a,V(var),I(2),I(typ))",'17 gunner: hates nobody'),
+ (B,"for typ in range(32):a(0x077a,V(v),I(2),I(typ))","for typ in range(0):a(0x077a,V(v),I(2),I(typ))",'17 gunner: hates nobody'),
  (B,"a(0xddc,I(BR_KILLS),V(11));f.get(31,KILLS);a(0x000a,V(31),I(1));a(0xddc,I(KILLS),V(31))","a(0xddc,I(BR_KILLS),V(11));f.get(31,KILLS)",'17 kills are counted from the brain'),
  (B,"f.eq(30,-1,'KILL_KNOWN');a(0xddc,I(BR_KILLS),V(11));f.go('KILL_DONE')","f.eq(30,-1,'KILL_KNOWN');a(0xddc,I(BR_KILLS),I(0));f.go('KILL_DONE')",'17 kills: the brain\'s old count is not a new kill'),
  (B,"a(0x01bd,V(31));a(0x0062,V(31),V(16));a(0xddc,I(HELI_SHOT_T),V(31));f.label('HELI_SHOT_DONE')","f.label('HELI_SHOT_DONE')",'17 fire at the helicopter reaches the pilot'),

@@ -1261,9 +1261,8 @@ for m in (0,2,3,4):
  nxt='MODE_REPORT_NOT_'+str(m);f.eq(25,m,nxt);msg(f,'HCFM'+str(m));f.go('MODE_REPORT_DONE');f.label(nxt)
 f.label('MODE_REPORT_DONE');a(0x0085,V(26),V(25))
 for var in [3,4,5,6]:
- skip='MODE_CLEAR_'+str(var);alive(f,var,skip);rest(var,'REST1_'+str(var));f.set(G_AIM+var-3,-1)
- for typ in range(32):a(0x077a,V(var),I(2),I(typ))   # no hatred of anybody: a gunner fires only the rounds the brain lets go
- a(0x077a,V(var),I(0),I(0));a(0x077a,V(var),I(0),I(8));f.label(skip)
+ # (no hatred is set or cleared here any more: the core gives every crewman none when he is created, and no fire rule adds any)
+ skip='MODE_CLEAR_'+str(var);alive(f,var,skip);rest(var,'REST1_'+str(var));f.set(G_AIM+var-3,-1);f.label(skip)
 f.label('MODE_READY');f.call('BURN_WATCH');f.get(30,FIRENEXT);a(0x01bd,V(31));f.check(0x001d,[V(31),V(30)],'BRAIN')
 a(0x000a,V(31),I(500));a(0xddc,I(FIRENEXT),V(31))
 for var in [3,4,5,6]:
