@@ -714,6 +714,11 @@ e.share(HC_STATE + 7, 3); e.gunshot(gang, (0., 0.5, 1.)); e.frame(ms=50, n=8, hu
 handled, v, used = e.opcode(20, 5, CMD_STATUS)
 assert v[0] >= h.HCB_ALERT_COMBAT and v[1] >= 1 and v[2] >= 1 and v[3] == 0 and v[4] == H_(gang), v
 assert e.opcode(20, 8, CMD_STATUS)[1][5] == -1, 'CJ has not fired'
+assert e.opcode(20, 9, CMD_STATUS)[1][8] == -1, 'nobody has fired at the helicopter'
+e.gunshot(gang, (1., 8., 23.)); e.frame(ms=50, hud=False)               # a round up at the helicopter (it hangs at 0, 8, 25)
+assert 0 <= e.opcode(20, 9, CMD_STATUS)[1][8] <= 100
+e.gunshot(s1, (0., 8., 25.)); e.gunshot(gang, (0., 0.5, 1.)); e.frame(ms=200, hud=False)
+assert e.opcode(20, 9, CMD_STATUS)[1][8] >= 200, 'our own rounds and rounds at CJ are not fire at the helicopter'
 e.gunshot(e.cj, (30., 40., 1.)); e.frame(ms=50, hud=False)
 v = e.opcode(20, 8, CMD_STATUS)[1]
 assert 0 <= v[5] <= 100 and abs(f32(v[6]) - 0.6) < .01 and abs(f32(v[7]) - 0.8) < .01, (v[5], f32(v[6]), f32(v[7]))
@@ -722,7 +727,7 @@ e.w32(gang + 0x54c, 55)                                              # he is dea
 e.frame(ms=50, n=2, hud=False)
 v = e.opcode(20, 5, CMD_STATUS)[1]
 assert v[3] == 1 and v[4] != H_(gang) and e.opcode(3, 9, CMD_GUNNER, handle=H_(g1))[1][1:3] == [0, 0] and e.opcode(10, 3, CMD_SQUAD, handle=H_(s1))[1][1:3] == [0, 0], v
-passed('A guard on foot asks with 3 variables: cover, fire, and "cease fire" in the very frame CJ walks into his line; "hold fire" in the menu stops everybody; the status request gives alert level, threats, attackers, kills, the most dangerous man and the direction of CJ\'s own last shot (the squad keeps out of his line of fire); a dead man is nobody\'s target and is counted')
+passed('A guard on foot asks with 3 variables: cover, fire, and "cease fire" in the very frame CJ walks into his line; "hold fire" in the menu stops everybody; the status request gives alert level, threats, attackers, kills, the most dangerous man, the direction of CJ\'s own last shot (the squad keeps out of his line of fire) and how long ago a stranger fired at the helicopter (the pilot breaks away); a dead man is nobody\'s target and is counted')
 
 # what a script must not be able to do through the opcode
 sentinel = [0x51515151] * 32

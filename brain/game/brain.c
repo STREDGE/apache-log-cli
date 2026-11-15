@@ -86,7 +86,7 @@ extern void *memset(void *d, int c, u64 n);
 #define BRAIN_OPCODE 0x0E48
 #define CMD_GUNNER 1                        /* 9 variables: in handle; out state (0 rest, 1 aim, 2 fire this round), target, muzzle xyz, end xyz */
 #define CMD_SQUAD 2                         /* 3 variables: in handle; out state (0 nothing, 1 cover, 2 fire, 3 cease fire now), target */
-#define CMD_STATUS 3                        /* 5 variables: out alert, threats, attackers, kills, the most dangerous man; 8: + ms since CJ fired, direction x, y */
+#define CMD_STATUS 3                        /* 5 variables: out alert, threats, attackers, kills, the most dangerous man; 8: + ms since CJ fired, direction x, y; 9: + ms since a stranger fired at our helicopter */
 #define IGNORE_ENTITY 0xbdcaf8UL            /* CWorld::pIgnoreEntity */
 #define GOT_IGNORE 0x84b180UL               /* the GOT entry the line-of-sight code reads its address from */
 /* CLEO (offsets from the start of libSAcleo64.so; the unpacked library is at +0x88000) */
@@ -205,6 +205,7 @@ static u32 g_ticks, g_last_think, g_dumps, g_peds_max, g_tick_us_max, g_events_l
 static u64 g_tick_us_sum;
 static int g_ready, g_dump_request, g_was_alive, g_busy, g_urgent, g_ignore_ok, g_bridge;     /* g_bridge: 0 not yet, 1 opcode registered, -1 cannot */
 static const u8 *g_our_ent[HCB_MAX_OURS + 2];   /* CJ, the helicopter and our people as the gunshot hook sees them */
+static u32 g_heli_shot_t;                       /* when a stranger's round last passed within 6 m of our helicopter */
 static u32 g_cj_shot_t;                         /* when CJ last fired, and in which direction (unit vector in the plane) */
 static float g_cj_shot_dir[2];
 #define BRAIN ((hcb_brain *)g_brain)
@@ -506,6 +507,18 @@ static int build_snapshot(hcb_snapshot *s, const hcb_out *prev) {
         if (src == cj_h) {
             float dx = q->t[0] - q->o[0], dy = q->t[1] - q->o[1], len2 = dx * dx + dy * dy;
             if (len2 > 0.04f) { float len = f_sqrt(len2); g_cj_shot_t = q->time; g_cj_shot_dir[0] = dx / len; g_cj_shot_dir[1] = dy / len; }
+        } else {
+            /* a stranger's round that passes close to our helicopter (the pilot, still flying by the scripts' rules, breaks away) */
+            const u8 *hl = obj_of(&vp, VHANDLE(s->heli), VEH_STRIDE);
+            for (k = 0; k < s->n_ours && s->ours[k] != src; k++) {}
+            if (hl && k == s->n_ours) {
+                const float *h = pos_of(hl);
+                float d[3], ap[3], l2 = 0, t = 0, dist = 0;
+                for (i = 0; i < 3; i++) { d[i] = q->t[i] - q->o[i]; ap[i] = h[i] - q->o[i]; l2 += d[i] * d[i]; t += ap[i] * d[i]; }
+                t = l2 > 0.01f ? t / l2 : 0; t = t < 0 ? 0 : t > 1.2f ? 1.2f : t;
+                for (i = 0; i < 3; i++) { float e = ap[i] - d[i] * t; dist += e * e; }
+                if (dist < 36.0f && l2 > 1.0f) g_heli_shot_t = q->time;
+            }
         }
         g_shot_tail++;
     }
@@ -685,6 +698,7 @@ static void cmd_status(int *v, int count) {
         v[5] = g_cj_shot_t && now - g_cj_shot_t < 60000 ? (int)(now - g_cj_shot_t) : -1;
         put_f(v + 6, g_cj_shot_dir[0]); put_f(v + 7, g_cj_shot_dir[1]);
     }
+    if (count >= 9) v[8] = g_heli_shot_t && now - g_heli_shot_t < 60000 ? (int)(now - g_heli_shot_t) : -1;
     if (!get_pool(PED_POOL, &pp)) return;
     for (i = 0; i < g_out.n_marks; i++) {
         const hcb_mark *m = &g_out.marks[i];

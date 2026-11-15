@@ -101,7 +101,7 @@ for var,x,y in [(20,-2.5,-2.0),(21,2.5,-2.0),(22,-6.,1.),(23,6.,1.)]:
  s.check(0x056d,[V(var)],skip);s.check(0x8118,[V(var)],skip);a(0x0819,V(var),V(19));s.check(0x0023,[F(2.5),V(19)],skip);a(0x0470,V(var),V(19));s.check(0x003b,[V(19),V(29)],'ARM_'+str(var));s.go('ARM_DONE_'+str(var));s.label('ARM_'+str(var));a(0x01b2,V(var),V(29),I(30000));a(0x01b9,V(var),V(29));s.label('ARM_DONE_'+str(var))
  # v40: the squad worker gives the orders while its heartbeat is fresh
  s.get(19,b.SQ_HEART);a(0x0085,V(16),V(15));a(0x0062,V(16),V(19));s.check(0x0019,[V(16),I(1000)],skip)
- s.eq(28,1,walk);s.check(0x056d,[V(24)],walk);s.check(0x8118,[V(24)],walk);s.eq(31,1,skip);a(0x074d,V(var),V(24),I(2000));s.go(skip)
+ # 1.3: the rope team never fires on this worker's word - only the squad worker, with the brain behind it, puts a guard on a man
  s.label(walk);a(0x04c4,V(0),F(x),F(y),F(0),V(10),V(11),V(12));a(0x00a0,V(var),V(13),V(14),V(15));a(0x050a,V(10),V(11),V(12),V(13),V(14),V(15),V(16));s.check(0x0021,[V(16),F(3)],watch);s.eq(7,1,skip);a(0x04eb,V(var),I(0));a(0x05d3,V(var),V(10),V(11),V(12),I(6),I(1800));s.go(skip);s.label(watch);a(0x04eb,V(var),I(1));s.label(skip)
 s.go('ACTIVE')
 # The reverse clip is cosmetic; vertical position is moved explicitly.

@@ -16,8 +16,8 @@ HCAIR ~r~POLICE CHOPPER!~w~ Gunners returning fire.
 HCCONT ~r~CONTACT!~w~ Gunners engaging.
 HCKILL ~g~TARGET DOWN~w~ ~1~
 HCCLEAR ~g~GUNNERS:~w~ area clear.
+HCNOBR ~r~NO BRAIN MOD.~w~ Put libHelicoverBrain64.so into the mods folder.
 HCFM0 ~y~GUNNERS:~w~ cease fire.
-HCFM1 ~r~GUNNERS:~w~ weapons free - anyone but us is a target.
 HCFM2 ~b~GUNNERS:~w~ firing on your targets.
 HCFM3 ~g~GUNNERS:~w~ protecting CJ.
 HCFM4 ~p~GUNNERS:~w~ overwatch - armed hostiles only.

@@ -6,6 +6,7 @@ OUT.mkdir(parents=True,exist_ok=True)
 LIB={int(c['id'],16):c for e in json.load(open(ROOT/'sa_mobile.json'))['extensions'] for c in e['commands']}
 # Official CLEO source defines 0DF4, missing from the downloaded library snapshot.
 LIB[0x0df4]={'id':'0DF4','name':'GET_MENU_TOUCHED_ITEM_INDEX','num_params':2}
+LIB[0x0e48]={'id':'0E48','name':'HELICOVER_BRAIN','num_params':3}   # registered by libHelicoverBrain64.so through CLEO's plugin interface
 # Native SA command (self, x, y, z), absent from the trimmed library snapshot.
 LIB[0x00ab]={'id':'00AB','name':'SET_CAR_COORDINATES','num_params':4}
 LIB[0x0016]={'id':'0016','name':'DIV_INT_LVAR_BY_VAL','num_params':2}
