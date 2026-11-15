@@ -44,13 +44,14 @@ static void ask(hcb_out *out, u32 from, u32 to) {
 }
 
 /* Is the man at p in the way of a round from a to e, or behind the target within `behind` metres?
-   Returns 0 no, 1 in the line, 2 behind the target. Somebody level with or behind the muzzle is not in the line. */
-static int in_line(hcb_vec a, hcb_vec e, hcb_vec p, float margin, float per_m, float behind, float behind_margin) {
+   Returns 0 no, 1 in the line, 2 behind the target. Somebody level with or behind the muzzle (the first `skip`
+   metres of the line) is not in the line. */
+static int in_line(hcb_vec a, hcb_vec e, hcb_vec p, float margin, float per_m, float behind, float behind_margin, float skip) {
     hcb_vec d = v_sub(e, a), ap = v_sub(p, a);
     float len = v_len(d), along, lat2, m;
     if (len < 0.01f) return 0;
     along = v_dot(ap, d) / len;
-    if (along <= 0.3f) return 0;
+    if (along <= skip) return 0;
     lat2 = v_dot(ap, ap) - along * along;
     if (along <= len) { m = margin + per_m * along; return lat2 <= m * m ? 1 : 0; }
     if (along > len + behind) return 0;
@@ -72,12 +73,11 @@ static shooter *shooter_of(hcb_brain *b, u32 id) {
 static float rnd_between(hcb_brain *b, float lo, float hi) {
     return hi > lo ? lo + (hi - lo) * (float)(hcb_rand(b) & 0xffff) / 65535.0f : lo;
 }
-static vtrack *veh_of(hcb_brain *b, u32 id) {
-    int i;
-    if (!id) return 0;
-    for (i = 0; i < HCB_MAX_VTRACKS; i++) if (b->vt[i].used && b->vt[i].last.id == id) return &b->vt[i];
-    return 0;
-}
+#define veh_of hcb_vfind
+/* A door gunner's rounds are made by the script along the checked line: they start muzzle_m out (clear of the
+   helicopter and of the man beside him) and end round_past_m behind the aim point. Everybody else fires the game's
+   own weapon, whose rounds fly on. */
+static int is_gunner(int role) { return role >= HCB_ROLE_GUNNER && role < HCB_ROLE_GUNNER + 4; }
 
 /* May this shooter fire at this contact right now? Returns HCB_HOLD_NONE or the reason. *aim_at / *aim are set. */
 static int check(hcb_brain *b, const hcb_snapshot *s, const hcb_ped *me, int role, const track *t, hcb_out *out, u8 *aim_at, hcb_vec *aim) {
@@ -86,27 +86,29 @@ static int check(hcb_brain *b, const hcb_snapshot *s, const hcb_ped *me, int rol
     float dist = v_dist(from, to), range = hcb_weapon_range(me->weapon) * 1.2f;
     vtrack *car = veh_of(b, t->last.vehicle), *heli = veh_of(b, s->heli);
     losent *l;
-    int i, r;
+    int i, r, gunner = is_gunner(role);
+    float skip = gunner ? (heli && v_dist(from, heli->last.pos) < 6 ? c->muzzle_m : 0.8f) : 0.3f;
 
     *aim_at = HCB_AIM_BODY; *aim = to;
     if (!hcb_is_firearm(me->weapon) || dist > range) return HCB_HOLD_RANGE;
     /* a door gunner does not fire across his own cabin */
-    if (heli && role >= HCB_ROLE_GUNNER && role < HCB_ROLE_GUNNER + 4 && me->vehicle == 0 && dist > 0.5f) {
+    if (heli && gunner && me->vehicle == 0 && dist > 0.5f) {
         hcb_vec right, d = v_sub(to, from);
         float side = ((role - HCB_ROLE_GUNNER) & 1) ? -1.0f : 1.0f;
         right.x = heli->last.fwd.y; right.y = -heli->last.fwd.x; right.z = 0;
         if (v_dist(from, heli->last.pos) < 6 && side * (d.x * right.x + d.y * right.y) < -0.17f * f_sqrt(d.x * d.x + d.y * d.y)) return HCB_HOLD_NO_LOS;
     }
     /* CJ first, then everybody who is ours or an ally, then people who have nothing to do with it */
-    r = in_line(from, to, s->player.pos, c->cj_line_m, c->line_per_m, c->backstop_m, 1.0f);
+    /* (a gunner's round is checked again when it leaves, on the line it really takes: here only half the allowance for scatter) */
+    r = in_line(from, to, s->player.pos, c->cj_line_m, gunner ? c->line_per_m * 0.5f : c->line_per_m, gunner ? c->round_past_m + c->cj_line_m : c->backstop_m, gunner ? c->cj_line_m : 1.0f, 0.3f);
     if (r) return r == 1 ? HCB_HOLD_CJ_IN_LINE : HCB_HOLD_CJ_BEHIND;
     for (i = 0; i < HCB_MAX_TRACKS; i++) {
         const track *o = &b->tr[i];
         if (!o->used || !o->seen || o == t || o->last.id == me->id) continue;
         if (o->friendly) {
-            if (in_line(from, to, o->last.pos, c->friend_line_m, c->line_per_m * 0.75f, 25, 0.8f)) return HCB_HOLD_FRIEND;
+            if (in_line(from, to, o->last.pos, c->friend_line_m, c->line_per_m * 0.75f, gunner ? c->round_past_m + c->friend_line_m : 25, gunner ? c->friend_line_m : 0.8f, skip)) return HCB_HOLD_FRIEND;
         } else if (o->cls <= HCB_CLS_NEUTRAL) {
-            r = in_line(from, to, o->last.pos, c->bystander_line_m, 0, 15, 0.6f);
+            r = in_line(from, to, o->last.pos, c->bystander_line_m, 0, gunner ? c->round_past_m + c->bystander_line_m : 15, gunner ? c->bystander_line_m : 0.6f, skip);
             /* somebody standing behind a man who is about to kill CJ does not save that man */
             if (r == 1 || (r == 2 && t->edps < 40)) return HCB_HOLD_BYSTANDER;
         }
@@ -123,10 +125,11 @@ static int check(hcb_brain *b, const hcb_snapshot *s, const hcb_ped *me, int rol
             *aim_at = car->why == HCB_WHY_RAMMING ? HCB_AIM_TYRE : HCB_AIM_DRIVER;
         } else *aim_at = HCB_AIM_DRIVER;
     }
-    /* the line of sight is the adapter's to answer: known and blocked = no; unknown or getting old = ask again */
+    /* the line of sight is the adapter's to answer, and it is asked on every tick for every pair that passed the rules
+       above: known and blocked = no; not known yet = he may take the man and bring his weapon round, not fire */
     l = los_find(b, me->id, t->last.id);
-    if (!l || s->time - l->time > 300) ask(out, me->id, t->last.id);
-    if (!l || s->time - l->time > 1000) return SOFT_LOS;
+    ask(out, me->id, t->last.id);
+    if (!l || s->time - l->time > 600) return SOFT_LOS;
     if (!l->clear) return HCB_HOLD_NO_LOS;
     return HCB_HOLD_NONE;
 }
@@ -161,9 +164,14 @@ HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         /* "answer": a policeman is fired at only once he has attacked */
         if (fire && s->police == HCB_POLICE_ANSWER && t->last.pedtype == 6 && t->cls < HCB_CLS_ATTACKER && s->roe != HCB_ROE_FOLLOW) fire = 0;
         if (!fire && t->cls < HCB_CLS_WATCH) continue;
-        cs[n].t = t; cs[n].fire = (u8)fire; cs[n].taken = 0;
-        cs[n].value = t->edps > 1 ? t->edps : 1;
-        n++;
+        /* kept sorted, most dangerous first and those that may be fired at before the rest: when the questions about
+           lines of sight do not all fit into one tick, the ones that matter most are asked */
+        {
+            float value = t->edps > 1 ? t->edps : 1;
+            for (j = n; j > 0 && (fire > cs[j - 1].fire || (fire == cs[j - 1].fire && value > cs[j - 1].value)); j--) cs[j] = cs[j - 1];
+            cs[j].t = t; cs[j].fire = (u8)fire; cs[j].taken = 0; cs[j].value = value;
+            n++;
+        }
     }
 
     /* (2) the hard rules for every pair */
@@ -172,11 +180,12 @@ HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         int role = s->our_role[i];
         me[i] = hcb_ped_of(s, s->ours[i]);
         done[i] = 0; choice[i] = -1;
-        if (!me[i] || (me[i]->flags & HCB_PF_DEAD) || role < HCB_ROLE_GUNNER) { me[i] = 0; done[i] = 1; continue; }
-        for (j = 0; j < n; j++) {
-            if (cs[j].fire && s->roe != HCB_ROE_HOLD) why[i][j] = (u8)check(b, s, me[i], role, cs[j].t, out, &aim_at[i][j], &dummy);
-            else { why[i][j] = HCB_HOLD_ROE; aim_at[i][j] = HCB_AIM_BODY; }
-        }
+        if (!me[i] || (me[i]->flags & HCB_PF_DEAD) || role < HCB_ROLE_GUNNER) { me[i] = 0; done[i] = 1; }
+    }
+    for (j = 0; j < n; j++) for (i = 0; i < n_ours; i++) {
+        if (!me[i]) continue;
+        if (cs[j].fire && s->roe != HCB_ROE_HOLD) why[i][j] = (u8)check(b, s, me[i], s->our_role[i], cs[j].t, out, &aim_at[i][j], &dummy);
+        else { why[i][j] = HCB_HOLD_ROE; aim_at[i][j] = HCB_AIM_BODY; }
     }
 
     /* (3) hand the targets out: always the pair that takes most danger off CJ; each further shooter on the same man
@@ -227,10 +236,12 @@ HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
             o->target = t->last.id; o->aim = t->last.pos; o->aim_at = aim_at[i][choice[i]]; o->ready = 1;
             if (why[i][choice[i]] == SOFT_LOS) o->hold = HCB_HOLD_NO_LOS;           /* the answer is on its way; the reaction clock is running */
             else if (now < sh->fire_from) o->hold = HCB_HOLD_REACTING;
+            /* a guard on foot fires the game's own weapon and the game makes his bursts: for him it is fire or cease fire */
+            else if (!is_gunner(sh->role)) { o->fire = 1; o->hold = HCB_HOLD_NONE; sh->last_fire = now; }
             else if (now < sh->pause_until) o->hold = HCB_HOLD_PAUSE;
             else {
                 if (!sh->burst_until) sh->burst_until = now + (u32)rnd_between(b, c->burst_min_ms, c->burst_max_ms);
-                if (now < sh->burst_until) { o->fire = 1; o->hold = HCB_HOLD_NONE; }
+                if (now < sh->burst_until) { o->fire = 1; o->hold = HCB_HOLD_NONE; sh->last_fire = now; }
                 else {                                      /* the burst is over: a breath, then the next one */
                     sh->pause_until = now + (u32)rnd_between(b, c->pause_min_ms, c->pause_max_ms);
                     sh->burst_until = 0;
@@ -261,4 +272,48 @@ HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         for (i = 0; i < n_ours; i++) if (me[i] && me[i]->id == b->sh[k].id) break;
         if (i == n_ours) b->sh[k].used = 0;
     }
+}
+
+/* One round, now. The order must still stand (same man, firing, given on a recent tick), and the hard rules are run
+   again on the positions of this frame: CJ, our own people, and - from what the last tick knew - allies, bystanders
+   and the vehicle the man sits in. */
+API int hcb_shot_check(const hcb_brain *cb, const hcb_shot *q) {
+    hcb_brain *b = (hcb_brain *)cb;
+    const hcb_cfg *c = &b->cfg;
+    const shooter *sh = 0;
+    const track *t;
+    int i, r, gunner;
+    float skip, past;
+    for (i = 0; i < HCB_MAX_OURS; i++) if (b->sh[i].used && b->sh[i].id == q->who) sh = &b->sh[i];
+    if (!sh || !q->target || sh->target != q->target || sh->hold != HCB_HOLD_NONE || q->time - b->time > 300) return HCB_HOLD_NO_TARGET;
+    t = hcb_find(b, q->target);
+    if (!t || t->friendly) return HCB_HOLD_NO_TARGET;
+    gunner = is_gunner(sh->role);
+    skip = gunner ? f_max(0.3f, v_dist(q->from, q->muzzle)) : 0.3f;
+    past = gunner ? c->round_past_m : c->backstop_m;
+    /* the line given is the line the round takes: for a gunner there is no scatter left to allow for */
+    r = in_line(q->from, q->to, q->cj, c->cj_line_m, gunner ? 0 : c->line_per_m, gunner ? past + c->cj_line_m : past, gunner ? c->cj_line_m : 1.0f, 0.3f);
+    if (r) return r == 1 ? HCB_HOLD_CJ_IN_LINE : HCB_HOLD_CJ_BEHIND;
+    for (i = 0; i < (int)q->n_friends && i < HCB_MAX_OURS; i++)
+        if (in_line(q->from, q->to, q->friends[i], c->friend_line_m, c->line_per_m * 0.75f, gunner ? past + c->friend_line_m : 25, gunner ? c->friend_line_m : 0.8f, skip)) return HCB_HOLD_FRIEND;
+    for (i = 0; i < HCB_MAX_TRACKS; i++) {
+        const track *o = &b->tr[i];
+        if (!o->used || !o->seen || o == t || o->last.id == q->who) continue;
+        if (o->friendly) {
+            if (o->why == HCB_WHY_OURS) continue;       /* our own people came with the question, as they stand now */
+            if (in_line(q->from, q->to, o->last.pos, c->friend_line_m + 0.5f, c->line_per_m * 0.75f, gunner ? past + c->friend_line_m : 25, gunner ? c->friend_line_m + 0.5f : 0.8f, skip)) return HCB_HOLD_FRIEND;
+        } else if (o->cls <= HCB_CLS_NEUTRAL) {
+            r = in_line(q->from, q->to, o->last.pos, c->bystander_line_m + 0.3f, 0, gunner ? past + c->bystander_line_m : 15, gunner ? c->bystander_line_m + 0.3f : 0.6f, skip);
+            if (r == 1 || (r == 2 && t->edps < 40)) return HCB_HOLD_BYSTANDER;
+        }
+    }
+    if (t->last.vehicle) {
+        const vtrack *car = hcb_vfind(b, t->last.vehicle);
+        if (car) {
+            float near = v_dist(car->last.pos, q->cj);
+            for (i = 0; i < (int)q->n_friends && i < HCB_MAX_OURS; i++) near = f_min(near, v_dist(car->last.pos, q->friends[i]));
+            if (near <= c->explode_m && (car->last.health < c->car_floor || (car->last.flags & HCB_VF_BURNING))) return HCB_HOLD_CAR_NEAR;
+        }
+    }
+    return HCB_HOLD_NONE;
 }

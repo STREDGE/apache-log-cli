@@ -215,14 +215,163 @@ sc.walls = [(15, -20, 15, 20)]
 fired = run(sc, 15)
 assert not fired and set(holds(sc).values()) == {'NO_LOS'}
 asked = sum(1 for s_ in sc.snapshots[-10:] if s_.n_los)
-assert 2 <= asked <= 5, ('the question is repeated a few times a second, not every tick', asked)
+assert asked == 10, ('the question is asked again on every tick', asked)
 sc.walls = []
 fired = run(sc, 10)
 assert fired and min(min(v) for v in fired.values()) <= 6
 sc.walls = [(15, -20, 15, 20)]
-run(sc, 5)
-assert not firing(sc), 'he steps behind a wall: fire stops within half a second'
-passed('Nobody fires through a wall: the line of sight is asked for (about three times a second), fire starts when it clears and stops within 0.5 s when it closes')
+run(sc, 2)
+assert not firing(sc), 'he steps behind a wall: fire stops on the second tick'
+passed('Nobody fires through a wall: the line of sight is asked for on every tick, fire starts when it clears and stops within 0.2 s when it closes')
+
+# ------------------------------------------------------------------ door gunners: rounds made by the script along a checked line
+def heli_scene(cj_at=(0., 0.), z=31., **kw):
+    sc = Scene(**kw)
+    sc.cj['pos'] = [cj_at[0], cj_at[1], 1.]
+    sc.heli = sc.veh(0, 40, z=z, cls=HCB_VC_HELI)            # facing north: the right door looks east
+    pilot = sc.our(0, 41, HCB_ROLE_PILOT, z=z)
+    sc.vehs[sc.heli]['driver'] = pilot
+    front = sc.our(1.4, 41, HCB_ROLE_GUNNER + 0, weapon=M4, z=z)
+    rear = sc.our(1.4, 39, HCB_ROLE_GUNNER + 2, weapon=M4, z=z)
+    return sc, front, rear
+
+
+sc, front, rear = heli_scene(cj_at=(-30., 0.))
+g = sc.ped(3, 75, pedtype=GANG, weapon=AK, z=31.)      # on a roof ahead of the helicopter, level with it: the rear gunner's line passes 0.1 m from the front gunner
+sc.shot(g, (-30., 0., 1.), dst=1)
+fired = run(sc, 12)
+assert front in fired and rear in fired, (fired, holds(sc))
+sc, front, rear = heli_scene(cj_at=(-30., 0.))
+mate = sc.our(2.2, 57, HCB_ROLE_SQUAD, weapon=M4, z=31.)   # ... but one of ours half-way down that same line does stop it
+g = sc.ped(3, 75, pedtype=GANG, weapon=AK, z=31.)
+sc.shot(g, (-30., 0., 1.), dst=1)
+fired = run(sc, 12)
+assert rear not in fired and HOLD[sc.orders[rear].hold] == 'FRIEND', (fired, holds(sc))
+passed('Two gunners in one door: the rear one fires past the man kneeling beside him (his rounds start 5.5 m out, clear of the helicopter) - in the real fight this cost 9% of the fire; one of ours further down the line still stops the shot')
+
+sc, front, rear = heli_scene(cj_at=(40., 41.8), z=2.)  # the helicopter hovers low: a flat line, and CJ stands 10 m behind the target on it
+g = sc.ped(30, 41, pedtype=GANG, weapon=AK)
+sc.shot(g, (40., 41.8, 1.), dst=1)
+fired = run(sc, 12)
+assert front in fired, (fired, holds(sc))
+sc = Scene()                                           # the same line for a guard on foot firing the game's own weapon
+sc.cj['pos'] = [40., 41.8, 1.]
+ground = sc.our(1.4, 41, HCB_ROLE_SQUAD, weapon=M4)
+g = sc.ped(30, 41, pedtype=GANG, weapon=AK)
+sc.shot(g, (40., 41.8, 1.), dst=1)
+fired = run(sc, 12)
+assert ground not in fired and HOLD[sc.orders[ground].hold] == 'CJ_BEHIND', (fired, holds(sc))
+sc, front, rear = heli_scene(cj_at=(32., 47.6))        # CJ 2 m behind the target: nobody
+g = sc.ped(30, 47, pedtype=GANG, weapon=AK)
+sc.shot(g, (32., 47.6, 1.), dst=1)
+fired = run(sc, 12)
+assert not fired, (fired, holds(sc))
+passed('A gunner\'s round ends 0.6 m past the point it is aimed at, so CJ 10 m behind the target does not stop a gunner (it stops a guard firing the game\'s own weapon); CJ 2 m behind the target stops everybody')
+
+# ------------------------------------------------------------------ one round, at the moment it leaves
+sc, front, rear = heli_scene(cj_at=(-30., 0.))
+g = sc.ped(40, 41, pedtype=GANG, weapon=AK)
+other = sc.ped(40, 60, pedtype=GANG, weapon=AK, face='away')
+sc.shot(g, (-30., 0., 1.), dst=1)
+run(sc, 6)
+assert sc.orders[front].fire
+b = sc.brain
+me, him = sc.peds[front]['pos'], sc.peds[g]['pos']
+d = [him[i] - me[i] for i in range(3)]
+n = math.sqrt(sum(x * x for x in d))
+muzzle = [me[i] + d[i] / n * 5.5 for i in range(3)]
+mates = [sc.peds[rear]['pos'], sc.peds[[i for i, r in sc.ours.items() if r == HCB_ROLE_PILOT][0]]['pos']]
+ask = lambda cj, to=None, friends=mates, time=None, target=g, who=front: HOLD[b.shot(who, target, time or sc.time, me, to or him, cj, friends, muzzle)]
+assert ask(sc.cj['pos']) == 'NONE'
+mid = [(me[i] + him[i]) / 2 for i in range(3)]
+assert ask([mid[0], mid[1] + 1.5, mid[2]]) == 'CJ_IN_LINE', 'CJ has run into the line since the last look'
+assert ask([mid[0], mid[1] + 2.6, mid[2]]) == 'NONE', '2.6 m from the line: the round goes'
+assert ask([him[0] + 2.0, him[1], him[2]]) == 'CJ_BEHIND' and ask([him[0] + 4.0, him[1], him[2]]) == 'NONE', 'the round ends 0.6 m past the aim point'
+assert ask(sc.cj['pos'], friends=mates + [[mid[0], mid[1] + 0.8, mid[2]]]) == 'FRIEND', 'one of ours in the line now'
+assert ask(sc.cj['pos'], friends=[[me[0] + 2.0, me[1] + 0.3, me[2]]]) == 'NONE', 'the man inside the first 5.5 m is behind the muzzle'
+assert ask(sc.cj['pos'], target=other) == 'NO_TARGET' and ask(sc.cj['pos'], target=g + 0x4000) == 'NO_TARGET', 'only the man of the standing order'
+assert ask(sc.cj['pos'], time=sc.time + 400) == 'NO_TARGET', 'an order older than 0.3 s is no order'
+sc.walls = [(20, 30, 20, 50)]                          # he steps behind a wall: the order still names him, but it is not an order to fire
+sc.step(2)
+assert sc.orders[front].target == g and not sc.orders[front].fire and ask(sc.cj['pos']) == 'NO_TARGET', holds(sc)
+sc.walls = []
+civ = sc.ped(mid[0], mid[1] + 1.0, z=mid[2])           # a passer-by 1 m from the line: the look allows it (0.8 m), the round is stricter (his place is 0.1 s old)
+for _ in range(12):
+    sc.step(1)
+    if sc.orders[front].fire:
+        break
+assert sc.orders[front].fire and ask(sc.cj['pos']) == 'BYSTANDER', holds(sc)
+sc.roe = HCB_ROE_HOLD
+sc.peds.pop(civ)
+sc.step(1)
+assert ask(sc.cj['pos']) == 'NO_TARGET', 'the player said hold fire: no round after the next look'
+sc, front, rear = heli_scene(cj_at=(10., 20.))
+drv = sc.ped(40, 41, pedtype=GANG, weapon=AK)
+carid = sc.veh(40, 41, driver=drv, health=500.)        # a damaged car 36 m from CJ: far enough to be fired at
+sc.shot(drv, (10., 20., 1.), dst=1)
+run(sc, 8)
+me, him = sc.peds[front]['pos'], sc.peds[drv]['pos']
+d = [him[i] - me[i] for i in range(3)]
+n = math.sqrt(sum(x * x for x in d))
+muzzle = [me[i] + d[i] / n * 5.5 for i in range(3)]
+for _ in range(12):
+    if sc.orders[front].fire:
+        break
+    sc.step(1)
+assert sc.orders[front].fire and sc.orders[front].aim_at == HCB_AIM_DRIVER
+assert HOLD[sc.brain.shot(front, drv, sc.time, me, him, sc.cj['pos'], [], muzzle)] == 'NONE'
+assert HOLD[sc.brain.shot(front, drv, sc.time, me, him, [33., 33., 1.], [], muzzle)] == 'CAR_NEAR', 'CJ has run up to within 18 m of that car since the look'
+assert HOLD[sc.brain.shot(front, drv, sc.time, me, him, sc.cj['pos'], [[36., 30., 1.]], muzzle)] == 'CAR_NEAR', '... or one of ours has'
+sc2, f2, r2 = heli_scene(cj_at=(-30., 0.))
+g2 = sc2.ped(40, 41, pedtype=GANG, weapon=AK)
+sc2.shot(g2, (-30., 0., 1.), dst=1)
+sc2.step(1)                                            # the man has been taken, the weapon is coming up: no round yet
+assert sc2.orders[f2].target == g2 and not sc2.orders[f2].fire
+assert HOLD[sc2.brain.shot(f2, g2, sc2.time, sc2.peds[f2]['pos'], sc2.peds[g2]['pos'], sc2.cj['pos'], [], None)] == 'NO_TARGET'
+passed('Every round is asked for at the moment it leaves, with the positions of that frame: CJ stepping within 2 m of the line, one of ours in it, a passer-by, a damaged car beside CJ, an order that is stale or was for another man - the round does not go')
+
+# ------------------------------------------------------------------ the car CJ is shooting at
+sc = rule(HCB_ROE_FOLLOW)
+drv, mate = sc.ped(40, 0, pedtype=GANG, weapon=AK), sc.ped(40, 0, pedtype=GANG, weapon=PISTOL)
+carid = sc.veh(40, 0, driver=drv)
+sc.peds[mate]['vehicle'], sc.peds[mate]['seat'] = carid, 1
+other = sc.ped(0, 30, pedtype=GANG, weapon=AK)
+sc.step(3)
+assert not firing(sc)
+sc.shot(1, (40., 2.2, 1.))                             # CJ puts a round into the car's bonnet, 2.2 m from the men in it
+targets = set()
+for _ in range(10):
+    sc.step(1)
+    targets |= {o.target for o in sc.orders.values() if o.fire}
+assert targets and targets <= {drv, mate} and other not in targets, (targets, holds(sc))
+passed('WHERE I SHOOT: CJ fires at a car - the men in it are the targets (aimed at them, not at the engine); a man CJ is not shooting at is left alone')
+
+# ------------------------------------------------------------------ kills
+sc = Scene()
+team = squad(sc)
+g = sc.ped(25, 0, pedtype=GANG, weapon=AK)
+sc.shot(g, (0., 0., 1.), dst=1)
+run(sc, 8)
+assert firing(sc, g) and sc.brain.out.kills == 0
+sc.peds[g]['flags'] |= HCB_PF_DEAD
+sc.step(1)
+assert sc.brain.out.kills == 1
+passer = sc.ped(-30, 0)
+sc.step(2)
+sc.peds[passer]['flags'] |= HCB_PF_DEAD                 # somebody dies whom nobody of ours was firing at
+sc.step(1)
+assert sc.brain.out.kills == 1
+passed('A man who dies while ours are firing at him is counted as theirs; a death nobody of ours had a hand in is not')
+
+# ------------------------------------------------------------------ many questions: the dangerous ones first
+sc = Scene(roe=HCB_ROE_ARMED)
+team = [sc.our(2 + k, 20 + 3 * k, HCB_ROLE_SQUAD + k % 4, weapon=M4) for k in range(8)]
+crowd = [sc.ped(30 + 2 * k, -10 + k, pedtype=GANG, weapon=PISTOL, face='away') for k in range(20)]
+killer = sc.ped(-75, 0, pedtype=GANG, weapon=AK)       # further from CJ than all of them: last in the snapshot, last in memory
+sc.shot(killer, (0., 0., 1.), dst=1)
+sc.step(1)
+assert len(sc.asked) == HCB_MAX_LOS and all(t == killer for _, t in sc.asked[:8]), sc.asked[:10]
+passed('Eight shooters and twenty-one armed men: 168 lines of sight do not fit into one look (96 do) - the ones to the man who is shooting CJ are asked first')
 
 # ------------------------------------------------------------------ sharing the targets out
 sc = Scene()
@@ -292,14 +441,17 @@ cold, hot = first_shot(False), first_shot(True)
 assert len(cold) == len(hot) == 40 and min(cold) >= 200 and max(cold) <= 500 and len(set(cold)) >= 2, sorted(set(cold))   # (the brain thinks in 100 ms ticks)
 assert sum(hot) / 40. < sum(cold) / 40. - 40, (sum(hot) / 40., sum(cold) / 40.)
 passed('First round at a new man: %d-%d ms from a standing start (40 different guards), about %d ms quicker when already fighting' % (min(cold), max(cold), sum(cold) / 40. - sum(hot) / 40.))
-sc = Scene()
-me = sc.our(0, 4, HCB_ROLE_SQUAD, weapon=M4)
-g = sc.ped(25, 4, pedtype=GANG, weapon=AK)
-pattern = ''
+sc, me, rear_ = heli_scene(cj_at=(-30., 0.))
+del sc.peds[rear_], sc.ours[rear_]
+g = sc.ped(40, 41, pedtype=GANG, weapon=AK)
+foot = sc.our(30, 30, HCB_ROLE_SQUAD, weapon=M4)       # a guard on foot beside the same fight
+pattern, foot_pattern = '', ''
 for k in range(300):
-    sc.shot(g, (0., 0., 1.), dst=1)
+    sc.shot(g, (-30., 0., 1.), dst=1)
     sc.step(1)
-    pattern += 'F' if firing(sc, g) else '.'
+    pattern += 'F' if sc.orders[me].fire else '.'
+    foot_pattern += 'F' if sc.orders[foot].fire else '.'
+assert '.' not in foot_pattern.lstrip('.') and len(foot_pattern) - len(foot_pattern.lstrip('.')) <= 5, foot_pattern[:40]
 bursts = [len(x) * 100 for x in pattern.strip('.').split('.') if x][:-1]      # (the last one is cut off by the end of the run)
 pauses = [len(x) * 100 for x in pattern.strip('.').strip('F').split('F') if x]
 cfg = sc.brain.cfg
@@ -307,7 +459,7 @@ assert len(bursts) > 10 and cfg.burst_min_ms - 100 <= min(bursts) and max(bursts
 assert cfg.pause_min_ms <= min(pauses) and max(pauses) <= cfg.pause_max_ms + 200, sorted(set(pauses))
 share = pattern.count('F') / 300.
 assert .55 <= share <= .9, share
-passed('Fire comes in bursts of %.1f-%.1f s with %.1f-%.1f s between them (on the trigger %d%% of the time), never one endless stream' % (min(bursts) / 1000., max(bursts) / 1000., min(pauses) / 1000., max(pauses) / 1000., share * 100))
+passed('A door gunner fires in bursts of %.1f-%.1f s with %.1f-%.1f s between them (on the trigger %d%% of the time), never one endless stream; a guard on foot gets a plain fire / cease fire - his bursts are the game\'s own weapon handling' % (min(bursts) / 1000., max(bursts) / 1000., min(pauses) / 1000., max(pauses) / 1000., share * 100))
 
 # ------------------------------------------------------------------ the hard rules hold in any mess: random fights, an independent check
 def check_orders(sc, s):

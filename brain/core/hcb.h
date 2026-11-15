@@ -12,7 +12,7 @@
 #define HCB_H
 #include <stdint.h>
 
-#define HCB_VERSION 2          /* layout of the structs below; a black box says which version wrote it */
+#define HCB_VERSION 3          /* layout of the structs below; a black box says which version wrote it */
 
 #define HCB_MAX_PEDS 64        /* peds in one snapshot (nearest to CJ first) */
 #define HCB_MAX_VEHS 40
@@ -21,7 +21,7 @@
 #define HCB_MAX_MARKS 48       /* contacts reported back for the debug markers */
 #define HCB_MAX_TRACKS 96      /* people the brain remembers at one time */
 #define HCB_MAX_VTRACKS 48
-#define HCB_MAX_LOS 32          /* line-of-sight questions per tick (answered by the adapter in the next snapshot) */
+#define HCB_MAX_LOS 96          /* line-of-sight questions per tick (answered by the adapter in the next snapshot) */
 
 /* ---- ped flags (hcb_ped.flags) */
 #define HCB_PF_DEAD 1
@@ -85,6 +85,7 @@
 #define HCB_WHY_BURNING 13
 #define HCB_WHY_MELEE_CLOSING 14
 #define HCB_WHY_SHOOTING_NEARBY 15
+#define HCB_WHY_AIR_FIRE 16      /* a helicopter that is not ours while rounds from nowhere are hitting CJ or ours */
 
 /* ---- alert levels (hcb_out.alert) */
 #define HCB_ALERT_CALM 0
@@ -200,7 +201,7 @@ typedef struct hcb_snapshot {
     uint8_t interior;
     uint8_t roe;        /* HCB_ROE_*: the player's fire rule */
     uint8_t police;     /* HCB_POLICE_* */
-    uint8_t reserved0;
+    uint8_t mission_free; /* 1 = the player wants mission characters treated like anybody else (default 0: defensive) */
     uint8_t reserved1;
     uint8_t reserved2;
     hcb_vec cam_pos;
@@ -253,8 +254,7 @@ typedef struct hcb_out {
     hcb_mark marks[HCB_MAX_MARKS];
     uint8_t n_orders;
     uint8_t n_queries;
-    uint8_t reserved0;
-    uint8_t reserved1;
+    uint16_t kills;     /* contacts that died while our people were firing at them (running total, wraps) */
     hcb_order orders[HCB_MAX_OURS];
     hcb_los queries[HCB_MAX_LOS];
 } hcb_out;
@@ -291,13 +291,20 @@ typedef struct hcb_cfg {
     float pause_min_ms;
     float pause_max_ms;
     float follow_ms;        /* FOLLOW: how long somebody CJ shot at stays a target */
+    /* verdicts do not flicker */
+    float threat_hold_ms;   /* a THREAT stays one this long after its reason was last true */
+    float ram_hold_ms;      /* the same for a car on a collision course */
+    float hit_hold_ms;      /* a car that has hit CJ or ours stays a threat this long while it keeps moving */
+    /* rounds of the door gunners are created by the script along a line the brain has checked */
+    float muzzle_m;         /* ... starting this far from the gunner (outside the helicopter) */
+    float round_past_m;     /* ... and ending this far past the aim point */
 } hcb_cfg;
 
 /* The brain itself is one opaque block of hcb_brain_size() bytes that the caller provides (no allocation). */
 typedef struct hcb_brain hcb_brain;
 
 uint32_t hcb_brain_size(void);
-uint32_t hcb_struct_size(int which);   /* 0 ped, 1 veh, 2 event, 3 snapshot, 4 out, 5 cfg, 6 mark, 7 track_info, 8 rec, 9 box_head, 10 los, 11 order */
+uint32_t hcb_struct_size(int which);   /* 0 ped, 1 veh, 2 event, 3 snapshot, 4 out, 5 cfg, 6 mark, 7 track_info, 8 rec, 9 box_head, 10 los, 11 order, 12 shot, 13 round */
 void hcb_init(hcb_brain *b, uint32_t seed);
 hcb_cfg *hcb_config(hcb_brain *b);
 void hcb_think(hcb_brain *b, const hcb_snapshot *s, hcb_out *out);
@@ -324,11 +331,39 @@ typedef struct hcb_track_info {
 } hcb_track_info;
 int hcb_track(const hcb_brain *b, uint32_t id, hcb_track_info *info);
 
+/* One round, asked for at the moment it is to leave the barrel, with the positions of THIS frame (a snapshot may be
+ * 100 ms old). The brain answers from the hard rules only: HCB_HOLD_NONE = let it go. The adapter still has to run
+ * its own ray along muzzle -> to. */
+typedef struct hcb_shot {
+    uint32_t who;           /* one of ours */
+    uint32_t target;        /* the contact of his current order */
+    uint32_t time;          /* game time now, ms */
+    uint32_t n_friends;
+    hcb_vec from;           /* where the shooter is */
+    hcb_vec muzzle;         /* where the round starts */
+    hcb_vec to;             /* the point it is aimed at (a gunner's round ends round_past_m beyond it) */
+    hcb_vec cj;             /* CJ now */
+    hcb_vec friends[HCB_MAX_OURS];  /* our own people now (the shooter himself left out) */
+} hcb_shot;
+int hcb_shot_check(const hcb_brain *b, const hcb_shot *q);
+
 /* ---- black box: a ring of the latest snapshots in a caller-provided buffer.
  * Besides the snapshots the adapter stores the brain's own memory every few seconds, so a replay can start from
  * the first such record in the file and reproduce every later decision exactly even though older records are gone. */
 #define HCB_REC_SNAPSHOT 1
 #define HCB_REC_STATE 2
+#define HCB_REC_ROUND 3         /* one round of ours: asked for, and what the answer was */
+typedef struct hcb_round {
+    uint32_t time;
+    uint32_t who;
+    uint32_t target;
+    hcb_vec muzzle;
+    hcb_vec to;
+    uint8_t verdict;        /* HCB_HOLD_*: HCB_HOLD_NONE = fired */
+    uint8_t ray;            /* 1 = the adapter's ray along the line was clear */
+    uint8_t reserved0;
+    uint8_t reserved1;
+} hcb_round;
 typedef struct hcb_rec {
     uint32_t cap;
     uint32_t start;         /* offset of the oldest whole record */
@@ -345,7 +380,8 @@ void hcb_rec_push_state(hcb_rec *r, uint8_t *buf, const hcb_brain *b);
 /* Read the record at *offset (start with r->start, stop at r->end) and move *offset on. Returns 0 at the end or on
    damaged data, HCB_REC_SNAPSHOT (s and digest filled) or HCB_REC_STATE (state, a block of hcb_brain_size() bytes,
    filled when it is not NULL). */
-int hcb_rec_next(const uint8_t *buf, uint32_t end, uint32_t *offset, hcb_snapshot *s, uint32_t *digest, hcb_brain *state);
+int hcb_rec_next(const uint8_t *buf, uint32_t end, uint32_t *offset, hcb_snapshot *s, uint32_t *digest, hcb_brain *state, hcb_round *round);
+void hcb_rec_push_round(hcb_rec *r, uint8_t *buf, const hcb_round *round);
 
 /* The report file the player sends: this head, then the records [start, end) of the ring, then free text. */
 typedef struct hcb_box_head {

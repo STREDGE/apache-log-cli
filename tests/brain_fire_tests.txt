@@ -7,10 +7,16 @@ PASS: No order to fire when CJ is within 2 m of the line (wider with range), or 
 PASS: Our own people and allies in or behind the line stop the shot; so does a passer-by in front of the target, and one behind it unless the target is already hurting CJ
 PASS: Vehicles: fire at a man in a car is aimed at him; a car below 700 health or burning within 18 m of CJ or ours is not fired at at all; far away it may be; a car bearing down on CJ gets its tyres shot
 PASS: A pistol does not reach 60 m; a door gunner does not fire across his own cabin (the gunner on that side does); the pilot gets no fire orders
-PASS: Nobody fires through a wall: the line of sight is asked for (about three times a second), fire starts when it clears and stops within 0.5 s when it closes
+PASS: Nobody fires through a wall: the line of sight is asked for on every tick, fire starts when it clears and stops within 0.2 s when it closes
+PASS: Two gunners in one door: the rear one fires past the man kneeling beside him (his rounds start 5.5 m out, clear of the helicopter) - in the real fight this cost 9% of the fire; one of ours further down the line still stops the shot
+PASS: A gunner's round ends 0.6 m past the point it is aimed at, so CJ 10 m behind the target does not stop a gunner (it stops a guard firing the game's own weapon); CJ 2 m behind the target stops everybody
+PASS: Every round is asked for at the moment it leaves, with the positions of that frame: CJ stepping within 2 m of the line, one of ours in it, a passer-by, a damaged car beside CJ, an order that is stale or was for another man - the round does not go
+PASS: WHERE I SHOOT: CJ fires at a car - the men in it are the targets (aimed at them, not at the engine); a man CJ is not shooting at is left alone
+PASS: A man who dies while ours are firing at him is counted as theirs; a death nobody of ours had a hand in is not
+PASS: Eight shooters and twenty-one armed men: 168 lines of sight do not fit into one look (96 do) - the ones to the man who is shooting CJ are asked first
 PASS: Targets are shared out: four attackers get one shooter each; a rifle close by gets two or three and the far pistol still gets one; never more than three on one man
 PASS: Nobody changes his man from tick to tick while the picture stays the same
-PASS: First round at a new man: 300-400 ms from a standing start (40 different guards), about 72 ms quicker when already fighting
-PASS: Fire comes in bursts of 0.7-1.4 s with 0.3-0.5 s between them (on the trigger 72% of the time), never one endless stream
-PASS: 60 random fights (25 s each, guards and CJ running about, cars, police, every fire rule): 28325 orders to fire, checked one by one by an independent calculation - none with CJ or one of ours in the line, at a friend, against the fire rule, or at a car that could blow up beside CJ
+PASS: First round at a new man: 300-400 ms from a standing start (40 different guards), about 70 ms quicker when already fighting
+PASS: A door gunner fires in bursts of 0.7-1.4 s with 0.3-0.5 s between them (on the trigger 71% of the time), never one endless stream; a guard on foot gets a plain fire / cease fire - his bursts are the game's own weapon handling
+PASS: 60 random fights (25 s each, guards and CJ running about, cars, police, every fire rule): 35456 orders to fire, checked one by one by an independent calculation - none with CJ or one of ours in the line, at a friend, against the fire rule, or at a car that could blow up beside CJ
 The core only. Nothing here has run in the game.

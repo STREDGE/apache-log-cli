@@ -44,30 +44,38 @@ static inline void copy(void *d, const void *s, u32 n) { u8 *a = d; const u8 *b 
 typedef struct track {
     hcb_ped last;
     u32 first_seen, last_seen, last_hostile, last_shot, cj_hit_him, cj_marked;
+    u32 hold_until;         /* a THREAT verdict that rests on a pose is kept until then */
     float damage_cj, damage_ours, aim_ms, edps, dist;
     u16 shots_at_cj, shots_at_ours, shots_total;
     u8 used, seen, cls, why, best_weapon, friendly, aims_at_ours, aim_latch;
+    u8 hold_why, reserved0, reserved1, reserved2;
 } track;
 typedef struct vtrack {
     hcb_veh last;
     u32 last_seen;
-    float edps, dist;
+    u32 ram_until;          /* on a collision course lately: the verdict is kept until then */
+    u32 hit_time;           /* when it last ran into CJ or one of ours */
+    u32 air_fire;           /* a helicopter: when rounds from nowhere last hit CJ or ours with it overhead */
+    u32 cj_marked;          /* when CJ last fired at it */
+    u32 driver_was;         /* the last driver it had (policemen jump out of a car that is still rolling) */
+    float edps, dist, ram_edps;
     u8 used, seen, cls, why;
 } vtrack;
 /* one of our shooters between ticks: whom he is on, since when, where he is in his burst */
 typedef struct shooter {
     u32 id, target, since, fire_from, burst_until, pause_until;
+    u32 last_fire;          /* the last tick he was ordered to fire */
     u8 used, hold, role, reserved;
 } shooter;
 /* what is known about lines of sight (answers of the adapter), and what has been asked */
-#define HCB_LOS_CACHE 64
+#define HCB_LOS_CACHE 160
 typedef struct losent {
     u32 from, to, time;
     u8 used, clear, reserved0, reserved1;
 } losent;
 struct hcb_brain {
     hcb_cfg cfg;
-    u32 time, ticks, rng, seed, alert_since, calm_since, reserved;
+    u32 time, ticks, rng, seed, alert_since, calm_since, kills;
     u8 alert, started, reserved0, reserved1;
     track tr[HCB_MAX_TRACKS];
     vtrack vt[HCB_MAX_VTRACKS];
@@ -84,6 +92,7 @@ HID u32 hcb_fnv(u32 h, u32 v);
 HID u32 hcb_bits(float f);
 HID u32 hcb_rand(hcb_brain *b);
 HID int hcb_is_firearm(int w);
+HID vtrack *hcb_vfind(hcb_brain *b, u32 id);
 /* hcb_fire.c */
 HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out);
 #endif
