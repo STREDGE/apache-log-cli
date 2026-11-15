@@ -68,7 +68,7 @@ Same for vehicles with 0xc68. Run it on the game thread only (the pools are not 
 | CPlayerInfo.Score (money) | +0xf0 | int32 | DWARF | dwarf |
 | CPlayerInfo.LastTimeEnergyLost / LastTimeArmourLost | +0x120 / +0x124 | uint32 ms | DWARF; `ComputeDamageResponse` @0x443e68 `str w8, [x9, #0x120]` | dwarf |
 | wanted level (stars 0..6) | `FindPlayerWanted(i)` + 0x2c | int32 (DWARF name `m_WantedLevel`) | `CRunningScript::ProcessCommands200To299` @0x3f69c0 `ldr w8, [x0, #0x2c]`; `CRunningScript::ProcessCommands400To499` @0x40eb18 `ldr w9, [x9, #0x2c]` | proven |
-| CWanted +0x0 |  | int32 chaos points (DWARF calls it `m_nWantedLevel`, it is NOT the star count) | DWARF | dwarf |
+| CWanted +0x0 |  | int32, DWARF name `m_nWantedLevel`; NOT what the script star commands read (chaos points on PC) | DWARF | dwarf (offset), inferred (meaning) |
 | CWanted.m_nCopsInPursuit | +0x18 | uint8 | DWARF | dwarf |
 
 | function | address | behaviour (read from the code) |
@@ -121,7 +121,7 @@ Sizes (DWARF): CPlaceable 0x20, CEntity 0x60, CPhysical 0x198, CPed 0x988, CPlay
 | CPed.m_nMaxHealth | +0x6b0 | float | DWARF; a script handler writes +0x6ac and +0x6b0 together @0x40df5c / @0x40df60 | dwarf |
 | CPed.m_nArmour | +0x6b4 | float | `CRunningScript::ProcessCommands1200To1299` @0x41d648 `ldr s0, [x8, #0x6b4]`; `CPedDamageResponseCalculator::ComputeDamageResponse` @0x443bd8 `ldr s0, [x19, #0x6b4]` | proven |
 | CPed.m_fCurrentHeading / m_fDesiredHeading | +0x6c4 / +0x6c8 | float rad | DWARF | dwarf |
-| CPed.m_pMyVehicle | +0x708 | CVehicle* - stays set after leaving; valid only with bInVehicle | `CRunningScript::ProcessCommands200To299` @0x3f65ec `ldr x8, [x8, #0x708]`; `CRunningScript::ProcessCommands900To999` @0x4159f0 `ldr x9, [x9, #0x708]` | proven |
+| CPed.m_pMyVehicle | +0x708 | CVehicle* - use only when bInVehicle is set | `CRunningScript::ProcessCommands200To299` @0x3f65ec `ldr x8, [x8, #0x708]`; `CRunningScript::ProcessCommands900To999` @0x4159f0 `ldr x9, [x9, #0x708]` | proven |
 | CPed.m_nPedType | +0x720 | int32 ePedType (0/1 = players) | `CRunningScript::ProcessCommands2200To2299` @0x404fa4 `ldr w8, [x8, #0x720]`; `CPed::IsPlayer` @0x595400 `ldr w8, [x0, #0x720]` | proven |
 | CPed.m_pPedStats | +0x728 | CPedStats* | DWARF; `CPed::SetCharCreatedBy` @0x5958f4 | dwarf |
 | CPed.m_WeaponSlots | +0x730 | CWeapon[13], 0x20 each | `CRunningScript::ProcessCommands1100To1199` @0x41c2a8 `ldr w8, [x8, #0x730]`; `CRunningScript::ProcessCommands1100To1199` @0x41c2a4 `add x8, x8, x10, lsl #5` | proven |
@@ -388,8 +388,8 @@ Homie test without a call: `g = base + 0xc89c20 + playerGroup*0x4a0; for i in 0.
 - Nothing matches the PC offsets: pointers are 8 bytes and CPed/CVehicle contain large audio entities first (CPed fields start at +0x198 with 0x3a0 bytes of audio objects; m_pPedIntelligence is at +0x538).
 - Acquaintances are in CPed (+0x63c), not in CPedIntelligence as on some PC layouts; CPedIntelligence +0 is the owner ped.
 - `m_pMat` can be NULL (entity uses the simple transform at +8/+0x14). Always use the position rule of section C.
-- `m_pMyVehicle` is stale after the ped leaves the car; test bInVehicle (+0x585 bit 0) first, as every game function does.
-- CWanted +0 is named `m_nWantedLevel` in the DWARF but is the chaos value; the stars are at +0x2c.
+- `m_pMyVehicle` must only be trusted when bInVehicle (+0x585 bit 0) is set: every game function read here tests the flag first (that the pointer stays set after leaving the car is inferred from PC).
+- CWanted +0 is named `m_nWantedLevel` in the DWARF but the script commands read the stars from +0x2c (`m_WantedLevel`); +0 is the chaos value on PC (inferred).
 - Vehicle class: use `m_vehicleType` (+0x738). `m_baseVehicleType` (+0x734) is 0 for helis and planes too.
 - The pool element is bigger than the class (ped 0x9c8 vs CPed 0x988, vehicle 0xc68 for every vehicle class). Stride = pool element size.
 - Pool sizes 140/110/350 are only the defaults of this file; read m_nSize.

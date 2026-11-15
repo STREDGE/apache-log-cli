@@ -308,7 +308,7 @@ static const struct brain_fn BRAIN_FUNCS[] = {
 #define OFF_CHID_currentInstanceIndex 0x8be728UL /* int; FindPlayerPed returns Players[1] when it is 1; symbol size 4; section .bss */
 #define OFF_CTimer_m_snTimeInMilliseconds 0xbdc558UL /* uint32; symbol size 4; section .bss */
 #define OFF_CTimer_m_FrameCounter 0xbdc590UL /* uint32; symbol size 4; section .bss */
-#define OFF_CTimer_ms_fTimeStep 0xbdc580UL /* float (1.0 = 1/50 s); symbol size 4; section .bss */
+#define OFF_CTimer_ms_fTimeStep 0xbdc580UL /* float time step (unit not checked; on PC 1.0 = 1/50 s); symbol size 4; section .bss */
 #define OFF_CTimer_m_UserPause 0xbdc594UL /* bool; symbol size 1; section .bss */
 #define OFF_CTimer_m_CodePause 0xbdc595UL /* bool; symbol size 1; section .bss */
 #define OFF_CCutsceneMgr_ms_running 0xba8925UL /* bool; symbol size 1; section .bss */
