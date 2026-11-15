@@ -1334,7 +1334,7 @@ for var in [3,4,5,6]:
  f.check(0x00db,[V(var),V(1)],'SHOOT_CHAR_ONFOOT_'+str(var));f.check(0x8a32,[V(var)],'SHOOT_CHAR_ONFOOT_'+str(var));a(0x0713,V(var),V(29),I(-1),F(0),F(0),F(0),F(150),I(0),I(1 if var in [3,5] else 0),I(100));f.go(skip)
  f.label('SHOOT_CHAR_ONFOOT_'+str(var));squad_owns(f,skip,30,31);a(0x074d,V(var),V(29),I(2500));f.label(skip)
 f.label('CHAR_PRECISE');f.get(29,FIRE_TASK_TARGET);alive(f,29,'CHAR_DONE');a(0x00a0,V(29),V(11),V(12),V(13));a(0x000b,V(13),F(.25));a(6,V(7),I(0));f.check(0x80df,[V(29)],'CHAR_TARGET_IN_CAR');f.go('CHAR_TARGET_READY')
-f.label('CHAR_TARGET_IN_CAR');f.call('TARGET_CAR_SAFE');f.eq(30,1,'CHAR_DONE');a(6,V(7),I(1))
+f.label('CHAR_TARGET_IN_CAR');a(6,V(7),I(1))   # beta 6: whether his car may be fired at is decided per gunner in PRECISE_BULLETS (a refusal also brings the weapon down)
 f.label('CHAR_TARGET_READY');f.call('PRECISE_BULLETS')
 f.label('CHAR_DONE');f.ret()
 

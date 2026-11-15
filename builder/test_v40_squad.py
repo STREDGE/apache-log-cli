@@ -615,17 +615,19 @@ def car_attack(hp):
  w,c,f=gunner_world([]);drv,car=962,963;w.exists.update({drv,car});w.cars[car]={'pos':[24.,0.,0.],'heading':90.};w.model[car]=400;w.incar[drv]=car
  w.traffic=[car];w.seats[(car,-1)]=drv;w.pedtype[drv]=7;w.skin[drv]=20;w.damage.add((1,drv));w.health[car]=hp;w.shared[b.SQ_T]=drv;w.calls.clear();w.step(c,f,n=30);return w,c,f,car,drv
 w,c,f,car,drv=car_attack(1000);assert calls(w,0x6bc) and [x for x in attacks(w) if x[2][1]==drv]
-w.calls.clear();w.health[car]=b.CAR_HOLD_HP-1;w.step(c,f,n=3);assert calls(w,0x687),'weapons down within 0.3 s of the car dropping below the floor, not at the next task round'
+while w.shared[b.FIRE_TASK_NEXT]-w.now!=1700:w.step(c,f)      # a task round has just been given: the next one is 1.7 s away
+w.calls.clear();w.health[car]=b.CAR_HOLD_HP-1;w.step(c,f,n=3);assert calls(w,0x687) and not attacks(w),'weapons down within 0.3 s of the car dropping below the floor, not at the next task round'
 w.calls.clear();w.step(c,f,n=30)
 assert not calls(w,0x6bc) and not attacks(w),(len(calls(w,0x6bc)),len(attacks(w)))
 w,c,f,car,drv=car_attack(b.CAR_HOLD_HP-1);assert not calls(w,0x6bc) and not attacks(w)
 w.incar.pop(drv);w.pos[drv]=[24.,0.,0.];w.calls.clear();w.step(c,f,n=30);assert calls(w,0x6bc),'the same man on foot is a target again'
 passed('A car below %d health is never fired at (it burns below 250): no rounds, no fire task, weapons down - the man is engaged again once he is out of it'%b.CAR_HOLD_HP)
 # ------------------------------------------------------------------ beta 6: PROTECT CJ is close protection, not a gang war
-def protect(typ=7,weapon=30,x=20.,facing=True,wanted=0,in_car=False,skin=20,hurt=False,frames=30):
+def protect(typ=7,weapon=30,x=20.,facing=True,wanted=0,in_car=False,skin=20,hurt=False,frames=30,turn=0.):
  w,c,f=fw();w.civilians=[];npc=900;w.exists.add(npc);w.pos[npc]=[x,0.,0.];w.skin[npc]=skin;w.pedtype[npc]=typ;w.civilians.append(npc);w.wanted=wanted
  w.weapons[npc]=weapon;threaten(w,npc,weapon=weapon)
- if not facing:w.actor_heading[npc]=(w.actor_heading[npc]+180.)%360
+ if not facing:turn=120.
+ w.actor_heading[npc]=(w.actor_heading[npc]+turn)%360
  if in_car:car=963;w.exists.add(car);w.cars[car]={'pos':[x,0.,0.],'heading':90.};w.model[car]=400;w.incar[npc]=car;w.traffic=[car];w.seats[(car,-1)]=npc
  if hurt:w.damage.add((1,npc))
  w.calls.clear();w.step(c,f,n=frames);return bool(attacks(w) or calls(w,0x6bc)),w
@@ -633,6 +635,7 @@ assert protect()[0],'control: an armed gang member on foot, 20 m away, turned to
 assert not protect(weapon=0)[0],'a gang member with empty hands is nobody\'s target'
 assert not protect(weapon=5)[0],'nor one with a bat: no firearm, no pre-emptive fire'
 assert not protect(facing=False)[0],'armed but walking away: not a threat yet'
+assert protect(turn=b.THREAT_FACING_DEG-10)[0] and protect(turn=10-b.THREAT_FACING_DEG)[0] and not protect(turn=b.THREAT_FACING_DEG+15)[0] and not protect(turn=-b.THREAT_FACING_DEG-15)[0],'turned to CJ = within 40 degrees either way'
 assert not protect(x=b.THREAT_NEAR_M+15.)[0],'armed and looking this way from 55 m: too far to call it imminent'
 assert not protect(in_car=True)[0],'gang members driving past are left alone (this is what blew cars up beside CJ)'
 assert protect(in_car=True,hurt=True)[0],'... until they attack'
