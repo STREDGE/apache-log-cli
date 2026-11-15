@@ -72,6 +72,11 @@ w.calls.clear();w.shared[b.MSG_UNTIL]=0;w.shared[b.CMD]=3;w.step(*V_,n=8);ks=key
 w.russian=False;w.game_lang=1;w.step(*V_,n=3);assert w.shared[b.LANG]==0
 w.calls.clear();w.shared[b.MSG_UNTIL]=0;w.shared[b.CMD]=2;w.step(*V_,n=8);ks=keys_printed(w);assert ks and all(k_[0]=='H' for k_ in ks),ks
 passed('Changing the game language while playing changes the mod\'s language at once (messages: English keys / U keys)')
+# the kill counter is the one line still printed directly (a text with a number): it follows the language too
+for russian_,key_ in ((False,'HCKILL'),(True,'UCKILL')):
+ w,c,f_=g['fire_world']();w.russian=russian_;w.game_lang=5 if russian_ else 0;w.shared[b.FIRE]=1;w.step(c,f_,n=3);npc_=g['target'](w,typ=7);w.step(c,f_,n=15)
+ w.dead.add(npc_);w.calls.clear();w.step(c,f_,n=5);assert [x[2][0] for x in calls(w,0x1e5)]==[key_],(russian_,[x[2] for x in calls(w,0x1e5)])
+passed('The kill counter ("TARGET DOWN n") is printed with the English key or its U key, like every other message')
 
 # =================================================================== the menu
 def open_menu(russian=False,summoned=True,aboard=False):
