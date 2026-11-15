@@ -214,8 +214,12 @@ w,c,ground,sq,team=escort_world(tactics=1);V=(c,ground,sq)
 AS=sqb.AS_FORM
 for k,t_ in enumerate(team):w.pos[t_]=list(AS[k])+[0.]
 hostile=950;w.exists.add(hostile);w.pos[hostile]=[20.,0.,0.];w.pedtype[hostile]=7;w.weapons[hostile]=30;w.civilians=[hostile];w.damage.add((1,hostile))
-w.pos[team[0]]=[0.,27.,0.];w.calls.clear();w.now+=3000;steps(w,V,6);assert w.shared[b.SQ_T]==hostile,'the hostile is a threat'
-o=last(w,0x5d3,team[0]);assert abs(o[2]-AS[0][1])<.5 and not orders(w,0x637,team[0]),o
+w.pos[team[0]]=[0.,27.,0.];w.calls.clear();w.now=(w.now//6000+1)*6000+100;beyond=[]
+for _ in range(6):
+ n0=len(w.calls);d=math.dist(w.pos[team[0]][:2],[0.,0.]);steps(w,V,1)
+ if d>25.2:beyond+=[x for x in w.calls[n0:] if x[1] in (0x5d3,0x637) and x[2][0]==team[0]]
+assert w.shared[b.SQ_T]==hostile,'the hostile is a threat'   # guard 0 is the one who bounds forward in this 3 s slot
+assert beyond and all(x[1]==0x5d3 and abs(x[2][2]-AS[0][1])<.5 for x in beyond),('beyond 25 m he only turns back',beyond)
 passed('Assault: a guard 27 m from CJ turns back to his slot (25 m cap, was 40 m)')
 assert not orders(w,0x637,team[3]),'the medic never joins the advance'
 passed('Assault: the medic stays with CJ')
