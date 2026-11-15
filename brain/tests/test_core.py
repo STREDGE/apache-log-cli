@@ -94,7 +94,7 @@ def shoot_scene(to, dst=0, shooter_at=(30., 0.)):
 
 sc, s = shoot_scene((-20., 1.5, 1.))                   # the round passes 1.5 m from CJ
 assert classes(sc)[s] == (HCB_CLS_ATTACKER, HCB_WHY_SHOT_AT_CJ) and sc.brain.track(s).shots_at_cj == 1
-sc, s = shoot_scene((2., 0.5, 1.))                     # stopped by a wall 2 m short of him
+sc, s = shoot_scene((3.6, 0.3, 1.))                    # stopped by a wall 3.6 m short of him: the line still runs through him
 assert classes(sc)[s][0] == HCB_CLS_ATTACKER
 sc, s = shoot_scene((0., 0., 1.), dst=1)               # the game says it hit him
 assert classes(sc)[s][0] == HCB_CLS_ATTACKER
@@ -104,6 +104,8 @@ sc, s = shoot_scene((60., 0., 1.))                     # fired away from CJ: the
 assert classes(sc)[s][0] == HCB_CLS_WATCH
 sc, s = shoot_scene((-20., 6., 1.))                    # passes 6 m from him
 assert classes(sc)[s][0] == HCB_CLS_WATCH
+sc, s = shoot_scene((40., 0., 1.), shooter_at=(2., 0.)) # a man two steps from CJ firing AWAY from him: the muzzle is near, the line is not
+assert classes(sc)[s][0] == HCB_CLS_WATCH and sc.brain.track(s).shots_at_cj == 0
 passed('A round that passes within 3 m of CJ (or stops just short of him) makes the shooter an ATTACKER; shooting somewhere else nearby only gets him watched')
 sc = Scene()
 guard = sc.our(0, -6, HCB_ROLE_SQUAD)
@@ -231,7 +233,7 @@ sc, v = car(-20, 0.5, (15., 0., 0.))                   # 1.3 s away, straight at
 assert classes(sc)[v] == (HCB_CLS_THREAT, HCB_WHY_RAMMING) and sc.brain.out.alert == HCB_ALERT_THREAT
 sc, v = car(-20, 6, (15., 0., 0.))                     # passes 6 m in front
 assert v not in classes(sc)
-sc, v = car(-20, 0.5, (5., 0., 0.))                    # crawling
+sc, v = car(-8, 0.5, (5., 0., 0.))                     # crawling: 1.6 s away, but at walking pace
 assert v not in classes(sc)
 sc, v = car(-60, 0.5, (15., 0., 0.))                   # 4 s away
 assert v not in classes(sc)
@@ -304,7 +306,14 @@ mk = sc.brain.marks()
 assert order[:3] == [aiming, close_rifle, far_pistol] and order[3] == watcher and sc.brain.out.top == aiming, order
 assert mk[aiming].edps > mk[close_rifle].edps > mk[far_pistol].edps > 0 and mk[watcher].edps > 0   # (class first: the man looking away ranks last even with a rifle)
 assert abs(sc.brain.out.danger - sum(m.edps for m in mk.values())) < 1e-3
-passed('Contacts are ranked by the damage they can be expected to do to CJ: the rifle already on him, then the rifle close by, then the pistol at long range, then the man looking away')
+sc = Scene()
+near, mid, far, out_of_range = [sc.ped(d, 0, pedtype=GANG, weapon=w) for d, w in ((10, AK), (60, AK), (100, AK), (60, PISTOL))]
+for s_ in (near, mid, far, out_of_range):
+    sc.shot(s_, (0., 0., 1.), dst=1)
+sc.step(1)
+mk = sc.brain.marks()
+assert mk[near].edps > mk[mid].edps > mk[far].edps > 0 and mk[out_of_range].edps == 0 and all(m.cls == HCB_CLS_ATTACKER for m in mk.values()), [(m.dist, m.edps) for m in mk.values()]
+passed('Contacts are ranked by the damage they can be expected to do to CJ: the rifle already on him, then the rifle close by, then the pistol at long range, then the man looking away; the same rifle counts for less the further away it is, and a pistol at 60 m for nothing')
 
 # ------------------------------------------------------------------ a crowd bigger than the memory
 sc = Scene()
@@ -373,7 +382,13 @@ sc, digests = random_fight(12, recorder=small)
 tail = small.records()
 assert small.rec.dropped > 0 and small.rec.records == len(tail) and 20 < len(tail) < len(digests) and small.rec.end <= small.rec.cap
 assert all(bytes(a) == bytes(b_) for (a, _), b_ in zip(tail, sc.snapshots[-len(tail):])) and [d for _, d in tail] == [d for d, _, _ in digests[-len(tail):]]
-passed('Black box in a small buffer: the oldest records make room (%d dropped), the last %d are intact and in order' % (small.rec.dropped, len(tail)))
+broken = Recorder(1 << 20)
+sc_, _ = random_fight(13, ticks=30, recorder=broken)
+assert len(broken.records()) == 30
+at = broken.rec.start + 8 + hcb_snapshot.n_peds.offset           # the first record now claims one ped more than it holds
+broken.buf[at] += 1
+assert broken.records() == [], 'a record whose length does not match its counts is refused, not read past its end'
+passed('Black box in a small buffer: the oldest records make room (%d dropped), the last %d are intact and in order; a damaged record is refused' % (small.rec.dropped, len(tail)))
 for seed in range(20):
     a = random_fight(100 + seed, ticks=120)[1]
     b_ = random_fight(100 + seed, ticks=120)[1]
