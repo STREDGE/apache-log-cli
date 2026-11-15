@@ -451,6 +451,28 @@ sc.shot(g, (0., 0., 1.), dst=1)
 run(sc, 10)
 states = sorted(sc.brain.squad(w_, g, sc.time, sc.peds[w_]['pos'], sc.peds[g]['pos'], sc.cj['pos'], [sc.peds[o_]['pos'] for o_ in team if o_ != w_]) for w_ in team)
 assert states == [2, 2, 2, 3] and sorted(HOLD[o.hold] for o in sc.orders.values()) == ['ENOUGH', 'NONE', 'NONE', 'NONE'], (states, holds(sc))
+# a second attacker turns up: the man with free hands takes him, the three who are firing keep their man
+on = lambda: {w_: sc.orders[w_].target for w_ in team}
+before = on()
+free = [w_ for w_ in team if HOLD[sc.orders[w_].hold] == 'ENOUGH'][0]
+g2 = sc.ped(-20, 8, pedtype=GANG, weapon=AK)
+sc.shot(g2, (0., 0., 1.), dst=1)
+run(sc, 10)
+assert on()[free] == g2 and sc.orders[free].fire and all(on()[w_] == g for w_ in team if w_ != free), (free, before, on(), holds(sc))
+# ...and with nobody free the least needed rifle goes over: nobody who fires at CJ is left alone
+sc = Scene()
+team = squad(sc)[:3]
+for w_ in list(sc.ours):
+    if w_ not in team: sc.ours.pop(w_)
+g = sc.ped(25, 0, pedtype=GANG, weapon=AK)
+sc.shot(g, (0., 0., 1.), dst=1)
+run(sc, 10)
+assert all(sc.orders[w_].target == g and sc.orders[w_].fire for w_ in team), holds(sc)
+g2 = sc.ped(-20, 8, pedtype=GANG, weapon=AK)
+sc.shot(g2, (0., 0., 1.), dst=1)
+run(sc, 10)
+assert sorted(sc.orders[w_].target for w_ in team) == sorted([g, g, g2]), holds(sc)
+passed('A new attacker is taken by the guard whose hands are free; the men who are firing keep their man (with nobody free, one rifle goes over)')
 sc, front, rear = heli_scene(cj_at=(40., 41.8), z=2.)  # a crewman by the landed helicopter, firing the game's own weapon: CJ 10 m behind his man
 g = sc.ped(30, 41, pedtype=GANG, weapon=AK)
 sc.shot(g, (40., 41.8, 1.), dst=1)

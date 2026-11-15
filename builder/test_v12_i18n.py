@@ -74,8 +74,9 @@ w.calls.clear();w.shared[b.MSG_UNTIL]=0;w.shared[b.CMD]=2;w.step(*V_,n=8);ks=key
 passed('Changing the game language while playing changes the mod\'s language at once (messages: English keys / U keys)')
 # the kill counter is the one line still printed directly (a text with a number): it follows the language too
 for russian_,key_ in ((False,'HCKILL'),(True,'UCKILL')):
- w,c,f_=g['fire_world']();w.russian=russian_;w.game_lang=5 if russian_ else 0;w.shared[b.FIRE]=1;w.step(c,f_,n=3);npc_=g['target'](w,typ=7);w.step(c,f_,n=15)
- w.dead.add(npc_);w.calls.clear();w.step(c,f_,n=5);assert [x[2][0] for x in calls(w,0x1e5)]==[key_],(russian_,[x[2] for x in calls(w,0x1e5)])
+ w,c,f_=g['fire_world']();w.russian=russian_;w.game_lang=5 if russian_ else 0;w.step(c,f_,n=3);npc_=g['target'](w,typ=7);w.weapons[npc_]=30;w.health[npc_]=100;w.damage.add((1,npc_))
+ w.calls.clear();w.step(c,f_,n=40);assert npc_ in w.dead,'the gunners brought the attacker down (the brain counts the kill)'
+ assert [x[2][0] for x in calls(w,0x1e5)]==[key_],(russian_,[x[2] for x in calls(w,0x1e5)])
 passed('The kill counter ("TARGET DOWN n") is printed with the English key or its U key, like every other message')
 
 # =================================================================== the menu
@@ -95,6 +96,11 @@ assert rows_of(w)==[i18n.encode(x,'game') for x in MAIN_RU],rows_of(w)
 assert [draw_game(r_) for r_ in rows_of(w)]==list(MAIN_RU) and draw_game(w.menu[0])=='HELICOVER / ЛЕТИТ ЗА ВАМИ',[draw_game(r_) for r_ in w.menu]
 press(w,(c,p),6,5);assert [draw_game(r_) for r_ in w.menu]==['HELICOVER / НАСТРОЙКИ','CLOSE','ЭКИПАЖ >','МОДЕЛЬ ВЕРТОЛЕТА >','ОРУЖИЕ ЭКИПАЖА >','ТАКТИКА: ОХРАНА','СООБЩЕНИЯ: ВСЕ','СТРЕЛКИ: С КОЛЕНА','< НАЗАД'],[draw_game(r_) for r_ in w.menu]
 passed('With the game in Russian the menu is Russian and reads correctly in the simulated font: main page, state in the title, settings')
+w,c,p=open_menu(True);press(w,(c,p),3,5)
+assert [draw_game(r_) for r_ in w.menu]==['HELICOVER / ОГОНЬ СТРЕЛКОВ','CLOSE','ЗАЩИЩАТЬ МЕНЯ [X]','ТОЛЬКО ВООРУЖЕННЫЕ','ТАМ, ГДЕ СТРЕЛЯЮ Я','НЕ СТРЕЛЯТЬ','ПОЛИЦИЯ: ОТВЕЧАТЬ','МИССИИ: ОБОРОНА','< НАЗАД'],[draw_game(r_) for r_ in w.menu]
+w.step(c,p,n=3);press(w,(c,p),4,5);w.step(c,p,n=3);press(w,(c,p),5,5)
+assert [draw_game(r_) for r_ in w.menu[6:8]]==['ПОЛИЦИЯ: НЕ СТРЕЛЯТЬ','МИССИИ: КАК ОБЫЧНО'] and (w.shared[b.POLICE],w.shared[b.MISSIONS])==(1,1),[draw_game(r_) for r_ in w.menu]
+passed('The fire page in Russian: four rules and the two switches (police, missions), every row readable in the simulated font')
 w,c,p=open_menu(True,aboard=True)
 assert [draw_game(r_) for r_ in rows_of(w)]==['ЛЕТЕТЬ К МЕТКЕ НА КАРТЕ','ЛЕТЕТЬ НА ГРОУВ-СТРИТ','КНОПКА ВЫХОДА: ПОСАДКА [X]','КНОПКА ВЫХОДА: ВЕРЕВКА','ОГОНЬ СТРЕЛКОВ >','НАСТРОЙКИ >'],[draw_game(r_) for r_ in rows_of(w)]
 w.calls.clear();w.messages.clear();press(w,(c,p),3)
@@ -194,7 +200,7 @@ press(w,(c,p),3,5);w.events.append(1);w.step(c,p);w.events.append(1);w.step(c,p,
 assert w.menu[0]==b'HELICOVER / HELICOPTER' and w.shared[b.MODEL]==487,(w.menu,w.shared[b.MODEL])
 w,c,p=open_menu();w.events.append(3);w.step(c,p);w.events.append(3);w.step(c,p,n=5)   # a double tap on "GUNNER FIRE >"
 assert w.menu[0]==b'HELICOVER / GUNNER FIRE' and w.shared[b.FIRE]==3,(w.menu,w.shared[b.FIRE])
-w.step(c,p,n=2);press(w,(c,p),3,5);assert w.shared[b.FIRE]==1,'a deliberate tap half a second later is taken'
+w.step(c,p,n=2);press(w,(c,p),3,5);assert w.shared[b.FIRE]==0,'a deliberate tap half a second later is taken (the fourth row: HOLD FIRE)'
 passed('A double tap on a row that opens a page opens the page and nothing more (no crew, helicopter or fire mode changed by the second tap)')
 w,c,p=open_menu();w.incar[1]=c.v[5];w.calls.clear();w.events.append(1);w.step(c,p,n=4)   # CJ got aboard and the tap comes before the page is redrawn
 assert not orders_given(w) and rows_of(w)[:2]==[b'FLY TO MAP MARKER',b'FLY TO GROVE STREET'] and w.shared[b.STATE]==2,(orders_given(w),w.menu)

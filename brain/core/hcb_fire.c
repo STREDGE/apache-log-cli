@@ -195,8 +195,11 @@ HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         int bi = -1, bj = -1;
         for (i = 0; i < n_ours; i++) {
             shooter *sh;
+            int busy = 0;                    /* he is firing at a man he may still fire at */
             if (done[i]) continue;
             sh = shooter_of(b, me[i]->id);
+            if (sh && sh->target && (sh->hold == HCB_HOLD_NONE || sh->hold == HCB_HOLD_PAUSE || sh->hold == HCB_HOLD_REACTING))
+                for (j = 0; j < n; j++) if (cs[j].t->last.id == sh->target && (why[i][j] == HCB_HOLD_NONE || why[i][j] == SOFT_LOS)) busy = 1;
             for (j = 0; j < n; j++) {
                 static const float share[4] = {1.0f, 0.55f, 0.3f, 0.15f};
                 float v;
@@ -204,6 +207,8 @@ HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                 v = cs[j].value * share[cs[j].taken];
                 if (why[i][j] == SOFT_LOS) v *= 0.9f;                         /* a man he is known to see comes first */
                 if (sh && sh->target == cs[j].t->last.id) v *= 1.3f;         /* stay on your man */
+                /* a man who is firing does not drop his target for a new one while somebody with free hands can take it */
+                else if (busy) v *= 0.6f;
                 v *= 1.0f / (1.0f + 0.01f * v_dist(me[i]->pos, cs[j].t->last.pos));  /* the nearer shooter, other things equal */
                 if (v > best) { best = v; bi = i; bj = j; }
             }

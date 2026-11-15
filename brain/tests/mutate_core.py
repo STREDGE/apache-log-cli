@@ -159,6 +159,8 @@ M += [
  (F, "if (sh->hold == HCB_HOLD_COVERING) return sh->ready ? 1 : 0;", "", 'guard: a suspect is only covered'),
  (F, "if (sh->hold != HCB_HOLD_NONE || sh->aim != sh->target) return 3;", "", 'guard: his man, but no fire'),
  (F, "why[i][bj] == HCB_HOLD_NONE ? HCB_HOLD_ENOUGH : why[i][bj];", "why[i][bj];", 'the fourth rifle is told why he does not fire'),
+ (F, "else if (busy) v *= 0.6f;", "", 'a firing man keeps his target when a new attacker turns up'),
+ (F, "else if (busy) v *= 0.6f;", "else if (busy) v *= 0.0f;", 'with nobody free one rifle still goes over to the new attacker'),
  (F, "return shot_check(cb, q, 1) == HCB_HOLD_NONE ? 2 : 3;", "return 2;", 'guard: cease fire in the same frame'),
  (F, "gunner = is_gunner(sh->role) && !as_guard;", "gunner = is_gunner(sh->role);", 'guard: a man on foot is judged as one, whatever his role'),
 ]

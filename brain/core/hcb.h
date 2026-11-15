@@ -57,6 +57,7 @@
 #define HCB_EV_PROJECTILE 4    /* src threw / launched `weapon`: a = position, b = velocity */
 
 /* ---- roles of our own people (hcb_snapshot.our_role) */
+#define HCB_ROLE_NONE 0        /* ours, but not in the fight (a guard who was let go and walks away): a friend in every line of fire, no orders */
 #define HCB_ROLE_PILOT 1
 #define HCB_ROLE_GUNNER 2      /* +0..3: right front, left front, right rear, left rear */
 #define HCB_ROLE_SQUAD 6       /* +0..3 */

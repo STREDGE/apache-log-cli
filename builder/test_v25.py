@@ -75,7 +75,7 @@ class World:
   """FIRE_SINGLE_BULLET: a round from start to end. The first living person within 0.5 m of it is hit. Independently of whoever let it go,
   the world notes a round that passes within 2 m of CJ, or within 1 m of one of ours further than 1 m from where it starts."""
   self.bullets.append((self.now,list(start),list(end),damage));self.exact_bullet(start,end)
-  ours=[self.shared[b.PUB+i] for i in range(2,7)]+[self.shared[b.GROUND_PUB+i] for i in range(5)]
+  ours=[self.shared[b.PUB+i] for i in range(2,7)]+[self.shared[b.GROUND_PUB+i] for i in range(5)]+[self.shared[b.LEAVE+i] for i in range(8)]   # (the men who were let go and walk away are still ours)
   if self.seg_dist(start,end,self.coords(1))<2.:self.bullet_violations.append((self.now,'CJ',self.seg_dist(start,end,self.coords(1))))
   for o in ours:
    if o in self.exists and o not in self.dead and o not in self.cars and self.seg_dist(start,end,self.coords(o))<1.:self.bullet_violations.append((self.now,o,self.seg_dist(start,end,self.coords(o))))

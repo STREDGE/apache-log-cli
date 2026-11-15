@@ -57,12 +57,14 @@ class BrainSim:
 
     def ours(self, w):
         out = []
-        for k in range(10):
-            v = w.shared[b.PUB + 2 + k] if k < 5 else w.shared[b.GROUND_PUB + k - 5]
+        for k in range(18):
+            v = w.shared[b.PUB + 2 + k] if k < 5 else w.shared[b.GROUND_PUB + k - 5] if k < 10 else w.shared[b.LEAVE + k - 10]
+            if len(out) == h.HCB_MAX_OURS:
+                break
             if v > 1 and v in w.exists and v not in w.cars and all(v != o for o, _ in out):
                 # (the crew are door gunners while mounted; after a landing - PHASE 1 - they are guards on foot like the ground team)
                 crew = h.HCB_ROLE_SQUAD if w.shared[b.PHASE] == 1 else h.HCB_ROLE_GUNNER
-                out.append((v, h.HCB_ROLE_PILOT if k == 0 else crew + k - 1 if k < 5 else h.HCB_ROLE_SQUAD + min(k - 5, 3)))
+                out.append((v, h.HCB_ROLE_PILOT if k == 0 else crew + k - 1 if k < 5 else h.HCB_ROLE_SQUAD + min(k - 5, 3) if k < 10 else h.HCB_ROLE_NONE))
         return out
 
     def fill(self, w, o, who, cj=False):
