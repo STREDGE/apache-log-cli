@@ -1,17 +1,26 @@
-PASS: The two simulated fonts reproduce the player's screenshots of beta 1 (@@♥ц@х@ in the game's Russian; FGHIJ... / N5SHGM in SanLTD)
-PASS: Game Russian: А-Я = 0x80-0x9F, а-я = 0xA0-0xBF (х = 181, ц = 182 as on the screenshot); SanLTD: capitals only, Latin look-alikes + 0x80-0x95
-PASS: Helicover.fxt (ASCII) holds the English messages, Helicover_RU.fxt the same ones with U keys for the game's Russian and V keys for SanLTD, same colour tags
-PASS: Every one of the 121 messages reads back as its Russian text in both simulated fonts (mixed case in the game's Russian, capitals in SanLTD), no @ anywhere
-PASS: The SanLTD test message carries the raw codes 0x80-0xAF in groups of eight
-PASS: AUTO follows the game: its own Russian -> game layout, the French slot with the EFIGS font (SanLTD) -> SanLTD layout, English / German / Italian / Spanish / Japanese -> English; explicit settings win; an unknown build stays English
-PASS: Notices use the English key, the U key (game Russian) or the V key (SanLTD) depending on the language
-PASS: The main menu in Russian reads correctly in both simulated fonts: rows and the state in the title
-PASS: Every menu page has an English, a game-Russian and a SanLTD version with the same rows; at most 8 rows, none longer than 26 (RU 30) characters, no unreadable code in any title or row
-PASS: SETTINGS > LANGUAGE: AUTO / ENGLISH / RUSSIAN (GAME RUSSIAN) / RUSSIAN (SANLTD), the choice applies at once and the pages follow
-PASS: FONT TEST: page 1 is the alphabet for the game's Russian, page 2 the capitals and the unknown codes for SanLTD; each prints its test message
-PASS: The launcher's "files missing" message is English, game Russian or SanLTD by the same rule as AUTO
-PASS: DISMISS with a squad on the ground: recall first, the helicopter leaves when the squad is back aboard
-PASS: A recall that never finishes does not keep the helicopter for ever: DISMISS goes through after 45 s
-PASS: DISMISS without a squad is immediate after the confirmation
+PASS: The simulated font of the game's Russian reproduces the player's screenshots of beta 1 (@@♥ц@х@)
+PASS: Game Russian: А-Я = 0x80-0x9F, а-я = 0xA0-0xBF (х = 181, ц = 182 as on the screenshot), Latin and tags untouched; it is the only Russian layout
+PASS: Helicover.fxt (ASCII) holds the 126 English messages, Helicover_RU.fxt the same ones with U keys (no third layout, no test message), same colour tags
+PASS: Every one of the 126 messages reads back as its Russian text in the simulated font, no @ anywhere
+PASS: The language follows the game: its own Russian -> Russian; English, SanLTD (the French slot), German, Italian, Spanish, Japanese -> English; an unknown build -> English
+PASS: Changing the game language while playing changes the mod's language at once (messages: English keys / U keys)
+PASS: With the game in Russian the menu is Russian and reads correctly in the simulated font: main page, state in the title, settings
+PASS: Aboard in Russian: the two exit-button switches; switching shows the Russian hint and starts nothing
+PASS: Every one of the 248 menu pages has an English and a Russian version with the same rows; at most 8 rows, none longer than 26 (RU 30) characters; no language page, no FONT TEST
+PASS: The launcher's "files missing" message is Russian in the game's Russian and English otherwise
+PASS: CALL HELICOPTER: once called the page is the FOLLOWING page - there is no CALL row to press twice, and one helicopter exists
+PASS: While the helicopter is being prepared, swapped or is leaving the first row says so ("HELICOPTER INBOUND...", "CHANGING, PLEASE WAIT...", "HELICOPTER LEAVING...") and orders nothing
+PASS: The squad row: DEPLOY SQUAD -> "SQUAD ROPING DOWN..." -> RECALL SQUAD -> "SQUAD COMING BACK..." -> DEPLOY SQUAD; the two progress rows order nothing however often they are pressed
+PASS: The same rows in Russian: ОТРЯД ВЫСАЖИВАЕТСЯ... / ЗАБРАТЬ ОТРЯД / ОТРЯД ВОЗВРАЩАЕТСЯ... / ОТМЕНИТЬ ПОДЪЕМ
+PASS: The rope row: CLIMB ABOARD BY ROPE -> CANCEL ROPE PICKUP (on the way in the cancel sends the helicopter back to following); the hover for the rope is not marked as HOLD
+PASS: DISMISS: the page becomes "HELICOPTER LEAVING..." and nothing can be ordered until it is gone
+PASS: A double tap on a row that opens a page opens the page and nothing more (no crew, helicopter or fire mode changed by the second tap)
+PASS: A tap on a page that is out of date (the situation changed this very moment) is not taken: the page is redrawn first
+PASS: DISMISS confirmed during rope work is carried out when the ropes are free
+PASS: DISMISS with a squad on the ground: recall first ("picking the squad up first"), the helicopter leaves when the squad is back aboard
+PASS: DISMISS while the squad is still roping down waits for the landing, then recalls it (the order used to be lost)
+PASS: A recall that cannot start is retried every 6 s and does not keep the helicopter for ever: DISMISS goes through after 45 s
+PASS: Another order withdraws a dismissal that was still waiting for the squad
+PASS: DISMISS without a squad is immediate after the confirmation; "NO, KEEP IT" changes nothing
 PASS: Crew and helicopter models are pre-requested while their pages are open, so choosing one does not stall a frame
-Mocked script execution only: the real look of Cyrillic in the game font is checked on the phone with FONT TEST.
+Mocked script execution only: the Russian layout was confirmed on the player's phone (beta 3); the look of the menu itself is the game's.

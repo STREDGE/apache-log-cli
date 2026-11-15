@@ -18,7 +18,8 @@ PASS: A stuck guard (moving, far, not progressing) is sent along the path networ
 PASS: MAN DOWN is called once when a guard dies
 PASS: RECALL TEAM: hover, the team ropes back up, then FOLLOW resumes
 PASS: CJ boards the helicopter another way: the team stays on the ground (deleted out of sight, nobody warped aboard)
-PASS: The same in view: the team is handed back to the game, nobody vanishes on screen
+PASS: The same in view: nobody vanishes on screen and nobody is handed to the game - the men put the guns away and walk off as ours (beta 4)
+PASS: ...and they are removed once out of sight
 PASS: Losing the whole team is reported and cleaned up
 PASS: Rope pickup with the team on the ground: the same team covers CJ (only the CJ rope is added)
 PASS: Assault contact: one man bounds forward firing while his partner covers crouched; the flanker moves out firing; the medic stays with CJ
@@ -112,6 +113,6 @@ PASS: MESSAGES: IMPORTANT keeps danger and tactical calls, drops the chatter
 PASS: MESSAGES: OFF is silent in a fight but still explains why a command was refused
 PASS: With the team on the ground only the squad calls the contact (no double "CONTACT!")
 PASS: SETTINGS: one row cycles MESSAGES: ALL / IMPORTANT / OFF
-PASS: Frame cost in a busy fight (8 threats, rounds at CJ): fire worker peak 3087, squad worker peak 1510 script instructions
-PASS: Frame cost in FOLLOW MY SHOTS under fire at 30 fps: free aim peak 2971 / average 1092, lock-on peak 1957 / average 910 script instructions (it was 5063 / 2300: the whole trace table was read every frame of a burst)
+PASS: Frame cost in a busy fight (8 threats, rounds at CJ): fire worker peak 3123, squad worker peak 1510 script instructions
+PASS: Frame cost in FOLLOW MY SHOTS under fire at 30 fps: free aim peak 2999 / average 1093, lock-on peak 1961 / average 911 script instructions (it was 5063 / 2300: the whole trace table was read every frame of a burst)
 Mocked script execution only: real pathing, cover and gunfire are not tested.

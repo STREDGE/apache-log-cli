@@ -15,22 +15,24 @@ PASS: Fire mode selection still enables and stops issuing tasks in the mock
 PASS: All four onboard guards remain attached after Grove and follow takeoff
 PASS: Takeoff-follow requests CJ to exit; no unintended hover with CJ aboard
 PASS: Follow-shots finds the game auto-aim target instead of the first nearby NPC
-PASS: Main menu shows only what fits the moment: call it; on foot - three modes (marked), gunner fire, rope, squad, dismiss; aboard - destinations and two explicit exits
+PASS: Main menu shows only what fits the moment: call it; on foot - three modes (marked), gunner fire, rope, squad, dismiss; aboard - destinations and the two exit-button switches
 PASS: Protect CJ and cease-fire remain active after aim and takeoff changes
 PASS: Weapon menu changes all four live guards to MP5
 PASS: Crew-based automatic weapon selection can be restored
 PASS: All weapon selections update the four guards in the mock
 PASS: Gesture activation is removed; CLEO menu invocation still opens the panel
 PASS: Rope insertion creates four additional guards while aircraft guards remain attached
-PASS: With CJ on foot the main menu offers the rope pickup, not destinations
+PASS: With CJ on foot and the rope out the rope row is the cancel, and there are no destinations
 PASS: Protect CJ does not target a member of the ground team
 PASS: Ground team receives CJ-relative formation tasks after descent
 PASS: Ground team attacks the hostile selected by Protect CJ in the mock
-PASS: Leaving hold hands the ground squad back to the game in view (no deletion on screen) and clears friendly handles
-PASS: Out of sight the ground squad is deleted when the helicopter leaves hold
+PASS: FOLLOW with the rope out cancels the pickup: the cover team climbs back aboard, then the helicopter follows - nobody is handed to the game
+PASS: A team that is let go in view is never handed to the game: unarmed, walking away, still ours and no longer a target list entry
+PASS: The guards who were let go are removed as soon as nobody sees them
 PASS: Insertion is rejected unless helicopter is holding
 PASS: Fifth rope proximity triggers simulated reverse ascent, restores CJ control and returns four guards
-PASS: Interrupting player ascent restores control and the last ground position
+PASS: An order given during the ascent does not interrupt the rope work (beta 4): the pilot says wait and CJ arrives aboard
+PASS: A helicopter driven off during the ascent restores control and the last ground position
 PASS: CJ ascent avoids new animation streaming and tolerates an unavailable animation task
 PASS: Missing resident PED animation cancels safely before disabling CJ control
 PASS: Fire worker omits passenger getter implicated by the AML crash log
@@ -83,7 +85,7 @@ PASS: Destination: scripted cruise to overhead, then native vertical descent to 
 PASS: A stalled native descent still offers LAND / ROPE after 25 s
 PASS: Pilot can reposition to keep an active threat in view
 PASS: New hold command stops the scripted cruise without ejecting CJ
-PASS: Aboard, EXIT: LAND and EXIT: ROPE are one tap each; the settings page has the same choice for the exit button
+PASS: Aboard, the two EXIT BUTTON rows only switch what the exit button does (hint shown, [X] moves): no order, no exit; settings has no exit or language row
 PASS: Doors lock while CJ is aboard so the native exit cannot drop him
 PASS: Exit button over the destination in ROPE mode starts the rope descent
 PASS: Exit button over the destination in LAND mode lands and then lets CJ out

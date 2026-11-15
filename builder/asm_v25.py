@@ -18,7 +18,9 @@ for _op,_name,_n in [(0x020a,'SET_CAR_DOORS_LOCKED',2),(0x0a52,'IS_WIDGET_RELEAS
  (0x05f5,'TASK_FOLLOW_PATH_NODES_TO_COORD',6),(0x0350,'SET_CHAR_STAY_IN_SAME_PLACE',2),(0x05ba,'TASK_STAND_STILL',2),(0x0639,'TASK_TURN_CHAR_TO_FACE_CHAR',2),
  (0x078f,'TASK_CLIMB',2),(0x0637,'TASK_GO_TO_COORD_WHILE_SHOOTING',8),(0x05c5,'TASK_DUCK',2),
  # 1.2: GET_RANDOM_FLOAT_IN_RANGE (min, max, result): checked in libGTASA (ProcessCommands500To599 case 0x208: two floats in, one float out)
- (0x0208,'GENERATE_RANDOM_FLOAT_IN_RANGE',3)]:
+ (0x0208,'GENERATE_RANDOM_FLOAT_IN_RANGE',3),
+ # beta 4: a guard who is let go strolls away like a pedestrian (one parameter in libGTASA's handler)
+ (0x05de,'TASK_WANDER_STANDARD',1)]:
  LIB.setdefault(_op,{'id':'%04X'%_op,'name':_name,'num_params':_n})
 STATE=0x48454d00;CMD=STATE+1;HEART=STATE+2
 # Protocol: commands 1 summon, 2 follow, 3 hold, 4 depart.

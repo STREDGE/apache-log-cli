@@ -61,7 +61,12 @@ SQFOOT ~y~SQUAD:~w~ CJ must be on foot to receive the team.
 SQCREW ~y~SQUAD:~w~ wait until the crew is back aboard.
 HCBUSY ~y~PILOT:~w~ emergency landing - cannot comply.
 HCSLATE ~y~PILOT:~w~ I make the change right after the rope.
-HFTEST ~b~FONT TEST~w~ ABCDEFGH abcdefgh 12345
+HCXBL ~b~PILOT:~w~ exit button: I land.
+HCXBR ~b~PILOT:~w~ exit button: you go down the rope.
+HCRBSY ~y~PILOT:~w~ wait - rope work in progress.
+HCRCAN ~b~PILOT:~w~ pickup cancelled. Ropes up.
+HCRUP ~b~PILOT:~w~ squad, back up the ropes.
+HCDSQ ~b~PILOT:~w~ picking the squad up first, then we leave.
 HCFOCUS ~r~SHOOTER ON CJ!~w~ Gunners focusing fire.
 HCEVADE ~r~TAKING HITS!~w~ Pilot breaking away.
 HCSHOT ~r~TAKING FIRE!~w~ Pilot breaking away.
