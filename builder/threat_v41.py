@@ -71,7 +71,7 @@ def _emit_body(s,label,h,out,friends,R,cj):
  s.label(P+'W_28');s.check(0x0019,[V(t1),I(32)],P+'W_AUTO');s.go(P+'W_33');s.label(P+'W_AUTO');a(0x000a,V(out),I(25));s.go(W)
  s.label(P+'W_33');s.check(0x0019,[V(t1),I(34)],P+'W_SNIPER');s.go(P+'W_35');s.label(P+'W_SNIPER');a(0x000a,V(out),I(35));s.go(W)
  s.label(P+'W_35');s.eq(t1,37,P+'W_HEAVY');s.check(0x0023,[F(15),V(d)],W);a(0x000a,V(out),I(30));s.go(W)
- s.label(P+'W_HEAVY');s.check(0x0019,[V(t1),I(38)],W);a(0x000a,V(out),I(60));s.go(W)
+ s.label(P+'W_HEAVY');s.check(0x8019,[V(t1),I(38)],W);a(0x000a,V(out),I(60));s.go(W)   # rocket launchers (35, 36) and the minigun (38): +60; 39 and up (satchel, spray, camera...) nothing
  s.label(P+'W_LOW');s.check(0x0019,[V(t1),I(15)],W);s.check(0x0019,[V(t1),I(18)],P+'W_THROWN');s.go(W)
  s.label(P+'W_THROWN');a(0x000a,V(out),I(30))
  s.label(W)
@@ -94,8 +94,10 @@ def emit_trace_scan(s,label,R,notfriend,cj=0,heli=1):
  (a visual tracer, ~300 ms). Only FIRE_SINGLE_BULLET / police helicopters store exact ends. So every
  trace is used as a LINE: P1 = start field, u = unit(P2 - P1), and the target's position along the line
  t = (X - P1).u, its squared distance from the line perp2 = |X - P1|^2 - t^2 (no square root needed):
-  - CJ behind the piece (t <= 1) and within 1.5 m of the line while CJ is shooting: his own shot ->
-    CJ_AIM_* (line + time) for FOLLOW MY SHOTS; a close friend with a smaller perp2 takes the credit.
+  - CJ behind the piece (t <= 1) and within 1.5 m of the line while CJ is shooting, and the piece points the way
+    he faces (within 100 degrees; in a car any direction): his own shot -> CJ_AIM_* (line + time) for FOLLOW MY
+    SHOTS; a close friend with a smaller perp2 takes the credit. (An enemy round that missed him and flew on
+    lies behind him too, but points back past the man he faces: not his.)
   - CJ ahead of the piece (1 < t <= 220) and within 2 m of the line: a shot at CJ -> the shooter is
     searched on the back-ray P1 - u*s (s = 0..88 m, 12 steps of 8 m with a 4.5 m box, on foot and in cars; he must
     hold a gun, 22-38) -> TB_SHOOTER.
@@ -133,6 +135,14 @@ def emit_trace_scan(s,label,R,notfriend,cj=0,heli=1):
  # ---- CJ behind the piece: his own shot? (only while he is shooting; a closer friend takes the credit)
  jgt(t4,1.0,P+'INCOMING');jlt(t4,-160.0,P+'HELI');jgt(t3,2.25,P+'HELI')
  s.get(t5,b.CJ_SHOT_T);a(0x01bd,V(t6));a(0x0062,V(t6),V(t5));s.check(0x8019,[V(t6),I(350)],P+'HELI')
+ # the piece must point the way CJ faces (within 100 degrees): an enemy round that missed him and flew on lies behind him and
+ # points back past the man he is facing, which is not his aim. In a car (drive-by) any direction is possible: no check
+ s.check(0x80df,[V(cj)],P+'DIR_OK')
+ a(0x0604,V(ux),V(uy),V(t1));a(0x0172,V(cj),V(t2));a(0x0063,V(t1),V(t2))
+ s.check(0x0023,[F(-180),V(t1)],P+'D_LO');a(0x000b,V(t1),F(360));s.label(P+'D_LO')
+ s.check(0x0021,[V(t1),F(180)],P+'D_HI');a(0x000b,V(t1),F(-360));s.label(P+'D_HI')
+ jgt(t1,100.0,P+'HELI');jlt(t1,-100.0,P+'HELI')
+ s.label(P+'DIR_OK')
  for i in range(4):
   skip=P+'FR_%d'%i;s.get(t6,b.GROUND_PUB+i);_alive(s,t6,skip)
   a(0x00a0,V(t6),V(t1),V(t2),V(t5));a(0x050a,V(t1),V(t2),V(t5),V(px),V(py),V(pz),V(t6));a(0x006b,V(t6),V(t6))

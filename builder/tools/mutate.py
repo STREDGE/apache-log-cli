@@ -112,6 +112,19 @@ M12=[
  ('build_v25.py',"p.check(0x0019,[V(21),I(45000)],'DT_RET')","p.check(0x0019,[V(21),I(45000000)],'DT_RET')",'12 dismiss timeout'),
  ('build_v25.py',"for model in [105,106,107,285,287,487,497,425]:a(0x0247,I(model))","pass",'12 model preload'),
  ('build_v25.py',"p.label('DO_EXIT_ROPE');p.set(EXIT_MODE,1)","p.label('DO_EXIT_ROPE');p.set(EXIT_MODE,0)",'12 exit rope row'),
+ # second independent review: FOLLOW MY SHOTS
+ ('threat_v41.py',"jgt(t1,100.0,P+'HELI');jlt(t1,-100.0,P+'HELI')","jgt(t1,1000.0,P+'HELI');jlt(t1,-1000.0,P+'HELI')",'12 aim direction check'),
+ ('threat_v41.py',"jgt(t1,100.0,P+'HELI');jlt(t1,-100.0,P+'HELI')","jgt(t1,60.0,P+'HELI');jlt(t1,-60.0,P+'HELI')",'12 aim direction tight'),
+ ('threat_v41.py',"jgt(t1,100.0,P+'HELI');jlt(t1,-100.0,P+'HELI')","jgt(t1,150.0,P+'HELI');jlt(t1,-150.0,P+'HELI')",'12 aim direction loose'),
+ ('threat_v41.py'," s.check(0x80df,[V(cj)],P+'DIR_OK')\n"," pass\n",'12 aim direction in a car'),
+ ('threat_v41.py',"s.check(0x0023,[F(-180),V(t1)],P+'D_LO');a(0x000b,V(t1),F(360));s.label(P+'D_LO')","s.label(P+'D_LO')",'12 aim direction seam low'),
+ ('threat_v41.py',"s.check(0x0021,[V(t1),F(180)],P+'D_HI');a(0x000b,V(t1),F(-360));s.label(P+'D_HI')","s.label(P+'D_HI')",'12 aim direction seam high'),
+ ('threat_v41.py',"s.label(P+'W_HEAVY');s.check(0x8019,[V(t1),I(38)],W)","s.label(P+'W_HEAVY');s.check(0x0019,[V(t1),I(38)],W)",'12 heavy weapon bonus'),
+ ('build_v25.py',"a(0x0062,V(31),V(30));f.check(0x8019,[V(31),I(250)],'CJ_POLL_RET')","a(0x0062,V(31),V(30));f.check(0x0019,[V(31),I(250)],'CJ_POLL_RET')",'12 scan after a shot'),
+ ('build_v25.py',"f.check(0x0019,[V(31),I(20)],'CJ_POLL_RET');f.call('TRACE_RUN')","f.check(0x0019,[V(31),I(200)],'CJ_POLL_RET');f.call('TRACE_RUN')",'12 scan every frame'),
+ ('build_v25.py',"f.check(0x0019,[V(31),I(99)],'TRACE_TICK_RET');f.call('TRACE_RUN')","f.check(0x0019,[V(31),I(0)],'TRACE_TICK_RET');f.call('TRACE_RUN')",'12 scan tick 100 ms'),
+ ('build_v25.py',"f.label('CJ_POLL');f.check(0x02e0,[V(0)],'CJ_POLL_IDLE')","f.label('CJ_POLL');f.get(30,GAME_OK);f.eq(30,1,'CJ_POLL_RET');f.check(0x02e0,[V(0)],'CJ_POLL_IDLE')",'12 stamp on every build'),
+ ('build_v25.py',"f.call('FIND_CJ_AIMED');alive(f,29,'AIM_NO_LOCK');f.call('SHOOT_CHAR');f.go('WAIT')\nf.label('AIM_NO_LOCK');f.get(30,CJ_AIM_T);a(0x01bd,V(31));a(0x0062,V(31),V(30));f.check(0x0019,[V(31),I(900)],'AIM_LINE');f.go('AIM_RAY')","f.get(30,CJ_AIM_T);a(0x01bd,V(31));a(0x0062,V(31),V(30));f.check(0x0019,[V(31),I(900)],'AIM_LINE');f.go('AIM_NO_LOCK')\nf.label('AIM_NO_LOCK');f.call('FIND_CJ_AIMED');alive(f,29,'AIM_RAY');f.call('SHOOT_CHAR');f.go('WAIT')",'12 lock-on before line'),
 ]
 if sys.argv[1:2]==['--new']:
  M=M12;sys.argv.pop(1)

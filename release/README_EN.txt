@@ -12,8 +12,10 @@ WHAT IS NEW IN 1.2 (beta)
   by the FONT TEST pages - see below; this is the main thing to check in the beta.
 - A clearer menu: one row = one action, modes are marked [X], the two exit methods are separate
   rows, DISMISS HELICOPTER asks first and recalls a squad on the ground before leaving.
-- WHERE I SHOOT (follow my shots) was rebuilt: the gunners take the line of your fire from the
-  bullet traces (not only the camera), stay on it while you shoot and 0.9 s after.
+- WHERE I SHOOT (follow my shots) was rebuilt: the gunners fire at the target you lock on to (the
+  game's auto-aim), in free aim at the line of your bullets (read from the bullet traces; the camera
+  is the fallback), and stay on it while you shoot and 0.9 s after. Rounds of other people that flew
+  past you do not count as your fire.
 - No teleports: the helicopter flies in from afar and leaves out of sight; the squad catches up by
   sprinting along the road network and a guard who lags for 60 s is let go; the pilot waits up to
   25 s for the squad at the ropes; the squad only rides in a car CJ drives himself (one seat each),
@@ -74,8 +76,9 @@ TIPS
 - If it cannot land or hover, move to open, level ground.
 - The Hunter has no passenger seat: no boarding or evacuation with it.
 - Settings last until the game is restarted.
-- WHERE I SHOOT follows bullet traces: grenades and flamethrowers leave none, so the gunners use
-  your aim target or the camera there.
+- WHERE I SHOOT takes your lock-on target first, then the line of your bullet traces, then the camera.
+  On other game versions the traces are not read (lock-on and camera work). Grenades and flamethrowers
+  leave no traces, so the gunners use your aim target or the camera there.
 
 HONEST LIMITS
 - This is a beta. I cannot see a phone screen, so the logic was checked on a simulation of the game,

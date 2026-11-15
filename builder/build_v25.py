@@ -1131,16 +1131,16 @@ f.label('FS_ACTIVE');a(6,V(27),I(1))
 # Aiming at a friendly suppresses assistance even before the shot line is evaluated.
 for var in [2,3,4,5,6]:
  skip='AIM_FRIEND_SKIP_'+str(var);alive(f,var,skip);f.check(0x8457,[I(0),V(var)],'SILENCE');f.label(skip)
-# His own shot line from the bullet traces (CJ_TRACE in the trace scan) is the primary source: it is exact
-# for auto-aim, free aim and drive-by alike. Without a fresh line: the game's lock-on target, then the camera.
-f.get(30,CJ_AIM_T);a(0x01bd,V(31));a(0x0062,V(31),V(30));f.check(0x0019,[V(31),I(900)],'AIM_LINE');f.go('AIM_LOCK')
+# What CJ aims at, in order: (1) the game's live lock-on target (his last shot line may be up to 0.9 s old and must not beat
+# it when he has turned to another man), (2) his own shot line from the bullet traces (free aim, drive-by), (3) the camera.
+f.call('FIND_CJ_AIMED');alive(f,29,'AIM_NO_LOCK');f.call('SHOOT_CHAR');f.go('WAIT')
+f.label('AIM_NO_LOCK');f.get(30,CJ_AIM_T);a(0x01bd,V(31));a(0x0062,V(31),V(30));f.check(0x0019,[V(31),I(900)],'AIM_LINE');f.go('AIM_RAY')
 f.label('AIM_LINE');f.get(14,CJ_AIM_X);f.get(15,CJ_AIM_Y);f.get(16,CJ_AIM_Z);f.get(8,CJ_AIM_PX);f.get(9,CJ_AIM_PY);f.get(10,CJ_AIM_PZ);a(0x00a0,V(0),V(22),V(23),V(24))
 # t = (CJ - P1).u ; origin = P1 + u*(t + 1): the point of his line nearest to him, one metre ahead
 a(0x0087,V(18),V(22));a(0x0063,V(18),V(8));a(0x006b,V(18),V(14));a(0x0087,V(19),V(23));a(0x0063,V(19),V(9));a(0x006b,V(19),V(15));a(0x005b,V(18),V(19))
 a(0x0087,V(19),V(24));a(0x0063,V(19),V(10));a(0x006b,V(19),V(16));a(0x005b,V(18),V(19));a(0x000b,V(18),F(1.0))
 for origin,direction in [(8,14),(9,15),(10,16)]:a(0x0087,V(21),V(direction));a(0x006b,V(21),V(18));a(0x005b,V(origin),V(21))
 f.go('RAY_INIT')
-f.label('AIM_LOCK');f.call('FIND_CJ_AIMED');alive(f,29,'AIM_RAY');f.call('SHOOT_CHAR');f.go('WAIT')
 f.label('AIM_RAY');a(0x068d,V(8),V(9),V(10));a(0x068e,V(11),V(12),V(13))
 for dest,point,origin in [(14,11,8),(15,12,9),(16,13,10)]:a(0x0087,V(dest),V(point));a(0x0063,V(dest),V(origin))
 a(0x050a,V(8),V(9),V(10),V(11),V(12),V(13),V(17));f.check(0x0021,[V(17),F(.01)],'SILENCE')
@@ -1312,10 +1312,11 @@ f.ret()
 # every 100 ms in every fire mode: shooters at CJ, hits on the helicopter, CJ's own shot line
 f.label('TRACE_TICK');f.get(30,GAME_OK);f.eq(30,1,'TRACE_TICK_RET');f.get(30,TRACE_SCAN_T);a(0x01bd,V(31));a(0x0062,V(31),V(30));f.check(0x0019,[V(31),I(99)],'TRACE_TICK_RET');f.call('TRACE_RUN')
 f.label('TRACE_TICK_RET');f.ret()
-# every frame: IS_CHAR_SHOOTING is a one-frame flag, so CJ_SHOT_T is stamped here and, for 250 ms after a shot,
-# the traces are read every frame (a trace lives 75-300 ms)
-f.label('CJ_POLL');f.get(30,GAME_OK);f.eq(30,1,'CJ_POLL_RET');f.check(0x02e0,[V(0)],'CJ_POLL_IDLE');a(0x01bd,V(31));a(0xddc,I(CJ_SHOT_T),V(31))
-f.label('CJ_POLL_IDLE');f.get(30,CJ_SHOT_T);a(0x01bd,V(31));a(0x0062,V(31),V(30));f.check(0x0019,[V(31),I(250)],'CJ_POLL_RET')
+# every frame: IS_CHAR_SHOOTING is a one-frame flag, so CJ_SHOT_T is stamped here (on every game build: FOLLOW MY SHOTS
+# needs it even where the traces cannot be read) and, for 250 ms after a shot, the traces are read every frame
+# (a trace lives 75-300 ms). Only the reading of the traces waits for the build check.
+f.label('CJ_POLL');f.check(0x02e0,[V(0)],'CJ_POLL_IDLE');a(0x01bd,V(31));a(0xddc,I(CJ_SHOT_T),V(31))
+f.label('CJ_POLL_IDLE');f.get(30,GAME_OK);f.eq(30,1,'CJ_POLL_RET');f.get(30,CJ_SHOT_T);a(0x01bd,V(31));a(0x0062,V(31),V(30));f.check(0x8019,[V(31),I(250)],'CJ_POLL_RET')
 f.get(30,TRACE_SCAN_T);a(0x01bd,V(31));a(0x0062,V(31),V(30));f.check(0x0019,[V(31),I(20)],'CJ_POLL_RET');f.call('TRACE_RUN')
 f.label('CJ_POLL_RET');f.ret()
 # 29@ handle, 30@ score: insert into the sorted list (higher first); uses 31@

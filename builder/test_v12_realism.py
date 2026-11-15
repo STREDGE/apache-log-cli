@@ -250,8 +250,11 @@ assert w.shared[b.SQ_T]==h,('a shooter found by the traces is adopted',[w.shared
 passed('The squad adopts a shooter the bullet-trace scan found, even 45 m away outside its own search')
 
 # the bullet-trace scan reads lines: what counts as CJ's own shot, as a hit on the helicopter, and how often it searches
-def aim_updated(start,end,cj_shooting,frames=36):
+def aim_updated(start,end,cj_shooting,frames=36,heading=None,in_car=False):
  w,c,f=fire_world();w.shared[b.FIRE]=2;w.frame_ms=33;w.step(c,f,n=3);t0=w.shared[b.CJ_AIM_T]
+ # CJ faces the way he shoots unless the scene says otherwise (degrees: 0 north, 90 west, 270 east)
+ w.actor_heading[1]=heading if heading is not None else math.degrees(math.atan2(-(end[0]-start[0]),end[1]-start[1]))%360
+ if in_car:w.cars[777]={'pos':[0.,0.,0.],'heading':0.};w.exists.add(777);w.incar[1]=777
  for i in range(frames):
   w.shooting=cj_shooting and i%6==0;w.ped_bullet(list(start),list(end));w.step(c,f)
  return w.shared[b.CJ_AIM_T]!=t0
@@ -265,6 +268,25 @@ w.shooting=False;w.step(c,f,n=40);t1=w.shared[b.CJ_AIM_T]                       
 for _ in range(20):w.ped_bullet([.5,0.,.7],[24.,0.,1.]);w.step(c,f)                          # rounds along his line, but he is not shooting
 assert w.shared[b.CJ_AIM_T]==t1,'older than 350 ms since his last shot: not his'
 passed('CJ aim line: only a round whose line passes within 1.5 m of him within 350 ms of his own shot counts as his')
+# an enemy round that missed CJ and flew on leaves its piece BEHIND him, on a line within 1.5 m of him, pointing the way the enemy
+# shot, i.e. back past the man CJ is facing. While CJ shoots that used to count as his own aim line (the gunners turned the wrong way)
+assert not aim_updated((-6.,0.,1.),(-10.,0.,1.),True,heading=270.),'an enemy round that flew past CJ (he faces the enemy, east) is not his aim line'
+assert aim_updated((-6.,0.,1.),(-10.,0.,1.),True,heading=90.),'control: the same line is his own when he faces the way it points'
+assert aim_updated((.5,0.,.7),(24.,0.,1.),True,heading=190.),'his own shot 80 degrees off the way he faces (still turning) counts'
+assert not aim_updated((.5,0.,.7),(24.,0.,1.),True,heading=30.),'a line pointing 120 degrees away from where he faces is not his'
+assert aim_updated((.5,0.,.7),(-3.67,23.64,1.),True,heading=350.),'the 0/360 seam: a line at heading 10 and CJ at 350 are 20 degrees apart, not 340'
+assert aim_updated((.5,0.,.7),(4.67,23.64,1.),True,heading=10.),'the same seam the other way round: line 350, CJ 10'
+assert aim_updated((-6.,0.,1.),(-10.,0.,1.),True,heading=270.,in_car=True),'in a car (drive-by, any direction) the heading says nothing about the aim'
+passed('CJ aim line: a round that flew past him pointing away from where he faces is not his aim (80 deg counts, 120 deg does not); in a car any direction counts')
+def scans(shooting,seconds=2.0):
+ w,c,f=fire_world();w.shared[b.FIRE]=2;w.frame_ms=33;w.step(c,f,n=12);w.now+=5000
+ w.shooting=shooting;w.step(c,f,n=3);key=lambda:len([x for x in calls(w,0xddc) if x[2][0]==b.TRACE_SCAN_T]);n0=key()
+ for _ in range(int(seconds*1000/33)):w.shooting=shooting;w.step(c,f)
+ return (key()-n0)/seconds
+busy,idle=scans(True),scans(False)
+assert busy>=25,('while CJ shoots the traces are read every frame: a trace lives only 75-300 ms',busy)
+assert idle<=12,('when he does not shoot only on the 100 ms tick, not every frame',idle)
+passed('Bullet traces are read every frame (%d/s) while CJ shoots and only on the 100 ms tick (%d/s) when he does not'%(busy,idle))
 def evaded(offset):
  w,c,f=fire_world();w.step(c,f,n=3);car=w.car
  for _ in range(8):w.ped_bullet([car[0]+70.,car[1]+offset,car[2]],[car[0]+5.,car[1]+offset,car[2]]);w.step(c,f)

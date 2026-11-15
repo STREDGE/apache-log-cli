@@ -29,6 +29,8 @@ PASS: Assault: the medic stays with CJ
 PASS: Guards keep the target they are on while it lives (no flipping when the threat list is reshuffled)
 PASS: The squad adopts a shooter the bullet-trace scan found, even 45 m away outside its own search
 PASS: CJ aim line: only a round whose line passes within 1.5 m of him within 350 ms of his own shot counts as his
+PASS: CJ aim line: a round that flew past him pointing away from where he faces is not his aim (80 deg counts, 120 deg does not); in a car any direction counts
+PASS: Bullet traces are read every frame (30/s) while CJ shoots and only on the 100 ms tick (7/s) when he does not
 PASS: Hits on the helicopter: a line within 6 m counts, one 12 m away does not
 PASS: The reverse search for a shooter runs at most four times a second even under a stream of rounds (21 passes in 6 s)
 PASS: Door gunners scatter their bullets (about +-0.5 m at 40 m) instead of putting every round on one point

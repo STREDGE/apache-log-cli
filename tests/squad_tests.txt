@@ -59,6 +59,7 @@ PASS: Rounds that do not come down at CJ do not make anyone the shooter
 PASS: An unarmed bystander standing on the back-ray is not mistaken for the shooter
 PASS: On another game build the bullet traces are not read at all
 PASS: Threats are ranked by weapon (sniper, then rifle, then pistol) and position (a rifleman on a roof above one on the street)
+PASS: A rocket launcher or a minigun scores 50 more than a pistol on the threat board (the heavy-weapon bonus was inverted)
 PASS: A passive police officer ranks below a gang member (no wanted stars for nothing)
 PASS: A car racing at CJ scores +50 for its driver; one driving away does not
 PASS: A target that ducks behind cover gets suppressive fire at his last seen position
@@ -72,6 +73,8 @@ PASS: FOLLOW MY SHOTS: nothing on his line within 170 m (the sky) - no rounds wa
 PASS: FOLLOW MY SHOTS without any bullet trace (grenade, flamethrower): the game's lock-on target still draws fire
 PASS: FOLLOW MY SHOTS: a guard firing next to CJ (CJ not shooting) does not start the gunners
 PASS: FOLLOW MY SHOTS: with a guard firing the other way next to him, the gunners still follow CJ's own line
+PASS: FOLLOW MY SHOTS on another game build: no traces are read, but his shooting still starts the gunners on his lock-on target
+PASS: FOLLOW MY SHOTS: the game's live lock-on target beats his last aim line (he turned to another man; the old line was still fresh)
 PASS: CALL HELICOPTER: it is created 160 m out, 50 m up and behind CJ, out of the camera's view, and flies in
 PASS: When the first bearing is in view it is moved, in the same tick, to the next bearing where it is not
 PASS: When every bearing is in view (e.g. a tall tower) the last one is used instead of looping
@@ -107,5 +110,5 @@ PASS: MESSAGES: IMPORTANT keeps danger and tactical calls, drops the chatter
 PASS: MESSAGES: OFF is silent in a fight but still explains why a command was refused
 PASS: With the team on the ground only the squad calls the contact (no double "CONTACT!")
 PASS: SETTINGS: one row cycles MESSAGES: ALL / IMPORTANT / OFF
-PASS: Frame cost in a busy fight (8 threats, rounds at CJ): fire worker peak 3088, squad worker peak 1508 script instructions
+PASS: Frame cost in a busy fight (8 threats, rounds at CJ): fire worker peak 3082, squad worker peak 1508 script instructions
 Mocked script execution only: real pathing, cover and gunfire are not tested.

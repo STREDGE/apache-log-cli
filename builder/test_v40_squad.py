@@ -359,6 +359,12 @@ w,c,f=gunner_world([(938,-20.,0.),(939,20.,0.)]);w.weapons.update({938:30,939:30
 for n in (938,939):w.damage.add((1,n))
 w.step(c,f,n=16);assert [h for h,_ in gs(w)]==[939,938],gs(w)
 passed('Threats are ranked by weapon (sniper, then rifle, then pistol) and position (a rifleman on a roof above one on the street)')
+# the heavy-weapon bonus (rocket launcher 35, minigun 38: +60) used to be inverted and fell on nothing at all
+w,c,f=gunner_world([(934,-20.,0.),(935,20.,0.),(936,0.,-20.)]);w.weapons.update({934:22,935:35,936:38})
+for n in (934,935,936):w.damage.add((1,n))
+w.step(c,f,n=16);sc=dict(gs(w))
+assert sc[935]-sc[934]>=40 and sc[936]-sc[934]>=40,('a rocket launcher or a minigun outranks a pistol',sc)
+passed('A rocket launcher or a minigun scores 50 more than a pistol on the threat board (the heavy-weapon bonus was inverted)')
 w,c,f=gunner_world([]);w.shared[b.FIRE]=1
 for n,typ in [(937,6),(938,7)]:w.exists.add(n);w.pos[n]=[20.,0.,0.] if n==937 else [0.,24.,0.];w.pedtype[n]=typ;w.skin[n]=280 if typ==6 else 20;w.civilians.append(n)
 w.step(c,f,n=16);order=[h for h,_ in gs(w)]
@@ -439,6 +445,22 @@ for i in range(90):
  w.ped_bullet([-.9,1.,1.],[-30.,2.,1.]);w.step(c,f)
 ends=fired_at(w,0);assert ends and all(e[0]>10. for e in ends),ends[:6]
 passed('FOLLOW MY SHOTS: with a guard firing the other way next to him, the gunners still follow CJ\'s own line')
+# another game build: the bullet traces are not read, but his shooting must still start FOLLOW MY SHOTS (the stamp comes before the build gate)
+w,c,f=follow_world([(940,24.,0.)]);w.now+=5000;w.targeting=940;w.blockers=[((24.,0.,1.),.6)];ok=[];w.shared[b.GAME_OK]=0;w.calls.clear()
+for i in range(60):
+ w.shared[b.GAME_OK]=0;w.shooting=i%6==0;w.step(c,f)
+ if i>=12:ok.append(940 in gtargets(w) and w.shared[b.FIRE_ACTIVE]==1)
+assert sum(ok)>=.9*len(ok),('on another build his lock-on target still draws fire',sum(ok),len(ok))
+assert not [x for x in calls(w,0xdd8) if x[2][1]>=b.BULLET_TRACES_OFS],'the traces of an unknown build are still not read'
+passed('FOLLOW MY SHOTS on another game build: no traces are read, but his shooting still starts the gunners on his lock-on target')
+# his last aim line (up to 0.9 s old) must not beat the game's live lock-on: he has turned to another man
+w,c,f=follow_world([(940,24.,0.),(941,0.,24.)]);w.blockers=[((24.,0.,1.),.6),((0.,24.,1.),.6)];w.actor_heading[1]=270.
+cj_fire(w,c,f,24,target=(24.,0.,1.))                                   # a burst at 940 in the east: the aim line points east
+assert 940 in gtargets(w),gtargets(w)
+w.targeting=941;w.calls.clear();w.step(c,f,n=6)                        # 0.2 s later the lock-on is on 941 in the north, the old line is still fresh
+tg=[x[2][1] for x in calls(w,0x74d)]
+assert tg and all(t==941 for t in tg),('a stale aim line must not beat the live lock-on',tg,gtargets(w))
+passed('FOLLOW MY SHOTS: the game\'s live lock-on target beats his last aim line (he turned to another man; the old line was still fresh)')
 # ------------------------------------------------------------------ 1.2 helicopter lifecycle
 def spawn_world(visible):
  w,c,_=setup();w.visible_fn=visible;command=g['command'];command(w,c,1,ticks=8)
