@@ -17,7 +17,7 @@ void dladdr(void){} void dlopen(void){} void dlsym(void){}
 S
 clang $T -fPIC -nostdlib -shared -fuse-ld=lld -Wl,-soname,libc.so -o "$OUT/stubs/libc.so" "$OUT/stubs/c.c"
 clang $T -fPIC -nostdlib -shared -fuse-ld=lld -Wl,-soname,libdl.so -o "$OUT/stubs/libdl.so" "$OUT/stubs/dl.c"
-clang $T -O2 -fPIC -ffreestanding -fno-builtin -fno-stack-protector -fvisibility=hidden -ffp-contract=off \
+clang $T -O2 -fPIC -ffreestanding -fno-builtin -fno-stack-protector -fvisibility=hidden -ffp-contract=off $BRAIN_DEFS \
   -Wall -Wextra -Wno-unused-parameter -Wno-unused-function \
   -nostdlib -shared -fuse-ld=lld -Wl,-soname,libHelicoverBrain64.so \
   -Wl,-z,max-page-size=16384 -Wl,--hash-style=both -Wl,-z,now -Wl,--no-undefined \

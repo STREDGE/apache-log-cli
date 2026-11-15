@@ -5,28 +5,31 @@ One worker drives whichever team is on foot: the rope / escort team of the groun
 while PHASE = 1). The core, ground and fire workers stop tasking those guards while SQ_HEART is
 fresh, so exactly one script gives them orders.
 
-Every 100 ms: perception every 400 ms (threats around CJ, rules of engagement from FIRE CONTROL),
-then a decision for each of the four guards. Tasks are only re-issued when the order changes or
-its time runs out, so the game AI is never restarted every tick.
+1.3 (Helicover Brain, stage 2): who is a threat and which guard fires at whom is decided by the brain
+(libHelicoverBrain64.so). Every FRAME each guard asks it (0E48, command 2): nothing / cover / fire / cease
+fire, and the man - a guard who is firing when CJ or one of ours comes into his line is taken off the
+trigger in that same frame. Every 100 ms: the brain's picture (command 3) for the radio calls, then a
+decision for each of the four guards - formation, shields, cover, bounding - with the man the brain gave
+him. The squad's own scans, threat list, scoring and rules of engagement are gone. Tasks are only
+re-issued when the order changes or its time runs out, so the game AI is never restarted every tick.
 
 Tactics (SETUP > TEAM ON FOOT): 0 BODYGUARD - tight diamond, two shields step between CJ and the
 threat, two engage on a short leash; 1 ASSAULT - wide wedge, one pair advances crouched, the other
 flanks. When CJ is badly hurt everyone forms a ring around him. The rear guard is the medic.
 
-Registers: 0 CJ, 1 heli, 2-5 guards, 6 CJ car/-1, 7 tactics, 8 fire mode, 9-11 CJ xyz, 12 now,
-13-16 threats, 17 group, 18 threat count (perception) / CJ speed (guards), 19 message scratch,
+Registers: 0 CJ, 1 heli, 2-5 guards, 6 CJ car/-1, 7 tactics, 8 attackers (brain), 9-11 CJ xyz, 12 now,
+13-16 each guard's man (-1 = none), 17 group, 18 threat count (perception) / CJ speed (guards), 19 message scratch,
 20 move speed, 21-23 guard xyz, 24 guard-CJ distance, 25 target, 26-31 scratch.
 """
 from asm_v25 import *
 import build_v25 as b
 from msg_v42 import say
-from threat_v41 import emit_score,SHOOTER_FRESH_MS,SCORE_FOCUS
 s=Script();a=s.add
 FIELDS={'TASK':0,'NEXT':1,'TX':2,'TY':3,'LX':4,'LY':5,'LT':6,'DEAD':7,'TGT':8,'COVER':9}
 # TASK values: -1 not set up, 0 idle, 1 moving, 2 sector watch, 3 shooting, 4 entering car,
 # 5 riding, 6 leaving car, 7 path-node move, 8 crouched assault, 9 medic, 10 timed attack,
 # 11 climbing an obstacle, 12 moving while shooting, 13 turning to the sector (assault),
-# 15 reload drill, 16 relaxed (quiet), 17 suppressive fire at the last seen spot
+# 15 reload drill, 16 relaxed (quiet), 18 weapon on the man but no fire (the brain said cease fire)
 def fk(k,f):return b.SQ_SLOT+k*b.SQ_SLOT_SIZE+FIELDS[f]
 _n=[0]
 def uid(p):_n[0]+=1;return p+'_'+str(_n[0])
@@ -55,8 +58,11 @@ NEAR=[-6.,-3.,0.,3.,6.]
 MID=[-27.,-18.,-9.,0.,9.,18.,27.]
 
 s.label('INIT');a(0)
-s.set(b.SQ_GROUP,0);s.set(b.SQ_SCAN_NEXT,0);s.set(b.SQ_MSG_NEXT,0);s.set(b.SQ_MEDIC_NEXT,0);reset_threats();reset_slots()
-s.label('LOOP');a(1,I(100));a(0x01bd,V(12));a(0xddc,I(b.SQ_HEART),V(12))
+s.set(b.SQ_GROUP,0);s.set(b.SQ_TICK,0);s.set(b.SQ_SCAN_NEXT,0);s.set(b.SQ_MSG_NEXT,0);s.set(b.SQ_MEDIC_NEXT,0);reset_threats();reset_slots()
+s.label('LOOP');a(1,I(0));a(0x01bd,V(12));a(0xddc,I(b.SQ_HEART),V(12))
+s.call('BRAIN_FRAME')                                    # every frame: the brain's word for each guard
+s.get(19,b.SQ_TICK);s.check(0x801d,[V(19),V(12)],'LOOP')   # everything else ten times a second (due when the time HAS come: at 10 fps that is every frame)
+a(0x0085,V(19),V(12));a(0x000a,V(19),I(100));a(0xddc,I(b.SQ_TICK),V(19))
 s.check(0x0256,[I(0)],'RELEASE');s.get(19,b.STATE)
 for st in [0,1,4,5,6,13]:
  nxt='STATE_OK_'+str(st);s.eq(19,st,nxt);s.go('RELEASE');s.label(nxt)
@@ -80,11 +86,14 @@ s.label('GROUP_ACTIVE');a(0x00a0,V(0),V(9),V(10),V(11));a(6,V(6),I(-1));s.check(
 a(0xddc,I(b.SQ_CARH),V(6));s.set(b.SQ_DRIVES,0);s.eq(6,-1,'DRV_CHECK');s.go('DRV_DONE')
 s.label('DRV_CHECK');a(0x046c,V(6),V(26));s.check(0x003b,[V(26),V(0)],'DRV_DONE');s.set(b.SQ_DRIVES,1)
 s.label('DRV_DONE')
-s.get(7,b.TACTICS);s.get(8,b.FIRE)
+s.get(7,b.TACTICS)
 # CJ inside an interior: the team waits outside (no teleport into interior coordinates)
 a(0x077e,V(19));s.eq(19,0,'LOOP')
 s.call('ANCHOR');s.call('PERCEIVE')
-for i in range(4):s.get(13+i,b.SQ_T+i)
+# each guard's man: the one the brain has him firing at (or holding fire on). A suspect he is only told to cover does not take him out
+# of the formation.
+for k in range(4):
+ nx=uid('MAN');a(6,V(13+k),I(-1));s.get(19,b.SQ_BR_ST+k);s.check(0x0019,[V(19),I(1)],nx);s.get(13+k,b.SQ_BR_TG+k);s.label(nx);a(0xddc,I(b.SQ_T+k),V(13+k))
 a(0x06ac,V(0),V(18))
 for k in range(4):s.call('GUARD_%d'%k)
 s.go('LOOP')
@@ -112,67 +121,47 @@ a(0xddc,I(b.FORM_UX),V(26));a(0xddc,I(b.FORM_UY),V(27));s.set(b.FORM_CT,0);s.ret
 s.label('AN_IDLE');s.set(b.FORM_CT,0)
 s.label('AN_RET');s.ret()
 
-# ---------------------------------------------------------------- perception
-# v40.1: the work is spread over four ticks (phase in SQ_SCAN_NEXT) so no single frame carries
-# the whole scan: 0 = re-check the list, the fire worker's targets and the fine cells near CJ;
-# 1/2 = the two halves of the coarse cells; 3 = drivers of nearby cars, then the radio calls.
-s.label('PERCEIVE');s.get(19,b.SQ_SCAN_NEXT)
-for i in range(4):s.get(13+i,b.SQ_T+i)
-s.get(18,b.SQ_THREATS)
-s.eq(19,0,'PH_1');a(6,V(18),I(0))
-for i in range(4):
- drop=uid('KEEP_DROP');placed=uid('KEEP_PLACED');a(0x0085,V(29),V(13+i));a(6,V(31),I(1));s.call('CLASSIFY');s.eq(30,1,drop)
- for j in range(i+1):
-  nj=uid('KEEP_AT');s.eq(18,j,nj);a(0x0085,V(13+j),V(29));s.go(placed);s.label(nj)
- s.label(placed);a(0x000a,V(18),I(1));s.label(drop)
-for j in range(4):
- keep=uid('CLEAR_TAIL');s.check(0x8019,[V(18),I(j)],keep);a(6,V(13+j),I(-1));s.label(keep)
-# whatever the door gunners are engaging is a candidate too (still checked against the rules)
-for key in [b.TB_SHOOTER,b.FIRE_TARGET]+[b.GUARD_TARGET+i for i in range(4)]:
- s.get(29,key);s.call('CONSIDER');s.check(0x8019,[V(18),I(3)],'PERCEIVE_STORE')
-for x in NEAR:
- for y in NEAR:
-  a(0x0087,V(26),V(9));a(0x000b,V(26),F(x));a(0x0087,V(27),V(10));a(0x000b,V(27),F(y));a(0x0a3e,V(26),V(27),V(11),F(1.6),F(1.6),F(4),V(29));s.call('CONSIDER');s.check(0x8019,[V(18),I(3)],'PERCEIVE_STORE')
-s.go('PERCEIVE_STORE')
-MID_CELLS=[(x,y) for x in MID for y in MID if not (x==0 and y==0)]  # the fine grid covers the centre
-for ph,cells in [(1,MID_CELLS[:len(MID_CELLS)//2]),(2,MID_CELLS[len(MID_CELLS)//2:])]:
- s.label('PH_%d'%ph);s.eq(19,ph,'PH_%d'%(ph+1))
- for x,y in cells:
-  a(0x0087,V(26),V(9));a(0x000b,V(26),F(x));a(0x0087,V(27),V(10));a(0x000b,V(27),F(y));a(0x0a3e,V(26),V(27),V(11),F(4.6),F(4.6),F(10),V(29));s.call('CONSIDER');s.check(0x8019,[V(18),I(3)],'PERCEIVE_STORE')
- s.go('PERCEIVE_STORE')
-s.label('PH_3')
-for dx,dy in [(-30,-30),(0,-30),(-30,0),(0,0)]:
- nxt=uid('CAR_NEXT');a(0x0087,V(26),V(9));a(0x000b,V(26),F(dx));a(0x0087,V(27),V(10));a(0x000b,V(27),F(dy));a(0x0087,V(28),V(26));a(0x000b,V(28),F(30));a(0x0087,V(31),V(27));a(0x000b,V(31),F(30))
- a(0x053e,V(26),V(27),V(28),V(31),I(-1),V(23));s.check(0x056e,[V(23)],nxt);s.check(0x803b,[V(23),V(1)],nxt);s.check(0x803b,[V(23),V(6)],nxt);a(0x046c,V(23),V(29));s.call('CONSIDER');s.check(0x8019,[V(18),I(3)],'PERCEIVE_STORE');s.label(nxt)
-s.label('PERCEIVE_STORE');s.eq(18,0,'PS_BUSY');s.go('PS_STORE');s.label('PS_BUSY');a(0xddc,I(b.SQ_QUIET_T),V(12));s.label('PS_STORE')
-for i in range(4):a(0xddc,I(b.SQ_T+i),V(13+i))
-a(0xddc,I(b.SQ_THREATS),V(18));s.get(19,b.SQ_SCAN_NEXT);a(0x000a,V(19),I(1));s.check(0x8019,[V(19),I(3)],'PH_WRAP');a(0xddc,I(b.SQ_SCAN_NEXT),V(19));s.ret()
-s.label('PH_WRAP');s.set(b.SQ_SCAN_NEXT,0)
-# v41: rate the threats (threat_v41.THREAT_SCORE) and sort them, most dangerous first: guard 0 and
-# every guard without a threat of his own take the top one.
-for i in range(4):
- none=uid('SC_NONE');done=uid('SC_DONE');a(0x0085,V(29),V(13+i));alive(29,none);s.call('SQ_SCORE');a(0xddc,I(b.SQ_SC+i),V(30));s.go(done)
- s.label(none);s.set(b.SQ_SC+i,-10000);s.label(done)
-SREG=[27,28,31,19]
-for i in range(4):s.get(SREG[i],b.SQ_SC+i)
-for i,j in [(0,1),(2,3),(0,2),(1,3),(1,2)]:
- keep=uid('SORT_KEEP');s.check(0x001d,[V(SREG[j]),V(SREG[i])],keep)
- a(0x0085,V(29),V(SREG[i]));a(0x0085,V(SREG[i]),V(SREG[j]));a(0x0085,V(SREG[j]),V(29))
- a(0x0085,V(29),V(13+i));a(0x0085,V(13+i),V(13+j));a(0x0085,V(13+j),V(29));s.label(keep)
-for i in range(4):a(0xddc,I(b.SQ_SC+i),V(SREG[i]));a(0xddc,I(b.SQ_T+i),V(13+i))
-# radio calls: kind and direction of the first contact, of every new top threat scoring 120+ (throttled),
+# ---------------------------------------------------------------- the brain, every frame
+# 27@ = what this guard is to do (0 nothing, 1 cover the man, 2 fire, 3 cease fire now), 28@ = the man. A guard who is on a firing task
+# and is told to cease fire gets an aiming task at once: the game's own weapon handling stops with the task that drove it.
+s.label('BRAIN_FRAME');s.eq(17,0,'BF_GO');s.ret()
+s.label('BF_GO');s.get(26,b.BRAIN_HELLO);s.check(0x0039,[V(26),I(b.BRAIN_MAGIC)],'BF_NONE')
+for k in range(4):
+ G=2+k;nxt=uid('BF_NEXT');hold=uid('BF_HOLD')
+ a(0x0085,V(26),V(G));a(0x0e48,V(26),I(3),I(2));a(0xddc,I(b.SQ_BR_ST+k),V(27));a(0xddc,I(b.SQ_BR_TG+k),V(28))
+ s.eq(27,3,nxt);s.get(29,fk(k,'TASK'))
+ for task in (3,8,10,12):s.check(0x8039,[V(29),I(task)],hold)
+ s.go(nxt)
+ s.label(hold);alive(G,nxt);alive(28,nxt);a(0x00a0,V(28),V(29),V(30),V(31));a(0x0667,V(G),V(29),V(30),V(31),I(1000));setk_lit(k,'TASK',18);setk(k,'TGT',28);later(k,600)
+ s.label(nxt)
+s.ret()
+s.label('BF_NONE')
+for k in range(4):s.set(b.SQ_BR_ST+k,0);s.set(b.SQ_BR_TG+k,-1)
+s.ret()
+
+# ---------------------------------------------------------------- the brain's picture, ten times a second
+# 24@ alert, 25@ threats, 26@ attackers, 27@ kills, 28@ the most dangerous man, 29@ ms since CJ fired (-1 = long ago), 30@/31@ the
+# direction of that shot. Leaves 18@ = threats, 8@ = attackers, 13@ = the most dangerous man (-1 = none) for the radio calls.
+s.label('PERCEIVE');s.get(19,b.BRAIN_HELLO);s.check(0x0039,[V(19),I(b.BRAIN_MAGIC)],'PV_NONE')
+a(0x0e48,V(24),I(8),I(3))
+# CJ's own line of fire: the formation keeps out of it (FIRE_LINE)
+s.check(0x0019,[V(29),I(-1)],'PV_NO_AIM');a(0x0085,V(19),V(12));a(0x0062,V(19),V(29));a(0xddc,I(b.CJ_AIM_T),V(19));a(0xddc,I(b.CJ_AIM_X),V(30));a(0xddc,I(b.CJ_AIM_Y),V(31));s.label('PV_NO_AIM')
+a(0x0085,V(18),V(25));a(0x0085,V(8),V(26));a(6,V(13),I(-1));s.check(0x0019,[V(28),I(0)],'PV_STORE');a(0x0085,V(13),V(28));s.go('PV_STORE')
+s.label('PV_NONE');a(6,V(18),I(0));a(6,V(8),I(0));a(6,V(13),I(-1))
+s.label('PV_STORE');a(0xddc,I(b.SQ_THREATS),V(18));s.eq(18,0,'PS_BUSY');s.go('PS_STORE');s.label('PS_BUSY');a(0xddc,I(b.SQ_QUIET_T),V(12));s.label('PS_STORE')
+# radio calls: kind and direction of the first contact, of every new most dangerous man who is attacking (throttled),
 # and "area secure" 3.5 s after the last threat
 s.eq(18,0,'CALL_CONTACT')
 s.get(19,b.SQ_CONTACT);s.eq(19,1,'CALL_RET');s.get(19,b.SQ_CLEAR_AT);s.eq(19,0,'CALL_CLEAR_CHECK');a(0x0085,V(19),V(12));a(0x000a,V(19),I(3500));a(0xddc,I(b.SQ_CLEAR_AT),V(19));s.ret()
 s.label('CALL_CLEAR_CHECK');s.check(0x001d,[V(12),V(19)],'CALL_RET');s.set(b.SQ_CONTACT,0);s.set(b.SQ_CLEAR_AT,0);s.set(b.SQ_CALLED,-1);msg('SQCLR',False);s.ret()
 s.label('CALL_CONTACT');s.set(b.SQ_CLEAR_AT,0);s.get(19,b.SQ_CONTACT);s.eq(19,0,'CALL_NEW_TOP');s.set(b.SQ_CONTACT,1);a(6,V(26),I(0));s.go('CALL_ANNOUNCE')
-s.label('CALL_NEW_TOP');s.get(19,b.SQ_CALLED);s.check(0x803b,[V(13),V(19)],'CALL_RET');s.get(19,b.SQ_SC);s.check(0x0019,[V(19),I(SCORE_FOCUS-1)],'CALL_RET');s.get(19,b.SQ_MSG_NEXT);s.check(0x001d,[V(12),V(19)],'CALL_RET');a(6,V(26),I(1))
-s.label('CALL_ANNOUNCE');a(0xddc,I(b.SQ_CALLED),V(13))
+s.label('CALL_NEW_TOP');s.get(19,b.SQ_CALLED);s.check(0x803b,[V(13),V(19)],'CALL_RET');s.check(0x0019,[V(8),I(0)],'CALL_RET');s.get(19,b.SQ_MSG_NEXT);s.check(0x001d,[V(12),V(19)],'CALL_RET');a(6,V(26),I(1))
+s.label('CALL_ANNOUNCE');alive(13,'CALL_RET');a(0xddc,I(b.SQ_CALLED),V(13))
 # kind (27@): 0 plain, 1 shooting at CJ, 2 sniper, 3 vehicle, 4 roof
-a(6,V(27),I(0));s.get(19,b.TB_SHOOTER);s.check(0x003b,[V(13),V(19)],'KIND_NOT_X');s.get(19,b.TB_SHOOTER_T);a(0x0085,V(20),V(12));a(0x0062,V(20),V(19));s.check(0x8019,[V(20),I(SHOOTER_FRESH_MS)],'KIND_NOT_X');a(6,V(27),I(1));s.go('KIND_DONE')
-s.label('KIND_NOT_X');a(0x0470,V(13),V(19));s.check(0x0019,[V(19),I(32)],'KIND_NOT_S');s.check(0x0019,[V(19),I(34)],'KIND_S');s.go('KIND_NOT_S');s.label('KIND_S');a(6,V(27),I(2));s.go('KIND_DONE')
+a(6,V(27),I(0));a(0x0470,V(13),V(19));s.check(0x0019,[V(19),I(32)],'KIND_NOT_S');s.check(0x0019,[V(19),I(34)],'KIND_S');s.go('KIND_NOT_S');s.label('KIND_S');a(6,V(27),I(2));s.go('KIND_DONE')
 s.label('KIND_NOT_S');s.check(0x00df,[V(13)],'KIND_NOT_V');a(6,V(27),I(3));s.go('KIND_DONE')
-s.label('KIND_NOT_V');a(0x00a0,V(13),V(20),V(21),V(22));a(0x0063,V(22),V(11));s.check(0x0021,[V(22),F(6)],'KIND_DONE');a(6,V(27),I(4))
+s.label('KIND_NOT_V');a(0x00a0,V(13),V(20),V(21),V(22));a(0x0063,V(22),V(11));s.check(0x0021,[V(22),F(6)],'KIND_NOT_R');a(6,V(27),I(4));s.go('KIND_DONE')
+s.label('KIND_NOT_R');s.check(0x0019,[V(8),I(0)],'KIND_DONE');a(6,V(27),I(1))   # somebody is attacking: "shots at CJ"
 s.label('KIND_DONE')
 # direction (28@) of the threat relative to CJ's heading: 0 front, 1 left, 2 rear, 3 right
 a(0x00a0,V(13),V(20),V(21),V(22));a(0x0063,V(20),V(9));a(0x0063,V(21),V(10));a(0x0604,V(20),V(21),V(29));a(0x0172,V(0),V(30));a(0x0063,V(29),V(30))
@@ -198,51 +187,6 @@ def call_table(prefix,throttle):
 call_table('CT0_',False)
 s.label('CALL_THROTTLED');call_table('CT1_',True)
 s.label('CALL_RET');s.ret()
-emit_score(s,'SQ_SCORE',29,30,[0,2,3,4,5],dict(cx=9,cy=10,cz=11,tx=20,ty=21,tz=22,d=23,t1=24,t2=25,t3=26))
-# 29@ candidate: append to the threat list when it is new, there is room and CLASSIFY accepts it.
-s.label('CONSIDER');s.check(0x0019,[V(18),I(3)],'CON_ROOM');s.ret()
-s.label('CON_ROOM')
-for j in range(4):s.check(0x803b,[V(29),V(13+j)],'CON_RET')
-a(6,V(31),I(0));s.call('CLASSIFY');s.eq(30,1,'CON_RET')
-for j in range(4):
- nj=uid('CON_AT');s.eq(18,j,nj);a(0x0085,V(13+j),V(29));s.go('CON_COUNT');s.label(nj)
-s.label('CON_COUNT');a(0x000a,V(18),I(1))
-s.label('CON_RET');s.ret()
-
-# 30@ = 1 when 29@ is a threat under the current rules of engagement. 31@ = 1: an existing threat,
-# kept while it stays in range (no need to keep shooting); police still drop out at wanted level 0.
-# Uses 19-25.
-s.label('CLASSIFY');a(6,V(30),I(0));alive(29,'CL_RET')
-s.check(0x803b,[V(29),V(0)],'CL_RET');s.check(0x8448,[V(29),V(1)],'CL_RET')
-a(0x00a0,V(29),V(20),V(21),V(22));a(0x050a,V(20),V(21),V(22),V(9),V(10),V(11),V(22));s.check(0x0023,[F(55),V(22)],'CL_RET')
-# The team, the crew and the pilot are all Grove-type (8): only for those run the friend checks.
-a(0x089f,V(29),V(23));s.eq(23,8,'CL_STRANGER')
-for i in range(2,7):s.get(19,b.PUB+i);s.check(0x803b,[V(29),V(19)],'CL_RET')
-for i in range(5):s.get(19,b.GROUND_PUB+i);s.check(0x803b,[V(29),V(19)],'CL_RET')
-s.label('CL_STRANGER')
-s.get(19,b.TB_SHOOTER);s.check(0x003b,[V(29),V(19)],'CL_NOT_SHOOTER');s.get(19,b.TB_SHOOTER_T);a(0x0085,V(25),V(12));a(0x0062,V(25),V(19));s.check(0x8019,[V(25),I(SHOOTER_FRESH_MS)],'CL_NOT_SHOOTER');s.go('CL_ACCEPT');s.label('CL_NOT_SHOOTER')
-# Anyone who hurt CJ or one of the team is hostile under every mode (self-defence).
-s.check(0x051a,[V(0),V(29)],'CL_NOT_ATTACKER_CJ');s.go('CL_ACCEPT');s.label('CL_NOT_ATTACKER_CJ')
-for k in range(4):
- nxt=uid('CL_NOT_ATTACKER');alive(2+k,nxt);s.check(0x051a,[V(2+k),V(29)],nxt);s.go('CL_ACCEPT');s.label(nxt)
-s.eq(8,0,'CL_ROE');s.ret()
-s.label('CL_ROE');a(0x0470,V(29),V(24))
-s.eq(8,2,'CL_NOT_FOLLOW');s.eq(31,1,'CL_FOLLOW_AIM');s.go('CL_ACCEPT');s.label('CL_FOLLOW_AIM');s.check(0x0457,[I(0),V(29)],'CL_RET');s.go('CL_ACCEPT')
-s.label('CL_NOT_FOLLOW');s.eq(23,8,'CL_NOT_GROVE');s.ret()
-s.label('CL_NOT_GROVE');s.eq(23,6,'CL_NOT_COP');a(0x01c0,I(0),V(25));s.check(0x0019,[V(25),I(0)],'CL_RET');s.go('CL_ACCEPT')
-s.label('CL_NOT_COP');s.eq(31,1,'CL_FRESH');s.go('CL_ACCEPT');s.label('CL_FRESH')
-# armed = pistols .. minigun (22-38) or thrown explosives (16-18)
-s.check(0x0019,[V(24),I(21)],'CL_THROWN');s.check(0x0019,[V(24),I(38)],'CL_ARMED');s.ret()
-s.label('CL_THROWN');s.check(0x0019,[V(24),I(15)],'CL_RET');s.check(0x0019,[V(24),I(18)],'CL_ARMED');s.ret()
-s.label('CL_ARMED');s.eq(8,1,'CL_CAREFUL');s.go('CL_ACCEPT')
-s.label('CL_CAREFUL');s.check(0x02e0,[V(29)],'CL_GANG');s.go('CL_ACCEPT')
-s.label('CL_GANG');s.check(0x0023,[F(20),V(22)],'CL_RET')
-for gang in [7,9,10]:
- nxt=uid('CL_GANG_NEXT');s.eq(23,gang,nxt);s.go('CL_ACCEPT');s.label(nxt)
-s.ret()
-s.label('CL_ACCEPT');a(6,V(30),I(1))
-s.label('CL_RET');s.ret()
-
 # ---------------------------------------------------------------- one guard
 def formation(k,table,lead=True):
   """26-28 = point `ox` to the right and `oy` ahead of CJ in the formation frame (unit travel direction u = FORM_UX/UY, right = (uy, -ux));
@@ -287,10 +231,19 @@ def move_to(k,G,speed,ms=2500,every=800):
  s.label(drift);s.get(29,fk(k,'TX'));s.get(30,fk(k,'TY'));a(0x0509,V(26),V(27),V(29),V(30),V(31));s.check(0x0021,[V(31),F(1.0)],'G%d_RET'%k)
  s.label(issue);a(0x04eb,V(G),I(0))
  a(0x05d3,V(G),V(26),V(27),V(28),speed,I(ms));setk(k,'TX',26);setk(k,'TY',27);setk_lit(k,'TASK',1);later(k,every);s.ret()
+def may_fire(k,no):
+ """Go on while the brain lets this guard fire at his man (state 2); else jump to `no` - he keeps his man (CJ or one of ours is in his
+ line just now) and does everything his tactics ask for except pull the trigger."""
+ s.get(31,b.SQ_BR_ST+k);s.check(0x0039,[V(31),I(2)],no)
+def hold_aim(k,G):
+ """Weapon on his man 25@, no fire (TASK 18). Returns from the guard routine."""
+ issue=uid('HOLD_ISSUE');same_order(k,18,25,issue);s.label(issue);a(0x00a0,V(25),V(26),V(27),V(28));a(0x0667,V(G),V(26),V(27),V(28),I(1000));order(k,18,25,600)
 def shoot_move(k,G,every=1200):
- """Run to 26-28 while firing at 25@ (TASK 12); re-issued for a new target or after `every` ms."""
+ """Run to 26-28 while firing at 25@ (TASK 12); re-issued for a new target or after `every` ms. Not allowed to fire: the same run without it."""
+ no=uid('SHOOTMOVE_HOLD');may_fire(k,no)
  issue=uid('SHOOTMOVE_ISSUE');same_order(k,12,25,issue);s.label(issue);a(0x04eb,V(G),I(0))
  a(0x0637,V(G),V(26),V(27),V(28),I(6),F(.5),F(1.0),V(25));setk(k,'TX',26);setk(k,'TY',27);order(k,12,25,every)
+ s.label(no);move_to(k,G,I(6),2500,every)
 def same_order(k,task,target_var,issue):
  """Return from the guard routine while the guard already runs `task` on target_var and the order
  has not expired; otherwise continue at `issue` (placed right after this call)."""
@@ -301,7 +254,8 @@ def shield(k,G,front,lateral):
  a(0x0087,V(26),V(29));a(0x0013,V(26),F(front));a(0x005b,V(26),V(9));a(0x0087,V(28),V(30));a(0x0013,V(28),F(-lateral));a(0x005b,V(26),V(28))
  a(0x0087,V(27),V(30));a(0x0013,V(27),F(front));a(0x005b,V(27),V(10));a(0x0087,V(28),V(29));a(0x0013,V(28),F(lateral));a(0x005b,V(27),V(28))
  a(0x0087,V(28),V(11));a(0x0509,V(21),V(22),V(26),V(27),V(31));fire=uid('SHIELD_FIRE');s.check(0x0021,[V(31),F(1.4)],fire);shoot_move(k,G,1200)
- s.label(fire);issue=uid('SHIELD_ISSUE');same_order(k,3,25,issue);s.label(issue);a(0x074d,V(G),V(25),I(1500));order(k,3,25,1200)
+ s.label(fire);no=uid('SHIELD_HOLD');may_fire(k,no);issue=uid('SHIELD_ISSUE');same_order(k,3,25,issue);s.label(issue);a(0x074d,V(G),V(25),I(1500));order(k,3,25,1200)
+ s.label(no);hold_aim(k,G)
 COVER_DIRS=[(3.5,0),(2.5,2.5),(0,3.5),(-2.5,2.5),(-3.5,0),(-2.5,-2.5),(0,-3.5),(2.5,-2.5)]
 def take_cover(k,G,limit,duck):
  """v41: under fire (the threat is shooting, or this guard is below 50 HP) look once for low cover
@@ -330,21 +284,14 @@ def take_cover(k,G,limit,duck):
  s.label(P+'GO');s.get(26,b.CV_X+k);s.get(27,b.CV_Y+k);s.get(28,b.CV_Z+k);a(0x0509,V(21),V(22),V(26),V(27),V(31));s.check(0x0021,[V(31),F(1.0)],duck);shoot_move(k,G,2500)
 def engage_duck(k,G,limit=None):
  if limit is None:
-  issue=uid('DUCK_ISSUE');same_order(k,8,25,issue);s.label(issue);a(0x0634,V(G),V(25),I(1),I(1000),I(60));order(k,8,25,3000);return
+  no=uid('DUCK_HOLD');may_fire(k,no);issue=uid('DUCK_ISSUE');same_order(k,8,25,issue);s.label(issue);a(0x0634,V(G),V(25),I(1),I(1000),I(60));order(k,8,25,3000)
+  s.label(no);hold_aim(k,G);return
  duck=uid('DUCK_HERE');take_cover(k,G,limit,duck);s.label(duck)
- # v1.1: a threat that slipped out of sight gets 4 s of suppressive fire at the spot where this
- # guard last saw him (TASK 17), while the flankers work around
- sup=uid('SUP_KEEP');s.get(31,fk(k,'TASK'));s.eq(31,17,sup);s.get(31,fk(k,'TGT'));s.check(0x003b,[V(31),V(25)],sup);s.get(31,fk(k,'NEXT'));s.check(0x001d,[V(12),V(31)],'G%d_RET'%k);s.label(sup)
- issue=uid('DUCK_ISSUE');same_order(k,8,25,issue);s.label(issue)
- hidden=uid('SUP_HIDDEN');shoot=uid('SUP_DUCK')
- a(0x00a0,V(25),V(26),V(27),V(28));a(0x000b,V(28),F(.5));a(0x0087,V(30),V(23));a(0x000b,V(30),F(.6))
- s.check(0x06bd,[V(21),V(22),V(30),V(26),V(27),V(28),I(1),I(0),I(0),I(0),I(0)],hidden)
- a(0xddc,I(b.LS_X+k),V(26));a(0xddc,I(b.LS_Y+k),V(27));a(0xddc,I(b.LS_Z+k),V(28));a(0xddc,I(b.LS_T+k),V(12));s.go(shoot)
- s.label(hidden);s.get(31,b.LS_T+k);a(0x0085,V(30),V(12));a(0x0062,V(30),V(31));s.check(0x8019,[V(30),I(4000)],shoot)
- s.get(26,b.LS_X+k);s.get(27,b.LS_Y+k);s.get(28,b.LS_Z+k);a(0x0668,V(G),V(26),V(27),V(28),I(1500));order(k,17,25,1500)
- s.label(shoot);a(0x0634,V(G),V(25),I(1),I(1000),I(60));order(k,8,25,3000)
+ no=uid('DUCK_HOLD');may_fire(k,no);issue=uid('DUCK_ISSUE');same_order(k,8,25,issue);s.label(issue);a(0x0634,V(G),V(25),I(1),I(1000),I(60));order(k,8,25,3000)
+ s.label(no);hold_aim(k,G)
 def engage_timed(k,G):
- issue=uid('TIMED_ISSUE');same_order(k,10,25,issue);s.label(issue);a(0x07a5,V(G),V(25),I(3000));order(k,10,25,2500)
+ no=uid('TIMED_HOLD');may_fire(k,no);issue=uid('TIMED_ISSUE');same_order(k,10,25,issue);s.label(issue);a(0x07a5,V(G),V(25),I(3000));order(k,10,25,2500)
+ s.label(no);hold_aim(k,G)
 def leash(k,G,limit,speed):
  """Further than `limit` from CJ (70% of it when this guard is below 50 HP): go back to the
  formation point instead of fighting."""
@@ -399,14 +346,10 @@ def guard(k):
  a(0x0087,V(28),V(23));a(0x000b,V(28),F(2));a(0x02ce,V(26),V(27),V(28),V(28));a(0x0087,V(31),V(23));a(0x000b,V(31),F(-.4));s.check(0x8025,[V(28),V(31)],P+'VAULT_DONE')
  a(0x0604,V(29),V(30),V(31));a(0x0173,V(G),V(31));a(0x04eb,V(G),I(0));a(0x078f,V(G),I(1));setk_lit(k,'TASK',11);later(k,1800);s.ret()
  s.label(P+'VAULT_DONE')
- # ---- combat: 1.2: a guard stays on the target he is already engaging while it lives and is still a threat (no flipping at every
- # perception pass); guard 0 always takes the top threat, so the team never ignores a new danger. Otherwise: own threat (spread
- # over the list), else the first one
- if k>0:
-  s.get(25,fk(k,'TGT'));alive(25,P+'PICK')
-  for j in range(4):s.check(0x803b,[V(25),V(13+j)],P+'COMBAT')
- s.label(P+'PICK');a(0x0085,V(25),V(13+k));alive(25,P+'T0');s.go(P+'COMBAT')
- s.label(P+'T0');a(0x0085,V(25),V(13));alive(25,P+'PEACE')
+ # ---- combat: the man the brain has given this guard (it shares the men out, keeps a guard on his man and puts two on the worst)
+ # (told to cease fire - CJ or one of ours is in his line - he still moves as his tactics say, to the shield point or to cover, without
+ # firing: see may_fire. The brain looks again from where he then stands.)
+ a(0x0085,V(25),V(13+k));alive(25,P+'PEACE')
  s.label(P+'COMBAT');a(0x00a0,V(25),V(26),V(27),V(28));a(0x0087,V(29),V(26));a(0x0063,V(29),V(9));a(0x0087,V(30),V(27));a(0x0063,V(30),V(10))
  a(0x0509,V(9),V(10),V(26),V(27),V(31));s.check(0x0023,[F(.5),V(31)],P+'D_OK');a(0x0007,V(31),F(.5));s.label(P+'D_OK');a(0x0073,V(29),V(31));a(0x0073,V(30),V(31))
  a(0x0226,V(0),V(31));s.check(0x0019,[V(31),I(35)],P+'CRIT')

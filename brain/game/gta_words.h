@@ -81,6 +81,10 @@ static const struct gta_word GTA_WORDS[] = {
     {0x4269a0, 0x79c06508U},   /* model index +0x32 */
     {0x5ab86c, 0xf9400408U},   /* group members +0x8 */
     {0x3fcfb0, 0xb9404d00U},   /* player group +0x4c */
+    {0x50cf18, 0xf00019faU},   /* line of sight: page of the GOT entry of pIgnoreEntity */
+    {0x50cf24, 0xf940c35aU},   /* line of sight: the GOT entry +0x180 */
+    {0x3f1fcc, 0x12003c28U},   /* CollectParameters (CLEO reads opcode parameters with it) */
+    {0x3f2654, 0xf940100aU},   /* GetPointerToScriptVariable */
 };
 
 /* GOT slots that are swapped, and the function each must point to before the swap */

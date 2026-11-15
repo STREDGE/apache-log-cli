@@ -14,6 +14,9 @@ def orders(w,op,who):return [x[2] for x in w.calls if x[1]==op and x[2][0]==who]
 def last(w,op,who):
  o=orders(w,op,who);assert o,(hex(op),who);return o[-1]
 def steps(w,vms,n):w.step(*vms,n=n)
+def shoots_cj(w,who):
+ """who fires at CJ, every frame from now on (the brain sees the rounds pass him)."""
+ w.shot_at=dict(getattr(w,'shot_at',{}));w.shot_at[who]=[w.player[0],w.player[1],w.player[2]+1.];w.shooting_chars.add(who)
 
 def escort_world(tactics=0,fire=3,crew=None):
  """Support following CJ, then TEAM ON FOOT: rope hover, four guards down, back to FOLLOW."""
@@ -222,10 +225,10 @@ o=last(w,0x5d3,team[1]);assert abs(o[1]-BG[1][1])<.01 and abs(o[2]+BG[1][0])<.01
 passed('Slots are placed in the anchored frame: ahead = travel direction, right = (uy, -ux)')
 # CJ shooting ahead: nobody stands in his line of fire
 w,c,V,team=anchor_scene()
-def aim_north(w):
- for key,val in ((b.CJ_AIM_X,0.),(b.CJ_AIM_Y,1.),(b.CJ_AIM_Z,0.),(b.CJ_AIM_PX,0.),(b.CJ_AIM_PY,0.),(b.CJ_AIM_PZ,1.)):w.shared[key]=val
- w.shared[b.CJ_AIM_T]=w.now;w.shared[b.CJ_SHOT_T]=w.now
-aim_north(w);w.calls.clear();w.now+=1500;aim_north(w);steps(w,V,3)
+w.cj_aim=[0.,30.,1.];w.calls.clear();w.now+=1500
+for _ in range(3):w.shooting=True;steps(w,V,1)                 # the brain sees his shots and reports the line; nobody writes it by hand
+w.shooting=False
+assert w.now-w.shared[b.CJ_AIM_T]<=300 and abs(w.shared[b.CJ_AIM_X])<.05 and w.shared[b.CJ_AIM_Y]>.99,('the line of his shots comes from the brain',w.shared[b.CJ_AIM_X],w.shared[b.CJ_AIM_Y])
 o=last(w,0x5d3,team[0]);assert abs(o[1])>=1.9,('the point guard stepped out of the line',o)
 for k in (1,2):
  o=last(w,0x5d3,team[k]) if orders(w,0x5d3,team[k]) else None
@@ -249,110 +252,69 @@ assert beyond and all(x[1]==0x5d3 and abs(x[2][2]-AS[0][1])<.5 for x in beyond),
 passed('Assault: a guard 27 m from CJ turns back to his slot (25 m cap, was 40 m)')
 assert not orders(w,0x637,team[3]),'the medic never joins the advance'
 passed('Assault: the medic stays with CJ')
-# a guard keeps his target while it is alive and still a threat
-def two_hostiles():
+# a guard keeps the man the brain gave him; a new attacker goes to the guard whose hands are free
+def attackers_scene(places):
  w,c,ground,sq,team=escort_world();V=(c,ground,sq)
  for k,t_ in enumerate(team):w.pos[t_]=[BG[k][0],BG[k][1],0.]
  hs=[]
- for i,(x,y) in enumerate([(14.,6.),(16.,-6.),(12.,0.)]):
-  h=960+i;w.exists.add(h);w.pos[h]=[x,y,0.];w.pedtype[h]=7;w.weapons[h]=30;w.shooting_chars.add(h);hs.append(h)
- w.civilians=list(hs);w.damage.add((1,hs[0]));return w,c,V,team,hs
-w,c,V,team,hs=two_hostiles();w.now+=3000;steps(w,V,12)
-mine=last(w,0x634,team[3])[1];assert mine in hs,mine
-D=963;w.exists.add(D);w.pos[D]=[7.,3.,0.];w.pedtype[D]=7;w.weapons[D]=30;w.shooting_chars.add(D);w.civilians.append(D);w.damage.add((1,D))
-w.calls.clear();w.now+=1000;steps(w,V,10)
-lst=[w.shared[b.SQ_T+i] for i in range(4)];assert lst[0]==D,('a closer attacker takes the top of the list',lst)
-o3=orders(w,0x634,team[3]);assert not o3 or all(o[1]==mine for o in o3),(mine,o3,lst)
-o0=orders(w,0x634,team[0]);assert o0 and o0[-1][1]==D,('guard 0 always takes the top threat',o0)
-passed('Guards keep the target they are on while it lives (no flipping when the threat list is reshuffled)')
+ for i,(x,y) in enumerate(places):
+  h=960+i;w.exists.add(h);w.pos[h]=[x,y,0.];w.pedtype[h]=7;w.weapons[h]=30;w.health[h]=100000;shoots_cj(w,h);hs.append(h)
+ w.civilians=list(hs);return w,c,V,team,hs
+def men(w):return [w.shared[b.SQ_T+i] for i in range(4)]
+w,c,V,team,hs=attackers_scene([(14.,6.)]);w.now+=3000;steps(w,V,12)
+A=hs[0];assert men(w)==[A]*4,men(w)
+firing=[k for k in range(4) if w.shared[b.SQ_BR_ST+k]==2];free=[k for k in range(4) if w.shared[b.SQ_BR_ST+k]==3]
+assert len(firing)==3 and len(free)==1,('three rifles on one man, the fourth keeps him covered',[w.shared[b.SQ_BR_ST+k] for k in range(4)])
+D=963;w.exists.add(D);w.pos[D]=[-12.,-5.,0.];w.pedtype[D]=7;w.weapons[D]=30;w.health[D]=100000;shoots_cj(w,D);w.civilians.append(D)
+w.calls.clear();seen=[]
+for _ in range(15):steps(w,V,1);seen.append(men(w))
+assert all(m[k]==A for m in seen for k in firing),('the men who are firing never leave their man',seen)
+assert seen[-1][free[0]]==D and w.shared[b.SQ_BR_ST+free[0]]==2,('the free guard takes the new attacker',seen[-1])
+for k in range(4):
+ shots=[x[2][1] for x in w.calls if x[1] in (0x634,0x74d,0x637,0x7a5) and x[2][0]==team[k]]
+ assert all(t_==(A if k in firing else D) for t_ in shots),(k,shots)
+passed('Guards keep the man they are firing at while he lives; a new attacker is taken by the guard whose hands are free (no flipping)')
 
-# the squad adopts a shooter that the gunners' bullet-trace scan found, even outside its own search cells
+# the squad takes a man the brain names even when he is far outside anything the squad could look for itself
 w,c,ground,sq,team=escort_world();V=(c,ground,sq)
 for k,t_ in enumerate(team):w.pos[t_]=[BG[k][0],BG[k][1],0.]
-h=980;w.exists.add(h);w.pos[h]=[45.,0.,0.];w.pedtype[h]=7;w.weapons[h]=30;w.civilians=[h]
-steps(w,V,6);assert w.shared[b.SQ_T]!=h,'45 m away and silent: not noticed by the squad itself'
-w.shared[b.TB_SHOOTER]=h;w.shared[b.TB_SHOOTER_T]=w.now;steps(w,V,6)
-assert w.shared[b.SQ_T]==h,('a shooter found by the traces is adopted',[w.shared[b.SQ_T+i] for i in range(4)])
-passed('The squad adopts a shooter the bullet-trace scan found, even 45 m away outside its own search')
+h=980;w.exists.add(h);w.pos[h]=[45.,0.,0.];w.pedtype[h]=7;w.weapons[h]=30;w.health[h]=100000;w.actor_heading[h]=270.;w.civilians=[h]
+steps(w,V,6);assert h not in men(w) and not any(x[2][1]==h for x in w.calls if x[1] in (0x634,0x74d,0x637,0x7a5)),'45 m away, armed, back turned and silent: nobody\'s man'
+shoots_cj(w,h);steps(w,V,8)
+assert men(w).count(h)==4 and [w.shared[b.SQ_BR_ST+k] for k in range(4)].count(2)==3,('a shooter the brain named is taken',men(w))
+passed('The squad takes a shooter the brain names, even 45 m away')
 
-# the bullet-trace scan reads lines: what counts as CJ's own shot, as a hit on the helicopter, and how often it searches
-def aim_updated(start,end,cj_shooting,frames=36,heading=None,in_car=False):
- w,c,f=fire_world();w.shared[b.FIRE]=2;w.frame_ms=33;w.step(c,f,n=3);t0=w.shared[b.CJ_AIM_T]
- # CJ faces the way he shoots unless the scene says otherwise (degrees: 0 north, 90 west, 270 east)
- w.actor_heading[1]=heading if heading is not None else math.degrees(math.atan2(-(end[0]-start[0]),end[1]-start[1]))%360
- if in_car:w.cars[777]={'pos':[0.,0.,0.],'heading':0.};w.exists.add(777);w.incar[1]=777
- for i in range(frames):
-  w.shooting=cj_shooting and i%6==0;w.ped_bullet(list(start),list(end));w.step(c,f)
- return w.shared[b.CJ_AIM_T]!=t0
-fire_world=g['fire_world']
-assert aim_updated((.5,0.,.7),(24.,0.,1.),True),'control: his own shot, he is shooting'
-assert not aim_updated((.5,0.,.7),(24.,0.,1.),False),'a line through him while he is NOT shooting is somebody else'
-assert not aim_updated((.5,4.,.7),(24.,4.,1.),True),'a line passing 4 m beside him is not his shot'
-w,c,f=fire_world();w.shared[b.FIRE]=2;w.frame_ms=33;w.step(c,f,n=3)
-for i in range(12):w.shooting=i%6==0;w.ped_bullet([.5,0.,.7],[24.,0.,1.]);w.step(c,f)      # CJ fires a burst
-w.shooting=False;w.step(c,f,n=40);t1=w.shared[b.CJ_AIM_T]                                    # then 1.3 s of quiet
-for _ in range(20):w.ped_bullet([.5,0.,.7],[24.,0.,1.]);w.step(c,f)                          # rounds along his line, but he is not shooting
-assert w.shared[b.CJ_AIM_T]==t1,'older than 350 ms since his last shot: not his'
-passed('CJ aim line: only a round whose line passes within 1.5 m of him within 350 ms of his own shot counts as his')
-# an enemy round that missed CJ and flew on leaves its piece BEHIND him, on a line within 1.5 m of him, pointing the way the enemy
-# shot, i.e. back past the man CJ is facing. While CJ shoots that used to count as his own aim line (the gunners turned the wrong way)
-assert not aim_updated((-6.,0.,1.),(-10.,0.,1.),True,heading=270.),'an enemy round that flew past CJ (he faces the enemy, east) is not his aim line'
-assert aim_updated((-6.,0.,1.),(-10.,0.,1.),True,heading=90.),'control: the same line is his own when he faces the way it points'
-assert aim_updated((.5,0.,.7),(24.,0.,1.),True,heading=190.),'his own shot 80 degrees off the way he faces (still turning) counts'
-assert not aim_updated((.5,0.,.7),(24.,0.,1.),True,heading=30.),'a line pointing 120 degrees away from where he faces is not his'
-assert aim_updated((.5,0.,.7),(-3.67,23.64,1.),True,heading=350.),'the 0/360 seam: a line at heading 10 and CJ at 350 are 20 degrees apart, not 340'
-assert aim_updated((.5,0.,.7),(4.67,23.64,1.),True,heading=10.),'the same seam the other way round: line 350, CJ 10'
-assert aim_updated((-6.,0.,1.),(-10.,0.,1.),True,heading=270.,in_car=True),'in a car (drive-by, any direction) the heading says nothing about the aim'
-passed('CJ aim line: a round that flew past him pointing away from where he faces is not his aim (80 deg counts, 120 deg does not); in a car any direction counts')
-def scans(shooting,seconds=2.0,traces=False,every=3):
- """Trace-table reads per second. shooting: CJ fires every `every` frames (the flag lasts one frame); traces: his rounds leave traces."""
- w,c,f=fire_world();w.shared[b.FIRE]=2;w.frame_ms=33;w.step(c,f,n=12);w.now+=5000;w.actor_heading[1]=270.
- w.step(c,f,n=3);key=lambda:len([x for x in calls(w,0xddc) if x[2][0]==b.TRACE_SCAN_T]);n0=key();found=0;shots=0
- for i in range(int(seconds*1000/33)):
-  w.shooting=shooting and i%every==0
-  if w.shooting:
-   shots+=1
-   if traces:w.ped_bullet([.5,0.,.7],[24.,0.,1.])
-  t0=w.shared[b.CJ_AIM_T];w.step(c,f);found+=w.shooting and w.shared[b.CJ_AIM_T]!=t0
- return (key()-n0)/seconds,found,shots
-lost,_,_=scans(True);burst,found,shots=scans(True,traces=True);idle,_,_=scans(False)
-assert lost>=25,('a shot whose line is not found yet: the traces are read every frame (a trace lives only 75-300 ms)',lost)
-assert found==shots,('every shot of a burst gives its line in the very frame the shot is seen',found,shots)
-assert burst<=16,('once the line of a shot is found the table is not read again every frame: about one read per shot',burst)
-assert idle<=12,('when he does not shoot only on the 100 ms tick, not every frame',idle)
-passed('Bullet traces: read every frame while a shot has no line yet (%d/s), once per shot in a burst (%d/s, every shot got its line at once), on the 100 ms tick otherwise (%d/s)'%(lost,burst,idle))
-def evaded(offset):
- w,c,f=fire_world();w.step(c,f,n=3);car=w.car
- for _ in range(8):w.ped_bullet([car[0]+70.,car[1]+offset,car[2]],[car[0]+5.,car[1]+offset,car[2]]);w.step(c,f)
- return w.shared[b.HELI_SHOT_T]>0 and w.now-w.shared[b.HELI_SHOT_T]<1500
-assert evaded(3.),'control: rounds passing 3 m from the helicopter'
-assert not evaded(12.),'rounds passing 12 m from it are not "taking fire"'
-passed('Hits on the helicopter: a line within 6 m counts, one 12 m away does not')
-def search_passes():
- w,c,f=fire_world();w.step(c,f,n=3);w.civilians=[]
- for _ in range(60):w.ped_bullet([40.,0.,1.],list(w.player));w.step(c,f)
- return len([x for x in calls(w,0xddc) if x[2][0]==b.TB_SEARCH_T]),w.now
-n_search,now=search_passes()
-assert 2<=n_search<=1+int(6.0/0.25)+1,(n_search,)
-passed('The reverse search for a shooter runs at most four times a second even under a stream of rounds (%d passes in 6 s)'%n_search)
+# CJ's line of fire comes from the brain (it reads his shots in the game itself): his own shot gives it in that very frame,
+# somebody else's rounds never do - the scripts read no bullet traces any more
+w,c,ground,sq,team=escort_world();V=(c,ground,sq)
+for k,t_ in enumerate(team):w.pos[t_]=[BG[k][0],BG[k][1],0.]
+steps(w,V,3);t0=w.shared[b.CJ_AIM_T]
+h=985;w.exists.add(h);w.pos[h]=[-30.,0.,1.];w.pedtype[h]=7;w.weapons[h]=30;w.health[h]=100000;w.civilians=[h]
+w.shot_at={h:[30.,0.,1.]};w.shooting_chars={h};steps(w,V,8)                       # a stranger's rounds along a line through CJ
+assert w.shared[b.CJ_AIM_T]==t0,'rounds of somebody else are never CJ\'s line, however close they pass'
+w.shooting_chars=set();w.cj_aim=[24.,0.,1.];w.shooting=True;steps(w,V,1);w.shooting=False
+assert w.now-w.shared[b.CJ_AIM_T]<=150 and w.shared[b.CJ_AIM_X]>.99 and abs(w.shared[b.CJ_AIM_Y])<.05,('his own shot: the line in the frame of the shot',w.now-w.shared[b.CJ_AIM_T],w.shared[b.CJ_AIM_X])
+t1=w.shared[b.CJ_AIM_T];steps(w,V,20);assert abs(w.shared[b.CJ_AIM_T]-t1)<=150,'no new shot: the line is not refreshed'
+assert not [x for x in w.calls if x[1]==0xdd8 and 0xCFA500<=x[2][1]<0xCFA500+16*44],'no script reads the game\'s bullet traces (the table at G+0xCFA500)'
+passed('CJ\'s line of fire comes from the brain: there in the frame of his shot, never from somebody else\'s rounds; the scripts read no bullet traces')
 
 # =================================================================== E4: gunners are not lasers
 fire_world,target=g['fire_world'],g['target']
-def bullet_ends(jitter,dist=40.):
- w,c,f=fire_world();w.jitter=jitter;npc=target(w);w.pos[npc]=[dist,0.,0.];w.damage.add((1,npc));w.speed=0.;w.step(c,f,n=40)
+def bullet_ends(dist=40.):
+ w,c,f=fire_world();npc=target(w);w.pos[npc]=[dist,0.,0.];w.health[npc]=100000;w.damage.add((1,npc));w.speed=0.;w.step(c,f,n=40)
  return [x[2][3:6] for x in calls(w,0x6bc)],w,npc
-ends,w,npc=bullet_ends(False)
-assert len(ends)>=10 and max(math.dist(e,ends[0]) for e in ends)<.05,('no jitter in the mock: every bullet lands on the same point',len(ends))
-ends,w,npc=bullet_ends(True)
-cx=[sum(e[i] for e in ends)/len(ends) for i in range(3)];spread=[math.dist(e,cx) for e in ends]
-assert len(ends)>=10 and max(spread)>.15,('the bullets scatter',max(spread))
-r=.1+.01*40.+.02*0.;assert max(spread)<=2*r*math.sqrt(3)+.7,('but stay near the target (+-%.2f m per axis at 40 m)'%r,max(spread))
-passed('Door gunners scatter their bullets (about +-0.5 m at 40 m) instead of putting every round on one point')
-near,_,_=bullet_ends(True,dist=8.);far,_,_=bullet_ends(True,dist=70.)
 def sd(e):
  m=[sum(x[i] for x in e)/len(e) for i in range(3)];return math.sqrt(sum(math.dist(x,m)**2 for x in e)/len(e))
-assert sd(near)<sd(far),(sd(near),sd(far))
-passed('The scatter grows with the distance to the target (%.2f m at 8 m, %.2f m at 70 m)'%(sd(near),sd(far)))
+ends,w,npc=bullet_ends()
+cx=[sum(e[i] for e in ends)/len(ends) for i in range(3)];spread=[math.dist(e,cx) for e in ends]
+rng_=max(math.dist(x[2][0:3],x[2][3:6]) for x in calls(w,0x6bc))                   # the real range, from the door of the helicopter
+assert len(ends)>=10 and max(spread)>.15,('the bullets scatter',len(ends),max(spread))
+r=.1+.01*rng_;assert max(spread)<=r*math.sqrt(3)+.1,('but stay near the man (+-%.2f m per axis at %d m)'%(r,rng_),max(spread))
+assert not invariants(w) and g['hit'](w)=={npc}
+passed('Door gunners scatter their bullets (+-%.1f m at %d m) instead of putting every round on one point; the scatter is the brain\'s and every round is still a checked one'%(r,rng_))
+near,_,_=bullet_ends(dist=10.);far,_,_=bullet_ends(dist=70.)
+assert len(near)>=10 and len(far)>=10 and sd(near)<sd(far),(len(near),len(far),sd(near),sd(far))
+passed('The scatter grows with the distance to the target (%.2f m at 10 m, %.2f m at 70 m)'%(sd(near),sd(far)))
 
 # =================================================================== E5: decor (model, clothes, weapon) changes at once
 for crew,expect in ((0,[106,107,106,107]),(1,[287]*4),(2,[285]*4)):
@@ -638,12 +600,18 @@ passed('A stale squad order cannot block the squad row: it is cleared by the tea
 w,c,ground,sq,team=escort_world();f=VM('Helicover_Fire',w);V=(c,ground,sq,f)
 for k,t_ in enumerate(team):w.pos[t_]=[BG[k][0],BG[k][1],0.]
 w.incar[1]=c.v[5];w.step(*V,n=12);assert w.shared[b.LEAVE_N]==1 and all(t_ in w.exists for t_ in team),'CJ flew off: the team is let go in view'
-w.incar.pop(1);w.shared[b.FIRE]=1;w.random_char=team[0];w.civilians=list(team);w.calls.clear();aimed=set()
-for _ in range(40):w.step(*V);aimed.add(w.shared[b.FIRE_TARGET])
-assert not aimed&set(team) and not calls(w,0x6bc) and not [x for x in calls(w,0x74d) if x[2][1] in team],('FIRE AT ALL does not fire at the men who are walking away',aimed,len(calls(w,0x6bc)))
-stranger=990;w.exists.add(stranger);w.pos[stranger]=[15.,5.,0.];w.pedtype[stranger]=4;w.skin[stranger]=20;w.random_char=stranger;w.civilians=[stranger];w.step(*V,n=30)
-assert calls(w,0x6bc),'(the gunners do fire in this mode: a stranger next to them is engaged)'
-passed('Guards who were let go stay friends of the gunners (even in FIRE AT ALL) until they are gone')
+w.incar.pop(1);left=[w.shared[b.LEAVE+i] for i in range(4)];assert sorted(left)==sorted(team),left
+w.calls.clear();w.step(*V,n=6)
+assert all(w.brain.marks().get(t_,(0,0))[0]==0 for t_ in team) and {o for o,_ in w.brain.ours(w)}>=set(team),'for the brain they are still ours'
+# an attacker stands right behind one of them as the gunners see it: the man walking away is in the line
+gun=w.coords(w.shared[b.PUB+3]);m=w.coords(team[0]);d=[m[i]-gun[i] for i in range(3)];L=math.sqrt(sum(x*x for x in d))
+foe=990;w.exists.add(foe);w.pos[foe]=[m[i]+d[i]/L*3. for i in range(2)]+[0.];w.pedtype[foe]=7;w.weapons[foe]=30;w.health[foe]=100000;w.civilians=[foe];shoots_cj(w,foe)
+w.step(*V,n=30)
+assert not w.bullet_violations and not invariants(w),('no round passes a man who was let go',w.bullet_violations[:3])
+assert not [x for x in w.calls if x[1] in (0x6bc,0x74d,0x634,0x637) and x[2][0] in team]+[x for x in w.calls if x[1] in (0x74d,0x634,0x637) and x[2][1] in team],'and they are nobody\'s target'
+w.pos[foe]=[25.,-10.,0.];shoots_cj(w,foe);n0=len(w.bullets);w.step(*V,n=20)
+assert len(w.bullets)>n0 and g['hit'](w)=={foe} and not w.bullet_violations,'(control: in the open the same attacker is engaged)'
+passed('Guards who were let go stay ours for the brain until they are gone: never a target, and no round is fired past them')
 
 # a ninth man let go while eight are still walking away in view: the one who left first makes room - nobody is handed to the game
 w,c,ground,sq,team=escort_world();V=(c,ground,sq)

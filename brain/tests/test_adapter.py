@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
-"""Runs libHelicoverBrain64.so (the phone build) on an emulated arm64 CPU against the player's REAL libGTASA.so.
+"""Runs libHelicoverBrain64.so (the phone build) on an emulated arm64 CPU against the player's REAL libGTASA.so and the
+REAL code of his CLEO library.
 
-    python3 brain/tests/test_adapter.py path/to/libGTASA.so [path/to/libHelicoverBrain64.so]
+    python3 brain/tests/test_adapter.py path/to/libGTASA.so path/to/libSAcleo64.so.image [path/to/libHelicoverBrain64.so]
 
-The mod's install checks read the real game code. The game's world (pools, peds, vehicles, the player, CLEO's shared
-values) is laid out in memory by this test exactly as brain/research/game_facts.md describes it; the handful of game
-functions the mod calls are replaced by recorders. The report the mod writes is then replayed by the host build of
+(the .image file and its .names.json are written by cleo-ui/tools/unpack_cleo.py from the player's libSAcleo64.so)
+
+The mod's install checks read the real game code. The game's world (pools, peds, vehicles, the player) is laid out in
+memory by this test exactly as brain/research/game_facts.md describes it; the handful of game functions the mod calls
+are replaced by recorders. The bridge is the real thing: the mod registers its opcode with CLEO's own RegisterOpcode,
+the test then calls CLEO's own opcode dispatcher on a script laid out in memory, and the parameters are read by the
+game's own CollectParameters / GetPointerToScriptVariable. The report the mod writes is replayed by the host build of
 the core: the decisions taken on the emulated arm64 CPU must be reproduced bit for bit on this computer.
 """
-import os, struct, subprocess, sys, tempfile
+import math, os, re, struct, subprocess, sys, tempfile
 from pathlib import Path
 from unicorn import *
 from unicorn.arm64_const import *
@@ -21,11 +26,16 @@ sys.path.insert(0, str(HERE.parent / 'tools'))
 import hcb_py as h
 import replay as replay_tool
 
+import json
 LIB = sys.argv[1] if len(sys.argv) > 1 else ''
-MOD = sys.argv[2] if len(sys.argv) > 2 else str(HERE.parent.parent / 'build' / 'brain' / 'libHelicoverBrain64.so')
-if not LIB:
+CLEO_FILE = sys.argv[2] if len(sys.argv) > 2 else ''
+MOD = sys.argv[3] if len(sys.argv) > 3 else str(HERE.parent.parent / 'build' / 'brain' / 'libHelicoverBrain64.so')
+if not LIB or not CLEO_FILE:
     sys.exit(__doc__)
+CLEO_BYTES = Path(CLEO_FILE).read_bytes()
+CLEO_NAMES = {int(k, 16): v.replace('dyn:', '') for k, v in json.load(open(CLEO_FILE + '.names.json')).items()}
 GTA, MODB, CLEO, STUB, STACK, DATA, SENT, WORLD = 0x7000000000, 0x7100000000, 0x7200000000, 0x6000000000, 0x6100000000, 0x6300000000, 0x6200000000, 0x6400000000
+OLDSTUB, CHEAP, TLS = 0x7600000000, 0x6500000000, 0x6600000000      # the unpacker's import stubs (baked into the image); CLEO's heap; thread data
 MODS = '/storage/emulated/0/Android_unprotected/data/com.rockstargames.gtasa/mods/'
 RET = struct.pack('<I', 0xd65f03c0)
 X = [UC_ARM64_REG_X0 + i for i in range(8)]
@@ -37,8 +47,14 @@ PLAYERS, PLAYER_FOCUS, TIME_MS, USER_PAUSE, CUTSCENE, MISSION_FLAG, SCRIPT_SPACE
 VT_USE_GUN, VT_KILL = 0x8338c8 + 0x10, 0x833c80 + 0x10
 F_SCRIPTS, F_HUD, F_GUNSHOT, F_LOS, F_POLY, F_SCREEN = 0x3f3ad8, 0x51f6f0, 0x442854, 0x5075a4, 0x6ee4a4, 0x6e9df8
 GOT_SCRIPTS, GOT_HUD, GOT_GUNSHOT = 0x845438, 0x845ec8, 0x843f10
+GOT_IGNORE, IGNORE_ENTITY, F_COLLECT, F_VARPTR, SCRIPT_PARAMS = 0x84b180, 0xbdcaf8, 0x3f1fcc, 0x3f2654, 0xa001ac
 HC_STATE = 0x48456A00
+HC_HELLO, HC_POLICE, HC_MISSION, HELLO_MAGIC = HC_STATE + 440, HC_STATE + 441, HC_STATE + 442, 0x42520021
 CLEO_IMAGE = 0x88000
+I_DISPATCH, I_REGISTER, I_MAP, I_VERSION, I_SHARED = 0x37904, 0x38a58, 0x27d988, 0x1bc30, 0x7d1f8
+I_G_COLLECT, I_G_VARPTR, I_G_PARAMS, I_G_BASE = 0x7d248, 0x7d240, 0x7d220, 0x7d1a0
+CMD_GUNNER, CMD_SQUAD, CMD_STATUS = 1, 2, 3
+CI = CLEO + CLEO_IMAGE
 
 
 def fl(v):
@@ -81,21 +97,45 @@ GTA_IMAGE = bytearray(GTA_SIZE)
 for _s in _loads:
     _d = _s.data()
     GTA_IMAGE[_s['p_vaddr']:_s['p_vaddr'] + len(_d)] = _d
+# what the linker does at load: the game's own code is run here (the script parameter readers), and it finds its data
+# through the GOT
+UNDEF = STUB + 0xfff0
+_symdata = _elf.get_section_by_name('.dynsym').data()
+for _name in ('.rela.dyn', '.rela.plt'):
+    _sec = _elf.get_section_by_name(_name)
+    for _off, _info, _add in struct.iter_unpack('<QQq', _sec.data() if _sec else b''):
+        _t, _si = _info & 0xffffffff, _info >> 32
+        if _t == 1027:
+            struct.pack_into('<Q', GTA_IMAGE, _off, GTA + _add)
+        elif _t in (1025, 1026, 257):
+            _shndx, _value = struct.unpack_from('<HQ', _symdata, _si * 24 + 6)
+            struct.pack_into('<Q', GTA_IMAGE, _off, (GTA + _value + (_add if _t == 257 else 0)) if _shndx else UNDEF)
 GTA_IMAGE = bytes(GTA_IMAGE)
 
 
 class Emu:
-    def __init__(self, tweak=None, cleo='CLEO ANDROID (64-260403)', sautils=True):
+    def __init__(self, tweak=None, cleo=None, sautils=True, mod=None, cleo_ready=True):
+        self.mod_path = mod or MOD
         self.uc = uc = Uc(UC_ARCH_ARM64, UC_MODE_ARM)
         self.imports, self.fs, self.fds, self.polys, self.items, self.prot, self.los_calls, self.threads = {}, {}, {}, [], [], [], [], []
         self.clock, self.sautils, self.walls, self.orig_calls = 1000, sautils, False, {'scripts': 0, 'hud': 0, 'gunshot': 0}
         uc.mem_map(GTA, GTA_SIZE); uc.mem_write(GTA, GTA_IMAGE)
         for slot, target in ((GOT_SCRIPTS, F_SCRIPTS), (GOT_HUD, F_HUD), (GOT_GUNSHOT, F_GUNSHOT)):      # what the linker binds at load
             uc.mem_write(GTA + slot, struct.pack('<Q', GTA + target))
-        uc.mem_map(CLEO, 0x400000)
+        uc.mem_write(GTA + GOT_IGNORE, struct.pack('<Q', GTA + IGNORE_ENTITY))
+        uc.mem_write(GTA + IGNORE_ENTITY, struct.pack('<Q', 0x5e17))          # whatever the game left there: it must still be there afterwards
+        # the player's CLEO, unpacked: its real code and data at the address the image was made for
+        self.cleo_size = (len(CLEO_BYTES) + 0xffff) & ~0xffff
+        uc.mem_map(CLEO, self.cleo_size); uc.mem_write(CLEO, CLEO_BYTES)
         if cleo:
-            uc.mem_write(CLEO + CLEO_IMAGE + 0x1bc30, cleo.encode() + b'\0')
-        uc.mem_map(STUB, 0x10000); uc.mem_map(STACK, 0x100000); uc.mem_map(DATA, 0x10000); uc.mem_map(SENT, 0x1000); uc.mem_write(SENT, RET * 4)
+            uc.mem_write(CI + I_VERSION, cleo.encode() + b'\0')
+        uc.mem_map(OLDSTUB, 0x100000); uc.mem_write(OLDSTUB, RET * (0x100000 // 4)); uc.mem_map(CHEAP, 0x100000); uc.mem_map(TLS, 0x10000)
+        uc.mem_write(TLS + 0x28, struct.pack('<Q', 0x1122334455667788)); uc.reg_write(UC_ARM64_REG_TPIDR_EL0, TLS)
+        self.cheap, self.cleo_unknown = CHEAP + 0x100, []
+        uc.hook_add(UC_HOOK_CODE, self.on_cleo_stub, begin=OLDSTUB, end=OLDSTUB + 0xfffff)
+        if cleo_ready:
+            self.cleo_finds_game()
+        uc.mem_map(STUB, 0x10000); uc.mem_write(UNDEF, RET); uc.mem_map(STACK, 0x100000); uc.mem_map(DATA, 0x10000); uc.mem_map(SENT, 0x1000); uc.mem_write(SENT, RET * 4)
         uc.mem_map(WORLD, 0x400000)
         uc.hook_add(UC_HOOK_CODE, self.on_stub, begin=STUB, end=STUB + 0xffff)
         for addr, fn in ((F_SCRIPTS, self.g_scripts), (F_HUD, self.g_hud), (F_GUNSHOT, self.g_gunshot), (F_LOS, self.g_los), (F_POLY, self.g_poly), (F_SCREEN, self.g_screen)):
@@ -109,6 +149,7 @@ class Emu:
         uc.reg_write(UC_ARM64_REG_CPACR_EL1, 3 << 20)
         self.sau = DATA + 0x6000; uc.mem_write(self.sau, struct.pack('<Q', self.sau + 0x100)); uc.mem_write(self.sau + 0x100, b''.join(struct.pack('<Q', self.stub('sau:%d' % i)) for i in range(8)))
         self.world()
+        self.cleo_before = bytes(uc.mem_read(CLEO, self.cleo_size))
         if tweak:
             tweak(self)
         self.load_mod()
@@ -128,7 +169,9 @@ class Emu:
         self.wanted = self.alloc(0x40)
         self.shared = self.alloc(0x2000)
         self.shared_n = 0
-        uc.mem_write(CLEO + CLEO_IMAGE + 0x7d1f8, struct.pack('<QQQ', self.shared, self.shared, self.shared + 0x2000))
+        uc.mem_write(CI + I_SHARED, struct.pack('<QQQ', self.shared, self.shared, self.shared + 0x2000))
+        # a CLEO script as the game keeps it: CRunningScript with its 32 local variables at +0x6c, and some code
+        self.script, self.code = self.alloc(0x200), self.alloc(0x100)
         self.cj = self.ped(0, 0, pedtype=0, flag=3)
         self.pdata = self.alloc(0xd8)
         uc.mem_write(self.pdata, struct.pack('<Q', self.wanted)); uc.mem_write(self.pdata + 0x4c, struct.pack('<I', 0))
@@ -177,18 +220,58 @@ class Emu:
             return
         t = self.alloc(0x40); self.w64(t, GTA + VT_USE_GUN); self.w64(t + 0x28, target); self.w64(intel + 0x30, t)
 
-    def veh(self, x, y, z=1., health=1000., vtype=0, driver=0, speed=(0., 0., 0.), flag=1):
+    def veh(self, x, y, z=1., health=1000., vtype=0, driver=0, speed=(0., 0., 0.), flag=1, model=400):
         uc = self.uc
         i = next(k for k in range(self.n_vehs) if bytes(uc.mem_read(self.veh_flags + k, 1))[0] & 0x80)
         v = self.veh_objs + i * VEH_STRIDE
         uc.mem_write(v, bytes(VEH_STRIDE)); uc.mem_write(self.veh_flags + i, bytes([flag]))
         mat = self.alloc(0x50)
         self.wf(mat, 1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1., 0., x, y, z, 0.)
-        self.w64(v + 0x18, mat); uc.mem_write(v + 0x5a, bytes([2 | (3 << 3)])); self.wf(v + 0x634, health); self.w32(v + 0x738, vtype)
+        self.w64(v + 0x18, mat); uc.mem_write(v + 0x5a, bytes([2 | (3 << 3)])); self.wf(v + 0x634, health); self.w32(v + 0x738, vtype); uc.mem_write(v + 0x32, struct.pack('<h', model))
         self.wf(v + 0x68, *[s / 50. for s in speed]); uc.mem_write(v + 0x5ec, b'\x03')
         if driver:
             self.w64(v + 0x5a0, driver); self.w64(driver + 0x708, v); uc.mem_write(driver + 0x585, b'\x01')
         return v
+
+    def cleo_finds_game(self):
+        """What CLEO stores when it has resolved the game's script functions (its own init, 0x2efac)."""
+        for at, v in ((I_G_COLLECT, GTA + F_COLLECT), (I_G_VARPTR, GTA + F_VARPTR), (I_G_PARAMS, GTA + SCRIPT_PARAMS), (I_G_BASE, GTA)):
+            self.w64(CI + at, v)
+
+    def on_cleo_stub(self, uc, addr, size, _):
+        n = CLEO_NAMES.get(addr)
+        if n is None:
+            return
+        x = [uc.reg_read(r) for r in X]; ret = 0
+        if n in ('malloc', '_Znwm', '_Znam'):
+            ret = self.cheap; self.cheap += (x[0] + 0x2f) & ~0xf
+        elif n == 'calloc':
+            ret = self.cheap; self.cheap += (x[0] * x[1] + 0x2f) & ~0xf
+        elif n in ('memcpy', 'memmove'): uc.mem_write(x[0], bytes(uc.mem_read(x[1], x[2]))); ret = x[0]
+        elif n == 'memset': uc.mem_write(x[0], bytes([x[1] & 255]) * x[2]); ret = x[0]
+        elif n in ('free', '_ZdlPv', '_ZdaPv', 'pthread_mutex_lock', 'pthread_mutex_unlock'): ret = 0
+        else: self.cleo_unknown.append(n)
+        uc.reg_write(UC_ARM64_REG_X0, ret & ((1 << 64) - 1))
+
+    def shared_value(self, key):
+        for k in range(self.shared_n):
+            if self.r32(self.shared + 8 * k) == key:
+                return self.r32(self.shared + 8 * k + 4)
+        return None
+
+    def locals(self, first=0, n=32):
+        return list(struct.unpack('<%di' % n, bytes(self.uc.mem_read(self.script + 0x6c + 4 * first, 4 * n))))
+
+    def opcode(self, first, count, cmd, handle=None, var=None):
+        """0E48 first_variable count command, run as CLEO runs it: its dispatcher finds the handler the mod registered.
+        Returns (handled, the `count` variables after the call, how many bytes of parameters were consumed)."""
+        if handle is not None:
+            self.w32(self.script + 0x6c + 4 * first, handle)
+        code = b'\x48\x0e' + (var if var is not None else b'\x03' + struct.pack('<H', first)) + b'\x04' + struct.pack('<b', count) + b'\x04' + struct.pack('<b', cmd) + b'\x4e\x00'
+        self.uc.mem_write(self.code, code)
+        self.w64(self.script + 0x20, self.code + 2)                       # the ip is just behind the two opcode bytes
+        handled = self.call(CI + I_DISPATCH, x=(self.script, self.script + 0x20, 0x0E48)) & 0xff
+        return handled, self.locals(first, max(1, min(count, 32 - first))), self.r64(self.script + 0x20) - self.code - 2
 
     def share(self, key, value):
         """What a Helicover script does with 0DDC."""
@@ -198,11 +281,11 @@ class Emu:
                 return
         self.w32(self.shared + 8 * self.shared_n, key); self.w32(self.shared + 8 * self.shared_n + 4, value)
         self.shared_n += 1
-        self.w64(CLEO + CLEO_IMAGE + 0x7d200, self.shared + 8 * self.shared_n)
+        self.w64(CI + I_SHARED + 8, self.shared + 8 * self.shared_n)
 
     # ---------------------------------------------------------- the mod
     def load_mod(self):
-        uc = self.uc; f = ELFFile(open(MOD, 'rb')); loads = [s for s in f.iter_segments() if s['p_type'] == 'PT_LOAD']
+        uc = self.uc; f = ELFFile(open(self.mod_path, 'rb')); loads = [s for s in f.iter_segments() if s['p_type'] == 'PT_LOAD']
         size = (max(s['p_vaddr'] + s['p_memsz'] for s in loads) + 0xffff) & ~0xffff; img = bytearray(size)
         for s in loads:
             d = s.data(); img[s['p_vaddr']:s['p_vaddr'] + len(d)] = d
@@ -275,7 +358,7 @@ class Emu:
     def g_los(self, uc, *_):
         a = struct.unpack('<3f', bytes(uc.mem_read(uc.reg_read(X[0]), 12))); b = struct.unpack('<3f', bytes(uc.mem_read(uc.reg_read(X[1]), 12)))
         flags = [uc.reg_read(r) & 0xff for r in X[2:8]] + [bytes(uc.mem_read(uc.reg_read(UC_ARM64_REG_SP), 1))[0]]
-        self.los_calls.append((a, b, flags))
+        self.los_calls.append((a, b, flags, self.r64(GTA + IGNORE_ENTITY)))
         self._ret(uc, 0 if self.walls else 1)
 
     def g_poly(self, uc, *_):
@@ -319,8 +402,25 @@ class Emu:
         o = struct.unpack('<3f', bytes(self.uc.mem_read(m + 0x30, 12)))
         self.call(self.slot(GOT_GUNSHOT), x=(0x1234, ped, 0), s=(o[0], o[1], o[2], to[0], to[1], to[2]))
 
+    def reports(self):
+        return sorted(k[len(MODS):] for k in self.fs if k.startswith(MODS + 'hcbrain_report_'))
+
     def report(self):
-        return self.fs.get(MODS + 'hcbrain_report.bin')
+        names = self.reports()
+        return self.fs[MODS + names[-1]] if names else None
+
+    def log(self):
+        return self.fs.get(MODS + 'hcbrain_log.txt', b'').decode()
+
+    def cleo_changes(self):
+        now = bytes(self.uc.mem_read(CLEO, self.cleo_size))
+        mine = set(range(I_SHARED, I_SHARED + 0x18, 8)) | {I_G_COLLECT, I_G_VARPTR, I_G_PARAMS, I_G_BASE}     # what this test itself writes as CLEO would
+        return [i - CLEO_IMAGE for i in range(0, self.cleo_size, 8) if now[i:i + 8] != self.cleo_before[i:i + 8] and i - CLEO_IMAGE not in mine]
+
+    def save(self, hud=True):
+        """Tap "Brain report" and let a frame pass; returns the newest report."""
+        self.call(self.items[1]['cb'], x=(0, 1, 0)); self.frame(n=1, hud=hud)
+        return self.report()
 
 
 results = []
@@ -331,55 +431,106 @@ def passed(t):
 
 
 def changed_bytes(e):
+    """Words of the game image that differ from what it was at load - leaving out the game clock (this test moves it) and
+    the game's own ScriptParams buffer (the game's CollectParameters fills it for every opcode of every script)."""
     now = bytes(e.uc.mem_read(GTA, GTA_SIZE))
-    return [i for i in range(0, GTA_SIZE, 8) if now[i:i + 8] != e.before[i:i + 8]]
+    own = {TIME_MS & ~7} | set(range(SCRIPT_PARAMS & ~7, SCRIPT_PARAMS + 0x88, 8))
+    return [i for i in range(0, GTA_SIZE, 8) if now[i:i + 8] != e.before[i:i + 8] and i not in own]
 
+
+def f32(v):
+    return struct.unpack('<f', struct.pack('<i', v))[0]
+
+
+N_WORDS = len(re.findall(r'^\s+\{0x', (HERE.parent / 'game' / 'gta_words.h').read_text(), re.M))
 
 # ------------------------------------------------------------------ install
 e = Emu()
 log = e.load()
 slots = [e.slot(g) for g in (GOT_SCRIPTS, GOT_HUD, GOT_GUNSHOT)]
 assert all(MODB <= s < MODB + e.mod_size for s in slots) and len(set(slots)) == 3, [hex(s) for s in slots]
-assert 'the brain is watching' in log and '66 instruction words match' in log and 'brain: 3 of 3' in log and 'CLEO recognised' in log, log
+assert 'the brain is running' in log and '%d instruction words match' % N_WORDS in log and 'brain: 3 of 3' in log and 'CLEO recognised' in log, log
 assert sorted(changed_bytes(e)) == sorted([GOT_SCRIPTS, GOT_HUD, GOT_GUNSHOT]), 'exactly three GOT slots of the game differ, nothing else'
 rw = [p for p in e.prot if p[2] == 3]; ro = [p for p in e.prot if p[2] == 1]
 assert len(rw) == len(ro) == 3 and all(p[0] % 0x4000 == 0 and p[1] == 0x4000 for p in e.prot) and not [p for p in e.prot if p[2] & 4], e.prot
-assert [i['name'] for i in e.items] == ['Brain markers', 'Brain report'] and e.items[0]['init'] == 1 and not e.threads
-passed('On the real libGTASA.so the mod finds all 66 instruction words, changes exactly three GOT slots (page made writable, then read-only again; never executable) and nothing else in the game; two items in Mods Settings')
+assert [i['name'] for i in e.items] == ['Brain markers', 'Brain report'] and e.items[0]['init'] == 0 and not e.threads
+assert not e.cleo_changes(), 'CLEO is not touched before the game runs its scripts'
+passed('On the real libGTASA.so the mod finds all %d instruction words, changes exactly three GOT slots (page made writable, then read-only again; never executable) and nothing else in the game; two items in Mods Settings, the markers off by default' % N_WORDS)
 e.frame(n=3)
 assert e.orig_calls == {'scripts': 3, 'hud': 3, 'gunshot': 0}, e.orig_calls
 passed('The game\'s own CTheScripts::Process and CHud::Draw are still called, once per call of the mod\'s functions')
+
+# ------------------------------------------------------------------ the bridge: CLEO's own RegisterOpcode and dispatcher
+assert 'bridge: opcode 0E48 registered with CLEO' in e.log() and not e.cleo_unknown, (e.log(), e.cleo_unknown)
+ch = e.cleo_changes()
+assert ch and all(I_MAP <= c < I_MAP + 0x18 for c in ch), [hex(c) for c in ch]
+assert not e.polys, 'markers are off: nothing is drawn'
+handled, v, used = e.opcode(5, 5, CMD_STATUS)
+assert handled == 1 and used == 7 and v[:4] == [0, 0, 0, 0], (handled, v, used)
+assert e.call(CI + I_DISPATCH, x=(e.script, e.script + 0x20, 0x0E49)) & 0xff == 0, 'only the one number is taken'
+assert sorted(changed_bytes(e)) == sorted([GOT_SCRIPTS, GOT_HUD, GOT_GUNSHOT]), 'the game\'s own parameter readers ran, nothing else of the game changed'
+passed('The bridge is made with CLEO\'s own code: RegisterOpcode(0E48) on the first frame (the only thing that changes inside CLEO is its opcode map), and CLEO\'s dispatcher then calls the brain with a script whose parameters are read by the game\'s own CollectParameters / GetPointerToScriptVariable')
+assert e.shared_value(HC_HELLO) is None and e.shared_n == 0
+e.frame(n=2)
+assert e.shared_n == 0, 'the brain never adds a value to CLEO\'s storage'
+e.share(HC_HELLO, 0)                                                  # the script: 0DDC HELLO 0
+e.frame(n=1)
+assert e.shared_value(HC_HELLO) == HELLO_MAGIC and e.shared_n == 1
+e.w64(CI + I_SHARED + 8, e.shared); e.shared_n = 0                    # a loaded save: CLEO empties its storage and restarts the scripts
+e.frame(n=2)
+e.share(HC_HELLO, 0); e.frame(n=1)
+assert e.shared_value(HC_HELLO) == HELLO_MAGIC
+passed('Handshake: the script creates one shared value with 0, the brain answers in it on the next frame (and again after a load has emptied CLEO\'s storage); the brain itself never adds a value')
 
 
 def refuses(tweak, text, **kw):
     e = Emu(tweak=tweak, **kw)
     log = e.load()
-    assert text in log and 'the brain is watching' not in log, log
-    assert not changed_bytes(e) and not e.prot, 'nothing in the game was touched'
+    assert text in log and 'the brain is running' not in log, log
+    assert not changed_bytes(e) and not e.prot and not e.cleo_changes(), 'nothing in the game or in CLEO was touched'
     e.w32(GTA + TIME_MS, 600000)
     return e
 
 
 refuses(lambda e: e.uc.mem_write(GTA + 0x40fb74, struct.pack('<I', 0xbd46b100)), 'differs from the build the brain was made for')       # health at another offset
 refuses(lambda e: e.uc.mem_write(GTA + F_LOS + 4, struct.pack('<I', 0xd503201f)), 'differs from the build the brain was made for')
+refuses(lambda e: e.uc.mem_write(GTA + F_COLLECT, struct.pack('<I', 0xd503201f)), 'differs from the build the brain was made for')
 refuses(lambda e: e.uc.mem_write(GTA + GOT_SCRIPTS, struct.pack('<Q', 0x7300000000)), 'another mod has taken it')
-passed('Another game build (one instruction differs, e.g. the health field at another offset) or the per-frame slot already taken by another mod: nothing is changed, the log says exactly what differed')
+passed('Another game build (one instruction differs, e.g. the health field at another offset or the parameter reader CLEO uses) or the per-frame slot already taken by another mod: nothing is changed, the log says exactly what differed')
 e = Emu(tweak=lambda e: (e.uc.mem_write(GTA + GOT_HUD, struct.pack('<Q', GTA + F_HUD + 0x1000)), e.uc.mem_write(GTA + GOT_GUNSHOT, struct.pack('<Q', GTA + F_GUNSHOT + 0x1000))))
 log = e.load()
-assert 'the brain is watching' in log and 'brain: 1 of 3' in log and 'no markers on screen' in log and 'shots will not be seen' in log, log
+assert 'the brain is running' in log and 'brain: 1 of 3' in log and 'no markers on screen' in log and 'shots will not be seen' in log, log
 assert sorted(changed_bytes(e)) == [GOT_SCRIPTS] and e.slot(GOT_HUD) == GTA + F_HUD + 0x1000
 gang_ = e.ped(20, 0, pedtype=7, weapon=30, face=(-1., 0.))
 e.frame(n=3, hud=False)
-e.call(e.items[1]['cb'], x=(0, 1, 0)); e.frame(n=1, hud=False)
-t_ = replay_tool.replay(e.report())[2]
-assert len(t_) == 4 and t_[-1]['out'].n_threats == 1 and all(x['match'] for x in t_)
-passed('The HUD or gunshot slot taken by another mod: those two are left alone and the brain still watches and records (no markers, no shots) - it says so in the log')
-e = Emu(cleo='CLEO ANDROID (64-999999)')
-log = e.load()
-assert 'the brain is watching' in log and 'CLEO not recognised' in log and len(e.threads) == 1, log
-e.frame(n=3)
-assert e.report() is None
-passed('An unknown CLEO build: the brain still watches (it just cannot tell who is ours) and keeps looking for CLEO from a waiting thread')
+t_ = replay_tool.replay(e.save(hud=False))[2]
+assert len(t_) >= 4 and t_[-1]['out'].n_threats == 1 and all(x['match'] for x in t_)
+passed('The HUD or gunshot slot taken by another mod: those two are left alone and the brain still runs and records (no markers, no shots) - it says so in the log')
+
+
+def no_bridge(text, **kw):
+    e = Emu(**kw)
+    log = e.load()
+    assert 'the brain is running' in log
+    e.share(HC_HELLO, 0)
+    e.frame(n=25)
+    assert text in e.log() and e.shared_value(HC_HELLO) == 0, e.log()
+    ch = e.cleo_changes()
+    assert e.call(CI + I_DISPATCH, x=(e.script, e.script + 0x20, 0x0E48)) & 0xff == 0, 'the opcode is not registered'
+    return e, ch
+
+
+e, ch = no_bridge('CLEO not recognised', cleo='CLEO ANDROID (64-999999)')
+assert len(e.threads) == 1 and not ch, [hex(c) for c in ch]
+e, ch = no_bridge('CLEO\'s code is not the build the bridge was made for', tweak=lambda e: e.uc.mem_write(CI + I_REGISTER + 4, struct.pack('<I', 0xd503201f)))
+assert ch == [I_REGISTER & ~7]
+e, ch = no_bridge('CLEO\'s plugin table is not where it should be', tweak=lambda e: e.w64(CI + 0x27d9b8 + 8 * 19, CI + 0x38e80))
+e, ch = no_bridge('CLEO has not found the game\'s script functions (yet)', cleo_ready=False)
+assert e.log().count('bridge: not yet') == 1, 'said once, then tried again quietly'
+e.cleo_finds_game()
+e.frame(n=12)
+assert 'bridge: opcode 0E48 registered' in e.log() and e.shared_value(HC_HELLO) == HELLO_MAGIC
+passed('No bridge without the CLEO it was made for: another CLEO version, one changed instruction in CLEO\'s interface code, a moved plugin table - the opcode is not registered, the handshake is not answered (so Helicover refuses to work) and the log says why; a CLEO that has not found the game yet is tried again once a second')
 
 # ------------------------------------------------------------------ a fight, seen through the game's memory
 e = Emu()
@@ -395,6 +546,7 @@ heli = e.veh(0, 8, 25., vtype=3, driver=pilot)
 burning = e.veh(8, -6, health=200.)
 driver = e.ped(-40, 0.5, pedtype=7)
 rammer = e.veh(-40, 0.5, driver=driver, speed=(20., 0., 0.))
+police_heli = e.veh(60, 60, 50., vtype=3, model=497)
 e.share(HC_STATE + 7, 3)
 e.share(HC_STATE + 21, e.handle(heli) & 0x7fffffff)                 # the script's own handle of the helicopter
 for k, p in enumerate((pilot, g1, g2)):
@@ -402,11 +554,10 @@ for k, p in enumerate((pilot, g1, g2)):
 for k, p in enumerate((s1, s2)):
     e.share(HC_STATE + 71 + k, e.handle(p))
 e.share(HC_STATE + 73, 0xdead01)                                     # a stale handle: must be ignored
+e.share(HC_HELLO, 0)
 e.frame(n=3)
-e.items[1]['cb'] and e.call(e.items[1]['cb'], x=(0, 1, 0))           # "Brain report": tap
-e.frame(n=1)
-data = e.report()
-assert data is not None
+data = e.save()
+assert data is not None and e.reports() == ['hcbrain_report_01.bin']
 head, text, ticks = replay_tool.replay(data)
 s = ticks[-1]['snapshot']; o = ticks[-1]['out']
 marks = {m.id: (m.cls, m.why) for m in o.marks[:o.n_marks]}
@@ -422,18 +573,35 @@ dp = next(p for p in s.peds[:s.n_peds] if p.id == H_(driver))
 assert dp.vehicle == H_(rammer) and dp.flags2 & h.HCB_PF2_DRIVER
 rv = next(v for v in s.vehs[:s.n_vehs] if v.id == H_(rammer))
 assert abs(rv.vel.x - 20) < .01 and rv.driver == H_(driver) and next(v for v in s.vehs[:s.n_vehs] if v.id == H_(heli)).cls == h.HCB_VC_HELI
-assert o.alert == h.HCB_ALERT_THREAT
-passed('The world is read correctly out of the game\'s memory: CJ, 11 people (type, weapon, position, facing, vehicle and seat), vehicles (speed, driver, burning, helicopter), our people and roles from the scripts\' shared values (a stale handle ignored), recruited homies from the player\'s group - and judged: armed Balla = THREAT, burning car and car on a collision course = hazards, Grove / recruit / ours = friends')
-assert all(t['match'] for t in ticks) and len(ticks) == 4 and ticks[0]['exact'], [(t['match'], t['exact']) for t in ticks]
+ph = next(v for v in s.vehs[:s.n_vehs] if v.id == H_(police_heli))
+assert ph.flags & h.HCB_VF_EMERGENCY and ph.model == 497, 'the police Maverick is known for what it is (it was not in the first real fight)'
+assert o.alert == h.HCB_ALERT_THREAT and s.police == h.HCB_POLICE_ANSWER and s.mission_free == 0
+passed('The world is read correctly out of the game\'s memory: CJ, 11 people (type, weapon, position, facing, vehicle and seat), vehicles (speed, driver, burning, helicopters, police models), our people and roles from the scripts\' shared values (a stale handle ignored), recruited homies from the player\'s group - and judged: armed Balla = THREAT, burning car and car on a collision course = hazards, Grove / recruit / ours = friends')
+assert all(t['match'] for t in ticks) and len(ticks) >= 4 and ticks[0]['exact'], [(t['match'], t['exact']) for t in ticks]
 passed('The report written on the emulated arm64 CPU replays on this computer to the same decisions, digest for digest: the core is bit-exact across the two architectures')
-assert 'think time' in text and 'screen 2000x1250' in text and 'asked for in Mods Settings' in text and 'CLEO shared values' in text, text
+assert 'think time' in text and 'screen 2000x1250' in text and 'asked for in Mods Settings' in text and 'scripts bridge: opcode 0E48' in text, text
 los_to_cj = [c for c in e.los_calls if abs(c[1][2] - 1.6) < .01 and abs(c[1][0]) < .01 and abs(c[1][1]) < .01]
 assert los_to_cj and all(c[2] == [1, 1, 0, 1, 0, 0, 0] for c in e.los_calls), e.los_calls[:3]
 assert any(abs(c[0][0] - 4) < .01 and abs(c[1][0] - 20) < .01 for c in e.los_calls), 'the core\'s question "does our guard see the Balla" is answered with a real ray'
-passed('Lines of sight are asked from the game chest to chest (buildings, vehicles and objects block; people do not): armed people to CJ, and the pairs the core asked about')
+to_driver = [c for c in e.los_calls if abs(c[1][0] + 40) < 1]
+assert to_driver and all(c[3] == rammer for c in to_driver) and all(c[3] == 0 for c in e.los_calls if c not in to_driver) and e.r64(GTA + IGNORE_ENTITY) == 0x5e17, 'a ray to the man at the wheel passes through his own car, every other ray ignores nothing, and the game\'s own value is put back'
+e.share(HC_POLICE, 1); e.share(HC_MISSION, 1); e.frame(n=1)
+s = replay_tool.replay(e.save())[2][-1]['snapshot']
+assert s.police == h.HCB_POLICE_EVADE and s.mission_free == 1
+e.share(HC_POLICE, 0); e.share(HC_MISSION, 0)
+e.share(HC_STATE + 27, 1); e.frame(n=1)                              # the helicopter has landed: the crew are guards on foot now
+s = replay_tool.replay(e.save())[2][-1]['snapshot']
+assert sorted(s.our_role[:s.n_ours]) == [1, 6, 6, 7, 7], list(s.our_role[:s.n_ours])
+e.share(HC_STATE + 27, 0)
+# a guard who was let go and walks away (the scripts keep him in LEAVE..+7) is still ours: a friend in every line of fire, no orders
+gone = e.ped(-6, -9, pedtype=8, weapon=0)
+e.share(HC_STATE + 416, e.handle(gone)); e.frame(n=1)
+s = replay_tool.replay(e.save())[2][-1]['snapshot']
+assert H_(gone) in list(s.ours[:s.n_ours]) and s.our_role[list(s.ours[:s.n_ours]).index(H_(gone))] == h.HCB_ROLE_NONE, list(s.our_role[:s.n_ours])
+e.share(HC_STATE + 416, 0); e.frame(n=1)
+passed('Lines of sight are asked from the game chest to chest (buildings, vehicles and objects block; people do not): armed people to CJ, and every pair the core asked about. The player\'s settings "police" and "missions" are read from the scripts\' shared values; the crew count as door gunners only while they are mounted (on foot they fire the game\'s own weapon and are judged like the ground team)')
 
 # shots, a weapon on CJ, damage
-e.fs.pop(MODS + 'hcbrain_report.bin')
 e.aim(civ, e.cj); e.w32(civ + 0x730, 22)
 e.gunshot(gang, (0., 0.5, 1.))
 e.gunshot(cop, (0., 60., 1.))                                        # the policeman fires up the street, away from CJ
@@ -441,8 +609,7 @@ e.frame(n=1)
 e.wf(e.cj + 0x6ac, 70.); e.w64(e.cj + 0x940, gang); e.w32(e.cj + 0x948, e.r32(GTA + TIME_MS)); e.uc.mem_write(e.cj + 0x93c, bytes([30]))
 e.wf(s1 + 0x6ac, 60.); e.w64(s1 + 0x940, rammer); e.w32(s1 + 0x948, 77); e.uc.mem_write(s1 + 0x93c, bytes([49]))    # run over: the inflictor is the car
 e.frame(n=3)
-e.call(e.items[1]['cb'], x=(1, 0, 0)); e.frame(n=1)
-head, text, ticks = replay_tool.replay(e.report())
+head, text, ticks = replay_tool.replay(e.save())
 events = [(ev.type, ev.src, ev.dst, round(ev.value)) for t in ticks for ev in t['snapshot'].events[:t['snapshot'].n_events]]
 assert (h.HCB_EV_SHOT, H_(gang), 0, 0) in events and (h.HCB_EV_SHOT, H_(cop), 0, 0) in events, events
 assert (h.HCB_EV_DAMAGE, H_(gang), H_(e.cj), 30) in events and (h.HCB_EV_DAMAGE, H_(driver), H_(s1), 40) in events, events
@@ -452,36 +619,207 @@ assert marks[H_(cop)] == (h.HCB_CLS_WATCH, h.HCB_WHY_SHOOTING_NEARBY) and o.aler
 assert e.orig_calls['gunshot'] == 2
 passed('Events: every gunshot is seen through the hook (and still reaches the game), damage to CJ and to ours is found from their health with the right inflictor (a car = its driver), a civilian\'s gun on CJ comes from his task - Balla = ATTACKER, civilian = THREAT, the policeman firing elsewhere is only watched')
 
+# ------------------------------------------------------------------ fire control through the opcode
+# the car that was bearing down on CJ and the civilian with the pistol leave the scene: one attacker, the Balla 20 m east
+e.uc.mem_write(e.veh_flags + (rammer - e.veh_objs) // VEH_STRIDE, b'\x80'); e.uc.mem_write(e.ped_flags + (driver - e.ped_objs) // PED_STRIDE, b'\x80')
+e.uc.mem_write(e.ped_flags + (civ - e.ped_objs) // PED_STRIDE, b'\x80')
+e.los_calls.clear()
+rounds, states, t0 = [], [], e.r32(GTA + TIME_MS)
+for k in range(60):                                                  # three seconds at 20 frames a second
+    e.frame(ms=50, hud=False)
+    e.gunshot(gang, (0., 0.5, 1.)) if k % 8 == 0 else None
+    n_los = len(e.los_calls)
+    handled, v, used = e.opcode(3, 9, CMD_GUNNER, handle=H_(g1))
+    assert handled == 1 and used == 7 and v[0] == H_(g1)
+    states.append(v[1])
+    if v[1] == 2:
+        rounds.append(dict(t=e.r32(GTA + TIME_MS), muzzle=[f32(x) for x in v[3:6]], end=[f32(x) for x in v[6:9]], target=v[2], ray=e.los_calls[n_los:]))
+    left = e.opcode(3, 9, CMD_GUNNER, handle=H_(g2))[1]
+    assert left[1] != 2, 'the gunner in the left door does not fire across the cabin'
+assert rounds and all(r['target'] == H_(gang) for r in rounds) and 1 in states, states
+gaps = [b['t'] - a['t'] for a, b in zip(rounds, rounds[1:])]
+assert min(gaps) >= 130 and 6 <= len(rounds) <= 20 and max(gaps) >= 300, (len(rounds), gaps)
+me = (1.4, 9., 25.3)
+for r in rounds:
+    d = [r['end'][i] - me[i] for i in range(3)]
+    n = math.sqrt(sum(x * x for x in d))
+    out = math.dist(r['muzzle'], me)
+    off_line = math.dist(r['muzzle'], [me[i] + d[i] / n * out for i in range(3)])
+    assert abs(out - 5.5) < .01 and off_line < .01, 'the round starts 5.5 m out, on the line'
+    aim = [r['end'][i] - d[i] / n * 0.6 for i in range(3)]
+    assert max(abs(aim[i] - (20., 0., 1.2)[i]) for i in range(3)) <= 0.1 + 0.01 * n + .02, ('scattered round the man by no more than 0.1 m + 1 % of the range', aim)
+    assert len(r['ray']) == 1 and r['ray'][0][2] == [1, 1, 0, 1, 0, 0, 0] and math.dist(r['ray'][0][0], r['muzzle']) < .01 and math.dist(r['ray'][0][1], aim) < .01, 'one ray along the very line of the round'
+assert len({tuple(round(x, 2) for x in r['end']) for r in rounds}) == len(rounds), 'no two rounds on the same line'
+passed('A door gunner asks every frame (0E48, 9 variables): weapon on the man, then rounds - each with its own line from 5.5 m outside the helicopter to a point scattered round the man and 0.6 m past it, checked by one ray along that very line; %d rounds in 3 s, never closer than 130 ms, with pauses between bursts; the gunner in the other door does not fire across the cabin' % len(rounds))
+
+
+def until_round(who=None, frames=40):
+    """Frames until the right gunner is given a round; returns the variables."""
+    for _ in range(frames):
+        e.frame(ms=50, hud=False)
+        v = e.opcode(3, 9, CMD_GUNNER, handle=H_(who or g1))[1]
+        if v[1] == 2:
+            return v
+    raise AssertionError('no round in %d frames' % frames)
+
+
+def no_round(calls=20, ms=10):
+    """The script keeps asking while the game time moves on (0.2 s: the next round falls due after 0.13-0.18 s), but the
+    brain is not given a new look. An order older than 0.3 s is no order, so two of these in a row must stay below that."""
+    out = []
+    for _ in range(calls):
+        e.w32(GTA + TIME_MS, e.r32(GTA + TIME_MS) + ms)
+        out.append(e.opcode(3, 9, CMD_GUNNER, handle=H_(g1))[1][1])
+    return out
+
+
+e.gunshot(gang, (0., 0.5, 1.)); until_round()
+e.move(e.cj, 18.6, 0.9)                                              # CJ runs up to the Balla: nothing has looked at the world since
+assert set(no_round()) == {1}, 'CJ within 2 m of the line in THIS frame: no round, the weapon stays on the man'
+e.move(e.cj, 0, 0)
+assert 2 in no_round(9), 'CJ away again: the rounds go'
+e.gunshot(gang, (0., 0.5, 1.)); until_round()
+e.move(s2, 15.5, 2.3, 6.4)                                           # one of ours in the line (he has climbed something)
+assert set(no_round()) == {1}
+e.move(s2, 4, -2)
+e.gunshot(gang, (0., 0.5, 1.)); until_round()
+e.walls = True                                                       # a lorry drives between them
+assert set(no_round()) == {1}
+e.walls = False
+car = e.veh(20, 0)                                                   # the Balla gets into a car
+e.w64(car + 0x5a0, gang); e.w64(gang + 0x708, car); e.uc.mem_write(gang + 0x585, b'\x01')
+e.gunshot(gang, (0., 0.5, 1.)); e.los_calls.clear()
+v = until_round()
+assert e.los_calls and all(c[3] == car for c in e.los_calls if abs(c[1][0] - 20) < 1.5) and e.r64(GTA + IGNORE_ENTITY) == 0x5e17, 'rays to a man in a car pass through that car, and the game\'s pointer is put back'
+e.wf(car + 0x634, 500.); e.move(e.cj, 12, 3)                         # the car is damaged and CJ is 8.5 m from it
+e.frame(ms=50, hud=False)
+assert set(no_round()) <= {0, 1} and 2 not in [e.opcode(3, 9, CMD_GUNNER, handle=H_(g1))[1][1] for _ in range(3)], 'a damaged car beside CJ is not fired at'
+e.move(e.cj, 0, 0); e.wf(car + 0x634, 1000.)
+e.w64(car + 0x5a0, 0); e.w64(gang + 0x708, 0); e.uc.mem_write(gang + 0x585, b'\x00'); e.uc.mem_write(e.veh_flags + (car - e.veh_objs) // VEH_STRIDE, b'\x80')
+data = e.save()
+notes = [r for t in replay_tool.replay(data)[2] for r in t['rounds']]
+why = {r.verdict if r.verdict else ('ray' if not r.ray else 0) for r in notes}
+assert {0, 'ray', h.HCB_HOLD_FRIEND} <= why and why & {h.HCB_HOLD_CJ_IN_LINE, h.HCB_HOLD_CJ_BEHIND}, why
+assert 'rounds of the door gunners' in replay_tool.summarize(data) and all(t['match'] for t in replay_tool.replay(data)[2] if t['exact'])
+passed('Each round is refused in the very frame the picture changes, before the brain has even looked again: CJ within 2 m of the line, one of ours in it, something driving in between (the ray), a damaged car beside CJ. A man in a car is seen through his own car (CWorld::pIgnoreEntity set for the ray and put back). Every round and every refusal is in the report')
+
+# a guard on foot
+e.gunshot(gang, (0., 0.5, 1.))
+got = set()
+for _ in range(12):
+    e.frame(ms=50, hud=False)
+    handled, v, used = e.opcode(10, 3, CMD_SQUAD, handle=H_(s1))
+    assert handled == 1 and used == 7
+    got.add(v[1])
+assert v[1] == 2 and v[2] == H_(gang) and got <= {1, 2}, (v, got)
+e.move(e.cj, 12, 1)                                                  # CJ walks into his line
+assert e.opcode(10, 3, CMD_SQUAD, handle=H_(s1))[1][1] == 3, 'cease fire in the same frame'
+e.frame(ms=50, hud=False)
+assert e.opcode(10, 3, CMD_SQUAD, handle=H_(s1))[1][1] == 3
+e.move(e.cj, 0, 0); e.frame(ms=50, n=2, hud=False)
+assert e.opcode(10, 3, CMD_SQUAD, handle=H_(s1))[1][1] == 2
+e.share(HC_STATE + 7, 0); e.frame(ms=50, n=2, hud=False)             # the player says hold fire
+assert e.opcode(10, 3, CMD_SQUAD, handle=H_(s1))[1][1] in (0, 3) and e.opcode(3, 9, CMD_GUNNER, handle=H_(g1))[1][1] != 2
+e.share(HC_STATE + 7, 3); e.gunshot(gang, (0., 0.5, 1.)); e.frame(ms=50, n=8, hud=False)
+handled, v, used = e.opcode(20, 5, CMD_STATUS)
+assert v[0] >= h.HCB_ALERT_COMBAT and v[1] >= 1 and v[2] >= 1 and v[3] == 0 and v[4] == H_(gang), v
+assert e.opcode(20, 8, CMD_STATUS)[1][5] == -1, 'CJ has not fired'
+assert e.opcode(20, 9, CMD_STATUS)[1][8] == -1, 'nobody has fired at the helicopter'
+e.gunshot(gang, (1., 8., 23.)); e.frame(ms=50, hud=False)               # a round up at the helicopter (it hangs at 0, 8, 25)
+assert 0 <= e.opcode(20, 9, CMD_STATUS)[1][8] <= 100
+e.gunshot(s1, (0., 8., 25.)); e.gunshot(gang, (0., 0.5, 1.)); e.frame(ms=200, hud=False)
+assert e.opcode(20, 9, CMD_STATUS)[1][8] >= 200, 'our own rounds and rounds at CJ are not fire at the helicopter'
+e.gunshot(e.cj, (30., 40., 1.)); e.frame(ms=50, hud=False)
+v = e.opcode(20, 8, CMD_STATUS)[1]
+assert 0 <= v[5] <= 100 and abs(f32(v[6]) - 0.6) < .01 and abs(f32(v[7]) - 0.8) < .01, (v[5], f32(v[6]), f32(v[7]))
+until_round()
+e.w32(gang + 0x54c, 55)                                              # he is dead
+e.frame(ms=50, n=2, hud=False)
+v = e.opcode(20, 5, CMD_STATUS)[1]
+assert v[3] == 1 and v[4] != H_(gang) and e.opcode(3, 9, CMD_GUNNER, handle=H_(g1))[1][1:3] == [0, 0] and e.opcode(10, 3, CMD_SQUAD, handle=H_(s1))[1][1:3] == [0, 0], v
+passed('A guard on foot asks with 3 variables: cover, fire, and "cease fire" in the very frame CJ walks into his line; "hold fire" in the menu stops everybody; the status request gives alert level, threats, attackers, kills, the most dangerous man, the direction of CJ\'s own last shot (the squad keeps out of his line of fire) and how long ago a stranger fired at the helicopter (the pilot breaks away); a dead man is nobody\'s target and is counted')
+
+# what a script must not be able to do through the opcode
+sentinel = [0x51515151] * 32
+e.uc.mem_write(e.script + 0x6c, struct.pack('<32i', *sentinel))
+for first, count in ((28, 9), (5, 40), (5, 0), (5, -3)):
+    handled, v, used = e.opcode(first, count, CMD_GUNNER)
+    assert handled == 1 and used == 7 and e.locals() == sentinel, (first, count)
+space_before = bytes(e.uc.mem_read(GTA + SCRIPT_SPACE, 0x100))
+handled, v, used = e.opcode(0, 9, CMD_GUNNER, var=b'\x02\x10\x00')    # a global variable instead of a local one
+assert handled == 1 and used == 7 and e.locals() == sentinel and bytes(e.uc.mem_read(GTA + SCRIPT_SPACE, 0x100)) == space_before
+handled, v, used = e.opcode(5, 9, 77)                                 # an unknown command
+assert used == 7 and e.locals() == sentinel
+handled, v, used = e.opcode(5, 9, CMD_GUNNER, handle=0x7fffff01)      # a handle that names nobody
+assert v[1:3] == [0, 0] and e.locals(14, 18) == sentinel[14:]
+passed('The opcode writes only inside the block of local variables it was given: a block that runs past the 32 locals, a count of 0 or below, a global variable, an unknown command or a handle that names nobody change nothing - and all three parameters are consumed every time, so the script never runs its own parameters as code')
+
 # ------------------------------------------------------------------ markers
-e.polys.clear()
-e.frame(n=1)
+e.w32(gang + 0x54c, 1)
+e.gunshot(gang, (0., 0.5, 1.)); until_round()
+e.polys.clear(); e.frame(n=1)
+assert not e.polys, 'off by default'
+e.call(e.items[0]['cb'], x=(0, 1, 0)); e.polys.clear(); e.frame(ms=50, n=1)
 bar, marks_drawn = e.polys[0], e.polys[1:]
-assert bar['p'][1] == 0 and W * .45 < bar['p'][0] < bar['p'][2] < W * .55 and bar['c'][:3] in ((240, 40, 40), (255, 255, 255)), bar
-fills = [p for p in marks_drawn if p['c'][:3] != (0, 0, 0)]
+assert H * .01 <= bar['p'][1] < bar['p'][5] <= H * .03 and W * .45 < bar['p'][0] < bar['p'][2] < W * .55 and bar['c'][:3] in ((240, 40, 40), (255, 255, 255)), bar
+frames_ = [p for p in marks_drawn if p['c'][:3] == (255, 255, 255)]
+fills = [p for p in marks_drawn if p['c'][:3] not in ((0, 0, 0), (255, 255, 255))]
 edges = [p for p in marks_drawn if p['c'][:3] == (0, 0, 0)]
-assert len(fills) == len(edges) >= 8
+assert len(fills) == len(edges) >= 7
 by_colour = {}
 for p in fills:
     by_colour.setdefault(p['c'][:3], []).append(((p['p'][0] + p['p'][2]) / 2, (p['p'][1] + p['p'][5]) / 2, p['p'][2] - p['p'][0]))
-assert len(by_colour[(240, 40, 40)]) == 2 and len(by_colour[(70, 150, 255)]) == 2 and len(by_colour[(60, 200, 90)]) >= 2 and (255, 140, 0) in by_colour and (250, 220, 40) in by_colour, by_colour
-gx = [c for c in by_colour[(240, 40, 40)] if abs(c[0] - (W / 2 + 20 * 20)) < 1]
-assert gx and abs(gx[0][1] - (H / 2 - 2.25 * 20)) < 1 and H * .008 <= gx[0][2] <= H * .03, by_colour[(240, 40, 40)]
+assert len(by_colour[(240, 40, 40)]) == 1 and len(by_colour[(70, 150, 255)]) == 2 and len(by_colour[(60, 200, 90)]) >= 2, by_colour
+gx = by_colour[(240, 40, 40)][0]
+assert abs(gx[0] - (W / 2 + 20 * 20)) < 1 and abs(gx[1] - (H / 2 - 2.25 * 20)) < 1 and H * .008 <= gx[2] <= H * .03, gx
+assert len(frames_) == 1 and abs((frames_[0]['p'][0] + frames_[0]['p'][2]) / 2 - gx[0]) < 1 and frames_[0]['p'][2] - frames_[0]['p'][0] > gx[2], 'a white frame round the man ours are firing at'
 assert all(0 <= c[0] <= W and 0 <= c[1] <= H for v in by_colour.values() for c in v)
-e.call(e.items[0]['cb'], x=(1, 0, 0)); e.polys.clear(); e.frame(n=1)
-assert not e.polys and b'Marks = 0' in e.fs['/storage/emulated/0/Android_unprotected/data/com.rockstargames.gtasa/configs/net.helicover.brain.ini']
-e.call(e.items[0]['cb'], x=(0, 1, 0)); e.uc.mem_write(GTA + USER_PAUSE, b'\1'); e.frame(n=1)
+assert b'Markers = 1' in e.fs['/storage/emulated/0/Android_unprotected/data/com.rockstargames.gtasa/configs/net.helicover.brain.ini']
+e.uc.mem_write(GTA + USER_PAUSE, b'\1'); e.polys.clear(); e.frame(n=1)
 assert not e.polys
 e.uc.mem_write(GTA + USER_PAUSE, b'\0')
-passed('Markers: a strip at the top centre in the colour of the alert level, and a square with a dark edge 1.25 m over every judged person (red attacker, orange threat, yellow watched, green ours, blue ally); nothing behind the camera or off screen; "Brain markers: Off" and the pause menu draw nothing')
+e.call(e.items[0]['cb'], x=(1, 0, 0)); e.polys.clear(); e.frame(n=1)
+assert not e.polys
+e2 = Emu(tweak=lambda e: e.fs.__setitem__('/storage/emulated/0/Android_unprotected/data/com.rockstargames.gtasa/configs/net.helicover.brain.ini', b'[Preferences]\nMarks = 1\n'))
+e2.load()
+assert e2.items[0]['init'] == 0, 'the setting of the observer version does not switch the markers on'
+passed('Markers are off until the player turns them on in Mods Settings (the setting left by version 0.1 does not count). On: a strip just below the top edge in the colour of the alert level, a square with a dark edge 1.25 m over every judged person (red attacker, green ours, blue ally) and a white frame round the man ours are firing at; nothing behind the camera, off screen or in the pause menu')
+
+# ------------------------------------------------------------------ how often the brain looks
+e = Emu()
+e.load()
+calm = e.ped(30, 0)
+e.frame(ms=25, n=40)                                                 # one second at 40 frames a second, nothing going on
+n_calm = len(replay_tool.replay(e.save())[2])
+gang = e.ped(20, 0, pedtype=7, weapon=30, face=(-1., 0.))
+e.frame(ms=25, n=40)
+n_threat = len(replay_tool.replay(e.save())[2]) - n_calm
+assert 9 <= n_calm <= 12 and 18 <= n_threat <= 22, (n_calm, n_threat)
+e2 = Emu()
+e2.load()
+far = e2.ped(60, 0, pedtype=7, weapon=30, face=(1., 0.))             # armed, 60 m away, looking the other way: watched, no threat yet
+ours = e2.ped(4, 2, pedtype=8, weapon=31)
+e2.share(HC_STATE + 71, e2.handle(ours))
+e2.frame(ms=100, n=3)
+n0 = len(replay_tool.replay(e2.save())[2])
+e2.gunshot(ours, (60., 0., 1.)); e2.frame(ms=45, n=1)                # one of ours fires: no hurry
+n1 = len(replay_tool.replay(e2.save())[2])
+e2.frame(ms=100, n=1)
+n2 = len(replay_tool.replay(e2.save())[2])
+e2.gunshot(far, (0., 0.5, 1.)); e2.frame(ms=45, n=1)                 # somebody else fires: the brain looks at once
+t_ = replay_tool.replay(e2.save())[2]
+assert n1 == n0 + 1 and len(t_) == n2 + 2 and t_[-2]['out'].n_attackers == 1, (n0, n1, n2, len(t_))
+passed('The brain looks ten times a second, twenty times while there is a threat, and at once (45 ms later instead of 100) when somebody who is not ours has fired')
 
 # ------------------------------------------------------------------ robustness
-e.fs.pop(MODS + 'hcbrain_report.bin', None)
-e.wf(e.cj + 0x6ac, 0.); e.frame(n=2)
-assert e.report() is not None and 'CJ died' in replay_tool.replay(e.report())[1]
-passed('When CJ dies a report is saved by itself')
+e.wf(e.cj + 0x6ac, 0.); n_before = len(e.reports()); e.frame(n=2)
+assert len(e.reports()) == n_before + 1 and 'CJ died' in replay_tool.replay(e.report())[1]
+assert e.reports() == ['hcbrain_report_%02d.bin' % k for k in range(1, n_before + 2)]
+passed('When CJ dies a report is saved by itself; every report is a new numbered file, none is overwritten')
 e = Emu()
 e.load()
 e.w64(GTA + PED_POOL, 0); e.frame(n=3)                                # the game has no pools yet (loading screen)
+assert e.opcode(5, 9, CMD_GUNNER, handle=0x101)[1][1:3] == [0, 0] and e.opcode(5, 5, CMD_STATUS)[0] == 1
 e.w64(GTA + PED_POOL, WORLD); e.w64(GTA + PLAYERS, 0); e.frame(n=3)   # no player yet
 e.w64(GTA + PLAYERS, e.cj)
 for k in range(1, 140):                                               # a full pool, far more people than a snapshot holds
@@ -493,11 +831,27 @@ for k in range(1, 140):                                               # a full p
 e.frame(n=30, ms=100)
 e.w32(GTA + TIME_MS, 1000)                                            # the clock jumps back (a loaded save)
 e.frame(n=5)
-e.call(e.items[1]['cb'], x=(0, 1, 0)); e.frame(n=1)
-head, text, ticks = replay_tool.replay(e.report())
+head, text, ticks = replay_tool.replay(e.save())
 assert len(ticks) >= 30 and max(t['snapshot'].n_peds for t in ticks) == h.HCB_MAX_PEDS and max(t['snapshot'].peds_lost for t in ticks) > 50 and all(t['match'] for t in ticks if t['exact'])
-passed('No pools yet, no player yet, a full pool of 139 people (64 nearest are taken), entities without a matrix or without an intelligence object, the clock jumping back after a load: no fault, and the report still replays exactly')
+passed('No pools yet, no player yet, a full pool of 139 people (64 nearest are taken), entities without a matrix or without an intelligence object, the clock jumping back after a load: no fault, the opcode answers "nothing" and the report still replays exactly')
 
-text = '\n'.join(results) + '\nThe phone build on an emulated CPU with the real libGTASA.so; the world in memory is laid out by the test. Not run in the game.\n'
+# the black box: two halves that take turns (a build with small halves, the same source)
+small_dir = tempfile.mkdtemp()
+subprocess.check_call(['sh', str(HERE.parent / 'build.sh')], env=dict(os.environ, OUT=small_dir, BRAIN_DEFS='-DBOX_BYTES=262144'), stdout=subprocess.DEVNULL)
+e = Emu(mod=small_dir + '/libHelicoverBrain64.so')
+e.load()
+for k in range(1, 30):
+    e.ped((k % 6) * 4 - 10, (k // 6) * 4 + 6, pedtype=7 if k % 2 else 4, weapon=30 if k % 4 == 0 else 0)
+sizes = []
+for k in range(14):
+    e.frame(n=25, ms=100)
+    head, text, ticks = replay_tool.replay(e.save())
+    sizes.append((len(e.report()), len(ticks), head.records))
+    assert ticks and ticks[0]['exact'] and all(t['match'] for t in ticks), k
+    assert ticks[-1]['snapshot'].time == e.r32(GTA + TIME_MS), 'the newest look is always in the report'
+assert max(s_[0] for s_ in sizes) <= 2 * 262144 + 4096 and len({s_[1] for s_ in sizes[6:]}) > 1 and min(s_[1] for s_ in sizes[6:]) >= 0.4 * max(s_[1] for s_ in sizes), sizes
+passed('Black box: two halves take turns (nothing is ever moved, so no pause); a report is the older half followed by the current one, it never loses the newest look, always starts from a stored memory of the brain and replays exactly - %d reports while the halves changed over several times, %d to %d looks in each' % (len(sizes), min(s_[1] for s_ in sizes[6:]), max(s_[1] for s_ in sizes)))
+
+text = '\n'.join(results) + '\nThe phone build on an emulated CPU with the real libGTASA.so and the real code of the CLEO library; the world in memory is laid out by the test. Not run in the game.\n'
 (h.OUT / 'brain_adapter_tests.txt').write_text(text)
 print(text)

@@ -38,7 +38,7 @@ def _parse(text):
 CONSTS, STRUCTS = _parse(HEADER.read_text())
 globals().update(CONSTS)
 globals().update(STRUCTS)
-__all__ = list(CONSTS) + list(STRUCTS) + ['Brain', 'Scene', 'LIB', 'vec', 'build', 'CONSTS', 'STRUCTS', 'Recorder', 'read_box', 'decode']
+__all__ = list(CONSTS) + list(STRUCTS) + ['Brain', 'Scene', 'LIB', 'vec', 'build', 'CONSTS', 'STRUCTS', 'Recorder', 'read_box', 'decode', 'load_fight']
 
 
 def build():
@@ -59,7 +59,9 @@ LIB.hcb_struct_size.restype = ctypes.c_uint32
 LIB.hcb_config.restype = ctypes.POINTER(hcb_cfg)
 LIB.hcb_weapon_dps.restype = ctypes.c_float
 LIB.hcb_weapon_range.restype = ctypes.c_float
-for _i, _n in enumerate(['hcb_ped', 'hcb_veh', 'hcb_event', 'hcb_snapshot', 'hcb_out', 'hcb_cfg', 'hcb_mark', 'hcb_track_info', 'hcb_rec', 'hcb_box_head', 'hcb_los', 'hcb_order']):
+LIB.hcb_gunner_round.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_float, ctypes.c_int, ctypes.c_void_p]
+LIB.hcb_gunner_blocked.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32]
+for _i, _n in enumerate(['hcb_ped', 'hcb_veh', 'hcb_event', 'hcb_snapshot', 'hcb_out', 'hcb_cfg', 'hcb_mark', 'hcb_track_info', 'hcb_rec', 'hcb_box_head', 'hcb_los', 'hcb_order', 'hcb_shot', 'hcb_round']):
     assert LIB.hcb_struct_size(_i) == ctypes.sizeof(STRUCTS[_n]), ('layout differs between C and Python', _n, LIB.hcb_struct_size(_i), ctypes.sizeof(STRUCTS[_n]))
     assert ctypes.sizeof(STRUCTS[_n]) % 4 == 0, _n
 
@@ -86,6 +88,38 @@ class Brain:
     def marks(self):
         return {m.id: m for m in self.out.marks[:self.out.n_marks]}
 
+    @staticmethod
+    def _shot(who, target, time, frm, to, cj, friends=(), muzzle=None):
+        q = hcb_shot()
+        q.who, q.target, q.time, q.n_friends = who, target, time, len(friends)
+        q.muzzle, q.to, q.cj = vec(*(muzzle or frm)), vec(*to), vec(*cj)
+        setattr(q, 'from', vec(*frm))
+        for i, f in enumerate(friends):
+            q.friends[i] = vec(*f)
+        return q
+
+    def shot(self, who, target, time, frm, to, cj, friends=(), muzzle=None):
+        """hcb_shot_check: may this round go, with these positions of this frame? Returns HCB_HOLD_*."""
+        return LIB.hcb_shot_check(self.mem, ctypes.byref(self._shot(who, target, time, frm, to, cj, friends, muzzle)))
+
+    def order(self, who):
+        """hcb_order_get: the standing order of one of ours, or None."""
+        o = hcb_order()
+        return o if LIB.hcb_order_get(self.mem, who, ctypes.byref(o)) else None
+
+    def round(self, who, target, time, frm, to, cj, friends=(), heli_speed=0., near_heli=True):
+        """hcb_gunner_round: None while no round is due, else the hcb_round (its line and the verdict of the hard rules)."""
+        r = hcb_round()
+        q = self._shot(who, target, time, frm, to, cj, friends)
+        return r if LIB.hcb_gunner_round(self.mem, ctypes.byref(q), heli_speed, int(near_heli), ctypes.byref(r)) else None
+
+    def blocked(self, who, time):
+        LIB.hcb_gunner_blocked(self.mem, who, time)
+
+    def squad(self, who, target, time, frm, to, cj, friends=()):
+        """hcb_squad_state: 0 nothing, 1 cover, 2 fire, 3 cease fire now."""
+        return LIB.hcb_squad_state(self.mem, ctypes.byref(self._shot(who, target, time, frm, to, cj, friends)))
+
     def cls(self, id):
         m = self.marks().get(id)
         if m:
@@ -99,18 +133,53 @@ class Brain:
 
 
 def decode(buf, start, end):
-    """Records of a black box, oldest first, decoded by the core itself: [('snapshot', hcb_snapshot, digest) | ('state', bytes)]."""
+    """Records of a black box, oldest first, decoded by the core itself:
+    [('snapshot', hcb_snapshot, digest) | ('state', bytes) | ('round', hcb_round)]."""
     out, off = [], ctypes.c_uint32(start)
     state = ctypes.create_string_buffer(LIB.hcb_brain_size())
     while True:
-        s, d = hcb_snapshot(), ctypes.c_uint32()
-        kind = LIB.hcb_rec_next(buf, end, ctypes.byref(off), ctypes.byref(s), ctypes.byref(d), state)
+        s, d, rnd = hcb_snapshot(), ctypes.c_uint32(), hcb_round()
+        kind = LIB.hcb_rec_next(buf, end, ctypes.byref(off), ctypes.byref(s), ctypes.byref(d), state, ctypes.byref(rnd))
         if kind == HCB_REC_SNAPSHOT:
             out.append(('snapshot', s, d.value))
         elif kind == HCB_REC_STATE:
             out.append(('state', state.raw))
+        elif kind == HCB_REC_ROUND:
+            out.append(('round', rnd))
         else:
             break
+    return out
+
+
+def load_fight(path):
+    """A recorded fight (brain/tools/box2json.py) as a list of hcb_snapshot. The file names every field, so a fight
+    recorded by an older core still loads: fields it does not have stay 0."""
+    import gzip, json
+    fight = json.load(gzip.open(path))
+    schema = fight['schema']
+
+    def fill(obj, names, row):
+        for name, value in zip(names, row):
+            target, parts = obj, name.split('.')
+            try:
+                for part in parts[:-1]:
+                    target = getattr(target, part)
+                setattr(target, parts[-1], value)
+            except AttributeError:
+                pass                                    # a field this core no longer has
+        return obj
+    kinds = dict(peds=('hcb_ped', hcb_ped), vehs=('hcb_veh', hcb_veh), events=('hcb_event', hcb_event), los=('hcb_los', hcb_los))
+    out = []
+    for t in fight['ticks']:
+        s = fill(hcb_snapshot(), schema['hcb_snapshot'], t['head'])
+        for arr, (name, _) in kinds.items():
+            for i, row in enumerate(t[arr][:len(getattr(s, arr))]):
+                fill(getattr(s, arr)[i], schema[name], row)
+        for i, v in enumerate(t['ours']):
+            s.ours[i] = v
+        for i, v in enumerate(t['our_role']):
+            s.our_role[i] = v
+        out.append(s)
     return out
 
 
@@ -125,6 +194,9 @@ class Recorder:
 
     def push_state(self, brain):
         LIB.hcb_rec_push_state(ctypes.byref(self.rec), self.buf, brain.mem)
+
+    def push_round(self, round):
+        LIB.hcb_rec_push_round(ctypes.byref(self.rec), self.buf, ctypes.byref(round))
 
     def all(self):
         return decode(self.buf, self.rec.start, self.rec.end)
@@ -169,7 +241,7 @@ class Scene:
         self.cj = dict(id=1, pos=[0., 0., 1.], vel=[0., 0., 0.], fwd=[0., 1., 0.], health=100., armour=0., weapon=0, pedtype=0, flags=0, flags2=0,
                        target=0, vehicle=0, model=0, seat=0)
         self.peds, self.vehs, self.events, self.ours = {}, {}, [], {}
-        self.wanted, self.on_mission, self.cutscene, self.heli = wanted, on_mission, 0, 0
+        self.wanted, self.on_mission, self.cutscene, self.heli, self.mission_free = wanted, on_mission, 0, 0, 0
         self.roe, self.police = HCB_ROE_DEFEND if roe is None else roe, HCB_POLICE_ANSWER
         self.walls = []          # [(x1, y1, x2, y2)]: segments that block the line of sight (answers to the brain's questions)
         self.los_fn = None       # or a function (from_id, to_id) -> bool
@@ -262,6 +334,7 @@ class Scene:
         s = hcb_snapshot()
         s.time, s.frame, s.heli = self.time, self.frame, self.heli
         s.wanted, s.on_mission, s.cutscene, s.roe, s.police = self.wanted, self.on_mission, self.cutscene, self.roe, self.police
+        s.mission_free = self.mission_free
         s.n_los = len(self.asked)
         for o, (a, b) in zip(s.los, self.asked):
             o.to = b

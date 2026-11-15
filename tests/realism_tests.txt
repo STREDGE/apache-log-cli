@@ -29,15 +29,11 @@ PASS: CJ shooting ahead: the guard in front of him steps 2 m out of his line of 
 PASS: When CJ stops shooting the guard returns to his slot
 PASS: Assault: a guard 27 m from CJ turns back to his slot (25 m cap, was 40 m)
 PASS: Assault: the medic stays with CJ
-PASS: Guards keep the target they are on while it lives (no flipping when the threat list is reshuffled)
-PASS: The squad adopts a shooter the bullet-trace scan found, even 45 m away outside its own search
-PASS: CJ aim line: only a round whose line passes within 1.5 m of him within 350 ms of his own shot counts as his
-PASS: CJ aim line: a round that flew past him pointing away from where he faces is not his aim (80 deg counts, 120 deg does not); in a car any direction counts
-PASS: Bullet traces: read every frame while a shot has no line yet (30/s), once per shot in a burst (10/s, every shot got its line at once), on the 100 ms tick otherwise (7/s)
-PASS: Hits on the helicopter: a line within 6 m counts, one 12 m away does not
-PASS: The reverse search for a shooter runs at most four times a second even under a stream of rounds (21 passes in 6 s)
-PASS: Door gunners scatter their bullets (about +-0.5 m at 40 m) instead of putting every round on one point
-PASS: The scatter grows with the distance to the target (0.65 m at 8 m, 1.00 m at 70 m)
+PASS: Guards keep the man they are firing at while he lives; a new attacker is taken by the guard whose hands are free (no flipping)
+PASS: The squad takes a shooter the brain names, even 45 m away
+PASS: CJ's line of fire comes from the brain: there in the frame of his shot, never from somebody else's rounds; the scripts read no bullet traces
+PASS: Door gunners scatter their bullets (+-0.7 m at 61 m) instead of putting every round on one point; the scatter is the brain's and every round is still a checked one
+PASS: The scatter grows with the distance to the target (0.64 m at 10 m, 0.97 m at 70 m)
 PASS: The team that ropes down wears the crew setting: Grove 106/107, Army 287, SWAT 285 (it was always SWAT)
 PASS: Changing the crew on the menu re-dresses the team on the ground at once: same spot, heading, health and armour, nobody teleports
 PASS: Grove clothes alternate between the two Families skins
@@ -75,6 +71,6 @@ PASS: The exit button pressed again while the helicopter slows down for the exit
 PASS: The exit button pressed again while the rope drop is under way: the drop is not ordered twice
 PASS: FLY TO MAP MARKER while a rope drop was still being retried: the retries end with the new destination (the exit button is not left blocked)
 PASS: A stale squad order cannot block the squad row: it is cleared by the team's own loop
-PASS: Guards who were let go stay friends of the gunners (even in FIRE AT ALL) until they are gone
+PASS: Guards who were let go stay ours for the brain until they are gone: never a target, and no round is fired past them
 PASS: More than eight guards walking away at once: the one who left first is removed to make room - even then nobody is handed to the game
 Mocked script execution only: real flight, pathing and animations are not simulated.

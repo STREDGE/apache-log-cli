@@ -1,12 +1,33 @@
-HELICOVER 1.2 BETA - support helicopter with a smart crew
-GTA San Andreas (Android), CLEO mod. Russian language, a clearer menu, realistic behaviour.
+HELICOVER 1.3 BETA 1 - support helicopter with a smart crew
+GTA San Andreas (Android, 64-bit), a CLEO mod + the Helicover Brain 0.2 mod. They only work together.
 
 WHAT IT IS
 Call a support helicopter: it flies in from far away, follows CJ and covers him with four door
 gunners. Drop a four-man team on foot, get picked up by rope, fly to the map marker or Grove
 Street and get out there by landing or by rope.
 
-NEW IN BETA 6
+NEW IN 1.3 BETA 1 - THE BRAIN CONTROLS THE FIRE
+- The archive has two parts now: the scripts (CLEO folder) and the mod libHelicoverBrain64.so (mods
+  folder). The brain decides who of your people fires at whom and when; the scripts only carry it out.
+  Without the brain the helicopter is not called ("NO BRAIN MOD"). The brain has no off switch
+  and there is no fallback mode.
+- Door gunners open fire 0.15-0.35 s after somebody fires at CJ or points a weapon at him (targets
+  used to be looked for every 1.5 s). Two take the most dangerous man, the others take the rest; a
+  man is not dropped while he lives; never more than three rifles on one man.
+- A car on a collision course with CJ is met early - the driver is fired at; cars next to CJ are not
+  blown up.
+- Every round of a door gunner is checked before it leaves: not within 2 m of CJ or 1 m of your own
+  people, not across the cabin, not past the gunner beside him. No more fire "at a spot" or at empty cars.
+- The squad on the ground fires only at the men the brain names and ceases fire in the very frame CJ
+  or one of yours enters the line. Squad tactics (formation, cover) are still the old ones.
+- GUNNER FIRE page: four rules - PROTECT ME / ARMED ONLY / WHERE I SHOOT / HOLD FIRE (FIRE AT ALL is
+  gone) - and two switches: POLICE: FIRE BACK (with stars, only at policemen who fired) / NEVER FIRE;
+  MISSIONS: DEFEND ONLY (in a mission, only at those who attacked) / AS USUAL.
+  HOLD FIRE is absolute now: nobody fires, whatever happens.
+- WHERE I SHOOT: the targets are the people CJ fires at and the crew of a car he fires at.
+- The pilot still flies by the old rules; his turn is a later stage.
+
+NEW IN 1.2 BETA 6
 - Messages arrive at once. In the mobile game the help box is a queue: every message stayed for 5
   seconds and the next one waited its turn, so calls ran far behind the events. The mod now draws
   one line of its own at the top centre of the screen: it is there in the same frame and is replaced
@@ -86,25 +107,29 @@ WHAT IS NEW IN 1.2 (beta)
   The squad on the ground changes clothes and weapon on the fly too.
 
 REQUIREMENTS
-- GTA San Andreas for Android with CLEO (CLEO Android).
-- Tested on the 64-bit game with AML. Map-marker flight, spotting shooters by bullet traces and the
-  automatic Russian language work on that build only; on other builds they switch off by themselves.
+- GTA San Andreas for Android, 64-bit, with AML (the mods folder) and CLEO Android.
+- The brain mod compares instructions of the game and of CLEO with its own table and works only on
+  the build it was made for. On any other build it touches nothing and Helicover says
+  "NO BRAIN MOD" (the reason is in mods/hcbrain_log.txt).
 
 INSTALLATION
 1. Close the game.
-2. Copy all 8 files from the CLEO folder of the archive into the game's CLEO folder
+2. Put mods/libHelicoverBrain64.so from the archive into the game's mods folder
+   (Android_unprotected/data/com.rockstargames.gtasa/mods/), replacing an older one.
+3. Copy all 8 files from the CLEO folder of the archive into the game's CLEO folder
    (Helicover.csi, Helicover.fxt, Helicover_RU.fxt and the five Helicover_*.csa).
    Helicover_RU.fxt is a binary file with Russian letters: copy it as it is, do not open or re-save
    it in a text editor (the English Helicover.fxt is plain text).
-3. Replace any older Helicover files; keep no duplicates.
-4. Start the game.
+4. Replace any older Helicover files; keep no duplicates.
+5. Start the game.
 
 HOW TO USE
 Open the CLEO menu and choose Helicover. The menu shows only what makes sense right now and the
 title says what the helicopter is doing.
 No helicopter: CALL HELICOPTER.
 CJ on foot: FOLLOW ME / HOLD HERE / PATROL AROUND ME (the current one is marked [X]),
-GUNNER FIRE > (protect me / armed only / where I shoot / fire at all / hold fire),
+GUNNER FIRE > (protect me / armed only / where I shoot / hold fire; police: fire back / never fire;
+missions: defend only / as usual),
 CLIMB ABOARD BY ROPE (CANCEL ROPE PICKUP until the climb starts), DEPLOY SQUAD / RECALL SQUAD
 (a progress row while the squad is on its way), SETTINGS >, DISMISS HELICOPTER.
 CJ aboard: FLY TO MAP MARKER, FLY TO GROVE STREET, EXIT BUTTON: LAND / EXIT BUTTON: ROPE (a switch:
@@ -129,15 +154,20 @@ TIPS
 - If it cannot land or hover, move to open, level ground.
 - The Hunter has no passenger seat: no boarding or evacuation with it.
 - Settings last until the game is restarted.
-- WHERE I SHOOT takes your lock-on target first, then the line of your bullet traces, then the camera.
-  On other game versions the traces are not read (lock-on and camera work). Grenades and flamethrowers
-  leave no traces, so the gunners use your aim target or the camera there.
+- A report for the author: game Settings > Mods Settings > "Brain report" saves the last ~10 minutes to
+  mods/hcbrain_report_NN.bin (a new number every time). The debug markers over people ("Brain markers",
+  same page) are off by default.
 
 HONEST LIMITS
-- This is a beta. I cannot see a phone screen, so the logic was checked on a simulation of the game,
-  not in the game: what is new in beta 6 (look and place of the message line, your people under
-  attack, the kneeling gunners, the new fire rules), flight, the squad and the WHERE I SHOOT mode need
-  your check. The Russian letters in the game's Russian were confirmed on a phone (beta 3).
+- This is a beta. The fire control of 1.3 was checked on a computer (simulated fights, a fight
+  recorded on a tablet, an emulator with the real game library and the real CLEO code), but it has
+  not run in the game itself yet.
+- The squad fires the game's own weapons: the brain stops a guard within one frame, but it does not
+  steer the game's bullet (the door gunners' rounds are checked one by one).
+- An enemy standing right next to CJ cannot be fired at from the helicopter (the line passes within
+  2 m of CJ). A close bodyguard, cover and getting CJ out of fire are later stages; the pilot still
+  flies by the old rules.
+- The police helicopter is not fired at yet.
 - The look of the menu itself (the blue box) is drawn by CLEO, not by Helicover: the mod only
   supplies the rows. A new look for the CLEO menu is a separate mod (CLEO UI).
 - In 1.1 I wrongly assumed a bullet trace holds the exact start and end of a shot. For people's shots

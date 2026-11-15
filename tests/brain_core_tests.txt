@@ -14,14 +14,22 @@ PASS: Friends come from the game: ours, Grove, recruited homies, whoever respect
 PASS: In a mission the mission's own people are only watched until they put a weapon on CJ or attack - the brain does not start the mission's fights for it
 PASS: A car whose path comes within 2.5 m of CJ in the next 2 s at 8 m/s or more is called out as RAMMING; passing wide, slow, far, leaving, or CJ in a car - not
 PASS: A burning car within 14 m of CJ is a hazard; a wreck or a distant fire is not, and our own helicopter never is
+PASS: A THREAT stays a THREAT for 2 s after the man looks away (in the real fight the verdict blinked 1-3 times a second); putting the weapon away or leaving ends it at once
+PASS: With stars up an armed policeman within 40 m is a THREAT whichever way he is looking (he is coming for CJ); a gang member looking away, a policeman behind a wall or without stars is not
+PASS: A car on a collision course stays RAMMING for 1.5 s through a swerve (it blinked every 0.1-0.4 s in the real fight); braking releases it at once
+PASS: Run down with no author named (as in the real fight): the driver of the nearest moving car within 9 m answers for it - also when he has just jumped out of it - and the car stays a threat while it keeps moving; a parked car and a distant one are not blamed
+PASS: Rounds from nowhere hit one of ours while a strange helicopter is overhead (the police Maverick of the real fight): that helicopter is marked a THREAT for 15 s; our own never is, and a fall is not gunfire
+PASS: The setting "missions: as usual" lifts the mission restraint: the mission's armed men are judged like anybody else
+PASS: The first real fight, replayed (551 looks): every verdict of THREAT on a living man lasts at least 1.9 s (the stage 1 core changed its mind up to three times a second), the driver who ran our man down is found, the end is EVACUATE, and two replays agree bit for bit
 PASS: The alert level rises at once (calm, wary, threat, combat) and comes down one step per 6 quiet seconds, not straight to calm
 PASS: Four riflemen on CJ at once, or any attacker while CJ is below 30 health, means EVACUATE; a cutscene lets the level fall
 PASS: Contacts are ranked by the damage they can be expected to do to CJ: the rifle already on him, then the rifle close by, then the pistol at long range, then the man looking away; the same rifle counts for less the further away it is, and a pistol at 60 m for nothing
 PASS: 300 people around CJ (64 fit in a snapshot, 96 in memory): the six who fired, standing further away than all of them, are never pushed out
-PASS: Black box: a random 30 s fight (300 snapshots, 432 kB) decodes byte for byte and replays in a fresh brain to exactly the same decisions, tick by tick
+PASS: Black box: a random 30 s fight (300 snapshots, 478 kB) decodes byte for byte and replays in a fresh brain to exactly the same decisions, tick by tick
 PASS: Black box with the brain's memory stored every 5 s: after the ring has dropped its beginning, a replay from the first stored state reproduces all 200 later decisions exactly (a cold start on the same data gets 20 of the first 20 wrong)
 PASS: The report file (head, records, text) reads back whole; a file that is not a report, is cut short or comes from another version of the brain is refused with a plain reason. tools/replay.py turns a report into a timeline (alert changes, who became a threat and why) and confirms the replay is exact
-PASS: Black box in a small buffer: the oldest records make room (234 dropped), the last 66 are intact and in order; a damaged record is refused
+PASS: Black box: every round of ours is stored between the looks (who, at whom, the line, the verdict) and reads back in order
+PASS: Black box in a small buffer: the oldest records make room (222 dropped), the last 78 are intact and in order; a damaged record is refused
 PASS: Twenty random fights run twice give identical decisions: the core has no hidden state and no hidden randomness
 PASS: 300 snapshots of pure noise (counts beyond the arrays, NaNs, wild ids) and a damaged black box: no crash, outputs stay in range
 The core only. Nothing here has run in the game.

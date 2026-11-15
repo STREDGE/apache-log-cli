@@ -254,6 +254,177 @@ c = classes(sc)
 assert c[b1] == (HCB_CLS_THREAT, HCB_WHY_BURNING) and b2 not in c and b3 not in c and sc.heli not in c, c
 passed('A burning car within 14 m of CJ is a hazard; a wreck or a distant fire is not, and our own helicopter never is')
 
+# ------------------------------------------------------------------ verdicts do not flicker (stage 2, from the first real fight)
+sc = Scene()
+g = sc.ped(20, 0, pedtype=GANG, weapon=AK)
+sc.step(3)
+assert classes(sc)[g] == (HCB_CLS_THREAT, HCB_WHY_ARMED_FACING)
+sc.face(g, sc.cj['pos'], away=True)                    # he looks over his shoulder
+sc.step(1)
+assert classes(sc)[g] == (HCB_CLS_THREAT, HCB_WHY_ARMED_FACING), 'one look away does not clear him'
+sc.step(int(sc.brain.cfg.threat_hold_ms / 100) - 2)
+assert classes(sc)[g][0] == HCB_CLS_THREAT
+sc.step(3)
+assert classes(sc)[g] == (HCB_CLS_WATCH, HCB_WHY_ARMED_NEAR), 'two seconds turned away: watched again'
+sc.face(g, sc.cj['pos'])
+sc.step(1)
+assert classes(sc)[g][0] == HCB_CLS_THREAT
+sc.face(g, sc.cj['pos'], away=True)
+sc.peds[g]['weapon'] = 0                               # ... but a man who puts the gun away is not held
+sc.step(1)
+assert classes(sc).get(g, (0, 0))[0] < HCB_CLS_THREAT
+sc.peds[g]['weapon'] = AK
+sc.face(g, sc.cj['pos'])
+sc.step(1)
+sc.face(g, sc.cj['pos'], away=True)
+sc.peds[g]['pos'] = [70., 0., 1.]                      # ... nor one who is suddenly far away
+sc.step(1)
+assert classes(sc).get(g, (0, 0))[0] < HCB_CLS_THREAT
+passed('A THREAT stays a THREAT for 2 s after the man looks away (in the real fight the verdict blinked 1-3 times a second); putting the weapon away or leaving ends it at once')
+
+sc = Scene(wanted=2)
+hunting = sc.ped(-25, 0, pedtype=COP, weapon=PISTOL, face='away')
+stick = sc.ped(-10, 5, pedtype=COP, weapon=3, face='away')
+behind_wall = sc.ped(25, 0, pedtype=COP, weapon=PISTOL, face='away', flags2=HCB_PF2_LOS_KNOWN)
+far_cop = sc.ped(0, 55, pedtype=COP, weapon=PISTOL, face='away')
+gang_away = sc.ped(0, -20, pedtype=GANG, weapon=AK, face='away')
+sc.step(2)
+c = classes(sc)
+assert c[hunting] == (HCB_CLS_THREAT, HCB_WHY_ARMED_FACING) and c[stick][0] == HCB_CLS_WATCH and c[behind_wall][0] == HCB_CLS_WATCH, c
+assert c[far_cop][0] == HCB_CLS_WATCH and c[gang_away][0] == HCB_CLS_WATCH, c
+sc = Scene(wanted=0)
+calm_cop = sc.ped(-25, 0, pedtype=COP, weapon=PISTOL, face='away')
+sc.step(2)
+assert calm_cop not in classes(sc)
+passed('With stars up an armed policeman within 40 m is a THREAT whichever way he is looking (he is coming for CJ); a gang member looking away, a policeman behind a wall or without stars is not')
+
+sc, v = car(-20, 0.5, (15., 0., 0.))
+drv = sc.vehs[v]['driver']
+assert classes(sc)[v] == (HCB_CLS_THREAT, HCB_WHY_RAMMING) and classes(sc)[drv] == (HCB_CLS_THREAT, HCB_WHY_RAMMING)
+sc.vehs[v]['vel'] = [12., 9., 0.]                      # it swerves: on this course it would miss by metres
+sc.step(1)
+assert classes(sc)[v] == (HCB_CLS_THREAT, HCB_WHY_RAMMING) and classes(sc)[drv][0] == HCB_CLS_THREAT, 'a swerve does not clear it'
+sc.step(int(sc.brain.cfg.ram_hold_ms / 100) + 1)
+assert v not in classes(sc), 'a second and a half off the collision course: released'
+sc, v = car(-20, 0.5, (15., 0., 0.))
+sc.vehs[v]['vel'] = [2., 0., 0.]                       # it brakes
+sc.step(1)
+assert v not in classes(sc), 'a car that has braked is released at once'
+passed('A car on a collision course stays RAMMING for 1.5 s through a swerve (it blinked every 0.1-0.4 s in the real fight); braking releases it at once')
+
+# ------------------------------------------------------------------ hurt, and the game does not say by whom
+sc = Scene()
+guard = sc.our(6, 0, HCB_ROLE_SQUAD)
+d1, d2 = sc.ped(9, 0), sc.ped(6, 30)
+hit_car = sc.veh(9, 0, vel=(-9., 0., 0.), driver=d1)
+parked_driver = sc.ped(6, 2)
+parked = sc.veh(6, 2, driver=parked_driver)
+far_car = sc.veh(6, 30, vel=(0., -12., 0.), driver=d2)
+sc.step(1)
+sc.damage(0, guard, 90, weapon=49)                     # run down: no author
+sc.step(1)
+c = classes(sc)
+assert c[d1] == (HCB_CLS_ATTACKER, HCB_WHY_HURT_OURS) and parked_driver not in c and d2 not in c, c
+assert sc.brain.track(d1).damage_ours == 90
+sc.vehs[hit_car]['pos'] = [-20., 30., 1.]              # it drives on, away from CJ, no longer on any collision course
+sc.vehs[hit_car]['vel'] = [-9., 0., 0.]
+sc.step(25)                                            # long after the 1.5 s for which a collision course is remembered
+assert classes(sc)[hit_car] == (HCB_CLS_THREAT, HCB_WHY_RAMMING), 'the car that ran one of ours down stays a threat while it drives about'
+sc.vehs[hit_car]['vel'] = [0., 0., 0.]
+sc.step(1)
+assert hit_car not in classes(sc)
+sc = Scene()
+guard = sc.our(6, 0, HCB_ROLE_SQUAD)
+d3 = sc.ped(6, 25)
+sc.veh(6, 25, vel=(12., 0., 0.), driver=d3)            # the only moving car is 25 m away
+sc.step(1)
+sc.damage(0, guard, 90, weapon=49)
+sc.step(1)
+assert sc.brain.out.n_attackers == 0, 'nobody near: nobody is blamed'
+sc = Scene(wanted=2)
+guard = sc.our(6, 0, HCB_ROLE_SQUAD)
+cop = sc.ped(9, 0, pedtype=COP, weapon=PISTOL)
+rolling = sc.veh(9, 0, vel=(-9., 0., 0.), driver=cop)
+sc.step(2)
+sc.vehs[rolling]['driver'] = 0                         # the policeman jumps out; the car rolls on into our man
+sc.peds[cop]['vehicle'] = 0
+sc.peds[cop]['pos'] = [10., 2., 1.]
+sc.step(1)
+sc.damage(0, guard, 90, weapon=49)
+sc.step(1)
+assert classes(sc)[cop] == (HCB_CLS_ATTACKER, HCB_WHY_HURT_OURS) and classes(sc)[rolling][1] == HCB_WHY_RAMMING, classes(sc)
+passed('Run down with no author named (as in the real fight): the driver of the nearest moving car within 9 m answers for it - also when he has just jumped out of it - and the car stays a threat while it keeps moving; a parked car and a distant one are not blamed')
+
+sc = Scene(wanted=3)
+sc.heli = sc.veh(0, 20, z=40., cls=HCB_VC_HELI)
+pilot = sc.our(0, 20, HCB_ROLE_PILOT, z=40.)
+sc.vehs[sc.heli]['driver'] = pilot
+gunner = sc.our(1.4, 20, HCB_ROLE_GUNNER, z=40.)
+cop_pilot = sc.ped(60, 40, pedtype=COP, z=50.)
+police_heli = sc.veh(60, 40, z=50., cls=HCB_VC_HELI, driver=cop_pilot, model=497)
+sc.step(1)
+assert police_heli not in classes(sc)
+sc.damage(0, gunner, 18, weapon=52)
+sc.step(1)
+c = classes(sc)
+assert c[police_heli] == (HCB_CLS_THREAT, HCB_WHY_AIR_FIRE) and sc.heli not in c and sc.brain.out.alert >= HCB_ALERT_THREAT, c
+sc.step(160)
+assert police_heli not in classes(sc), 'quiet for 15 s: no longer a threat'
+sc = Scene()
+guard = sc.our(6, 0, HCB_ROLE_SQUAD)
+cop_pilot = sc.ped(60, 40, pedtype=COP, z=50.)
+police_heli = sc.veh(60, 40, z=50., cls=HCB_VC_HELI, driver=cop_pilot, model=497)
+sc.step(1)
+sc.damage(0, guard, 20, weapon=54)                     # a fall is not gunfire
+sc.step(1)
+assert police_heli not in classes(sc)
+passed('Rounds from nowhere hit one of ours while a strange helicopter is overhead (the police Maverick of the real fight): that helicopter is marked a THREAT for 15 s; our own never is, and a fall is not gunfire')
+
+sc = Scene(on_mission=1)
+m = sc.ped(20, 0, pedtype=GANG, weapon=AK, flags=HCB_PF_MISSION)
+sc.step(3)
+assert classes(sc)[m][0] == HCB_CLS_WATCH
+sc.mission_free = 1
+sc.step(1)
+assert classes(sc)[m] == (HCB_CLS_THREAT, HCB_WHY_ARMED_FACING)
+passed('The setting "missions: as usual" lifts the mission restraint: the mission\'s armed men are judged like anybody else')
+
+# ------------------------------------------------------------------ the first real fight (recorded on the player's tablet, 57 s, three stars, CJ killed)
+FIGHT = Path(__file__).resolve().parent / 'data' / 'fight1_police.json.gz'
+fight = load_fight(FIGHT)
+assert len(fight) == 551 and fight[0].n_ours == 9 and fight[-1].player.health == 0
+
+
+def play(snaps, seed=3):
+    b, digests, periods, open_, blamed = Brain(seed=seed), [], [], {}, None
+    for s in snaps:
+        o = b.think(s)
+        digests.append(o.digest)
+        assert o.n_marks <= HCB_MAX_MARKS and o.n_orders <= HCB_MAX_OURS and o.n_queries <= HCB_MAX_LOS and o.alert <= HCB_ALERT_EVACUATE
+        alive = {p.id for p in s.peds[:s.n_peds] if not p.flags & HCB_PF_DEAD} | {v.id for v in s.vehs[:s.n_vehs]}
+        now = {m.id for m in o.marks[:o.n_marks] if m.cls >= HCB_CLS_THREAT and m.kind == HCB_KIND_PED and m.why != HCB_WHY_RAMMING}
+        for i in now:
+            open_.setdefault(i, s.time)
+        for i in list(open_):
+            if i not in now:
+                start = open_.pop(i)
+                if i in alive:
+                    periods.append((i, start, s.time))
+        for e in s.events[:s.n_events]:
+            if e.type == HCB_EV_DAMAGE and e.src == 0 and e.weapon == 49:
+                blamed = [t for t in (b.track(p.id) for p in s.peds[:s.n_peds]) if t and t.damage_ours >= 90]
+    return digests, periods, blamed, b
+
+
+d1, periods, blamed, b = play(fight)
+d2 = play(fight)[0]
+assert d1 == d2
+short = [(hex(i), (e - a)) for i, a, e in periods if e - a < 1900]
+assert not short, short
+assert blamed and len(blamed) == 1, 'the squad member run down at 27.6 s: one driver answers for it'
+assert b.out.alert == HCB_ALERT_EVACUATE
+passed('The first real fight, replayed (551 looks): every verdict of THREAT on a living man lasts at least 1.9 s (the stage 1 core changed its mind up to three times a second), the driver who ran our man down is found, the end is EVACUATE, and two replays agree bit for bit')
+
 # ------------------------------------------------------------------ alert level
 sc = Scene()
 sc.step(2)
@@ -429,6 +600,18 @@ assert len(ticks) == len(kept) and len(exact) == after and all(t['match'] for t 
 report = replay_tool.summarize(data)
 assert 'reproduce the phone\'s decisions exactly' in report and 'ATTACKER' in report and 'alert COMBAT' in report and 'device: test' in report, report[:600]
 passed('The report file (head, records, text) reads back whole; a file that is not a report, is cut short or comes from another version of the brain is refused with a plain reason. tools/replay.py turns a report into a timeline (alert changes, who became a threat and why) and confirms the replay is exact')
+rr = Recorder(1 << 16)
+sc = Scene()
+sc.step(1)
+rr.push(sc.snapshots[-1], 5)
+rnd_ = hcb_round()
+rnd_.time, rnd_.who, rnd_.target, rnd_.verdict, rnd_.ray = 123456, 0x1002, 0x2c0e, HCB_HOLD_CJ_IN_LINE, 1
+rnd_.muzzle, rnd_.to = vec(1., 2., 3.), vec(4., 5., 6.)
+rr.push_round(rnd_)
+rr.push(sc.snapshots[-1], 6)
+got = rr.all()
+assert [g_[0] for g_ in got] == ['snapshot', 'round', 'snapshot'] and bytes(got[1][1]) == bytes(rnd_), [g_[0] for g_ in got]
+passed('Black box: every round of ours is stored between the looks (who, at whom, the line, the verdict) and reads back in order')
 passed('Black box in a small buffer: the oldest records make room (%d dropped), the last %d are intact and in order; a damaged record is refused' % (small.rec.dropped, len(tail)))
 for seed in range(20):
     a = random_fight(100 + seed, ticks=120)[1]
@@ -453,7 +636,7 @@ for _ in range(50):
     r.push(s, 1)
 junk = (ctypes.c_uint8 * 4096)(*[rnd.getrandbits(8) for _ in range(4096)])
 off, s = ctypes.c_uint32(0), hcb_snapshot()
-while hcb_py.LIB.hcb_rec_next(junk, 4096, ctypes.byref(off), ctypes.byref(s), None):
+while hcb_py.LIB.hcb_rec_next(junk, 4096, ctypes.byref(off), ctypes.byref(s), None, None, None):
     pass
 passed('300 snapshots of pure noise (counts beyond the arrays, NaNs, wild ids) and a damaged black box: no crash, outputs stay in range')
 
