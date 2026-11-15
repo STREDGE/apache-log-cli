@@ -451,6 +451,20 @@ sc.shot(g, (0., 0., 1.), dst=1)
 run(sc, 10)
 states = sorted(sc.brain.squad(w_, g, sc.time, sc.peds[w_]['pos'], sc.peds[g]['pos'], sc.cj['pos'], [sc.peds[o_]['pos'] for o_ in team if o_ != w_]) for w_ in team)
 assert states == [2, 2, 2, 3] and sorted(HOLD[o.hold] for o in sc.orders.values()) == ['ENOUGH', 'NONE', 'NONE', 'NONE'], (states, holds(sc))
+# two attackers at once, both on the same side and one behind the other: two rifles each - not three on the nearer man
+sc = Scene()
+team = squad(sc)
+near_, far_ = sc.ped(20, 2, pedtype=GANG, weapon=AK), sc.ped(30, 2, pedtype=GANG, weapon=AK)
+sc.shot(near_, (0., 0., 1.), dst=1)
+sc.shot(far_, (0., 0., 1.), dst=1)
+run(sc, 10)
+on_ = sorted(o.target for o in sc.orders.values() if o.fire)
+assert on_ == sorted([near_, near_, far_, far_]), ('fire spreads: two and two', on_, holds(sc))
+sc = Scene()
+team = squad(sc)
+g = sc.ped(25, 0, pedtype=GANG, weapon=AK)
+sc.shot(g, (0., 0., 1.), dst=1)
+run(sc, 10)
 # a second attacker turns up: the man with free hands takes him, the three who are firing keep their man
 on = lambda: {w_: sc.orders[w_].target for w_ in team}
 before = on()
@@ -473,6 +487,31 @@ sc.shot(g2, (0., 0., 1.), dst=1)
 run(sc, 10)
 took = [w_ for w_ in team if sc.orders[w_].target == g2 and sc.orders[w_].fire]
 assert took and free not in took, ('nobody who fires at CJ is left alone', free, holds(sc))
+# ...and a much more dangerous one whom only a firing man can take (the free man has CJ in his line to both) is worth the change
+sc = Scene()
+team = squad(sc, places=((3, 8), (-5, 0)))
+weak = sc.ped(25, 1, pedtype=GANG, weapon=PISTOL)
+sc.shot(weak, (0., 0., 1.), dst=1)
+run(sc, 10)
+assert sc.orders[team[0]].target == weak and sc.orders[team[0]].fire and HOLD[sc.orders[team[1]].hold] == 'CJ_IN_LINE', holds(sc)
+close = sc.ped(10, -1, pedtype=GANG, weapon=PISTOL)
+sc.shot(close, (0., 0., 1.), dst=1)
+run(sc, 10)
+m_ = sc.brain.marks()
+assert 1.4 < m_[close].edps / m_[weak].edps < 1.9, ('(the scene: about one and a half times as dangerous)', m_[close].edps, m_[weak].edps)
+assert sc.orders[team[0]].target == close and sc.orders[team[0]].fire and HOLD[sc.orders[team[1]].hold] == 'CJ_IN_LINE', holds(sc)
+# one rifle, two attackers: it stays on one man - a rifle is taken only from a man who has more than he needs
+sc = Scene()
+team = squad(sc, places=((3, 8),))
+a_, b_ = sc.ped(25, 3, pedtype=GANG, weapon=AK), sc.ped(25, -3, pedtype=GANG, weapon=AK)
+sc.shot(a_, (0., 0., 1.), dst=1)
+sc.shot(b_, (0., 0., 1.), dst=1)
+run(sc, 5)
+seen = []
+for _ in range(10):
+    sc.step(1)
+    seen.append((sc.orders[team[0]].target, sc.orders[team[0]].fire))
+assert len(set(seen)) == 1 and seen[0][1] == 1, ('no hopping between two men', seen)
 # ...and with nobody free the least needed rifle goes over: nobody who fires at CJ is left alone
 sc = Scene()
 team = squad(sc)[:3]

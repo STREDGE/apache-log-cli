@@ -409,6 +409,6 @@ API int hcb_squad_state(const hcb_brain *cb, const hcb_shot *q) {
     const shooter *sh = shooter_find((hcb_brain *)cb, q->who);
     if (!sh || !sh->aim) return 0;
     if (sh->hold == HCB_HOLD_COVERING) return sh->ready ? 1 : 0;
-    if (sh->hold != HCB_HOLD_NONE || sh->aim != sh->target) return 3;
+    /* (the check below refuses by itself when his order is not "fire" or the man asked about is not his) */
     return shot_check(cb, q, 1) == HCB_HOLD_NONE ? 2 : 3;
 }

@@ -266,7 +266,7 @@ for fname,old,new,name in M:
  r=subprocess.run([sys.executable,'build_all.py'],cwd=ROOT/'builder',capture_output=True,text=True,env=env)
  if r.returncode:print('BUILD FAIL',name,r.stderr[-300:]);continue
  rc=0
- for tf in ('test_v12_realism.py','test_v12_i18n.py','test_v40_squad.py','test_v25.py'):
+ for tf in ('test_v25.py','test_v40_squad.py','test_v12_realism.py','test_v12_i18n.py'):   # the quick ones first: most mutants are caught there
   r=subprocess.run([sys.executable,tf],cwd=ROOT/'builder',capture_output=True,text=True,env=env)
   if r.returncode:rc=1;break
  print(('CAUGHT  ' if rc else 'MISSED  ')+name+('' if rc else '  <<<<<<'),flush=True)
