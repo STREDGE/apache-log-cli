@@ -6,6 +6,15 @@ Call a support helicopter: it flies in from far away, follows CJ and covers him 
 gunners. Drop a four-man team on foot, get picked up by rope, fly to the map marker or Grove
 Street and get out there by landing or by rope.
 
+NEW IN BETA 5
+- The menu opens at once. After a tap on "helicover" in the CLEO list it used to take almost a
+  second: the mod's scripts checked each other with fixed pauses. Now the menu is there on the
+  next frame.
+- The rows answer at once: the order reaches the pilot in the same frame and the page is redrawn
+  without the 0.2 s pause. The double-tap protection (0.35 s after a page change, 1 s for the same
+  row) is unchanged.
+- Flight, gunners and the squad are as in beta 4: only the menu was changed.
+
 NEW IN BETA 4
 - The mod's language simply follows the game's: game set to Russian - menu and messages in Russian;
   any other game language (English, SanLTD and the rest) - English. There is no language choice in
@@ -102,10 +111,11 @@ TIPS
 
 HONEST LIMITS
 - This is a beta. I cannot see a phone screen, so the logic was checked on a simulation of the game,
-  not in the game: flight, the squad, the double-press protection and the WHERE I SHOOT mode need
+  not in the game: flight, the squad, the double-press protection, the WHERE I SHOOT mode and how
+  fast the menu opens (beta 5) need
   your check. The Russian letters in the game's Russian were confirmed on a phone (beta 3).
 - The look of the menu itself (the blue box) is drawn by CLEO, not by Helicover: the mod only
-  supplies the rows. A new look for the CLEO menu is a separate project.
+  supplies the rows. A new look for the CLEO menu is a separate mod (CLEO UI).
 - In 1.1 I wrongly assumed a bullet trace holds the exact start and end of a shot. For people's shots
   it does not (it is a random piece up to 5 m long on the bullet's path), so "spot the shooter by
   the trace" and "rounds hit the helicopter" worked worse than promised. 1.2 uses lines instead.

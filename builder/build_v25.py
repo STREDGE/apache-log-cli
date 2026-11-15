@@ -66,6 +66,7 @@ import threat_v41 as _tv;assert _tv.STATE==STATE and _tv.GROUND_PUB==GROUND_PUB
 TS_SAVE=STATE+380   # 4 slots: registers the trace scan borrows
 PREV_HP=STATE+356;PREV_HP_T=STATE+360;GT_YIELD=STATE+364;LS_X=STATE+340;LS_Y=STATE+344;LS_Z=STATE+348;LS_T=STATE+352  # gunner hit tracking / guard last-seen
 BLOCK_T=STATE+390;SQ_CARH=STATE+391;SQ_DRIVES=STATE+392;ESC_LAGGED=STATE+393;ROPE_T0=STATE+394;SQ_LAG=STATE+395   # SQ_LAG..+3: per guard, time since he fell 70 m behind CJ
+NAP_UNTIL=STATE+428   # beta 5: end of the core's current 100 ms nap (an order ends the nap at once)
 AFTER_ROPE=STATE+425;DISMISS_NEXT=STATE+426;LEAVE_ROT=STATE+427   # beta 4: the order that follows once a cancelled pickup's cover team is back aboard / when the panel may ask for the recall again
 ROPE_WAIT=STATE+415;LEAVE=STATE+416;LEAVE_N=STATE+424   # beta 4: the rope hangs waiting for CJ / LEAVE..+7: guards who were let go and walk away / 1 while any is left
 ROPE_BUSY=STATE+406;SWAP_MSG=STATE+407;TEAM_CREW=STATE+408;DISMISS_T=STATE+411;PB_AIM=STATE+412   # PB_AIM..+2: the aim point the gunners were called with   # 1.2 decor: a rope motion is under way / swap message shown / crew setting the ground team wears
@@ -192,7 +193,7 @@ for key in range(PUB,PUB+7):c.set(key,-1)
 for key in range(GROUND_PUB,GROUND_PUB+5):c.set(key,-1)
 c.set(ROPE_COMMAND,0)
 for key,val in [(LANG,0),(ROPE_WAIT,0),(LEAVE_N,0),(AFTER_ROPE,0),(DISMISS_NEXT,0),(LEAVE_ROT,0),(ROPE_BUSY,0),(SWAP_MSG,0),(TEAM_CREW,0),(STATE,0),(CMD,0),(OPEN,0),(MODEL,487),(CREW,2),(FIRE,3),(TOUCH,0),(HUD,2),(HP,0),(WEAPON_SETTING,0),(EXIT_MODE,0),(AUTO_EXIT,0),(LOCK_HOLD,0),(ROPE_PENDING,0),(DROP_RESULT,0),(ROPE_TRIES,0),(RETRY_AT,0),(FORCE_ROPE,0),(EXIT_PRESSED,0),(EXIT_LAST,0),(AIR_SEEN,0),(AIR_CALL_NEXT,0),(KILLS,0),(LAST_TGT,-1),(ENGAGED,0),(CLEAR_AT,0),(ORBIT_I,0),(ORBIT_NEXT,0),(TACTICS,0),(ESCORT_PENDING,0),(ST_I,0),(ST_NEXT,0),(HP_PREV,0),(HP_T,0),(EVADE_UNTIL,0),(HELI_SHOT_T,-100000)]:c.set(key,val)
-c.label('IDLE');a(1,I(100));c.call('RESOLVE_LANG');a(0x01bd,V(20));a(0xddc,I(HEART),V(20));c.get(19,HELLO_AT);c.eq(19,-1,'HELLO_CHECK');c.go('HELLO_DONE')
+c.label('IDLE');c.call('NAP');c.call('RESOLVE_LANG');a(0x01bd,V(20));a(0xddc,I(HEART),V(20));c.get(19,HELLO_AT);c.eq(19,-1,'HELLO_CHECK');c.go('HELLO_DONE')
 c.label('HELLO_CHECK');c.eq(19,0,'HELLO_DUE');a(0x0085,V(19),V(20));a(0x000a,V(19),I(5000));a(0xddc,I(HELLO_AT),V(19));c.go('HELLO_DONE')
 c.label('HELLO_DUE');c.check(0x001d,[V(20),V(19)],'HELLO_DONE');c.check(0x0256,[I(0)],'HELLO_DONE');c.set(HELLO_AT,-1);c.get(19,GAME_OK);c.eq(19,1,'HELLO_OLD');msg(c,'HCHELLO');c.go('HELLO_DONE')
 c.label('HELLO_OLD');msg(c,'HCHELLV')
@@ -245,10 +246,15 @@ c.label('TEAM_CHECK_ROPE');c.eq(25,11,'TEAM_CHECK_PATROL');c.go('ROPE_PREP')
 c.label('TEAM_CHECK_PATROL');c.eq(25,12,'FOLLOW');c.go('PATROL_START')
 # v34: per-frame ticks only while the script itself moves the helicopter (cruise, glide, descent);
 # long frozen holds (awaiting a choice, rope work) go back to the normal 100 ms tick.
+# beta 5: the core still works every 100 ms, but an order does not wait for the end of the nap: the nap is slept frame by frame and
+# ends the moment CMD is set (the menu page then follows the order on the next frame instead of up to 0.1 s later). Uses 17@, 19@.
+c.label('NAP');a(0x01bd,V(19));a(0x000a,V(19),I(100));a(0xddc,I(NAP_UNTIL),V(19))
+c.label('NAP_LOOP');a(1,I(0));c.get(19,CMD);c.eq(19,0,'NAP_END');a(0x01bd,V(19));c.get(17,NAP_UNTIL);c.check(0x801d,[V(17),V(19)],'NAP_LOOP')
+c.label('NAP_END');c.ret()
 c.label('TICK');c.get(19,FROZEN);c.eq(19,1,'TICK_NORMAL_WAIT');c.get(19,STATE)
 for st in [10,19,21,22]:
  nxt='TICK_FAST_NOT_'+str(st);c.eq(19,st,nxt);a(1,I(0));c.go('TICK_AFTER_WAIT');c.label(nxt)
-c.label('TICK_NORMAL_WAIT');a(1,I(100))
+c.label('TICK_NORMAL_WAIT');c.call('NAP')
 c.label('TICK_AFTER_WAIT')
 if DEBUG_BREADCRUMBS:
  c.get(19,STATE);a(0x0012,V(19),I(100));c.get(17,DBG_CODE);a(0x005a,V(19),V(17));c.get(17,DBG_LAST);c.check(0x803b,[V(19),V(17)],'DBG_SAME');a(0x01e5,S('HCDBG'),V(19),I(600000),I(1));a(0xddc,I(DBG_LAST),V(19));c.label('DBG_SAME')
@@ -952,11 +958,12 @@ a(0xddc,I(STATE),V(7));c.set(BUSY,0);msg(c,'HCCFAIL')
 c.label('CREW_REJECT');c.get(19,ACREW);a(0xddc,I(CREW),V(19))
 c.label('CREW_RETURN');c.ret()
 
+PANEL_FRESH_MS=1000;CORE_FRESH_MS=1500;PANEL_PROOF_MS=650;CORE_PROOF_MS=250   # beta 5: a heartbeat (game time stamp) younger than FRESH = the script is running, no waiting; otherwise it has to change within PROOF ms
 p=Script();a=p.add
 MENU_GUARD_MS=350;MENU_REPEAT_MS=1000   # beta 4 tap guard: after a tap or a page change / the same main-page row again
 import i18n_v12 as i18n
 p.label('INIT');a(0);a(6,V(10),I(0));a(6,V(16),I(0));a(6,V(25),I(-1));a(6,V(26),I(0));a(6,V(17),I(-999));p.set(DISMISS_T,0)
-p.label('WATCH');a(1,I(50));a(0x01bd,V(20));a(0xddc,I(PANELHEART),V(20));p.call('DISMISS_TICK');p.get(0,0);p.eq(0,0,'WATCH');p.check(0x0256,[I(0)],'WATCH')
+p.label('WATCH');a(1,I(0));a(0x01bd,V(20));a(0xddc,I(PANELHEART),V(20));p.call('DISMISS_TICK');p.get(0,0);p.eq(0,0,'WATCH');p.check(0x0256,[I(0)],'WATCH')
 p.get(8,STATE);p.check(0x803b,[V(8),V(17)],'AFTER_NOTICE');a(0x0085,V(17),V(8))
 # 1.1: a state the core entered on its own way (rope hover = 3, follow after the team landed = 2)
 # is not announced as if the player had asked for it
@@ -970,8 +977,13 @@ notice={24:'HCPAT',1:'HCLOAD',2:'HCFOLL',3:'HCHOLD',4:'HCDEPT',5:'HCFAIL',6:'HCO
 for st,key in notice.items():
  nxt='NOTICE_NEXT_'+str(st);p.eq(8,st,nxt);say(p,key);p.go('AFTER_NOTICE');p.label(nxt)
 p.label('AFTER_NOTICE');p.get(1,OPEN);p.eq(1,1,'WATCH');p.go('ACQUIRE')
-p.label('ACQUIRE');p.get(0,0);p.eq(0,0,'WATCH');p.set(OPEN,0);p.set(0,1);a(6,V(10),I(0));a(6,V(25),I(-1));p.get(13,HEART);a(1,I(250));p.get(14,HEART);p.check(0x803b,[V(13),V(14)],'CORE_MISSING');a(6,V(2),I(0));a(6,V(3),I(-999));p.go('REFRESH')
-p.label('MENU_POLL');a(1,I(50));a(0x01bd,V(20));a(0xddc,I(PANELHEART),V(20));p.call('DISMISS_TICK');p.check(0x0256,[I(0)],'CLOSE');a(0x0df4,V(1),I(250));p.eq(1,-2,'PICK');p.go('CLOSE')
+p.label('ACQUIRE');p.get(0,0);p.eq(0,0,'WATCH');p.set(OPEN,0);p.set(0,1);a(6,V(10),I(0));a(6,V(25),I(-1));p.get(13,HEART);p.eq(13,0,'CORE_SEEN');p.go('CORE_SLOW')
+p.label('CORE_SEEN');a(0x01bd,V(14));a(0x0062,V(14),V(13));p.check(0x8019,[V(14),I(CORE_FRESH_MS)],'CORE_SLOW');p.check(0x0019,[V(14),I(-1)],'CORE_SLOW')   # beta 5: no 250 ms pause - the core's heartbeat is a time stamp
+p.label('CORE_OK');a(6,V(2),I(0));a(6,V(3),I(-999));p.go('REFRESH')
+# a stale stamp (or one from 'the future' after a loaded save): the old proof of life - it has to change within 250 ms
+p.label('CORE_SLOW');a(0x01bd,V(29));a(0x000a,V(29),I(CORE_PROOF_MS))
+p.label('CORE_SLOW_LOOP');a(1,I(0));p.get(14,HEART);p.check(0x003b,[V(14),V(13)],'CORE_OK');a(0x01bd,V(14));p.check(0x001d,[V(14),V(29)],'CORE_SLOW_LOOP');p.go('CORE_MISSING')
+p.label('MENU_POLL');a(1,I(0));a(0x01bd,V(20));a(0xddc,I(PANELHEART),V(20));p.call('DISMISS_TICK');p.check(0x0256,[I(0)],'CLOSE');a(0x0df4,V(1),I(250));p.eq(1,-2,'PICK');p.go('CLOSE')
 p.label('PICK');p.eq(1,-1,'HAS_PICK');p.go('CHECK_MENU_STATUS')
 # beta 4, every page: nothing is accepted for 0.35 s after a tap was taken or the page changed (16@). A double tap on "CREW >" used to
 # open the page AND pick its first row; a tap already on its way when the squad landed used to hit the row that replaced the old one.
@@ -1048,7 +1060,7 @@ for st in [1,4,13]:
 # beta 4: the order is carried out by DISMISS_TICK - at once with everybody aboard, after the squad is back otherwise
 a(0x01bd,V(20));a(0xddc,I(DISMISS_T),V(20));p.set(DISMISS_NEXT,0);p.call('DT_PHASE');p.eq(22,0,'DDA_SQUAD');p.go('DDA_GO')
 p.label('DDA_SQUAD');say(p,'HCDSQ')
-p.label('DDA_GO');p.call('DISMISS_TICK');a(1,I(200));a(6,V(2),I(0));p.go('CHECK_MENU_STATUS')
+p.label('DDA_GO');p.call('DISMISS_TICK');a(6,V(2),I(0));p.go('CHECK_MENU_STATUS')
 # DISMISS_TICK (every pass of the panel, menu open or not) while a dismissal is pending: nothing while ropes move or the squad is on its
 # way; squad on the ground - the recall is asked for (again every 6 s: a first try may meet a bad site) and after 45 s the helicopter
 # leaves without it; everybody aboard - the helicopter is sent home. Uses 19@, 21@ - 24@.
@@ -1083,7 +1095,7 @@ for label,cmd in [('DO_CALL',1),('DO_FOLLOW',2),('DO_HOLD',3),('DO_GROVE',7),('D
  for st in [1,4,13]:
   nxt='ALLOW_'+label+'_'+str(st);p.eq(8,st,nxt);p.go('FORCE_REFRESH');p.label(nxt)
  if cmd!=17:p.set(DISMISS_T,0)   # another order withdraws a dismissal that still waits for the squad
- p.set(CMD,cmd);a(1,I(200))
+ p.set(CMD,cmd)   # beta 5: no fixed 200 ms pause - the page follows the state on the very next pass (the menu is polled every frame)
  p.go('CHECK_MENU_STATUS')
 # the two EXIT BUTTON rows are switches: they choose what the game's own exit button does and start nothing themselves
 p.label('DO_EXIT_LAND');p.set(EXIT_MODE,0);say(p,'HCXBL');p.go('FORCE_REFRESH')
@@ -1163,7 +1175,15 @@ for prof,suf in zip(PROFILES,SUFFIX):
    p.blob('PREF_'+str(pg)+'_'+str(val)+suf,i18n.menu_text(title,prof),[Tx(fmt%v,prof,v==val) for v in values]+[Tx('BACK',prof)])
 
 launch=Script();a=launch.add
-launch.label('ENTRY');a(0);a(1,I(400));launch.get(1,PANELHEART);a(1,I(250));launch.get(2,PANELHEART);launch.check(0x803b,[V(1),V(2)],'MISSING');launch.set(OPEN,1);a(0x004e)
+# beta 5: the menu opens at once. The panel writes the game time into PANELHEART on every pass, so "is it alive" is a comparison
+# with the time now (it used to be two reads 250 ms apart after a 400 ms pause: 0.65 s before the panel was even asked).
+# A stale stamp (or one from 'the future' after a loaded save) falls back to the old proof of life: the stamp has to change
+# within 650 ms - so a stale stamp alone never means "files missing".
+launch.label('ENTRY');a(0);launch.get(1,PANELHEART);launch.eq(1,0,'PANEL_SEEN');launch.go('PANEL_SLOW')
+launch.label('PANEL_SEEN');a(0x01bd,V(2));a(0x0062,V(2),V(1));launch.check(0x8019,[V(2),I(PANEL_FRESH_MS)],'PANEL_SLOW');launch.check(0x0019,[V(2),I(-1)],'PANEL_SLOW')
+launch.label('PANEL_OK');launch.set(OPEN,1);a(0x004e)
+launch.label('PANEL_SLOW');a(0x01bd,V(3));a(0x000a,V(3),I(PANEL_PROOF_MS))
+launch.label('PANEL_SLOW_LOOP');a(1,I(0));launch.get(2,PANELHEART);launch.check(0x003b,[V(2),V(1)],'PANEL_OK');a(0x01bd,V(2));launch.check(0x001d,[V(2),V(3)],'PANEL_SLOW_LOOP')
 launch.label('MISSING')
 for _ofs,_val in GAME_SIG:a(0x0dd8,V(1),I(_ofs),I(4),I(1));launch.check(0x0039,[V(1),I(_val)],'MISSING_EN')   # only on the known build is the game's language flag read
 a(0x0dd8,V(1),I(GAME_RU_FLAG),I(1),I(1));launch.eq(1,1,'MISSING_EN');a(0x03e5,S('UCOFF'));a(0x004e)

@@ -1,4 +1,4 @@
-PASS: Rope glide from 40 m eases out in about 3-4 s, never above 25 m/s, and takes the same time at 30 and 10 fps (3200 ms / 3201 ms)
+PASS: Rope glide from 40 m eases out in about 3-4 s, never above 25 m/s, and takes the same time at 30 and 10 fps (3200 ms / 3234 ms)
 PASS: Exit by rope at 20 m/s: the destination is 30 m ahead (speed + 10 m), so the helicopter slows down on the way
 PASS: A script-flown helicopter (frozen, no real speed) is slowed by its cruise speed: 40 m/s means a point 50 m ahead
 PASS: Exit by rope at walking pace: freeze right here and drop

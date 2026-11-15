@@ -23,4 +23,12 @@ PASS: A recall that cannot start is retried every 6 s and does not keep the heli
 PASS: Another order withdraws a dismissal that was still waiting for the squad
 PASS: DISMISS without a squad is immediate after the confirmation; "NO, KEEP IT" changes nothing
 PASS: Crew and helicopter models are pre-requested while their pages are open, so choosing one does not stall a frame
+PASS: Tapping "helicover" in the CLEO list: the menu is on the screen 2 frame(s) later at 10, 30 and 60 fps, whatever the scripts were doing (it used to take 0.9 s of fixed pauses)
+PASS: No menu script (never started, or stopped a few seconds ago): the launcher says "files missing" within 0.7 s and leaves no open request behind
+PASS: A heartbeat that is out of date (or ahead of the clock after a loaded save) with both scripts alive: the menu still opens, 3 frames at most - a stale stamp alone never means "missing"
+PASS: No core script (never started, or stopped 3 s ago): the OFFLINE page, 0.25 s after the tap
+PASS: A tapped row: the core takes the order within 2 frame(s) and the page shows the result within 2 (HOLD HERE gets its [X], CALL HELICOPTER turns into the FOLLOWING page) - no fixed 0.2 s pause, no waiting for the core's 0.1 s tick
+PASS: A tap that CLEO keeps reporting for 0.25 s does exactly what a single report does on all 8 rows at 10, 30 and 60 fps: one order at most, and nothing is chosen on the page that has just opened
+PASS: Nothing asked: the core still works once per 0.1 s (20 passes in 2 s at 10 fps, 15 at 30 fps, 18 at 60 fps - the same as with the plain pause)
+PASS: Any order number in any situation (no helicopter, following, aboard, squad down, roping, leaving) is taken or dropped within 2 frames (while leaving: 0.1 s) - an order never stays pending, so the nap cannot turn into a busy loop
 Mocked script execution only: the Russian layout was confirmed on the player's phone (beta 3); the look of the menu itself is the game's.
