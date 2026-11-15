@@ -135,7 +135,7 @@ class VM:
    elif base==0x457:cond(w.targeting==vals[1])
    elif base==0x431:cond((vals[0],vals[1]) not in w.seats)
    elif base==0x205:cond(all(abs(w.coords(vals[0])[i]-w.car[i])<=vals[2+i] for i in range(3)))
-   elif base==0x6bd:cond(w.siteclear and w.clear_fn(vals[0],vals[1]) and getattr(w,'los_fn',lambda a,b:True)(vals[:3],vals[3:6]) and (w.ray_block_distance is None or math.dist(vals[:3],vals[3:6])<w.ray_block_distance) and not (vals[8] and any(w.seg_dist(vals[:3],vals[3:6],pos)<rad for pos,rad in getattr(w,'blockers',[]))))
+   elif base==0x6bd:cond(w.siteclear and w.clear_fn(vals[0],vals[1]) and getattr(w,'los_fn',lambda a,b:True)(vals[:3],vals[3:6]) and (w.ray_block_distance is None or math.dist(vals[:3],vals[3:6])<w.ray_block_distance) and not (vals[8] and any(w.seg_dist(vals[:3],vals[3:6],pos)<rad for pos,rad in getattr(w,'blockers',[]))) and not (vals[7] and getattr(w,'car_body',None) and w.incar.get(1) in w.cars and w.seg_dist(vals[:3],vals[3:6],w.cars[w.incar[1]]['pos'])<w.car_body))   # car_body: CJ's own car is solid for lines that include vehicles
    elif base in [0x51a,0x51c]:cond((vals[0],vals[1]) in w.damage)
    elif op==0xddd:put(0,w.shared[vals[1]])
    elif op==0xddc:w.shared[vals[0]]=vals[1]
@@ -215,7 +215,7 @@ class VM:
    elif op==0x53e:
     found=next((car for car in w.traffic if car in w.exists and vals[0]<=w.cars[car]['pos'][0]<=vals[2] and vals[1]<=w.cars[car]['pos'][1]<=vals[3] and (vals[4]<0 or w.model[car]==vals[4])),-1)
     put(5,found)
-   elif op==0x46c:put(1,w.seats.get((vals[0],-1),-1))
+   elif op==0x46c:put(1,w.seats.get((vals[0],-1),1 if (w.incar.get(1)==vals[0] and not getattr(w,'cj_is_passenger',False)) else -1))   # the driver's handle: an explicit one, else CJ when he sits in it (not as a passenger)
    elif op==0x432:
     assert (vals[0],vals[1]) in w.seats, 'empty passenger seat dereference'
     put(2,w.seats[(vals[0],vals[1])])
@@ -233,7 +233,7 @@ class VM:
     w.next+=1;new=w.next;put(len(aa)-1,new);w.exists.add(new)
     if op==0xa5:w.model[new]=vals[0];w.cars[new]={'pos':vals[1:4].copy(),'heading':w.heading};w.current_car=new
     elif op==0x129:w.incar[new]=vals[0];w.skin[new]=vals[2]
-    elif op==0x9a:w.pos[new]=vals[2:5].copy();w.skin[new]=vals[1];w.pedtype[new]=vals[0]
+    elif op==0x9a:w.pos[new]=[vals[2],vals[3],vals[4]+1.];w.skin[new]=vals[1];w.pedtype[new]=vals[0]   # CREATE_CHAR: z += 1.0 as in libGTASA (a ped's position is its centre, 1 m above its feet)
    elif op in [0x9b,0xa6]:w.exists.discard(vals[0]);w.incar.pop(vals[0],None);w.attach.pop(vals[0],None);w.cars.pop(vals[0],None)
    elif op==0x464:
     w.incar.pop(vals[0],None);w.attach[vals[0]]=(vals[1],vals[2:5].copy());w.weapons[vals[0]]=vals[-1]

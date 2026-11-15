@@ -15,7 +15,7 @@ WHAT IS NEW IN 1.2 (beta)
 - WHERE I SHOOT (follow my shots) was rebuilt: the gunners fire at the target you lock on to (the
   game's auto-aim), in free aim at the line of your bullets (read from the bullet traces; the camera
   is the fallback), and stay on it while you shoot and 0.9 s after. Rounds of other people that flew
-  past you do not count as your fire.
+  past you do not count as your fire. It works from a car (drive-by) too.
 - No teleports: the helicopter flies in from afar and leaves out of sight; the squad catches up by
   sprinting along the road network and a guard who lags for 60 s is let go; the pilot waits up to
   25 s for the squad at the ropes; the squad only rides in a car CJ drives himself (one seat each),

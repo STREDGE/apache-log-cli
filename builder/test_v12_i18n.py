@@ -62,7 +62,7 @@ w,c,p=open_menu()
 assert w.menu[0]==b'HELICOVER / FOLLOWING' and rows_of(w)==[b'FOLLOW ME [X]',b'HOLD HERE',b'PATROL AROUND ME',b'GUNNER FIRE >',b'CLIMB ABOARD BY ROPE',b'DEPLOY SQUAD',b'SETTINGS >',b'DISMISS HELICOPTER']
 for setting,prof in [(2,'cp1251'),(3,'glyph')]:
  w,c,p=open_menu(setting)
- want=[i18n.encode(x,prof) for x in ('ЛЕТЕТЬ ЗА МНОЙ [X]','ЖДАТЬ ЗДЕСЬ','ПАТРУЛЬ ВОКРУГ','ОГОНЬ СТРЕЛКОВ >','НА БОРТ ПО ВЕРЕВКЕ','ВЫСАДИТЬ ОТРЯД','НАСТРОЙКИ >','ОТПУСТИТЬ ВЕРТОЛЕТ')]
+ want=[i18n.encode(x,prof) for x in ('ЛЕТЕТЬ ЗА МНОЙ [X]','ЖДАТЬ ЗДЕСЬ','ПАТРУЛЬ ВОКРУГ','ОГОНЬ СТРЕЛКОВ >','НА БОРТ ПО ВЕРЕВКЕ','ВЫСАДИТЬ ОТРЯД','НАСТРОЙКИ (SETTINGS) >','ОТПУСТИТЬ ВЕРТОЛЕТ')]
  assert rows_of(w)==want,(setting,rows_of(w))
  assert w.menu[0]==i18n.encode('HELICOVER / ЛЕТИТ ЗА ВАМИ',prof),w.menu[0]
 passed('The main menu is drawn in Russian in either byte layout: rows and the state in the title')

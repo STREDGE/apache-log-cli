@@ -116,12 +116,15 @@ w.pos[team[0]]=[0.,-100.,0.];steps(w,V,3);w.now+=40000;steps(w,V,3);assert team[
 passed('Catching up within 70 m clears the lag clock')
 
 # riding along: only a car CJ drives, one seat per guard, nobody boards a taxi or somebody else's car
-def car_scene(model=400,driver=True,seats=3):
+def car_scene(model=400,driver=True,seats=3,npc_seat=None,cj_seat=0):
  w,c,ground,sq,team=escort_world();V=(c,ground,sq)
  for k,t in enumerate(team):w.pos[t]=[BG[k][0],BG[k][1],0.]
  car=777;w.exists.add(car);w.cars[car]={'pos':[0.,0.,0.],'heading':0.};w.model[car]=model;w.seats_count=seats
  w.incar[1]=car
- if not driver:w.seats[(car,0)]=True   # CJ sits in a passenger seat: it is not free
+ if not driver:
+  w.seats[(car,-1)]=555;w.cj_is_passenger=True                                       # somebody else drives ...
+  if cj_seat is not None:w.seats[(car,cj_seat)]=True                                 # ... and CJ sits in a passenger seat the squad could want (None: a seat beyond theirs, e.g. a bus)
+ if npc_seat is not None:w.seats[(car,npc_seat)]=True                                # a passenger who stayed in the car CJ drives
  w.calls.clear();steps(w,V,3);return w,V,team,car
 w,V,team,car=car_scene()
 seatof={t:last(w,0x5ca,t)[3] for t in team if orders(w,0x5ca,t)}
@@ -130,6 +133,12 @@ passed('CJ drives a 4-door car: guards 0, 1, 2 take passenger seats 0, 1, 2 (gua
 w,V,team,car=car_scene(driver=False)
 assert not any(orders(w,0x5ca,t) for t in team),'CJ rides as a passenger (taxi, bus, a lift): the team does not board'
 passed('CJ is a passenger of somebody else\'s car: the guards do not climb in')
+w,V,team,car=car_scene(driver=False,cj_seat=None)     # a lift where the three seats the squad would take all look free (a bus, a back seat)
+assert not any(orders(w,0x5ca,t) for t in team),'who drives is asked from the car (its driver is not CJ), not guessed from free seats'
+w,V,team,car=car_scene(npc_seat=1)
+seatof={t:last(w,0x5ca,t)[3] for t in team if orders(w,0x5ca,t)}
+assert seatof=={team[0]:0,team[2]:2},('CJ drives a car that kept a passenger in seat 1: guards 0 and 2 still ride, guard 1 has no seat',seatof)
+passed('CJ at the wheel is read from the car\'s driver: a car that kept a passenger is still boarded (free seats only), a lift in the back seat is not')
 w,V,team,car=car_scene(seats=1)
 assert [t for t in team if orders(w,0x5ca,t)]==[team[0]],[t for t in team if orders(w,0x5ca,t)]
 passed('A bike / two-seater has one passenger seat: only guard 0 rides')
@@ -278,15 +287,23 @@ assert aim_updated((.5,0.,.7),(-3.67,23.64,1.),True,heading=350.),'the 0/360 sea
 assert aim_updated((.5,0.,.7),(4.67,23.64,1.),True,heading=10.),'the same seam the other way round: line 350, CJ 10'
 assert aim_updated((-6.,0.,1.),(-10.,0.,1.),True,heading=270.,in_car=True),'in a car (drive-by, any direction) the heading says nothing about the aim'
 passed('CJ aim line: a round that flew past him pointing away from where he faces is not his aim (80 deg counts, 120 deg does not); in a car any direction counts')
-def scans(shooting,seconds=2.0):
- w,c,f=fire_world();w.shared[b.FIRE]=2;w.frame_ms=33;w.step(c,f,n=12);w.now+=5000
- w.shooting=shooting;w.step(c,f,n=3);key=lambda:len([x for x in calls(w,0xddc) if x[2][0]==b.TRACE_SCAN_T]);n0=key()
- for _ in range(int(seconds*1000/33)):w.shooting=shooting;w.step(c,f)
- return (key()-n0)/seconds
-busy,idle=scans(True),scans(False)
-assert busy>=25,('while CJ shoots the traces are read every frame: a trace lives only 75-300 ms',busy)
+def scans(shooting,seconds=2.0,traces=False,every=3):
+ """Trace-table reads per second. shooting: CJ fires every `every` frames (the flag lasts one frame); traces: his rounds leave traces."""
+ w,c,f=fire_world();w.shared[b.FIRE]=2;w.frame_ms=33;w.step(c,f,n=12);w.now+=5000;w.actor_heading[1]=270.
+ w.step(c,f,n=3);key=lambda:len([x for x in calls(w,0xddc) if x[2][0]==b.TRACE_SCAN_T]);n0=key();found=0;shots=0
+ for i in range(int(seconds*1000/33)):
+  w.shooting=shooting and i%every==0
+  if w.shooting:
+   shots+=1
+   if traces:w.ped_bullet([.5,0.,.7],[24.,0.,1.])
+  t0=w.shared[b.CJ_AIM_T];w.step(c,f);found+=w.shooting and w.shared[b.CJ_AIM_T]!=t0
+ return (key()-n0)/seconds,found,shots
+lost,_,_=scans(True);burst,found,shots=scans(True,traces=True);idle,_,_=scans(False)
+assert lost>=25,('a shot whose line is not found yet: the traces are read every frame (a trace lives only 75-300 ms)',lost)
+assert found==shots,('every shot of a burst gives its line in the very frame the shot is seen',found,shots)
+assert burst<=16,('once the line of a shot is found the table is not read again every frame: about one read per shot',burst)
 assert idle<=12,('when he does not shoot only on the 100 ms tick, not every frame',idle)
-passed('Bullet traces are read every frame (%d/s) while CJ shoots and only on the 100 ms tick (%d/s) when he does not'%(busy,idle))
+passed('Bullet traces: read every frame while a shot has no line yet (%d/s), once per shot in a burst (%d/s, every shot got its line at once), on the 100 ms tick otherwise (%d/s)'%(lost,burst,idle))
 def evaded(offset):
  w,c,f=fire_world();w.step(c,f,n=3);car=w.car
  for _ in range(8):w.ped_bullet([car[0]+70.,car[1]+offset,car[2]],[car[0]+5.,car[1]+offset,car[2]]);w.step(c,f)
@@ -331,6 +348,7 @@ w.teleports.clear();old=list(team);w.shared[b.CREW]=1;steps(w,V,12)
 new=[w.shared[b.GROUND_PUB+i] for i in range(4)]
 assert all(n_ not in old and w.skin[n_]==287 for n_ in new) and all(o_ not in w.exists for o_ in old),(old,new,[w.skin.get(n_) for n_ in new])
 assert all(w.pos[n_][:2]==[BG[i][0],BG[i][1]] and w.health[n_]==130 and w.armor[n_]==40 and w.actor_heading[n_]==33. for i,n_ in enumerate(new)),[(w.pos[n_],w.health[n_],w.armor[n_]) for n_ in new]
+assert all(abs(w.pos[n_][2])<.01 for n_ in new),('the same height too: CREATE_CHAR adds 1 m to the z it is given, the new guard must not appear in the air and drop',[w.pos[n_][2] for n_ in new])
 assert w.shared[b.TEAM_CREW]==1 and w.shared[b.ESCORT_ON]==1 and not w.teleports,(w.shared[b.TEAM_CREW],w.shared[b.ESCORT_ON],w.teleports)
 passed('Changing the crew on the menu re-dresses the team on the ground at once: same spot, heading, health and armour, nobody teleports')
 w.shared[b.CREW]=0;steps(w,V,12);new2=[w.shared[b.GROUND_PUB+i] for i in range(4)]

@@ -160,7 +160,7 @@ def check_keys():
 MENU={
  'CALL':('CALL HELICOPTER','ПОЗВАТЬ ВЕРТОЛЕТ'),
  'WAIT':('PLEASE WAIT...','ПОДОЖДИТЕ...'),
- 'SETTINGS':('SETTINGS >','НАСТРОЙКИ >'),
+ 'SETTINGS':('SETTINGS >','НАСТРОЙКИ (SETTINGS) >'),   # beta: the Latin word keeps the way to LANGUAGE readable if the Cyrillic layout is wrong
  'GUNFIRE':('GUNNER FIRE >','ОГОНЬ СТРЕЛКОВ >'),
  'FOLLOW':('FOLLOW ME','ЛЕТЕТЬ ЗА МНОЙ'),
  'HOLD':('HOLD HERE','ЖДАТЬ ЗДЕСЬ'),

@@ -210,6 +210,9 @@ for i,var in enumerate([20,21,22,23]):
  s.label(need);a(6,V(16),I(0));s.check(0x00df,[V(var)],foot);s.go(skip)
  s.label(foot);s.check(0x0248,[V(mdl)],load)
  a(0x00a0,V(var),V(10),V(11),V(12));a(0x0172,V(var),V(13));a(0x0226,V(var),V(14));a(0x04dd,V(var),V(9))
+ # CREATE_CHAR puts the new character 1 m above the z it is given (libGTASA: z += 1.0, the height of a ped's centre), and 00A0 returned
+ # the old one's centre: without this the re-dressed guard appeared 1 m up in the air and dropped
+ a(0x000b,V(12),F(-1.0))
  a(0x009a,I(8),V(mdl),V(10),V(11),V(12),V(8));s.check(0x056d,[V(8)],skip)
  a(0x0173,V(8),V(13));a(0x0085,V(7),V(8));s.call('GSETUP');a(0x0223,V(8),V(14));a(0x035f,V(8),V(9))
  s.check(0x0019,[V(4),I(0)],noarm2);a(0x01b2,V(8),V(4),I(30000));a(0x01b9,V(8),V(4));s.label(noarm2)
