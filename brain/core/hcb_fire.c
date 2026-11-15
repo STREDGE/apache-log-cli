@@ -383,7 +383,9 @@ API int hcb_gunner_round(hcb_brain *b, const hcb_shot *in, float heli_speed, int
     if (sh->next_round && (int)(in->time - sh->next_round) < 0 && sh->next_round - in->time < 2000) return 0;
     out = near_heli ? c->muzzle_m : 0.8f;
     d = v_sub(q.to, q.from); len = v_len(d);
-    if (len < out + 1.0f) { sh->next_round = in->time + 100; return 0; }
+    /* (written so that a position that is not a number, or one 500 m away, gives no round: the game hangs on such a line) */
+    if (!(len >= out + 1.0f && len < 500.0f) || !(q.cj.x - q.cj.x == 0.0f && q.cj.y - q.cj.y == 0.0f && q.cj.z - q.cj.z == 0.0f)) { sh->next_round = in->time + 100; return 0; }
+    if (!(heli_speed >= 0.0f && heli_speed < 150.0f)) heli_speed = 0.0f;
     spread = c->scatter_m + c->scatter_per_m * len + c->scatter_per_ms * (near_heli ? heli_speed : 0);
     q.to.x += dice(sh) * spread; q.to.y += dice(sh) * spread; q.to.z += dice(sh) * spread;
     d = v_sub(q.to, q.from); len = v_len(d);

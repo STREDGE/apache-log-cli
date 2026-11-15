@@ -159,6 +159,8 @@ M += [
  (F, "if (sh->hold == HCB_HOLD_COVERING) return sh->ready ? 1 : 0;", "", 'guard: a suspect is only covered'),
  (F, "why[i][bj] == HCB_HOLD_NONE ? HCB_HOLD_ENOUGH : why[i][bj];", "why[i][bj];", 'the fourth rifle is told why he does not fire'),
  (F, "else if (busy[i] && (cs[j].free || cs[j].taken)) v *= 0.6f;", "", 'a firing man keeps his target when a new attacker turns up'),
+ (F, "if (!(len >= out + 1.0f && len < 500.0f) || !(q.cj.x - q.cj.x == 0.0f && q.cj.y - q.cj.y == 0.0f && q.cj.z - q.cj.z == 0.0f))", "if (len < out + 1.0f)", 'a round never gets a point that is not a number'),
+ (F, "if (!(heli_speed >= 0.0f && heli_speed < 150.0f)) heli_speed = 0.0f;", "", 'a nonsense helicopter speed is taken as 0'),
  (F, "if (from >= 0) { cs[choice[from]].taken--; choice[from] = j; cs[j].taken++; }", "", 'an attacker nobody is on gets a rifle from the crowd'),
  (F, "need = cs[j].t->cls == HCB_CLS_ATTACKER ? 2 : 3;", "need = 1;", 'a rifle is taken only from a man who has more than he needs'),
  (F, "else if (busy[i] && (cs[j].free || cs[j].taken)) v *= 0.6f;", "else if (busy[i] && cs[j].free) v *= 0.6f;", 'a firing man does not follow the free man to the new attacker'),

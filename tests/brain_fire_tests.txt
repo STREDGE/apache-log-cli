@@ -14,6 +14,7 @@ PASS: Every round is asked for at the moment it leaves, with the positions of th
 PASS: A door gunner's rounds (the script asks every frame): never closer together than 130 ms, usually within 180 ms, with the pauses of his bursts; each on its own line - from 5.5 m outside the helicopter (0.8 m when dismounted), scattered round the man by up to 0.1 m + 1 % of the range (more from a fast helicopter), ending 0.6 m past the point aimed at
 PASS: A round the hard rules refuse is asked for again 60 ms later (and noted in the black box at most four times a second); so is one whose ray was blocked. No rounds at a suspect who is only covered
 PASS: A new attacker is taken by the guard whose hands are free; the men who are firing keep their man (with nobody free, one rifle goes over)
+PASS: A position that is not a number, one 600 m away, or CJ at no number gives no round; a nonsense helicopter speed is taken as 0 - the game never gets such a line
 PASS: A guard on foot (he fires the game's own weapon) is told: a suspect to keep a weapon on, fire, or "your man, but no fire" - in the very frame CJ comes into his line, while his weapon is coming up, and when three rifles are on the man already; hold fire leaves him no man at all
 PASS: WHERE I SHOOT: CJ fires at a car - the men in it are the targets (aimed at them, not at the engine); a man CJ is not shooting at is left alone
 PASS: A man who dies while ours are firing at him is counted as theirs; a death nobody of ours had a hand in is not

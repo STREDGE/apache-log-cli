@@ -44,6 +44,9 @@ extern void *dlopen(const char *name, int flags);
 extern void *dlsym(void *handle, const char *name);
 extern int pthread_create(u64 *thread, const void *attr, void *(*fn)(void *), void *arg);
 extern int usleep(u32 usec);
+extern long syscall(long number, ...);
+struct sigact { int flags; int pad; void *handler; u64 mask; void *restorer; };   /* bionic's struct sigaction on arm64 */
+extern int sigaction(int sig, const struct sigact *act, struct sigact *old);
 struct timespec { long tv_sec, tv_nsec; };
 extern int clock_gettime(int clock, struct timespec *t);
 extern void *memcpy(void *d, const void *s, u64 n);
@@ -51,7 +54,7 @@ extern void *memset(void *d, int c, u64 n);
 
 #define HIDDEN __attribute__((visibility("hidden")))
 #define EXPORT __attribute__((visibility("default")))
-#define VERSION "0.2 (stage 2: fire control)"
+#define VERSION "0.2.1 (stage 2: fire control)"
 #define GAME_DIR "/storage/emulated/0/Android_unprotected/data/com.rockstargames.gtasa/"
 
 /* ---------- the game (offsets from libGTASA base; see brain/research/game_facts.md) ---------- */
@@ -64,6 +67,8 @@ extern void *memset(void *d, int c, u64 n);
 #define PLAYER_FOCUS 0xbdcae8UL
 #define TIME_MS 0xbdc558UL
 #define USER_PAUSE 0xbdc594UL
+#define CODE_PAUSE 0xbdc595UL
+#define FRAME_COUNTER 0xbdc590UL         /* CTimer::m_FrameCounter: goes up once a frame, also in the pause menu */
 #define CUTSCENE 0xba8925UL
 #define MISSION_FLAG 0x9f83f8UL
 #define SCRIPT_SPACE 0x9a2038UL
@@ -97,6 +102,7 @@ extern void *memset(void *d, int c, u64 n);
 #define CLEO_SHARED (CLEO_IMAGE + 0x7d1f8UL)    /* std::vector<{u32 key, u32 value}>: begin, end, end of capacity */
 #define CLEO_MIN_SIZE (CLEO_IMAGE + 0x27e000UL)
 #define CLEO_IFS (CLEO_IMAGE + 0x27d9b8UL)      /* the plugin interface: 28 function pointers */
+#define CLEO_SCRIPTS (CLEO_IMAGE + 0x7d188UL)   /* std::vector<obj*> of CLEO's scripts: obj+0x20 CRunningScript*, obj+0x28 code base */
 #define CLEO_REGISTER (CLEO_IMAGE + 0x38a58UL)  /* slot 17: int RegisterOpcode(u16, handler) */
 #define CLEO_READ_PARAM (CLEO_IMAGE + 0x38e84UL)    /* slot 19 */
 #define CLEO_VAR_PTR (CLEO_IMAGE + 0x38e9cUL)   /* slot 20 */
@@ -205,6 +211,19 @@ static hcb_snapshot g_snap;
 static hcb_out g_out, g_shown;
 static u32 g_ticks, g_last_think, g_dumps, g_peds_max, g_tick_us_max, g_events_lost, g_rounds, g_rounds_refused, g_rays;
 static u64 g_tick_us_sum;
+/* the brain's share of the game's time. A ray of the game costs tens to hundreds of microseconds in a busy street; asked
+   for every pair on every look (stage 2 as first released) they could take most of a frame, the frames grew longer, the
+   brain looked again in every frame - and the game all but stopped. Now the rays of a frame have a time budget, a look
+   answers a limited number of questions (the most important first, the rest in turn), and the brain never takes more
+   than a quarter of the real time. */
+#define RAY_FRAME_US 2500U              /* rays (looks and rounds together) per frame */
+#define RAY_CJ_LOOK 10U                 /* "does this armed man see CJ?" per look */
+#define RAY_ASK_LOOK 32U                /* the core's questions answered per look: the first 8 always, the rest in turn */
+#define RAY_ASK_FIRST 8U
+static u64 g_frame_ray_us, g_ray_us_max, g_think_cost_us, g_think_end_us, g_frame_at_us, g_gap_max_us, g_frame_brain_us_max;
+static u32 g_rays_bad, g_rays_skipped, g_rounds_bad, g_looks_skipped, g_rays_look_max, g_ask_cursor, g_slow_run, g_crawls;
+static volatile u32 g_where;            /* where the game thread is inside the brain (for the hang recorder): 0 outside */
+static volatile long g_main_tid;
 static int g_ready, g_dump_request, g_was_alive, g_busy, g_urgent, g_ignore_ok, g_bridge;     /* g_bridge: 0 not yet, 1 opcode registered, -1 cannot */
 static const u8 *g_our_ent[HCB_MAX_OURS + 2];   /* CJ, the helicopter and our people as the gunshot hook sees them */
 static u32 g_heli_shot_t;                       /* when a stranger's round last passed within 6 m of our helicopter */
@@ -358,7 +377,7 @@ HIDDEN void *brain_gunshot(void *self, const u8 *ent, float ox, float oy, float 
         g_shot_head++;
         /* somebody who is not ours has fired: the brain looks again at once instead of waiting for its next turn */
         for (i = 0; i < HCB_MAX_OURS + 2; i++) if (g_our_ent[i] == ent) break;
-        if (i == HCB_MAX_OURS + 2) g_urgent = 1;
+        if (i == HCB_MAX_OURS + 2 && ent) g_urgent = 1;     /* (a round without a shooter - a scripted one - is no reason to hurry) */
     }
     return g_gunshot_orig(self, ent, ox, oy, oz, tx, ty, tz, silent);
 }
@@ -394,13 +413,32 @@ static void watch_damage(hcb_snapshot *s, u32 id, float hp, u32 stamp, const u8 
 typedef int (*los_fn)(const float *a, const float *b, int buildings, int vehicles, int peds, int objects, int dummies, int see_through, int camera);
 /* Buildings, vehicles and objects block; people do not. `ignore` (may be 0) is one entity the ray passes through:
    the vehicle the target sits in - otherwise a man in a car is always "behind something". */
+/* A point the game may be given: a number (not NaN, not infinite) inside the map. The game's own search through the
+   map's sectors never ends for a point that is not a number - the whole game hangs (the old freeze over the marker). */
+static int sane(const float *p) {
+    int i;
+    for (i = 0; i < 3; i++) if (!(p[i] - p[i] == 0.0f)) return 0;
+    return p[0] > -4000.0f && p[0] < 4000.0f && p[1] > -4000.0f && p[1] < 4000.0f && p[2] > -300.0f && p[2] < 3000.0f;
+}
+static u64 now_us(void);
+static int ray_budget_left(void) { return g_frame_ray_us < RAY_FRAME_US; }
 static int ray(const float *p, const float *q, const u8 *ignore) {
     const u8 **slot = (const u8 **)(G + IGNORE_ENTITY), *old = 0;
     int r;
+    u64 t0, dt;
+    u32 was = g_where;
+    float dx = p[0] - q[0], dy = p[1] - q[1], dz = p[2] - q[2];
+    if (!sane(p) || !sane(q) || dx * dx + dy * dy + dz * dz > 400.0f * 400.0f) { g_rays_bad++; return 0; }   /* never given to the game */
+    g_where = 2;
+    t0 = now_us();
     if (g_ignore_ok) { old = *slot; *slot = ignore; }
     r = ((los_fn)(G + G_LOS_CLEAR))(p, q, 1, 1, 0, 1, 0, 0, 0) != 0;
     if (g_ignore_ok) *slot = old;
+    dt = now_us() - t0;
+    g_frame_ray_us += dt;
+    if (dt > g_ray_us_max) g_ray_us_max = dt;
     g_rays++;
+    g_where = was;
     return r;
 }
 static const u8 *vehicle_of(const u8 *ped) { return (RD(u8, ped + 0x585) & 1) ? RD(const u8 *, ped + 0x708) : 0; }
@@ -425,7 +463,7 @@ static int build_snapshot(hcb_snapshot *s, const hcb_out *prev) {
     struct pool pp, vp;
     const u8 *cj = player_ped(), *wanted, *e;
     const float *cjp;
-    u32 cj_h, i, n, k, v, flag, mounted, los_left = 24;                   /* rays per look: up to 24 here + one per question of the core */
+    u32 cj_h, i, n, k, v, flag, mounted, los_left = RAY_CJ_LOOK, rays0 = g_rays;   /* rays per look: a few here + the core's questions, within the frame's budget */
     float best[HCB_MAX_PEDS], d;
     u32 idx[HCB_MAX_PEDS];
 
@@ -436,6 +474,7 @@ static int build_snapshot(hcb_snapshot *s, const hcb_out *prev) {
     s->time = RD(u32, G + TIME_MS); s->frame = g_ticks;
     fill_ped(&s->player, cj, cj_h, &pp, &vp, cj);
     cjp = pos_of(cj);
+    if (!sane(cjp)) return 0;
     wanted = RD(const u8 *, G + PLAYERS + (u64)RD(u8, G + PLAYER_FOCUS) * PLAYER_INFO + 8);
     s->wanted = wanted ? (u8)RD(u32, wanted + 0x2c) : 0;
     flag = RD(u32, G + MISSION_FLAG);
@@ -468,7 +507,7 @@ static int build_snapshot(hcb_snapshot *s, const hcb_out *prev) {
         int ours = 0;
         if (pp.flags[i] & 0x80) continue;
         ped = pp.objs + (u64)i * PED_STRIDE;
-        if (ped == cj) continue;
+        if (ped == cj || !sane(pos_of(ped))) continue;
         d = dist2(pos_of(ped), cjp);
         for (k = 0; k < s->n_ours; k++) if (s->ours[k] == ((i << 8) | pp.flags[i])) ours = 1;
         if (ours) d = 0;
@@ -482,7 +521,7 @@ static int build_snapshot(hcb_snapshot *s, const hcb_out *prev) {
         hcb_ped *o = &s->peds[k];
         fill_ped(o, ped, (idx[k] << 8) | pp.flags[idx[k]], &pp, &vp, cj);
         /* can he see CJ? asked only for people with a firearm in their hands, a few per look */
-        if (los_left && !(o->flags & HCB_PF_DEAD) && hcb_weapon_class(o->weapon) >= HCB_WC_PISTOL && best[k] > 0 && best[k] < 70.0f * 70.0f) {
+        if (los_left && ray_budget_left() && !(o->flags & HCB_PF_DEAD) && hcb_weapon_class(o->weapon) >= HCB_WC_PISTOL && best[k] > 0 && best[k] < 70.0f * 70.0f) {
             o->flags2 |= HCB_PF2_LOS_KNOWN | (sees(ped, cj) ? HCB_PF2_LOS_CLEAR : 0);
             los_left--;
         }
@@ -495,6 +534,7 @@ static int build_snapshot(hcb_snapshot *s, const hcb_out *prev) {
         const u8 *veh;
         if (vp.flags[i] & 0x80) continue;
         veh = vp.objs + (u64)i * VEH_STRIDE;
+        if (!sane(pos_of(veh))) continue;
         d = dist2(pos_of(veh), cjp);
         if (d > 150.0f * 150.0f) continue;
         if (n == HCB_MAX_VEHS) { if (d >= best[n - 1]) continue; n--; }
@@ -538,13 +578,24 @@ static int build_snapshot(hcb_snapshot *s, const hcb_out *prev) {
     e = obj_of(&vp, VHANDLE(s->heli), VEH_STRIDE);
     if (e) watch_damage(s, s->heli, RD(float, e + 0x634), (u32)(u64)RD(const u8 *, e + 0x698), RD(const u8 *, e + 0x698), (signed char)RD(u8, e + 0x694), &pp, &vp);
 
-    /* the lines of sight the core asked for on the previous look: all of them */
-    for (i = 0; i < prev->n_queries && s->n_los < HCB_MAX_LOS; i++) {
-        const u8 *a = obj_of(&pp, prev->queries[i].from, PED_STRIDE), *b = obj_of(&pp, prev->queries[i].to, PED_STRIDE);
-        hcb_los *l = &s->los[s->n_los++];
-        l->from = prev->queries[i].from; l->to = prev->queries[i].to;
-        l->clear = (u8)(a && b && sees(a, b));
+    /* the lines of sight the core asked for on the previous look. They come most important first: the first few are
+       answered on every look, the rest in turn, as far as the frame's budget goes. A question left for the next look
+       is no harm: the core keeps an answer 0.6 s, and a man it has no fresh answer for is aimed at, not fired at. */
+    {
+        u32 nq = prev->n_queries < HCB_MAX_LOS ? prev->n_queries : HCB_MAX_LOS, first = nq < RAY_ASK_FIRST ? nq : RAY_ASK_FIRST;
+        u32 rest = nq - first, asked = 0, m, r = 0;
+        for (m = 0; m < nq && asked < RAY_ASK_LOOK && ray_budget_left(); m++) {
+            u32 q = m < first ? m : first + (g_ask_cursor + r++) % rest;
+            const u8 *a = obj_of(&pp, prev->queries[q].from, PED_STRIDE), *b = obj_of(&pp, prev->queries[q].to, PED_STRIDE);
+            hcb_los *l = &s->los[s->n_los++];
+            l->from = prev->queries[q].from; l->to = prev->queries[q].to;
+            l->clear = (u8)(a && b && sees(a, b));
+            asked++;
+        }
+        if (rest) g_ask_cursor = (g_ask_cursor + r) % rest;
+        g_rays_skipped += nq - asked;
     }
+    if (g_rays - rays0 > g_rays_look_max) g_rays_look_max = g_rays - rays0;
     /* who is ours, for the gunshot hook */
     g_our_ent[0] = cj; g_our_ent[1] = obj_of(&vp, VHANDLE(s->heli), VEH_STRIDE);
     for (k = 0; k < HCB_MAX_OURS; k++) g_our_ent[2 + k] = k < s->n_ours ? obj_of(&pp, s->ours[k], PED_STRIDE) : 0;
@@ -576,7 +627,11 @@ static void save_report(const char *why) {
     ts(&g_note, "\nticks "); tu(&g_note, g_ticks); ts(&g_note, ", think time avg "); tu(&g_note, g_ticks ? g_tick_us_sum / g_ticks : 0);
     ts(&g_note, " us, max "); tu(&g_note, g_tick_us_max); ts(&g_note, " us\nmost peds in a look "); tu(&g_note, g_peds_max);
     ts(&g_note, ", events lost "); tu(&g_note, g_events_lost); ts(&g_note, ", rays "); tu(&g_note, g_rays);
-    ts(&g_note, "\nrounds let go "); tu(&g_note, g_rounds); ts(&g_note, ", refused "); tu(&g_note, g_rounds_refused);
+    ts(&g_note, " (most in a look "); tu(&g_note, g_rays_look_max); ts(&g_note, ", longest "); tu(&g_note, g_ray_us_max); ts(&g_note, " us, left for a later look ");
+    tu(&g_note, g_rays_skipped); ts(&g_note, ", points refused as not a number or off the map "); tu(&g_note, g_rays_bad); ts(&g_note, ")");
+    ts(&g_note, "\nlooks put off to keep the brain under a quarter of the time "); tu(&g_note, g_looks_skipped); ts(&g_note, ", brain in one frame at most ");
+    tu(&g_note, g_frame_brain_us_max); ts(&g_note, " us, longest frame "); tu(&g_note, g_gap_max_us / 1000); ts(&g_note, " ms, crawls "); tu(&g_note, g_crawls);
+    ts(&g_note, "\nrounds let go "); tu(&g_note, g_rounds); ts(&g_note, ", refused "); tu(&g_note, g_rounds_refused); ts(&g_note, ", with a bad point "); tu(&g_note, g_rounds_bad);
     ts(&g_note, "\nscripts bridge: "); ts(&g_note, g_bridge == 1 ? "opcode 0E48" : g_cleo ? "CLEO recognised, opcode not registered" : "none (CLEO not recognised)");
     ts(&g_note, "\nscreen "); ti(&g_note, RD(int, G + RSGLOBAL + 8)); ts(&g_note, "x"); ti(&g_note, RD(int, G + RSGLOBAL + 12)); ts(&g_note, "\n");
     first_line_of(&g_note, "/proc/meminfo", "MemTotal");
@@ -600,8 +655,11 @@ static void think(void) {
     /* ten looks a second of game time, twenty while there is a threat, and at once (but not more often than every
        40 ms) when somebody who is not ours has just fired */
     if (now >= g_last_think && now - g_last_think < every && !(g_urgent && now - g_last_think >= 40)) return;
-    g_urgent = 0;
     t0 = now_us();
+    /* never more than a quarter of the real time: a look that cost 6 ms waits at least 18 ms before the next one, so a
+       slow game is never made slower by the brain looking again in every one of its (longer) frames */
+    if (g_think_end_us && t0 - g_think_end_us < 3 * g_think_cost_us) { g_looks_skipped++; return; }
+    g_urgent = 0;
     if (!build_snapshot(&g_snap, &g_out)) return;
     g_last_think = now;
     if (g_rec[g_cur].end + hcb_brain_size() + sizeof(hcb_snapshot) + 4096 > BOX_BYTES) {   /* this half is full: the other takes over */
@@ -612,7 +670,9 @@ static void think(void) {
     hcb_rec_push(&g_rec[g_cur], g_box[g_cur], &g_snap, g_out.digest);
     memcpy(&g_shown, &g_out, sizeof g_shown);
     g_ticks++;
-    t0 = now_us() - t0;
+    g_think_end_us = now_us();
+    t0 = g_think_end_us - t0;
+    g_think_cost_us = t0;
     g_tick_us_sum += t0;
     if (t0 > g_tick_us_max) g_tick_us_max = (u32)t0;
     /* a report on request, and by itself when CJ dies: those are the moments worth looking at */
@@ -661,11 +721,15 @@ static void cmd_gunner(int *v) {
     if (!me || !him || is_dead(him) || is_dead(me)) return;
     v[2] = (int)o.target; v[1] = o.ready ? 1 : 0;
     if (!o.fire) return;
+    if (!ray_budget_left()) return;                    /* this frame's rays are spent: the round waits a frame (its pace is kept) */
     heli = obj_of(&vp, VHANDLE(g_snap.heli), VEH_STRIDE);
     near_heli = heli && dist2(pos_of(heli), pos_of(me)) < 36.0f;
     if (near_heli) { const float *hv = (const float *)(heli + 0x68); speed = 50.0f * f_sqrt(hv[0] * hv[0] + hv[1] * hv[1] + hv[2] * hv[2]); }
+    if (!(speed >= 0.0f && speed < 150.0f)) speed = 0.0f;   /* a helicopter moved by the scripts may carry anything in its speed */
     fill_shot(&q, who, o.target, &pp, cj, me, him, 0.3f, 0.2f);
+    if (!sane(&q.from.x) || !sane(&q.to.x) || !sane(&q.cj.x)) { g_rounds_bad++; return; }
     if (!hcb_gunner_round(BRAIN, &q, speed, near_heli, &r)) return;
+    if (r.verdict == HCB_HOLD_NONE && (!sane(&r.muzzle.x) || !sane(&r.end.x) || !sane(&r.to.x))) { g_rounds_bad++; hcb_gunner_blocked(BRAIN, who, q.time); return; }
     if (r.verdict == HCB_HOLD_NONE) {
         r.ray = (u8)ray(&r.muzzle.x, &r.to.x, vehicle_of(him));
         if (!r.ray) hcb_gunner_blocked(BRAIN, who, q.time);
@@ -724,11 +788,11 @@ HIDDEN void brain_opcode(void *script, u8 **ip, u16 opcode, const char *name) {
     /* only a block of the script's own 32 local variables is ever written */
     if (!vars || (u8 *)vars < first || (u8 *)vars >= first + 32 * 4 || (((u8 *)vars - first) & 3) || count < 1 || ((u8 *)vars - first) / 4 + count > 32) return;
     if (!g_ready || g_busy || !g_ticks) { if (cmd != CMD_STATUS && count >= 3) { vars[1] = 0; vars[2] = 0; } return; }
-    g_busy = 1;
+    g_busy = 1; g_where = 10 + (u32)(cmd & 7);
     if (cmd == CMD_GUNNER && count >= 9) cmd_gunner(vars);
     else if (cmd == CMD_SQUAD && count >= 3) cmd_squad(vars);
     else if (cmd == CMD_STATUS && count >= 5) cmd_status(vars, count);
-    g_busy = 0;
+    g_busy = 0; g_where = 0;
 }
 /* Is this the CLEO the bridge was studied on, and has it found the same game? 0 = yes, else what is wrong. */
 static u32 cleo_refuses(void) {
@@ -764,8 +828,29 @@ static void bridge(void) {
     flush_log();
     log_end();
 }
+/* "The game is crawling": twenty frames in a row each longer than a quarter of a second (a pause, a menu or a switch to
+   another app does not count: the frames do not run then, and a gap over 5 s is not counted). One report is saved
+   by itself the first time, with what the brain cost in those frames. */
+static void watch_frames(u64 t, u64 brain_us) {
+    u64 gap = g_frame_at_us ? t - g_frame_at_us : 0;
+    if (gap > 250000 && gap < 5000000) g_slow_run++; else g_slow_run = 0;
+    if (gap < 5000000 && gap > g_gap_max_us) g_gap_max_us = gap;
+    if (brain_us > g_frame_brain_us_max) g_frame_brain_us_max = brain_us;
+    if (g_slow_run == 20) {
+        g_crawls++;
+        log_begin();
+        lg("the game crawled: 20 frames in a row over 0.25 s (the last "); tu(&g_log, gap / 1000); lg(" ms); the brain took ");
+        tu(&g_log, brain_us); lg(" us of it, rays this frame "); tu(&g_log, g_frame_ray_us); lg(" us\n");
+        flush_log(); log_end();
+        if (g_crawls == 1) save_report("the game crawled (20 frames in a row over 0.25 s)");
+    }
+}
 HIDDEN void brain_scripts(void) {
-    if (g_ready && !g_busy) { g_busy = 1; bridge(); think(); g_busy = 0; }
+    u64 t = now_us();
+    if (!g_main_tid) g_main_tid = syscall(178);        /* gettid: the game's thread, for the hang recorder */
+    g_frame_ray_us = 0;
+    if (g_ready && !g_busy) { g_busy = 1; g_where = 1; bridge(); think(); g_where = 0; g_busy = 0; watch_frames(t, now_us() - t); }
+    g_frame_at_us = t;
     g_scripts_orig();
 }
 
@@ -806,7 +891,7 @@ static void draw(void) {
 }
 HIDDEN void brain_hud(void) {
     g_hud_orig();
-    if (g_ready && !g_busy) { g_busy = 1; draw(); g_busy = 0; }
+    if (g_ready && !g_busy) { g_busy = 1; g_where = 3; draw(); g_where = 0; g_busy = 0; }
 }
 
 /* ---------- Mods Settings (SAUtils) ---------- */
@@ -916,8 +1001,130 @@ static void *waiter(void *arg) {
     return 0;
 }
 
+/* ---------- the hang recorder ----------
+   A thread of its own looks at the game's frame counter twice a second. When no frame has come for 6 s and the game
+   is not paused, the game's thread is stuck. Then, once (twice at most in a session), it writes to the log where that
+   thread is - six looks 0.3 s apart: the address it runs at, the calls that led there (function names of libGTASA where
+   the library has them) and where each CLEO script stands - and saves the black box. The game hangs either way; this
+   is so the next fix is made from facts. The thread only reads, except one signal that makes the stuck thread tell its
+   registers (only when it is running, not when it sleeps in the kernel). Memory is read through process_vm_readv, so a
+   bad address is an error, never a crash. */
+struct iovec_ { void *base; u64 len; };
+static int safe_read(void *dst, u64 src, u64 n) {
+    struct iovec_ l, r;
+    if (src < 0x1000 || src > 0x0000ffffffffffffUL) return 0;
+    l.base = dst; l.len = n; r.base = (void *)src; r.len = n;
+    return syscall(270, syscall(172), &l, 1L, &r, 1L, 0L) == (long)n;      /* process_vm_readv(getpid(), ...) */
+}
+static volatile int g_smp_ready;
+static volatile u64 g_smp_regs[4];      /* pc, lr, fp, sp */
+HIDDEN void brain_on_sample(int sig, void *info, void *ucv) {
+    const u8 *uc = (const u8 *)ucv;     /* arm64 ucontext: uc_mcontext at 176 (regs[29] 416, regs[30] 424, sp 432, pc 440) */
+    (void)sig; (void)info;
+    g_smp_regs[0] = RD(u64, uc + 440); g_smp_regs[1] = RD(u64, uc + 424); g_smp_regs[2] = RD(u64, uc + 416); g_smp_regs[3] = RD(u64, uc + 432);
+    __atomic_store_n(&g_smp_ready, 1, __ATOMIC_RELEASE);
+}
+static void task_path(char *b, long tid, const char *leaf) {
+    char d[24]; int n = 0, k = 0; const char *pre = "/proc/self/task/";
+    while (*pre) b[k++] = *pre++;
+    do { d[n++] = (char)('0' + tid % 10); tid /= 10; } while (tid && n < 20);
+    while (n) b[k++] = d[--n];
+    b[k++] = '/';
+    while (*leaf) b[k++] = *leaf++;
+    b[k] = 0;
+}
+static long read_small(const char *path, char *b, long cap) {
+    int fd = open(path, O_RDONLY); long n;
+    if (fd < 0) return 0;
+    n = read(fd, b, (u64)cap - 1); close(fd);
+    if (n < 0) n = 0;
+    b[n] = 0;
+    return n;
+}
+static u64 hexnum(const char **p) {
+    u64 v = 0; const char *s = *p;
+    while (*s == ' ') s++;
+    if (s[0] == '0' && s[1] == 'x') s += 2;
+    for (;; s++) { char c = *s; u32 d = c >= '0' && c <= '9' ? (u32)(c - '0') : c >= 'a' && c <= 'f' ? (u32)(c - 'a' + 10) : 99; if (d > 15) break; v = v * 16 + d; }
+    *p = s;
+    return v;
+}
+static void addr_name(u64 a) {
+    Dl_info di; const char *f, *base;
+    tx(&g_log, a);
+    if (!dladdr((const void *)a, &di) || !di.dli_fname) return;
+    for (f = base = di.dli_fname; *f; f++) if (*f == '/') base = f + 1;
+    lg(" "); lg(base); lg("+"); tx(&g_log, a - (u64)di.dli_fbase);
+    if (di.dli_sname) { lg(" "); lg(di.dli_sname); lg("+"); tx(&g_log, a - (u64)di.dli_saddr); }
+}
+static int is_code(u64 w) { return (w >= G && w < G + 0x900000UL) || (g_cleo_base && w >= g_cleo_base && w < g_cleo_base + g_cleo_size); }
+static void one_look(long tid, int k, int running) {
+    char path[64], b[512]; u64 pc = 0, lr = 0, fp = 0, sp = 0, a, w, fr[2]; u32 i, n;
+    if (running) {
+        __atomic_store_n(&g_smp_ready, 0, __ATOMIC_RELEASE);
+        syscall(131, syscall(172), tid, 27L);                          /* tgkill(getpid(), tid, SIGPROF) */
+        for (i = 0; i < 40 && !__atomic_load_n(&g_smp_ready, __ATOMIC_ACQUIRE); i++) usleep(5000);
+        if (g_smp_ready) { pc = g_smp_regs[0]; lr = g_smp_regs[1]; fp = g_smp_regs[2]; sp = g_smp_regs[3]; }
+    } else {                                                           /* asleep in the kernel: /proc tells the stack and pc */
+        const char *q = b;
+        task_path(path, tid, "syscall");
+        if (read_small(path, b, sizeof b) && b[0] >= '0' && b[0] <= '9') { for (i = 0; i < 7; i++) hexnum(&q); sp = hexnum(&q); pc = hexnum(&q); }
+    }
+    lg("look "); tu(&g_log, (u64)k + 1); lg(": pc "); addr_name(pc); lg("\n  lr "); addr_name(lr); lg("\n");
+    for (n = 0; fp && n < 16 && safe_read(fr, fp, 16); n++) {          /* the chain of frames */
+        if (!fr[1]) break;
+        lg("  called from "); addr_name(fr[1]); lg("\n");
+        if (fr[0] <= fp) break;
+        fp = fr[0];
+    }
+    for (a = sp, n = 0; sp && a < sp + 4096 && n < 14; a += 8)         /* return addresses left on the stack */
+        if (safe_read(&w, a, 8) && is_code(w)) { lg("  on the stack "); addr_name(w); lg("\n"); n++; }
+    if (g_cleo) {                                                      /* where every CLEO script stands */
+        u64 be[2], obj, rs, base, ip; char nm[9];
+        if (safe_read(be, g_cleo + CLEO_SCRIPTS, 16) && be[1] >= be[0] && be[1] - be[0] <= 64 * 8)
+            for (a = be[0]; a < be[1]; a += 8) {
+                if (!safe_read(&obj, a, 8) || !safe_read(&rs, obj + 0x20, 8) || !safe_read(&base, obj + 0x28, 8) || !safe_read(&ip, rs + 0x20, 8) || !safe_read(nm, rs + 0x10, 8)) continue;
+                nm[8] = 0;
+                for (i = 0; i < 8; i++) if (nm[i] && (nm[i] < 32 || nm[i] > 126)) nm[i] = '?';
+                lg("  script "); lg(nm); lg(" at "); tx(&g_log, ip - base); lg("\n");
+            }
+    }
+}
+static void hang_dump(u32 secs) {
+    static const u32 KEYS[] = {0, 1, 7, 20, 21, 27, 29, 440, 451, 452, 454, 455};
+    char path[64], st[256]; const char *q; long tid = g_main_tid; u32 i, v, tries; int running = 0, locked = 0;
+    struct sigact act, old;
+    task_path(path, tid, "stat");
+    if (read_small(path, st, sizeof st)) { for (q = st; *q && *q != ')'; q++) {} if (*q) running = q[2] == 'R'; }
+    for (tries = 0; tries < 2000 && !locked; tries++) { if (!__atomic_exchange_n(&g_log_lock, 1, __ATOMIC_ACQUIRE)) locked = 1; else usleep(1000); }
+    lg("\nHANG: no new frame for "); tu(&g_log, secs); lg(" s and the game is not paused. The game's thread is ");
+    lg(running ? "running (a loop that does not end)" : "asleep (waiting for something)"); lg("; inside the brain: ");
+    tu(&g_log, g_where); lg(" (0 = outside, 1 = a look, 2 = a ray, 3 = markers, 11-13 = a script's question)\nHelicover:");
+    for (i = 0; i < sizeof KEYS / sizeof KEYS[0]; i++) if (shared_get(HC_STATE + KEYS[i], &v)) { lg(" +"); tu(&g_log, KEYS[i]); lg("="); ti(&g_log, (int)v); }
+    lg("\n(if you had switched to another app, this is not a hang - ignore it)\n");
+    memset(&act, 0, sizeof act); act.flags = 4 | 0x10000000; act.handler = (void *)&brain_on_sample;   /* SA_SIGINFO | SA_RESTART */
+    if (running && sigaction(27, &act, &old)) running = 0;
+    for (i = 0; i < 6; i++) { one_look(tid, (int)i, running); if (i < 5) usleep(300000); }
+    if (running) sigaction(27, &old, 0);
+    flush_log();
+    if (locked) log_end();
+    save_report("the game hung (see hcbrain_log.txt for where)");
+}
+static void *watchdog(void *arg) {
+    u32 last = 0, still = 0, dumps = 0, fc;
+    (void)arg;
+    for (;;) {
+        usleep(500000);
+        if (!__atomic_load_n(&g_ready, __ATOMIC_ACQUIRE) || !g_main_tid) continue;
+        fc = RD(u32, G + FRAME_COUNTER);
+        if (fc != last || RD(u8, G + USER_PAUSE) || RD(u8, G + CODE_PAUSE)) { last = fc; still = 0; continue; }
+        if (++still == 12 && dumps < 2) { dumps++; hang_dump(still / 2); }
+    }
+    return 0;
+}
+
 struct ModInfo { char guid[48]; char name[48]; char version[24]; char author[48]; u16 ver[4]; u8 reserved[336]; };
-static struct ModInfo g_info __attribute__((aligned(16))) = {"net.helicover.brain", "Helicover Brain", "0.2", "Helicover", {0, 2, 0, 0}, {0}};
+static struct ModInfo g_info __attribute__((aligned(16))) = {"net.helicover.brain", "Helicover Brain", "0.2.1", "Helicover", {0, 2, 1, 0}, {0}};
 static int g_done;
 EXPORT struct ModInfo *__GetModInfo(void) { return &g_info; }
 EXPORT void OnModPreLoad(void) {}
@@ -932,6 +1139,7 @@ EXPORT void OnModLoad(void) {
     add_menu_items();
     r = try_install();
     if (r != -1 && (r == 0 || !g_cleo)) { if (pthread_create(&th, 0, waiter, (void *)(long)r)) lg("cannot start the waiting thread\n"); else lg("waiting (for the game or for CLEO)\n"); }
+    if (r != -1) { if (pthread_create(&th, 0, watchdog, 0)) lg("cannot start the hang recorder\n"); else lg("hang recorder on\n"); }
     ti(&g_log, r); lg(" = state at load\n");
     flush_log();
 }
