@@ -61,7 +61,7 @@ M12=[
  ('build_v25.py',"c.get(19,FROZEN);c.eq(19,1,'RESUME_HOLD_FREE');a(0x0574,V(5),I(1));c.ret()","c.call('BLOCK_HOVER');c.ret()",'12 swap keeps frozen'),
  ('build_v25.py',"c.call('PUBLISH');c.call('ARM_CREW');c.get(19,CREWGEN)","c.call('PUBLISH');c.get(19,CREWGEN)",'12 arm new gunners'),
  ('build_v25.py',"if k:c.check(0x02ca,[V(5)],'SPAWN_PLACED')","if k:c.go('SPAWN_PLACED')",'12 spawn unseen'),
- ('msg_v42.py',"a(0x0dd8,V(17),I(GAME_RU_FLAG),I(1),I(1));s.eq(17,1,'RL_DONE');s.set(LANG,2);s.ret()","a(0x0dd8,V(17),I(GAME_RU_FLAG),I(1),I(1));s.eq(17,1,'RL_DONE');s.set(LANG,0);s.ret()",'12 AUTO language'),
+ ('msg_v42.py',"a(0x0dd8,V(17),I(GAME_RU_FLAG),I(1),I(1));s.eq(17,1,'RL_EFIGS');s.set(LANG,1);s.ret()","a(0x0dd8,V(17),I(GAME_RU_FLAG),I(1),I(1));s.eq(17,1,'RL_EFIGS');s.set(LANG,0);s.ret()",'12 AUTO language'),
  ('msg_v42.py',"s.get(18,LANG);s.eq(18,0,P+'LU')","a(6,V(18),I(0));s.eq(18,0,P+'LU')",'12 say language'),
  # E2 ground team
  ('build_v25_ground.py',"s.check(0x0019,[V(16),I(60000)],nxt)","s.check(0x0019,[V(16),I(60000000)],nxt)",'12 lag 60 s'),
@@ -121,6 +121,13 @@ M12=[
  ('build_v25.py',"f.get(31,CJ_AIM_T);f.check(0x001d,[V(30),V(31)],'CJ_POLL_RET')\n","",'12 scan stops when the line is found'),
  ('build_v25.py',"f.check(0x003b,[V(30),V(31)],'ARM_TICK');f.go('WAIT')","f.go('ARM_TICK')",'12 fire pass waits a frame after a scan'),
  ('build_v25.py',"f.check(0x8019,[V(31),I(49)],'ARM_TICK')","f.check(0x8019,[V(31),I(4900000)],'ARM_TICK')",'12 fire pass cannot starve'),
+ # beta 3: the two Russian layouts read off the player's screenshots, AUTO by the game's language
+ ('msg_v42.py',"s.label('RL_EFIGS');a(0x0dd8,V(17),I(GAME_EFIGS_FLAG),I(1),I(1));s.eq(17,1,'RL_DONE')","s.label('RL_EFIGS')",'12 AUTO needs the EFIGS font'),
+ ('msg_v42.py',"s.eq(17,SANLTD_SLOT,'RL_DONE');s.set(LANG,2);s.ret()","s.set(LANG,2);s.ret()",'12 AUTO SanLTD slot only'),
+ ('i18n_v12.py',"out.append((0x80 if ch.isupper() else 0xA0)+i)","out.append((0x7F if ch.isupper() else 0x9F)+i)",'12 game layout base'),
+ ('i18n_v12.py',"'Б':0x80,'Ф':0x81","'Б':0x81,'Ф':0x80",'12 SanLTD table'),
+ ('i18n_v12.py',"'Т':0x54,'У':0x59","'Т':0x54,'У':0x55",'12 SanLTD look-alike'),
+ ('build_v25.py',"launch.eq(1,SANLTD_SLOT,'MISSING_EN');a(0x03e5,S('VCOFF'))","a(0x03e5,S('VCOFF'))",'12 launcher SanLTD slot'),
  # second independent review: FOLLOW MY SHOTS
  ('threat_v41.py',"jgt(t1,100.0,P+'HELI');jlt(t1,-100.0,P+'HELI')","jgt(t1,1000.0,P+'HELI');jlt(t1,-1000.0,P+'HELI')",'12 aim direction check'),
  ('threat_v41.py',"jgt(t1,100.0,P+'HELI');jlt(t1,-100.0,P+'HELI')","jgt(t1,60.0,P+'HELI');jlt(t1,-60.0,P+'HELI')",'12 aim direction tight'),

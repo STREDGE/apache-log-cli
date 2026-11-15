@@ -8,8 +8,8 @@ Street and get out there by landing or by rope.
 
 WHAT IS NEW IN 1.2 (beta)
 - Russian language for the menu and every message. Chosen automatically from the game's language
-  or by hand (SETTINGS > LANGUAGE). Which of the two Russian letter layouts fits your font is shown
-  by the FONT TEST pages - see below; this is the main thing to check in the beta.
+  or by hand (SETTINGS > LANGUAGE). Russian text needs the game itself set to Russian (or to the
+  SanLTD fan localisation) - see LANGUAGE below.
 - A clearer menu: one row = one action, modes are marked [X], the two exit methods are separate
   rows, DISMISS HELICOPTER asks first and recalls a squad on the ground before leaving.
 - WHERE I SHOOT (follow my shots) was rebuilt: the gunners fire at the target you lock on to (the
@@ -56,16 +56,18 @@ what the vehicle exit button does), GUNNER FIRE >, SETTINGS >.
 SETTINGS: crew, helicopter model, crew weapon, squad tactics (GUARD / ASSAULT), exit button
 (LAND / ROPE), messages (ALL / IMPORTANT / OFF), LANGUAGE.
 
-LANGUAGE AND FONT TEST (IMPORTANT FOR THE BETA)
-The game draws text with its own font and the code alone cannot tell how Russian letters are laid
-out in it, so the beta carries two layouts and test pages. If Russian words look like rubbish:
-1. SETTINGS > LANGUAGE: AUTO picks "RUSSIAN 2" when the game itself is set to Russian. Try
-   RUSSIAN 1 (CP1251), RUSSIAN 2 (GAME FONT) and ENGLISH.
-2. Open LANGUAGE > FONT TEST. Page 1 rows start with "1:", page 2 rows with "2:". The page where
-   you see the Cyrillic alphabet in order is the right layout. SHOW MESSAGE prints the same in a
-   help box.
-3. Send a screenshot of both pages: the final version keeps only the right layout and drops the
-   test pages. Until then you can play in English (LANGUAGE > ENGLISH).
+LANGUAGE (IMPORTANT FOR THE BETA)
+The mod draws its text with the game's own font, and the game has a different font per language:
+- game set to Russian: the mod writes Russian (normal mixed case);
+- game set to SanLTD (a fan localisation installed over French): Russian in CAPITALS;
+- English and the other languages: their font has no Cyrillic at all, so the mod stays in English.
+AUTO (the default) picks this by itself. By hand: SETTINGS > LANGUAGE: AUTO / ENGLISH /
+RUSSIAN (GAME RUSSIAN) / RUSSIAN (SANLTD). With a real French game AUTO takes it for SanLTD:
+choose ENGLISH.
+FONT TEST (LANGUAGE > FONT TEST): page 1 with the game in Russian must show the Cyrillic alphabet
+in order after "1:"; page 2 with the game in SanLTD shows the capitals after "2:" and the codes
+still to be identified after "R:". SHOW MESSAGE prints the same in a help box. Screenshots of
+page 1 (Russian) and page 2 (SanLTD) are welcome.
 
 MESSAGES
 Calls sound like radio traffic: PILOT (blue), GUNNERS, SQUAD and MEDIC (green), HELICOVER hints

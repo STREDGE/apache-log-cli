@@ -1,33 +1,45 @@
-"""Helicover 1.2 language data: every Russian text, and the two ways a Cyrillic letter can reach the game's font.
+"""Helicover 1.2 language data: every Russian text, and how a Cyrillic letter reaches the game's font.
 
-The game draws help-box messages (FXT keys) and CLEO menu rows with CFont::PrintString from single-byte codes. For
-Russian the font texture is not laid out like CP1251: libGTASA carries `russian_table` (128 entries, indexed by
-CP1251 byte - 0x80) that gives the glyph slot of every Cyrillic letter. Which of the two reaches the screen depends on
-where the game applies that table, which cannot be told from the code alone, so the beta ships both and a FONT TEST page:
+The game draws help-box messages (FXT keys) and CLEO menu rows with CFont::PrintString; a text byte becomes a 16-bit code as it is.
+What the font shows for a code depends on the language the GAME is set to (libGTASA 2.00 arm64 + the player's screenshots of the
+first beta's FONT TEST):
 
-  RUS-1  plain CP1251 bytes (the engine maps them itself)
-  RUS-2  the byte is replaced by russian_table[byte - 0x80] (the text is already in glyph codes)
+  English / other  the standard font texture has no Cyrillic at all (codes above its last glyph are blanked) -> English only.
+  Russian          CFont::UsingRussianLanguage: every font style goes through one atlas (RussianFont.met); the glyph is entry
+                   "code - 0x20" and every code past the end of the atlas is drawn as '@'. On screen: 181 = kha, 182 = tse,
+                   192 = an ellipsis, 193-195 = shield / star / heart, 196+ = '@'. So the letters run in alphabet order,
+                   A-YA = 0x80-0x9F, a-ya = 0xA0-0xBF (Unicode - 0x390), with no IO.                         -> profile 'game'
+  SanLTD           a fan localisation in the French slot (CFont::UsingEFIGSLanguage, language index 1): the ordinary font with
+                   SanLTD's texture. Letters that look Latin use the Latin glyph, the rest sit at 0x80-0x95 (22 of 22 confirmed
+                   on the player's screenshot). The codes of a few lower-case letters are not confirmed, so this profile
+                   writes everything in CAPITALS.                                                            -> profile 'sanltd'
 
-tools/verify_russian_table.py checks GLYPH_TABLE against a libGTASA.so.
+The first beta shipped CP1251 and "russian_table" layouts; both were wrong (that table only serves the keyboard key names).
 """
 import re
-# russian_table of libGTASA (arm64 build 2.00): glyph slot for CP1251 byte 0x80 + index (0 = not a letter)
-GLYPH_TABLE=(0,0,0,0,0,133,0,0,0,0,0,0,0,141,142,143,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,32,0,0,0,0,0,0,0,177,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,210,0,0,0,0,0,0,0,
- 193,208,192,184,198,182,199,187,205,178,181,197,204,183,196,194,195,203,206,180,190,188,179,202,185,186,189,191,207,200,209,201,
- 226,241,225,217,231,215,232,220,238,211,214,230,237,216,229,227,228,236,239,213,223,221,212,235,218,219,222,224,240,233,242,234)
-PROFILES=('en','cp1251','glyph')
+ALPHABET='АБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ'   # 32 letters, no IO: the official atlas has none
+# SanLTD: capital letter -> byte. Latin look-alikes first, then the Cyrillic glyphs of the texture.
+SANLTD={'А':0x41,'В':0x42,'Е':0x45,'Ё':0x45,'К':0x4B,'М':0x4D,'Н':0x48,'О':0x4F,'Р':0x50,'С':0x43,'Т':0x54,'У':0x59,'Х':0x58,
+ 'Б':0x80,'Ф':0x81,'Г':0x82,'Д':0x83,'Ж':0x84,'И':0x85,'Й':0x86,'Л':0x87,'З':0x88,'Ц':0x89,'Щ':0x8A,'П':0x8C,'Ч':0x8D,'Ш':0x8E,
+ 'Ъ':0x90,'Ы':0x91,'Ь':0x92,'Э':0x93,'Ю':0x94,'Я':0x95}
+PROFILES=('en','game','sanltd')
+def upper_keep_tags(text):
+ """Capitals everywhere except inside the ~x~ colour / number tags (they are commands for the game, case matters)."""
+ return ''.join(part if re.fullmatch(r'~[^~]~',part) else part.upper() for part in re.split(r'(~[^~]~)',text))
 def encode(text,profile):
- """Text -> bytes for a profile. Latin text, digits and punctuation stay ASCII; Cyrillic goes through CP1251 (and the glyph table)."""
+ """Text -> bytes for a profile. Latin text, digits and punctuation stay ASCII; Cyrillic goes to the codes of that font."""
  if profile=='en':return text.encode('ascii')
+ if profile=='sanltd':text=upper_keep_tags(text)
  out=bytearray()
  for ch in text:
   if ord(ch)<128:out.append(ord(ch));continue
-  b=ch.encode('cp1251')[0]
-  if profile=='cp1251':out.append(b)
+  if profile=='game':
+   ch={'Ё':'Е','ё':'е'}.get(ch,ch);i=ALPHABET.find(ch.upper())
+   assert i>=0,('no glyph for',ch)
+   out.append((0x80 if ch.isupper() else 0xA0)+i)
   else:
-   g=GLYPH_TABLE[b-0x80]
-   assert g,('no glyph for',ch)
-   out.append(g)
+   assert ch in SANLTD,('no SanLTD glyph for',ch)
+   out.append(SANLTD[ch])
  return bytes(out)
 def ukey(key):return 'U'+key[1:]
 def vkey(key):return 'V'+key[1:]
@@ -225,9 +237,15 @@ def menu_text(key,profile):
 def state_title(state,en_name,profile):
  return encode('HELICOVER / '+en_name,'en') if profile=='en' else encode('HELICOVER / '+STATE_RU[state],profile)
 
-# FONT TEST: the Cyrillic alphabet, once per layout. Row 1-4 of each page; every letter of the game's table appears.
+# FONT TEST: page 1 is for the game's own Russian (profile 'game'), page 2 for SanLTD. Each shows the alphabet as this build writes it;
+# page 2 adds raw codes whose letters are not known yet (the lower-case half of SanLTD), so one screenshot settles them.
 ALPHA_UP1='АБВГДЕЖЗИЙКЛМНОП';ALPHA_UP2='РСТУФХЦЧШЩЪЫЬЭЮЯ';ALPHA_LO1='абвгдежзийклмноп';ALPHA_LO2='рстуфхцчшщъыьэюя'
 RU_MESSAGES['HFTEST']='~b~ТЕСТ ШРИФТА~w~ '+ALPHA_UP1+' '+ALPHA_LO1
 def font_test_rows(profile):
- tag='1: ' if profile=='cp1251' else '2: '
- return [encode(tag+s,profile) for s in (ALPHA_UP1,ALPHA_UP2,ALPHA_LO1,ALPHA_LO2)]
+ if profile=='game':return [encode('1: '+s,'game') for s in (ALPHA_UP1,ALPHA_UP2,ALPHA_LO1,ALPHA_LO2)]
+ return [encode('2: '+ALPHA_UP1,'sanltd'),encode('2: '+ALPHA_UP2,'sanltd'),b'R: '+bytes(range(0x96,0xA6)),b'R: '+bytes(range(0xA6,0xB0))]
+def _groups(lo,hi,n=8):return b' '.join(bytes(range(i,min(i+n,hi))) for i in range(lo,hi,n))
+# texts that are not a translation: the SanLTD test message shows the raw codes 0x80-0xAF in the help-box font
+FXT_OVERRIDE={('sanltd','HFTEST'):b'~b~TEST~w~ '+_groups(0x80,0xB0)}
+def fxt_text(key,profile):
+ return FXT_OVERRIDE.get((profile,key)) or encode(RU_MESSAGES[key],profile)

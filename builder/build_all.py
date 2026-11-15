@@ -23,7 +23,7 @@ def missing_keys():
     return sorted(used-have)
 def write_languages():
     """Helicover.fxt stays plain ASCII English (as in 1.1, so a loader that dislikes high bytes can never break it); Helicover_RU.fxt carries
-    the same messages in Russian twice: key U... in plain CP1251, key V... in the game's glyph codes."""
+    the same messages in Russian twice: key U... in the codes of the game's own Russian font, key V... in SanLTD codes (capitals)."""
     path=OUT/'Helicover.fxt';lines=[l for l in path.read_text().splitlines() if l.strip()]
     en={l.split(' ',1)[0]:l.split(' ',1)[1] for l in lines}
     extra=set(i18n.RU_MESSAGES)-set(en);absent=set(en)-set(i18n.RU_MESSAGES)
@@ -33,7 +33,7 @@ def write_languages():
         if len(i18n.visible(v))>i18n.RU_PLAIN_LIMIT:sys.exit('Russian text too long: '+k)
     out=bytearray()
     for k in en:
-        for prof,key in (('cp1251',i18n.ukey(k)),('glyph',i18n.vkey(k))):out+=key.encode('ascii')+b' '+i18n.encode(i18n.RU_MESSAGES[k],prof)+b'\n'
+        for prof,key in (('game',i18n.ukey(k)),('sanltd',i18n.vkey(k))):out+=key.encode('ascii')+b' '+i18n.fxt_text(k,prof)+b'\n'
     (OUT/'Helicover_RU.fxt').write_bytes(bytes(out))
 if __name__=='__main__':
     run('build_v25.py');run('build_v25_ground.py');run('build_v25_squad.py')
