@@ -122,9 +122,10 @@ passed('DISMISS without a squad is immediate after the confirmation')
 
 # models for the CREW and HELICOPTER pages are requested while the page is open and released after
 w,c,p=open_menu(1);w.calls.clear();w.events.append(6);w.step(c,p,n=4);w.events.append(0);w.step(c,p,n=4)
-assert {x[2][0] for x in calls(w,0x247)}>={105,106,107,285,287},'crew skins are requested when the page opens'
-w.calls.clear();w.events.append(3);w.step(c,p,n=4)
-w.events.append(7);w.step(c,p,n=4);assert {x[2][0] for x in calls(w,0x249)}>={285,287,487,497,425},'and released when the pages are left'
+assert {x[2][0] for x in calls(w,0x247)}=={105,106,107,285,287},'only the crew skins are requested when the CREW page opens (not three helicopter models)'
+w.calls.clear();w.events.append(3);w.step(c,p,n=4);w.events.append(1);w.step(c,p,n=4)
+assert {x[2][0] for x in calls(w,0x247)}=={487,497,425},'the helicopter models when the HELICOPTER page opens'
+w.calls.clear();w.events.append(3);w.step(c,p,n=4);w.events.append(7);w.step(c,p,n=4);assert {x[2][0] for x in calls(w,0x249)}>={285,287,487,497,425},'and released when the pages are left'
 passed('Crew and helicopter models are pre-requested while their pages are open, so choosing one does not stall a frame')
 
 text='\n'.join(results)+'\nMocked script execution only: the real look of Cyrillic in the game font is checked on the phone with FONT TEST.\n'
