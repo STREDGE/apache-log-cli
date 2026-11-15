@@ -6,7 +6,7 @@ HERE=Path(__file__).resolve().parent;P=HERE/'test_v25.py'
 _src=P.read_text();g={'__file__':str(P),'__name__':'v25_harness'}
 exec(compile(_src[:_src.index('results=[]')],str(P),'exec'),g)
 for _m in re.finditer(r'^def [a-z_0-9]+\(.*?(?=^\S)',_src,re.S|re.M):exec(compile(_m.group(0),str(P),'exec'),g)
-World,VM,b,setup,summon,calls=g['World'],g['VM'],g['b'],g['setup'],g['summon'],g['calls']
+World,VM,b,setup,summon,calls,invariants,command=g['World'],g['VM'],g['b'],g['setup'],g['summon'],g['calls'],g['invariants'],g['command']
 import build_v25_squad as sqb
 results=[]
 def passed(t):results.append('PASS: '+t)
@@ -150,8 +150,11 @@ assert all(t not in w.exists for t in team) and w.shared[b.ESCORT_ON]==0 and 'SQ
 passed('CJ boards the helicopter another way: the team stays on the ground (deleted out of sight, nobody warped aboard)')
 w,c,ground,sq,team=escort_world();V=(c,ground,sq);w.teleports.clear()
 w.incar[1]=c.v[5];w.offscreen=set();w.onscreen=True;steps(w,V,12)
-assert all(t in w.exists and t in w.released for t in team) and w.shared[b.ESCORT_ON]==0 and not w.teleports,(w.messages,w.teleports)
-passed('The same in view: the team is handed back to the game, nobody vanishes on screen')
+assert all(t in w.exists and t not in w.released and t in w.wander and w.weapons[t]==0 for t in team) and w.shared[b.ESCORT_ON]==0 and not w.teleports and not w.handed,(w.messages,w.teleports,w.handed)
+assert sorted(w.shared[b.LEAVE+k] for k in range(4))==sorted(team) and not invariants(w),invariants(w)
+passed('The same in view: nobody vanishes on screen and nobody is handed to the game - the men put the guns away and walk off as ours (beta 4)')
+w.onscreen=False;steps(w,V,4);assert all(t not in w.exists for t in team) and w.shared[b.LEAVE_N]==0
+passed('...and they are removed once out of sight')
 w,c,ground,sq,team=escort_world();V=(c,ground,sq)
 for t in team:w.dead.add(t)
 steps(w,V,12);assert 'SQLOST' in w.messages and w.shared[b.ESCORT_ON]==0 and 'SQBACK' not in w.messages
@@ -261,8 +264,8 @@ w,c,p=setup(True);launch=VM('Helicover',w);summon(w,c);w.step(c,p,launch,n=15)
 assert w.menu[7]==b'DEPLOY SQUAD',w.menu
 w.events.append(6);w.step(c,p,n=4);assert w.menu[5]==b'SQUAD TACTICS: GUARD',w.menu
 w.events.append(3);w.step(c,p,n=4);assert w.shared[b.TACTICS]==1 and w.menu[5]==b'SQUAD TACTICS: ASSAULT',w.menu
-w.events.append(7);w.step(c,p,n=4);w.shared[b.ESCORT_ON]=1;w.step(c,p,n=4);assert w.menu[7]==b'RECALL SQUAD',w.menu
-w.events.append(5);w.step(c,p,n=2);assert w.shared[b.CMD] in (17,0) and any(x[2]==[b.CMD,17] for x in calls(w,0xddc))
+w.events.append(5);w.step(c,p,n=4);w.shared[b.ESCORT_ON]=1;w.step(c,p,n=4);assert w.menu[7]==b'RECALL SQUAD',w.menu
+w.step(c,p,n=6);w.events.append(5);w.step(c,p,n=2);assert w.shared[b.CMD] in (17,0) and any(x[2]==[b.CMD,17] for x in calls(w,0xddc))
 passed('Main menu: one row deploys / recalls the squad; SETTINGS switches GUARD / ASSAULT')
 w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.shared[b.CMD]=16;w.step(c,n=5);assert 'HCEXIT' in w.messages and w.shared[b.STATE]!=19
 w,c,_=setup();summon(w,c);w.shared[b.ESCORT_ON]=1;w.shared[b.CMD]=16;w.step(c,n=5);assert 'SQALR' in w.messages
@@ -666,7 +669,7 @@ assert 'SQCR' in w.messages and 'HCCONT' not in w.messages,w.messages
 passed('With the team on the ground only the squad calls the contact (no double "CONTACT!")')
 w,c,p=setup(True);launch=VM('Helicover',w);w.step(c,p,launch,n=15);w.events.append(1);w.step(c,p,n=4)
 rows=[]
-for _ in range(4):rows.append(w.menu[7]);w.events.append(5);w.step(c,p,n=4)
+for _ in range(4):rows.append(w.menu[6]);w.events.append(4);w.step(c,p,n=4)
 assert rows==[b'MESSAGES: ALL',b'MESSAGES: IMPORTANT',b'MESSAGES: OFF',b'MESSAGES: ALL'],rows
 passed('SETTINGS: one row cycles MESSAGES: ALL / IMPORTANT / OFF')
 # ------------------------------------------------------------------ v41 frame cost

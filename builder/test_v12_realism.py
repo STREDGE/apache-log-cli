@@ -6,7 +6,7 @@ HERE=Path(__file__).resolve().parent;P=HERE/'test_v25.py'
 _src=P.read_text();g={'__file__':str(P),'__name__':'v25_harness'}
 exec(compile(_src[:_src.index('results=[]')],str(P),'exec'),g)
 for _m in re.finditer(r'^def [a-z_0-9]+\(.*?(?=^\S)',_src,re.S|re.M):exec(compile(_m.group(0),str(P),'exec'),g)
-World,VM,b,setup,summon,calls,command=g['World'],g['VM'],g['b'],g['setup'],g['summon'],g['calls'],g['command']
+World,VM,b,setup,summon,calls,command,invariants=g['World'],g['VM'],g['b'],g['setup'],g['summon'],g['calls'],g['command'],g['invariants']
 import build_v25_squad as sqb
 results=[]
 def passed(t):results.append('PASS: '+t)
@@ -102,8 +102,11 @@ assert team[0] not in w.exists and w.shared[b.GROUND_PUB]==-1 and w.shared[b.ESC
 assert all(x in w.exists for x in team[1:]) and w.shared[b.ESCORT_ON]==1
 passed('A guard 150 m behind for 60 s is let go (deleted out of sight); the rest of the team carries on')
 w.pos[team[1]]=[0.,-150.,0.];w.offscreen=set();w.onscreen=True;steps(w,V,3);w.now+=61000;steps(w,V,3)
-assert team[1] in w.exists and team[1] in w.released and w.shared[b.GROUND_PUB+1]==-1,'in view: handed back, not deleted'
-passed('The same guard in view is handed back to the game (01C2), never deleted on screen')
+assert team[1] in w.exists and team[1] not in w.released and w.shared[b.GROUND_PUB+1]==-1 and not w.handed,'in view: neither deleted nor handed to the game'
+assert team[1] in w.wander and w.weapons[team[1]]==0 and w.shared[b.LEAVE]==team[1] and w.shared[b.LEAVE_N]==1 and not invariants(w),(w.wander,invariants(w))
+passed('The same guard in view is never deleted on screen and never handed to the game (beta 4): he puts the gun away and walks off as ours')
+w.offscreen={team[1]};steps(w,V,3);assert team[1] not in w.exists and w.shared[b.LEAVE]==-1 and w.shared[b.LEAVE_N]==0;w.offscreen=set()
+passed('...and is removed the moment nobody sees him')
 w.pos[team[2]]=[0.,-150.,0.];w.pos[team[3]]=[0.,-160.,0.];steps(w,V,3);w.now+=61000;steps(w,V,6)
 assert w.shared[b.ESCORT_ON]==0 and 'SQAWAY' in w.messages and 'SQLOST' not in w.messages,(w.shared[b.ESCORT_ON],w.messages)
 assert not w.teleports,w.teleports
@@ -151,9 +154,18 @@ w.car=[c.v[26],c.v[27],c.v[28]+18.];w.speed=0.;steps(w,V,40)
 assert w.shared[b.ESCORT_ON]==3 and team[3] in w.exists,(w.shared[b.ESCORT_ON],w.messages)
 steps(w,V,60);assert all(t in w.exists for t in team),'the three at their ropes wait for the fourth'
 w.now+=26000;steps(w,V,70)
-assert team[3] in w.released or team[3] not in w.exists,'the one who never arrived is left behind'
+assert all(t not in w.exists for t in team[:3]),'the three at their ropes are aboard'
+assert team[3] in w.exists and team[3] not in w.released and not w.handed,'the one who never arrived is left behind - and is NOT handed to the game (beta 4: that was the armed "policeman" the player got a star for)'
+assert team[3] in w.wander and w.weapons[team[3]]==0 and team[3] in [w.shared[b.LEAVE+k] for k in range(8)] and not invariants(w),(w.wander,invariants(w))
 assert w.shared[b.ESCORT_ON]==0 and not [t for t in w.teleports if t['who']==team[3]]
-passed('Recall: the pilot waits up to 25 s for the guards; the one who cannot get there stays behind and is never teleported')
+passed('Recall: the pilot waits up to 25 s for the guards; the one who cannot get there stays behind unarmed as ours (never teleported, never handed to the game)')
+# the player's report: deploy -> recall -> deploy again. The straggler of the first team must not be a stray armed ped, and the new team is complete
+w.offscreen={team[3]};steps(w,V,30);assert team[3] not in w.exists and w.shared[b.LEAVE_N]==0;w.offscreen=set()
+w.shared[b.CMD]=16;steps(w,V,6);assert w.shared[b.STATE]==19 and w.shared[b.ESCORT_PENDING]==1,(w.shared[b.STATE],w.messages)
+w.car=[c.v[26],c.v[27],c.v[28]+18.];w.speed=0.;steps(w,V,60)
+team2=[w.shared[b.GROUND_PUB+i] for i in range(4)]
+assert w.shared[b.ESCORT_ON]==1 and len(set(team2))==4 and all(t in w.exists for t in team2) and not set(team2)&set(team) and not w.handed and not invariants(w),(w.shared[b.ESCORT_ON],team2,invariants(w))
+passed('Deploy - recall - deploy again: the second team is four new men, nobody of the first is left as a stray armed ped')
 # a guard sitting in a car gets out (0633), he is not teleported out
 w,c,ground,sq,team=escort_world();V=(c,ground,sq)
 for k,t in enumerate(team):w.pos[t]=[BG[k][0],BG[k][1],0.]
@@ -165,9 +177,14 @@ passed('A guard in a car gets out first (task) and then runs to his rope; no tel
 # nobody on the ropes: the pilot gives up after 90 s instead of hovering for ever; an abandoned request leaves no stale team flag
 w,c,_=setup();summon(w,c);command(w,c,3,ticks=5);w.car=[0.,0.,18.];w.speed=0.;ground=VM('Helicover_Ground',w);w.step(c,ground,n=3)
 w.shared[b.ROPE_COMMAND]=1;w.step(c,ground,n=10);assert w.shared[b.GROUND_PUB]!=-1 and w.frozen.get(c.v[5])
-w.now+=91000;w.step(c,ground,n=6)
-assert w.shared[b.GROUND_PUB]==-1 and not w.frozen.get(c.v[5]) and 'RGLATE' in w.messages,(w.messages,w.shared[b.GROUND_PUB])
-passed('Rope pickup nobody takes: after 90 s the ropes go up and the helicopter is free again')
+cover=[w.shared[b.GROUND_PUB+i] for i in range(4)];w.now+=91000;w.step(c,ground,n=6)
+assert 'RGLATE' in w.messages and w.shared[b.ESCORT_ON]==3 and w.shared[b.ROPE_BUSY]==1 and w.shared[b.ROPE_WAIT]==0 and all(t in w.exists for t in cover),(w.messages,w.shared[b.ESCORT_ON])
+for _ in range(400):
+ w.step(c,ground)
+ if w.shared[b.STATE]==2:break
+assert w.shared[b.STATE]==2 and w.shared[b.GROUND_PUB]==-1 and not w.frozen.get(c.v[5]) and w.shared[b.ESCORT_ON]==0 and w.shared[b.ROPE_BUSY]==0,(w.shared[b.STATE],w.messages,w.shared[b.GROUND_PUB])
+assert all(t not in w.exists for t in cover) and not w.handed and not set(cover)&w.released and not invariants(w),(w.handed,invariants(w))
+passed('Rope pickup nobody takes: after 90 s the cover team climbs back aboard (it used to be let go on the spot), the ropes go up and the helicopter follows again')
 w,c,_=setup();summon(w,c);command(w,c,3,ticks=5);ground=VM('Helicover_Ground',w);w.step(c,ground,n=3)
 w.shared[b.ESCORT_ON]=2;w.shared[b.ESCORT_CMD]=1;w.playing=False;w.step(ground,n=4)
 assert w.shared[b.ESCORT_ON]==0,w.shared[b.ESCORT_ON]
@@ -467,14 +484,179 @@ for _ in range(400):
  w.cars[car]['pos'][0]+=1.5;w.player=list(w.cars[car]['pos']);w.speed=15.;w.car_speeds={car:15.};w.step(*V)
 w.car_speeds={};w.incar.pop(1);w.player=[w.cars[car]['pos'][0],w.cars[car]['pos'][1],0.];w.speed=12.
 steps(w,V,100);w.now+=65000;steps(w,V,20)
-alive=[g_ for g_ in team if g_ in w.exists and g_ not in w.released]
-assert w.shared[b.ESCORT_ON]==0 and not alive and 'SQAWAY' in w.messages,('the lagging team is stood down',w.shared[b.ESCORT_ON],alive,w.messages)
+alive=[g_ for g_ in team if g_ in [w.shared[b.GROUND_PUB+i] for i in range(4)]]
+assert w.shared[b.ESCORT_ON]==0 and not alive and 'SQAWAY' in w.messages and not w.handed and not invariants(w),('the lagging team is stood down',w.shared[b.ESCORT_ON],alive,w.messages,w.handed,invariants(w))
 # the helicopter, still following him, is told to leave
 command(w,c,4,ticks=6);w.now+=40000;steps(w,V,20)
 bad=[x for x in w.teleports if x['who']!=c.v[5] or x['dist']>12.]
 bad=[x for x in bad if not (x['who']==c.v[5] and x['op']==0xab)]
 assert not bad,[(hex(x['op']),x['who'],round(x['dist'],1)) for x in bad][:6]
 passed('A whole day - deploy, fire fight, CJ drives off, the squad cannot keep up, dismiss - without a single teleport of a person')
+
+# =================================================================== beta 4: the same order twice, and orders during rope work
+def run_until(w,V,cond,limit=600):
+ for _ in range(limit):
+  w.step(*V)
+  if cond():return True
+ return False
+def states_seen(w,V,cond,limit=600):
+ seen=[]
+ for _ in range(limit):
+  w.step(*V);seen.append(w.shared[b.STATE])
+  if cond():break
+ return seen
+def cover_world(wait=True):
+ """CJ asked for the rope from a hover: the cover team is down and the rope hangs 3 m from him (he has not walked to it)."""
+ w,c,_=setup();summon(w,c);command(w,c,3,ticks=5);w.car=[0.,0.,18.];w.speed=0.;ground=VM('Helicover_Ground',w);V=(c,ground);w.step(*V,n=3)
+ w.shared[b.ROPE_COMMAND]=1;w.step(*V,n=8);team=[w.shared[b.GROUND_PUB+i] for i in range(4)];assert all(t_ in w.exists for t_ in team) and w.shared[b.ROPE_WAIT]==1 and w.shared[b.ROPE_BUSY]==1
+ if wait:w.now+=6000;w.step(*V,n=8);assert w.shared[b.ROPE_BUSY]==0 and w.shared[b.ROPE_WAIT]==1 and w.shared[b.ESCORT_ON]==0
+ return w,c,ground,V,team
+def squad_cover_world():
+ """The squad is on the ground, CJ asked for the rope: the helicopter hovers with the rope out and the squad covers him."""
+ w,c,ground,sq,team=escort_world();V=(c,ground,sq)
+ for k,t_ in enumerate(team):w.pos[t_]=[BG[k][0],BG[k][1],0.]
+ command(w,c,10,ticks=4);assert w.shared[b.STATE]==19 and w.shared[b.ESCORT_PENDING]==0,(w.shared[b.STATE],w.messages)
+ w.car=[c.v[26],c.v[27],c.v[28]+18.];w.speed=0.;w.player=[w.player[0]+6.,w.player[1],w.player[2]]   # CJ steps away from the rope: it waits for him
+ assert run_until(w,V,lambda:w.shared[b.ROPE_WAIT]==1 and w.shared[b.ROPE_BUSY]==0,120),(w.shared[b.STATE],w.shared[b.ROPE_WAIT],w.messages)
+ w.now+=4000;w.step(*V,n=6);assert w.shared[b.STATE]==3 and w.shared[b.ESCORT_ON]==1 and w.shared[b.ROPE_WAIT]==1,(w.shared[b.STATE],w.shared[b.ESCORT_ON])
+ return w,c,ground,V,team
+FLIGHT=(0x726,0x4a2,0x825,0x918,0x4d2,0x743,0x4a1)
+def flight_orders(w):return [x for x in w.calls if x[1] in FLIGHT]
+# --- the mode that is already on
+w,c,_=setup();summon(w,c);w.step(c,n=3);w.calls.clear();command(w,c,2,ticks=4);assert w.shared[b.STATE]==2 and not flight_orders(w),flight_orders(w)
+command(w,c,3,ticks=4);assert w.shared[b.STATE]==3;w.calls.clear();command(w,c,3,ticks=4);assert not flight_orders(w)
+command(w,c,14,ticks=4);assert w.shared[b.STATE]==24;step_=w.shared[b.PATROL_STEP];nxt_=w.shared[b.PATROL_NEXT];w.calls.clear();command(w,c,14,ticks=1)
+assert w.shared[b.STATE]==24 and w.shared[b.PATROL_STEP]==step_ and w.shared[b.PATROL_NEXT]==nxt_,'the patrol round is not started again'
+passed('FOLLOW / HOLD / PATROL given again while already on: nothing is restarted (no new flight task, the patrol round goes on)')
+w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.step(c,n=3);command(w,c,7,ticks=4);st=w.shared[b.STATE];assert st in (20,10,11),st
+t0=c.v[21];w.now+=3000;command(w,c,7,ticks=3);assert c.v[21]==t0 and w.shared[b.STATE] in (20,10,11),'the flight to Grove Street is not restarted (its clock stays)'
+passed('FLY TO GROVE STREET again during the flight: ignored')
+w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.marker=[300.,200.,0.];w.step(c,n=3);command(w,c,11,ticks=4);assert w.shared[b.STATE] in (21,25),w.shared[b.STATE]
+t0=c.v[21];dx=w.shared[b.DEST_X];w.now+=3000;w.calls.clear();command(w,c,11,ticks=3);assert c.v[21]==t0 and w.shared[b.DEST_X]==dx,'same marker: the flight goes on'
+w.marker=[-400.,100.,0.];command(w,c,11,ticks=3);assert w.shared[b.DEST_X]!=dx and c.v[21]!=t0,'a marker moved somewhere else is a new destination'
+passed('FLY TO MAP MARKER again with the same marker: ignored; with the marker moved: the new destination is taken')
+# --- the squad: one deployment, one recall
+w,c,_=setup();summon(w,c);ground=VM('Helicover_Ground',w);sq=VM('Helicover_Squad',w);V=(c,ground,sq);w.step(*V,n=3)
+command(w,c,16,ticks=4);assert w.shared[b.STATE]==19 and w.shared[b.ESCORT_PENDING]==1
+t0=c.v[21];w.messages.clear();w.now+=1500
+for cmd in (16,17,16):command(w,c,cmd,ticks=2)
+assert w.shared[b.STATE]==19 and w.shared[b.ESCORT_PENDING]==1 and c.v[21]==t0 and not {'SQALR','SQNONE'}&set(w.messages),(w.shared[b.ESCORT_PENDING],w.messages)
+command(w,c,10,ticks=2);assert w.shared[b.ESCORT_PENDING]==1 and 'HCRBSY' in w.messages,'the rope for CJ is not taken while the squad is using the ropes'
+w.car=[c.v[26],c.v[27],c.v[28]+18.];w.speed=0.;assert run_until(w,V,lambda:w.shared[b.ESCORT_ON]==2,80)
+assert w.shared[b.ROPE_BUSY]==1,'busy from the moment the rope worker takes the order'
+assert run_until(w,V,lambda:w.shared[b.GROUND_PUB+3]>0,10);team=[w.shared[b.GROUND_PUB+i] for i in range(4)];made=len(calls(w,0x503));assert all(t_ in w.exists for t_ in team)
+w.ped_heights={t_:9. for t_ in team}   # still high on the ropes
+w.step(*V,n=3);assert w.shared[b.ESCORT_ON]==2;w.messages.clear();w.shared[b.MSG_UNTIL]=0
+for cmd in (16,17,16,17):command(w,c,cmd,ticks=1)
+assert len(calls(w,0x503))==made and [w.shared[b.GROUND_PUB+i] for i in range(4)]==team and not {'SQALR','SQNONE'}&set(w.messages)
+command(w,c,2,ticks=2);assert w.shared[b.STATE]==3 and 'HCRBSY' in w.messages and w.shared[b.ESCORT_ON]==2,'FOLLOW does not pull the helicopter away from men on the ropes'
+w.ped_heights={}
+assert run_until(w,V,lambda:w.shared[b.ESCORT_ON]==1,120) and all(t_ in w.exists for t_ in team) and not invariants(w)
+passed('DEPLOY SQUAD given again (and RECALL, and the rope) while the helicopter comes in or the men are on the ropes: one team of four, nothing restarted, FOLLOW waits')
+w.step(*V,n=6);w.car=[0.,-45.,28.];w.speed=12.;w.step(*V,n=3)   # the helicopter is back to following, away from the squad
+command(w,c,17,ticks=4);assert w.shared[b.STATE]==19 and w.shared[b.ESCORT_PENDING]==2
+t0=c.v[21];w.now+=1500;w.messages.clear()
+for cmd in (17,16,17):command(w,c,cmd,ticks=2)
+assert w.shared[b.STATE]==19 and w.shared[b.ESCORT_PENDING]==2 and c.v[21]==t0 and w.shared[b.ESCORT_ON]==1 and not {'SQALR','SQNONE'}&set(w.messages)
+w.car=[c.v[26],c.v[27],c.v[28]+18.];w.speed=0.;assert run_until(w,V,lambda:w.shared[b.ESCORT_ON]==3,80)
+for cmd in (16,17,16):command(w,c,cmd,ticks=1)
+assert w.shared[b.ESCORT_ON]==3 and len(calls(w,0x503))==made,'no second team is created while the first climbs back'
+assert run_until(w,V,lambda:w.shared[b.ESCORT_ON]==0 and w.shared[b.STATE]==2,600),(w.shared[b.ESCORT_ON],w.shared[b.STATE])
+assert all(t_ not in w.exists for t_ in team) and not w.handed and not invariants(w),(w.handed,invariants(w))
+passed('RECALL SQUAD given again (and DEPLOY) during the recall: one recall, no second team, everybody back aboard, nobody handed to the game')
+# --- the rope for CJ: order again = cancel
+w,c,_=setup();summon(w,c);w.step(c,n=3);command(w,c,10,ticks=4);assert w.shared[b.STATE]==19 and w.shared[b.ESCORT_PENDING]==0
+w.messages.clear();command(w,c,10,ticks=4);assert w.shared[b.STATE]==2 and 'HCRCAN' in w.messages and w.shared[b.ROPE_COMMAND]==0,(w.shared[b.STATE],w.messages)
+passed('The rope order again on the way in cancels the pickup: the helicopter goes back to following')
+w,c,ground,V,team=cover_world(wait=False)   # the cover team is still on its way down
+w.messages.clear();command(w,c,10,ticks=3);assert w.shared[b.ROPE_COMMAND]==1 and w.shared[b.STATE]==3 and 'HCRBSY' not in w.messages,'the cancel is noted, the men are not disturbed on the ropes'
+w.calls.clear();w.step(*V,n=12);assert w.shared[b.ROPE_COMMAND]==1 and w.shared[b.ESCORT_ON]==0 and 'HCRCAN' not in w.messages and not [x for x in calls(w,0x5d3) if x[2][0] in team],'still on the ropes 1.2 s later: the cancel waits for the landing'
+w.player=[0.,-3.,.7]   # CJ even stands at the rope: the cancel still wins over the automatic pull-up
+w.now+=6000;seen=states_seen(w,V,lambda:w.shared[b.STATE]==2)
+assert w.shared[b.STATE]==2 and 19 not in seen and 'HCRCAN' in w.messages and w.incar.get(1)!=c.v[5] and w.control,(seen[-5:],w.messages,w.incar)
+assert all(t_ not in w.exists for t_ in team) and not w.handed and not invariants(w)
+passed('CANCEL ROPE PICKUP while the cover team is still roping down: taken when the men have landed - they climb back, CJ is not pulled up')
+w,c,ground,V,team=cover_world(wait=False);command(w,c,10,ticks=3);assert w.shared[b.ROPE_COMMAND]==1
+w.health[c.v[5]]=300;w.messages.clear();made=len(calls(w,0x503));w.step(*V,n=20)   # the helicopter is driven off before the men have even landed
+assert w.shared[b.STATE]==13 and w.shared[b.ROPE_COMMAND]==0 and len(calls(w,0x503))==made and 'RGHOLD' not in w.messages and not w.handed,(w.shared[b.STATE],w.shared[b.ROPE_COMMAND],w.messages)
+passed('A cancel that was still waiting for the landing ends with the pickup when the helicopter is driven off (it is not read as a new rope order)')
+w,c,ground,V,team=cover_world();w.messages.clear();command(w,c,10,ticks=3);seen=states_seen(w,V,lambda:w.shared[b.STATE]==2)
+assert w.shared[b.STATE]==2 and 19 not in seen and 'HCRCAN' in w.messages and all(t_ not in w.exists for t_ in team) and not w.handed and not w.frozen.get(c.v[5]) and not invariants(w),(seen[-5:],w.messages,w.handed)
+passed('CANCEL ROPE PICKUP with the rope hanging: the cover team climbs back up, the helicopter follows again (no new approach, nobody left behind)')
+w,c,ground,V,team=squad_cover_world();w.messages.clear();command(w,c,10,ticks=3);assert run_until(w,V,lambda:w.shared[b.STATE]==2,80)
+assert w.shared[b.ESCORT_ON]==1 and [w.shared[b.GROUND_PUB+i] for i in range(4)]==team and all(t_ in w.exists for t_ in team) and w.shared[b.ROPE_WAIT]==0 and not w.frozen.get(c.v[5]) and 'HCRCAN' in w.messages,(w.shared[b.ESCORT_ON],w.messages)
+assert w.shared[b.GROUND_PUB+4]==-1 and not w.handed and not invariants(w)
+passed('CANCEL ROPE PICKUP with the squad on the ground: the squad simply stays with CJ, the rope goes up, the helicopter follows')
+# --- other orders while the rope hangs
+w,c,ground,V,team=cover_world();made=len(calls(w,0x503));w.messages.clear();command(w,c,16,ticks=3);assert run_until(w,V,lambda:w.shared[b.ESCORT_ON]==1 and w.shared[b.STATE]==2,80),(w.shared[b.ESCORT_ON],w.shared[b.STATE])
+assert [w.shared[b.GROUND_PUB+i] for i in range(4)]==team and all(t_ in w.exists for t_ in team) and len(calls(w,0x503))==made and 'SQIN' in w.messages and w.shared[b.ROPE_WAIT]==0 and not invariants(w),(w.messages,invariants(w))
+passed('DEPLOY SQUAD while a cover team waits by the rope: the same four men stay down as the squad (no second team)')
+w,c,ground,V,team=squad_cover_world();w.messages.clear();command(w,c,17,ticks=3);seen=states_seen(w,V,lambda:w.shared[b.ESCORT_ON]==0 and w.shared[b.STATE]==2)
+assert w.shared[b.ESCORT_ON]==0 and w.shared[b.STATE]==2 and 19 not in seen and 'HCRUP' in w.messages and all(t_ not in w.exists for t_ in team) and not w.handed and not invariants(w),(seen[-5:],w.messages,w.handed)
+passed('RECALL SQUAD while the squad covers the rope: it goes up the ropes that already hang (no second approach)')
+for cmd,final in ((14,24),(4,4)):
+ w,c,ground,V,team=cover_world();command(w,c,cmd,ticks=3);assert w.shared[b.STATE]==3 and w.shared[b.AFTER_ROPE]==cmd,(cmd,w.shared[b.STATE])
+ seen=states_seen(w,V,lambda:w.shared[b.STATE]==final);assert w.shared[b.STATE]==final and all(t_ not in w.exists for t_ in team) and not w.handed and w.shared[b.AFTER_ROPE]==0 and not invariants(w),(cmd,seen[-5:],w.handed)
+passed('PATROL / DISMISS while a cover team waits by the rope: the team climbs back first, then the order is carried out (it used to be left on the ground)')
+w,c,ground,V,team=squad_cover_world();command(w,c,14,ticks=3);w.step(*V,n=8);assert w.shared[b.STATE]==24 and w.shared[b.ESCORT_ON]==1 and all(t_ in w.exists for t_ in team) and w.shared[b.ROPE_WAIT]==0 and not invariants(w),(w.shared[b.STATE],w.shared[b.ESCORT_ON])
+passed('PATROL while the squad covers the rope: the rope goes up, the squad stays with CJ, the helicopter patrols')
+# --- rope work is never interrupted
+w,c,ground,V,team=cover_world();w.player=[0.,-3.,.7];assert run_until(w,V,lambda:not w.control,40),'CJ is on the rope'
+w.messages.clear()
+for cmd in (2,3,4,14,10,16,17):command(w,c,cmd,ticks=1)
+assert w.shared[b.STATE]==3 and 'HCRBSY' in w.messages and not w.control
+assert run_until(w,V,lambda:w.incar.get(1)==c.v[5],200) and w.control,'he arrives aboard'
+w.messages.clear();w.shared[b.MSG_UNTIL]=0
+for cmd in (7,11,15):command(w,c,cmd,ticks=1)
+assert w.shared[b.STATE]==3 and 'HCRBSY' in w.messages,'aboard, with the team still climbing: destinations and the exit wait too'
+assert run_until(w,V,lambda:w.shared[b.ROPE_BUSY]==0 and all(t_ not in w.exists for t_ in team),400) and not w.handed and not invariants(w)
+passed('Nothing interrupts rope work: while CJ or the team is on the ropes every order is answered "wait - rope work in progress" and the work is finished')
+# --- the exit button
+w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.shared[b.EXIT_MODE]=1;w.speed=20.;w.step(c,n=3);w.messages.clear();command(w,c,15,ticks=1)
+assert w.shared[b.STATE] in (21,22,25) and w.shared[b.AUTO_EXIT]==1 and w.messages.count('HCXHERE')==1,(w.shared[b.STATE],w.shared[b.AUTO_EXIT],w.messages)
+dest=(w.shared[b.DEST_X],w.shared[b.DEST_Y]);w.car=[w.car[0]+15.,w.car[1],w.car[2]];w.shared[b.MSG_UNTIL]=0
+for _ in range(3):command(w,c,15,ticks=1)
+assert (w.shared[b.DEST_X],w.shared[b.DEST_Y])==dest and w.shared[b.AUTO_EXIT]==1 and w.messages.count('HCXHERE')==1,('the stopping point is not pushed further on by every press',dest,w.shared[b.DEST_X],w.messages)
+passed('The exit button pressed again while the helicopter slows down for the exit: one exit, the stopping point stays')
+w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.shared[b.EXIT_MODE]=1;w.speed=0.;w.step(c,n=3);command(w,c,15,ticks=3)
+assert w.shared[b.STATE]==23 and w.shared[b.DROP_COMMAND]==1 and w.shared[b.ROPE_PENDING]==1,(w.shared[b.STATE],w.shared[b.DROP_COMMAND])
+w.shared[b.ROPE_TRIES]=3;w.shared[b.DROP_COMMAND]=0;w.shared[b.DROP_RESULT]=-1   # the rope worker took the order and is at it
+for _ in range(3):command(w,c,15,ticks=2)
+assert w.shared[b.ROPE_TRIES]==3 and w.shared[b.DROP_COMMAND]==0,'the drop is not ordered a second time (the retry count used to start again)'
+passed('The exit button pressed again while the rope drop is under way: the drop is not ordered twice')
+# --- a new destination ends a rope drop that was being retried
+w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.shared[b.EXIT_MODE]=1;w.speed=0.;w.marker=[300.,200.,0.];w.step(c,n=3);command(w,c,15,ticks=3)
+assert w.shared[b.STATE]==23 and w.shared[b.ROPE_PENDING]==1;w.shared[b.DROP_COMMAND]=0
+command(w,c,11,ticks=3);assert w.shared[b.STATE] in (21,25) and w.shared[b.ROPE_PENDING]==0,(w.shared[b.STATE],w.shared[b.ROPE_PENDING])
+passed('FLY TO MAP MARKER while a rope drop was still being retried: the retries end with the new destination (the exit button is not left blocked)')
+# --- guards who were let go: at most eight are kept as ours, the gunners never shoot at them
+w,c,ground,sq,team=escort_world();V=(c,ground,sq)
+assert not any(x[1]==0x1c2 and x[2][0] in team for x in w.calls)
+w.shared[b.ESCORT_CMD]=1;w.step(*V,n=6);assert w.shared[b.ESCORT_CMD]==0 and w.shared[b.ESCORT_ON]==1,'an order that is not for the team on the ground does not stay pending'
+command(w,c,17,ticks=4);assert w.shared[b.STATE]==19 and w.shared[b.ESCORT_PENDING]==2,'...so the recall still works'
+passed('A stale squad order cannot block the squad row: it is cleared by the team\'s own loop')
+w,c,ground,sq,team=escort_world();f=VM('Helicover_Fire',w);V=(c,ground,sq,f)
+for k,t_ in enumerate(team):w.pos[t_]=[BG[k][0],BG[k][1],0.]
+w.incar[1]=c.v[5];w.step(*V,n=12);assert w.shared[b.LEAVE_N]==1 and all(t_ in w.exists for t_ in team),'CJ flew off: the team is let go in view'
+w.incar.pop(1);w.shared[b.FIRE]=1;w.random_char=team[0];w.civilians=list(team);w.calls.clear();aimed=set()
+for _ in range(40):w.step(*V);aimed.add(w.shared[b.FIRE_TARGET])
+assert not aimed&set(team) and not calls(w,0x6bc) and not [x for x in calls(w,0x74d) if x[2][1] in team],('FIRE AT ALL does not fire at the men who are walking away',aimed,len(calls(w,0x6bc)))
+stranger=990;w.exists.add(stranger);w.pos[stranger]=[15.,5.,0.];w.pedtype[stranger]=4;w.skin[stranger]=20;w.random_char=stranger;w.civilians=[stranger];w.step(*V,n=30)
+assert calls(w,0x6bc),'(the gunners do fire in this mode: a stranger next to them is engaged)'
+passed('Guards who were let go stay friends of the gunners (even in FIRE AT ALL) until they are gone')
+
+# a ninth man let go while eight are still walking away in view: the one who left first makes room - nobody is handed to the game
+w,c,ground,sq,team=escort_world();V=(c,ground,sq)
+for k,t_ in enumerate(team):w.pos[t_]=[BG[k][0],BG[k][1],0.]
+old=[]
+for k in range(8):
+ h=2000+k;w.exists.add(h);w.pos[h]=[40.+k,40.,0.];w.creator[h]='Helicover_Ground';w.kind[h]='ped';w.shared[b.LEAVE+k]=h;old.append(h)
+w.shared[b.LEAVE_N]=1;w.shared[b.LEAVE_ROT]=0
+w.pos[team[0]]=[0.,-150.,0.];steps(w,V,3);w.now+=61000;steps(w,V,4)
+assert w.shared[b.LEAVE]==team[0] and old[0] not in w.exists and all(h in w.exists for h in old[1:]) and w.shared[b.LEAVE_ROT]==1 and not w.handed and not invariants(w),(w.shared[b.LEAVE],w.handed,invariants(w))
+w.pos[team[1]]=[0.,-150.,0.];steps(w,V,3);w.now+=61000;steps(w,V,4)
+assert w.shared[b.LEAVE+1]==team[1] and old[1] not in w.exists and w.shared[b.LEAVE_ROT]==2 and not w.handed and not invariants(w)
+passed('More than eight guards walking away at once: the one who left first is removed to make room - even then nobody is handed to the game')
 
 text='\n'.join(results)+'\nMocked script execution only: real flight, pathing and animations are not simulated.\n'
 (b.OUT/'realism_tests.txt').write_text(text);print(text)

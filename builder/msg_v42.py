@@ -12,13 +12,10 @@ from asm_v25 import *
 STATE=0x48456A00
 HUD=STATE+9              # 2 ALL, 1 IMPORTANT, 0 OFF
 MSG_UNTIL=STATE+331;MSG_PRIO=STATE+332;SAVE_A=STATE+333;SAVE_B=STATE+334
-# 1.2 language: LANG_SETTING 0 AUTO / 1 ENGLISH / 2 RUSSIAN for the game's own Russian / 3 RUSSIAN for SanLTD; LANG is what is in force:
-# 0 English, 1 Russian in the codes of the game's Russian font (FXT keys U...), 2 Russian in SanLTD codes (FXT keys V...)
-LANG=STATE+409;LANG_SETTING=STATE+410
-# bytes in libGTASA 2.00 arm64: CFont::UsingRussianLanguage, CFont::UsingEFIGSLanguage, FrontEndMenuManager + 0x48 (the language index
-# opcode 09FB returns: 0 English, 1 French, 2 German, 3 Italian, 4 Spanish; SanLTD is installed over French)
-GAME_RU_FLAG=0xCE1771;GAME_EFIGS_FLAG=0xCE1773;GAME_LANG_BYTE=0xC1DE88;SANLTD_SLOT=1
-from i18n_v12 import ukey,vkey
+# 1.2 language: LANG is what is in force: 0 English, 1 Russian in the codes of the game's Russian font (FXT keys U...). It follows the
+# game: Russian when the game is set to its own Russian (byte CFont::UsingRussianLanguage of libGTASA 2.00 arm64), English otherwise.
+LANG=STATE+409;GAME_RU_FLAG=0xCE1771
+from i18n_v12 import ukey
 LEVEL_ALL,LEVEL_IMPORTANT,LEVEL_OFF=2,1,0
 SHOW_MS={1:2500,2:3000,3:3500,4:3000}
 ACTION=4;DANGER=3;TACTICAL=2;CHATTER=1
@@ -29,7 +26,7 @@ prio(ACTION,'HCNEED','HCVER','HCNOMAP','HCIN','HCEXIT','HCNOSEA','HCNOSIT','HCFA
  'HCXHERE','HCSNO','HCSFAIL','HCCFAIL','SQALR','SQNONE','SQFOOT',
  'SQCREW','HCOUT','HCFAIL','HCOFF','HCBLOCK','HCRWAIT','HCGCLMB','HCWAIT','HCXROPE','HCNOPAD','HCCHOS','HCHELLO','HCHELLV',
  'RGFAIL','RGHOLD','RGHIGH','RGMOVE','RGBLOCK',
- 'RGSEAT','RGANIM','RPDFAIL','HCMAPOF','HCDBG','HCBUSY')
+ 'RGSEAT','RGANIM','RPDFAIL','HCMAPOF','HCDBG','HCBUSY','HCXBL','HCXBR','HCRBSY','HCRCAN','HCRUP','HCDSQ')
 prio(DANGER,'HCFOCUS','HCSHOT','HCEVADE','HCAIR','SQCOV','SQDOWN','SQEVAC','SQLOST','HCDAMAG','HCEMERG',
  *['SQ'+k+d for k in 'XSVR' for d in 'FLBR'])
 prio(TACTICAL,'HCLOAD','HCFOLL','HCHOLD','HCPAT','HCDEPT','HCROPE','HCRTEAM','HCRBACK','HCSWAP','HCCREW',
@@ -44,21 +41,13 @@ def print_key(s,key,P,number=None):
   if number is None:a(0x03e5,S(k))
   else:a(0x01e5,S(k),*number)
  s.get(18,LANG);s.eq(18,0,P+'LU');pr(key);s.go(P+'LD')
- s.label(P+'LU');s.eq(18,1,P+'LV');pr(ukey(key));s.go(P+'LD')
- s.label(P+'LV');pr(vkey(key));s.label(P+'LD')
+ s.label(P+'LU');pr(ukey(key));s.label(P+'LD')
 def emit_resolve_lang(s,game_ok_key):
- """Subroutine RESOLVE_LANG (Core): LANG from LANG_SETTING. AUTO follows the language the game is set to: its own Russian -> 1,
- the French slot with the EFIGS font (where SanLTD lives) -> 2, anything else -> English (those fonts have no Cyrillic).
- Uses V17 and V19. `game_ok_key` is the shared flag that says the libGTASA build is the known one (memory reads are safe)."""
- a=s.add;s.label('RESOLVE_LANG');s.get(19,LANG_SETTING);s.eq(19,0,'RL_FIXED')
- s.set(LANG,0);s.get(17,game_ok_key);s.eq(17,1,'RL_DONE')
- a(0x0dd8,V(17),I(GAME_RU_FLAG),I(1),I(1));s.eq(17,1,'RL_EFIGS');s.set(LANG,1);s.ret()
- s.label('RL_EFIGS');a(0x0dd8,V(17),I(GAME_EFIGS_FLAG),I(1),I(1));s.eq(17,1,'RL_DONE')
- a(0x0dd8,V(17),I(GAME_LANG_BYTE),I(1),I(1));s.eq(17,SANLTD_SLOT,'RL_DONE');s.set(LANG,2);s.ret()
- s.label('RL_FIXED');s.eq(19,1,'RL_RU1');s.set(LANG,0);s.ret()
- s.label('RL_RU1');s.eq(19,2,'RL_RU2');s.set(LANG,1);s.ret()
- s.label('RL_RU2');s.set(LANG,2)
- s.label('RL_DONE');s.ret()
+ """Subroutine RESOLVE_LANG (Core): Russian when the game itself is set to its own Russian, English otherwise.
+ Uses V17. `game_ok_key` is the shared flag that says the libGTASA build is the known one (the memory read is safe)."""
+ a=s.add;s.label('RESOLVE_LANG');s.get(17,game_ok_key);s.eq(17,1,'RL_EN')
+ a(0x0dd8,V(17),I(GAME_RU_FLAG),I(1),I(1));s.eq(17,1,'RL_EN');s.set(LANG,1);s.ret()
+ s.label('RL_EN');s.set(LANG,0);s.ret()
 def say(s,key,level=None):
  """Inline: show `key` through the dispatcher (uses no registers of the caller)."""
  a=s.add;p=PRIO.get(key,TACTICAL) if level is None else level;_n[0]+=1;P='SAY%d_'%_n[0];skip=P+'SKIP';show=P+'SHOW'

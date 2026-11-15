@@ -13,6 +13,7 @@ class World:
   self.weapons=defaultdict(int);self.velocity={};self.speed=0;self.altitude=25;self.siteclear=True;self.auto_board=True;self.ground_fn=lambda x,y,z: 13.35 if 2400<x<2600 and -1750<y< -1600 else 0.;self.clear_fn=lambda x,y: True
   self.random_char=-1;self.civilians=[];self.traffic=[];self.seats={};self.damage=set();self.messages=[];self.cars={};self.current_car=None;self.fallback_car=self.car.copy();self.heading=72.;self.attached_reports_incar=True;self.shooting=False;self.targeting=-1;self.camera=[0.,-5.,2.];self.lookat=[100.,-5.,2.];self.ray_block_distance=None;self.pedtype={};self.armor=defaultdict(int);self.wanted=0;self.shooting_chars=set();self.actor_heading=defaultdict(float);self.frozen={};self.accuracy={};self.attack_rate={};self.create_calls=0;self.fail_create_after=None
   self.walk={};self.released=set();self.teleports=[];self.russian=False;self.visible_fn=None;self.rng=random.Random(7)
+  self.creator={};self.kind={};self.handed=[];self.wander=set();self.invisible=set();self.released_cars=set()   # beta 4: who made what, living guards handed to the game, leavers
  @property
  def car(self):
   return self.cars[self.current_car]['pos'] if getattr(self,'current_car',None) in getattr(self,'cars',{}) else getattr(self,'fallback_car',[0.,-45.,28.])
@@ -74,7 +75,7 @@ class World:
   return xyz
 class VM:
  def __init__(self,name,w):
-  self.w=w;self.ip=0;self.v=defaultdict(int);self.wake=0;self.done=False;self.stack=[]
+  self.w=w;self.ip=0;self.v=defaultdict(int);self.wake=0;self.done=False;self.stack=[];self.name=name
   meta=json.loads((b.OUT/(name+'.meta.json')).read_text());raw=(b.OUT/(name+('.csi' if name=='Helicover' else '.csa'))).read_bytes();self.raw=raw
   self.code={};p=0
   while p<meta['code_size']:
@@ -152,7 +153,13 @@ class VM:
    elif op==0x1b4:w.control=bool(vals[1])
    elif op==0x83c:w.velocity[vals[0]]=vals[1:4]
    elif op==0x208:put(2,w.rng.uniform(vals[0],vals[1]) if getattr(w,'jitter',False) else (vals[0]+vals[1])/2.)   # GENERATE_RANDOM_FLOAT_IN_RANGE (centre unless a test enables the jitter)
-   elif op==0x1c2:w.released.add(vals[0])   # MARK_CHAR_AS_NO_LONGER_NEEDED: the game removes him later, out of sight
+   elif op==0x1c2:
+    w.released.add(vals[0])   # MARK_CHAR_AS_NO_LONGER_NEEDED: the game owns him from now on (an ordinary pedestrian with whatever he wears and holds)
+    if vals[0] in w.exists and vals[0] not in w.dead and w.creator.get(vals[0])=='Helicover_Ground':w.handed.append((w.now,vals[0]))   # beta 4: a living guard must never be handed to the game
+   elif op==0x5de:w.wander.add(vals[0])   # TASK_WANDER_STANDARD: strolls away like a pedestrian
+   elif op==0x1c3:w.released_cars.add(vals[0])   # MARK_CAR_AS_NO_LONGER_NEEDED: the departing helicopter flies off as the game's own
+   elif op==0x337:
+    if not vals[1]:w.invisible.add(vals[0])
    elif op in [0x5d3,0x5f5]:w.walk[vals[0]]={'to':list(vals[1:4]),'speed':{4:1.6,5:3.,6:4.6,7:6.5}.get(int(vals[4]),1.6),'until':w.now+int(vals[5])}
    elif op==0xa1:
     w.velocity.pop(vals[0],None);w.note_teleport(0xa1,vals[0],w.coords(vals[0]),vals[1:4])
@@ -207,7 +214,7 @@ class VM:
    elif op==0x1ea:put(1,0 if w.model.get(vals[0])==425 else getattr(w,'seats_count',3))
    elif op==0x73f:put(7,w.random_char)
    elif op==0x503:
-    w.next+=1;new=w.next;put(5,new);w.exists.add(new);w.pos[new]=[vals[2],vals[3],w.ground_fn(vals[2],vals[3],vals[4])];w.skin[new]=vals[1];w.pedtype[new]=vals[0]
+    w.next+=1;new=w.next;put(5,new);w.exists.add(new);w.pos[new]=[vals[2],vals[3],w.ground_fn(vals[2],vals[3],vals[4])];w.skin[new]=vals[1];w.pedtype[new]=vals[0];w.creator[new]=self.name
    elif op==0xa3e:
     candidates=w.civilians or ([w.random_char] if w.random_char in w.exists else [])
     found=next((ch for ch in candidates if ch in w.exists and ch not in w.dead and ch not in w.incar and ch not in w.attach and all(abs(w.coords(ch)[i]-vals[i])<=vals[i+3] for i in range(3))),-1)
@@ -230,7 +237,7 @@ class VM:
    elif op in [0xa5,0x129,0x9a,0x186,0x187]:
     w.create_calls+=1
     if op==0x9a and w.fail_create_after is not None and w.create_calls>=w.fail_create_after:put(len(aa)-1,-1);continue
-    w.next+=1;new=w.next;put(len(aa)-1,new);w.exists.add(new)
+    w.next+=1;new=w.next;put(len(aa)-1,new);w.exists.add(new);w.creator[new]=self.name;w.kind[new]={0xa5:'heli',0x129:'pilot',0x9a:'ped'}.get(op,'blip')
     if op==0xa5:w.model[new]=vals[0];w.cars[new]={'pos':vals[1:4].copy(),'heading':w.heading};w.current_car=new
     elif op==0x129:w.incar[new]=vals[0];w.skin[new]=vals[2]
     elif op==0x9a:w.pos[new]=[vals[2],vals[3],vals[4]+1.];w.skin[new]=vals[1];w.pedtype[new]=vals[0]   # CREATE_CHAR: z += 1.0 as in libGTASA (a ped's position is its centre, 1 m above its feet)
@@ -259,6 +266,21 @@ class VM:
    else:
     assert op in [0x1e5,0x247,0x38b,0x39f,0x1c5,0x8af,0x54a,0x446,0x77a,0x168,0x165,0x7e0,0x957,0x35f,0x825,0x918,0x7bb,0x249,0x4df,0x726,0x780,0x4a2,0x743,0x164,0x1c2,0x1c3,0x1b9,0x687,0x74d,0x5d3,0x4eb,0x637,0x667,0x792,0x619,0x83c,0x99a,0x4ba,0x668,0x713,0x6bc,0xaf,0x7db,0x4e4,0xad,0x853,0x337,0x4ed,0x605,0x614,0x393,0x634,0x7a5,0x856,0x350,0x5ba,0x639,0x5f5,0x78f,0x637,0x5c5],hex(op)
   raise AssertionError('loop without WAIT')
+def invariants(w):
+ """Beta 4: what must hold between any two frames, whatever was pressed and however often. Returns the list of violations.
+ A living man made by the rope worker is in one of its four team slots, is the rope dummy, or is walking away in a LEAVE slot -
+ so there is never a second team; none of them was handed to the game; one helicopter and one crew (two while a swap is under way)."""
+ bad=[];alive=lambda h:h in w.exists and h not in w.dead
+ ground=[h for h,who in w.creator.items() if who=='Helicover_Ground' and alive(h)]
+ known={w.shared[b.GROUND_PUB+i] for i in range(5)}|{w.shared[b.LEAVE+k] for k in range(8)}
+ orphans=[h for h in ground if h not in known and h not in w.released]
+ if orphans:bad.append(('guards nobody owns',orphans))
+ if w.handed:bad.append(('living guards handed to the game',list(w.handed)))
+ helis=[h for h,k in w.kind.items() if k=='heli' and h in w.exists and h not in w.released_cars]   # a helicopter that was sent home is the game's
+ if len(helis)>(2 if w.shared[b.STATE]==16 else 1):bad.append(('more than one helicopter',helis))
+ crew=[h for h,k in w.kind.items() if w.creator.get(h)=='Helicover_Core' and k in ('pilot','ped') and alive(h) and h not in w.released]
+ if len(crew)>(10 if w.shared[b.STATE] in (16,17) else 5):bad.append(('more than a pilot and four gunners',crew))
+ return bad
 def setup(panel=False):
  w=World();c=VM('Helicover_Core',w);p=VM('Helicover_Panel',w) if panel else None;v=[c]+([p] if p else []);w.step(*v,n=3);return w,c,p
 def command(w,c,n,extra=None,ticks=5):w.shared[b.CMD]=n;w.step(c,*([extra] if extra else []),n=ticks)
@@ -427,8 +449,8 @@ assert w.menu[1]==b'CLOSE' and w.menu[2:]==[b'CALL HELICOPTER',b'SETTINGS >'],w.
 summon(w,c);w.step(c,p,n=4)
 assert w.menu[2:]==[b'FOLLOW ME [X]',b'HOLD HERE',b'PATROL AROUND ME',b'GUNNER FIRE >',b'CLIMB ABOARD BY ROPE',b'DEPLOY SQUAD',b'SETTINGS >',b'DISMISS HELICOPTER'],w.menu
 w.incar[1]=c.v[5];w.step(c,p,n=4)
-assert w.menu[2:]==[b'FLY TO MAP MARKER',b'FLY TO GROVE STREET',b'EXIT: LAND [X]',b'EXIT: ROPE',b'GUNNER FIRE >',b'SETTINGS >'],w.menu
-passed('Main menu shows only what fits the moment: call it; on foot - three modes (marked), gunner fire, rope, squad, dismiss; aboard - destinations and two explicit exits')
+assert w.menu[2:]==[b'FLY TO MAP MARKER',b'FLY TO GROVE STREET',b'EXIT BUTTON: LAND [X]',b'EXIT BUTTON: ROPE',b'GUNNER FIRE >',b'SETTINGS >'],w.menu
+passed('Main menu shows only what fits the moment: call it; on foot - three modes (marked), gunner fire, rope, squad, dismiss; aboard - destinations and the two exit-button switches')
 
 w,c,f=fire_world();n=target(w);w.damage.add((1,n));w.step(c,f,n=12)
 assert calls(w,0x6bc) and all(x[2][1]==n for x in calls(w,0x74d))
@@ -466,8 +488,8 @@ assert len(set(squad))==4 and all(x in w.exists for x in squad), (squad,w.messag
 assert len(calls(w,0x503))>=4 and all(c.v[i] in w.attach for i in [13,14,15,16])
 passed('Rope insertion creates four additional guards while aircraft guards remain attached')
 launch=VM('Helicover',w);w.step(c,p,fire,ground,launch,n=15)
-assert b'CLIMB ABOARD BY ROPE' in w.menu and b'FLY TO GROVE STREET' not in w.menu,w.menu
-passed('With CJ on foot the main menu offers the rope pickup, not destinations')
+assert b'CANCEL ROPE PICKUP' in w.menu and b'CLIMB ABOARD BY ROPE' not in w.menu and b'FLY TO GROVE STREET' not in w.menu,w.menu
+passed('With CJ on foot and the rope out the rope row is the cancel, and there are no destinations')
 w.random_char=squad[0];w.damage.add((1,squad[0]));w.shared[b.FIRE]=3;w.step(c,p,fire,ground,n=12)
 assert not any(x[2][1]==squad[0] for x in calls(w,0x74d))
 passed('Protect CJ does not target a member of the ground team')
@@ -479,16 +501,26 @@ passed('Ground team receives CJ-relative formation tasks after descent')
 hostile=target(w,typ=7,skin=21);w.damage.add((1,hostile));w.step(c,p,fire,ground,n=22)
 assert any(x[2][0] in squad and x[2][1]==hostile for x in calls(w,0x74d)), (w.shared[b.FIRE_TARGET], squad)
 passed('Ground team attacks the hostile selected by Protect CJ in the mock')
-command(w,c,2,ticks=5);w.step(c,p,fire,ground,n=5)
-# 1.2: nobody is deleted in view: the game gets the guards back (01C2) and removes them once they are out of sight
-assert all(x in w.exists and x in w.released for x in squad) and all(w.shared[b.GROUND_PUB+i]==-1 for i in range(4))
-passed('Leaving hold hands the ground squad back to the game in view (no deletion on screen) and clears friendly handles')
+# beta 4: FOLLOW while the cover team waits by the rope = the pickup is cancelled: the team climbs back up its ropes, then the helicopter follows
+w.messages.clear();command(w,c,2,ticks=5);assert w.shared[b.STATE]==3 and all(x in w.exists for x in squad),'the helicopter waits for its men'
+for _ in range(400):
+ w.step(c,p,fire,ground)
+ if w.shared[b.STATE]==2:break
+assert w.shared[b.STATE]==2 and 'HCRCAN' in w.messages,(w.shared[b.STATE],w.messages)
+assert all(x not in w.exists for x in squad) and not set(squad)&w.released and not w.handed and all(w.shared[b.GROUND_PUB+i]==-1 for i in range(4)) and not invariants(w),(w.handed,invariants(w))
+passed('FOLLOW with the rope out cancels the pickup: the cover team climbs back aboard, then the helicopter follows - nobody is handed to the game')
+# the helicopter is driven off (badly damaged) while the cover team is down: the men are let go - in view they put the guns away and walk off as ours
 w,c,p=setup(True);summon(w,c);command(w,c,3,ticks=5);w.car=[0.,0.,18.];w.speed=0
 fire=VM('Helicover_Fire',w);ground=VM('Helicover_Ground',w);w.step(c,p,fire,ground,n=5)
 w.shared[b.ROPE_COMMAND]=1;w.step(c,p,fire,ground,n=6);squad=[w.shared[b.GROUND_PUB+i] for i in range(4)]
-w.onscreen=False;command(w,c,2,ticks=5);w.step(c,p,fire,ground,n=5)
-assert all(x not in w.exists for x in squad) and all(w.shared[b.GROUND_PUB+i]==-1 for i in range(4))
-passed('Out of sight the ground squad is deleted when the helicopter leaves hold')
+w.now+=8000;w.step(c,p,fire,ground,n=8);w.health[c.v[5]]=300;w.step(c,p,fire,ground,n=12)
+assert w.shared[b.STATE]==13,w.shared[b.STATE]
+assert all(x in w.exists and x not in w.released and x in w.wander and w.weapons[x]==0 for x in squad) and not w.handed,(w.released,w.wander,w.handed)
+assert sorted(w.shared[b.LEAVE+k] for k in range(4))==sorted(squad) and w.shared[b.LEAVE_N]==1 and all(w.shared[b.GROUND_PUB+i]==-1 for i in range(4)) and not invariants(w),invariants(w)
+passed('A team that is let go in view is never handed to the game: unarmed, walking away, still ours and no longer a target list entry')
+w.onscreen=False;w.step(c,p,fire,ground,n=5)
+assert all(x not in w.exists for x in squad) and w.shared[b.LEAVE_N]==0 and all(w.shared[b.LEAVE+k]==-1 for k in range(8)) and not w.handed
+passed('The guards who were let go are removed as soon as nobody sees them')
 w,c,_=setup();summon(w,c);ground=VM('Helicover_Ground',w);w.step(c,ground,n=3);w.shared[b.ROPE_COMMAND]=1;w.step(c,ground,n=5)
 assert not calls(w,0x503) and 'RGHOLD' in w.messages
 passed('Insertion is rejected unless helicopter is holding')
@@ -510,9 +542,16 @@ passed('Fifth rope proximity triggers simulated reverse ascent, restores CJ cont
 w,c,_=setup();summon(w,c);command(w,c,3,ticks=5);w.car=[0.,0.,18.];w.speed=0
 ground=VM('Helicover_Ground',w);w.step(c,ground,n=3);w.shared[b.ROPE_COMMAND]=1;w.step(c,ground,n=5)
 w.now+=8000;w.player=[0.,-3.,.7];w.step(c,ground,n=8);assert w.control is False
-command(w,c,2,ticks=2);w.step(c,ground,n=6)
-assert w.control is True and w.player[2]<2 and w.incar.get(1)!=c.v[5]
-passed('Interrupting player ascent restores control and the last ground position')
+w.messages.clear();command(w,c,2,ticks=2);w.step(c,ground,n=6)
+assert w.shared[b.STATE]==3 and 'HCRBSY' in w.messages and w.control is False,(w.shared[b.STATE],w.messages)
+w.step(c,ground,n=80);assert w.incar.get(1)==c.v[5] and w.control is True,(w.incar,w.messages)
+passed('An order given during the ascent does not interrupt the rope work (beta 4): the pilot says wait and CJ arrives aboard')
+w,c,_=setup();summon(w,c);command(w,c,3,ticks=5);w.car=[0.,0.,18.];w.speed=0
+ground=VM('Helicover_Ground',w);w.step(c,ground,n=3);w.shared[b.ROPE_COMMAND]=1;w.step(c,ground,n=5)
+w.now+=8000;w.player=[0.,-3.,.7];w.step(c,ground,n=8);assert w.control is False
+w.health[c.v[5]]=300;w.step(c,ground,n=8)
+assert w.shared[b.STATE]==13 and w.control is True and w.player[2]<2 and w.incar.get(1)!=c.v[5],(w.shared[b.STATE],w.control,w.player)
+passed('A helicopter driven off during the ascent restores control and the last ground position')
 # A failed animation task must not receive speed/time adjustments or leave control disabled.
 w,c,_=setup();summon(w,c);command(w,c,3,ticks=5);w.car=[0.,0.,18.];w.speed=0;w.animation_available=False
 ground=VM('Helicover_Ground',w);w.step(c,ground,n=3);w.shared[b.ROPE_COMMAND]=1;w.step(c,ground,n=5)
@@ -859,16 +898,18 @@ passed('New hold command stops the scripted cruise without ejecting CJ')
 def to_destination(w,c,*vms):
  w.incar[1]=c.v[5];w.marker=[200.,150.,0.];command(w,c,11,ticks=8);assert w.shared[b.STATE]==21
  w.car=[205.,150.,80.];w.step(c,*vms,n=8);fly_until(w,23,c,*vms)
-# menu (1.2): two explicit exit rows - EXIT: LAND and EXIT: ROPE - each is one tap, and the one used last is marked [X] (it is what the exit button does)
+# menu (beta 4): the two EXIT BUTTON rows are switches for the game's own exit button - they start nothing themselves
 w,c,p=setup(True);summon(w,c);w.incar[1]=c.v[5];launch=VM('Helicover',w);w.step(c,p,launch,n=15)
-assert b'EXIT: LAND [X]' in w.menu and b'EXIT: ROPE' in w.menu and b'GET OUT HERE' not in w.menu,w.menu
-w.events.append(5);w.step(c,p,n=5);assert w.menu[0]==b'HELICOVER / SETTINGS' and w.menu[6]==b'EXIT BUTTON: LAND',w.menu
-w.events.append(4);w.step(c,p,n=5);assert w.shared[b.EXIT_MODE]==1 and w.menu[6]==b'EXIT BUTTON: ROPE'
-w.events.append(4);w.step(c,p,n=5);assert w.shared[b.EXIT_MODE]==0 and w.menu[6]==b'EXIT BUTTON: LAND'
-w.events.append(4);w.step(c,p,n=5);w.events.append(7);w.step(c,p,n=5);assert w.menu[0]==b'HELICOVER / FOLLOWING' and b'EXIT: ROPE [X]' in w.menu,w.menu
-w.calls.clear();w.events.append(2);w.step(c,p,n=6);assert w.shared[b.EXIT_MODE]==0 and any(x[2]==[b.CMD,15] for x in calls(w,0xddc)),'EXIT: LAND is one tap and starts the exit'
-w.calls.clear();w.events.append(3);w.step(c,p,n=6);assert w.shared[b.EXIT_MODE]==1 and any(x[2]==[b.CMD,15] for x in calls(w,0xddc)),'EXIT: ROPE is one tap and starts the exit'
-passed('Aboard, EXIT: LAND and EXIT: ROPE are one tap each; the settings page has the same choice for the exit button')
+assert b'EXIT BUTTON: LAND [X]' in w.menu and b'EXIT BUTTON: ROPE' in w.menu and b'GET OUT HERE' not in w.menu,w.menu
+w.events.append(5);w.step(c,p,n=5);assert w.menu==[b'HELICOVER / SETTINGS',b'CLOSE',b'CREW >',b'HELICOPTER MODEL >',b'CREW WEAPON >',b'SQUAD TACTICS: GUARD',b'MESSAGES: ALL',b'< BACK'] and not any(b'EXIT' in r or b'LANGUAGE' in r for r in w.menu),w.menu
+w.events.append(5);w.step(c,p,n=5);assert w.menu[0]==b'HELICOVER / FOLLOWING',w.menu
+st=w.shared[b.STATE];pos=list(w.car)
+for idx,mode,row,key in [(3,1,b'EXIT BUTTON: ROPE [X]','HCXBR'),(3,1,b'EXIT BUTTON: ROPE [X]','HCXBR'),(2,0,b'EXIT BUTTON: LAND [X]','HCXBL'),(2,0,b'EXIT BUTTON: LAND [X]','HCXBL'),(3,1,b'EXIT BUTTON: ROPE [X]','HCXBR')]:
+ w.calls.clear();w.messages.clear();w.shared[b.MSG_UNTIL]=0;w.events.append(idx);w.step(c,p,n=12)
+ assert w.shared[b.EXIT_MODE]==mode and row in w.menu and sum(1 for r in w.menu if r.endswith(b'[X]'))==1,(idx,w.shared[b.EXIT_MODE],w.menu)
+ assert not any(x[2][0]==b.CMD and x[2][1]!=0 for x in calls(w,0xddc)) and w.shared[b.STATE]==st and w.shared[b.AUTO_EXIT]==0 and w.shared[b.DROP_COMMAND]==0 and w.incar.get(1)==c.v[5],'a switch row gives no order: no exit, no landing, no rope'
+ assert key in w.messages,(key,w.messages)
+passed('Aboard, the two EXIT BUTTON rows only switch what the exit button does (hint shown, [X] moves): no order, no exit; settings has no exit or language row')
 # doors are locked against the player while CJ is aboard, unlocked when he is outside
 w,c,_=setup();summon(w,c);w.step(c,n=3);assert w.locks.get(c.v[5])==1
 w.incar[1]=c.v[5];w.step(c,n=3);assert w.locks[c.v[5]]==4

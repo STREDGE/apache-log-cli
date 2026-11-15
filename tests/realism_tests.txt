@@ -8,16 +8,18 @@ PASS: Emergency landing (CJ aboard, hull below 350): lands below at once and ref
 PASS: Emergency landing skips a blocked spot and takes the first clear one 25 m around
 PASS: Hull below 350 with CJ on foot: the pilot retreats (it no longer depends on the crew phase)
 PASS: A guard 150 m behind for 60 s is let go (deleted out of sight); the rest of the team carries on
-PASS: The same guard in view is handed back to the game (01C2), never deleted on screen
+PASS: The same guard in view is never deleted on screen and never handed to the game (beta 4): he puts the gun away and walks off as ours
+PASS: ...and is removed the moment nobody sees him
 PASS: Everybody lagging for 60 s: "lost you, team stands down", ESCORT_ON cleared, not a single teleport
 PASS: Catching up within 70 m clears the lag clock
 PASS: CJ drives a 4-door car: guards 0, 1, 2 take passenger seats 0, 1, 2 (guard 3 has no seat)
 PASS: CJ is a passenger of somebody else's car: the guards do not climb in
 PASS: CJ at the wheel is read from the car's driver: a car that kept a passenger is still boarded (free seats only), a lift in the back seat is not
 PASS: A bike / two-seater has one passenger seat: only guard 0 rides
-PASS: Recall: the pilot waits up to 25 s for the guards; the one who cannot get there stays behind and is never teleported
+PASS: Recall: the pilot waits up to 25 s for the guards; the one who cannot get there stays behind unarmed as ours (never teleported, never handed to the game)
+PASS: Deploy - recall - deploy again: the second team is four new men, nobody of the first is left as a stray armed ped
 PASS: A guard in a car gets out first (task) and then runs to his rope; no teleport out of the car
-PASS: Rope pickup nobody takes: after 90 s the ropes go up and the helicopter is free again
+PASS: Rope pickup nobody takes: after 90 s the cover team climbs back aboard (it used to be let go on the spot), the ropes go up and the helicopter follows again
 PASS: CJ dies / is arrested while a team deployment starts: ESCORT_ON is reset, support is not stuck on a team that never came
 PASS: Recall for a team that no longer exists: the pilot does not hang frozen, he goes back to FOLLOW
 PASS: Formation anchor: walking 60+ degrees off the old direction for 1.5 s re-anchors it, a short sidestep does not
@@ -54,4 +56,25 @@ PASS: Releasing the helicopter clears the cruise speed
 PASS: After a live re-skin the clean-up deletes only real objects (no ped handle in the platform slot)
 PASS: Boarding muster: each guard walks to the side of the helicopter he is mounted on (it was mirrored: a 4 m snap through the fuselage)
 PASS: A whole day - deploy, fire fight, CJ drives off, the squad cannot keep up, dismiss - without a single teleport of a person
+PASS: FOLLOW / HOLD / PATROL given again while already on: nothing is restarted (no new flight task, the patrol round goes on)
+PASS: FLY TO GROVE STREET again during the flight: ignored
+PASS: FLY TO MAP MARKER again with the same marker: ignored; with the marker moved: the new destination is taken
+PASS: DEPLOY SQUAD given again (and RECALL, and the rope) while the helicopter comes in or the men are on the ropes: one team of four, nothing restarted, FOLLOW waits
+PASS: RECALL SQUAD given again (and DEPLOY) during the recall: one recall, no second team, everybody back aboard, nobody handed to the game
+PASS: The rope order again on the way in cancels the pickup: the helicopter goes back to following
+PASS: CANCEL ROPE PICKUP while the cover team is still roping down: taken when the men have landed - they climb back, CJ is not pulled up
+PASS: A cancel that was still waiting for the landing ends with the pickup when the helicopter is driven off (it is not read as a new rope order)
+PASS: CANCEL ROPE PICKUP with the rope hanging: the cover team climbs back up, the helicopter follows again (no new approach, nobody left behind)
+PASS: CANCEL ROPE PICKUP with the squad on the ground: the squad simply stays with CJ, the rope goes up, the helicopter follows
+PASS: DEPLOY SQUAD while a cover team waits by the rope: the same four men stay down as the squad (no second team)
+PASS: RECALL SQUAD while the squad covers the rope: it goes up the ropes that already hang (no second approach)
+PASS: PATROL / DISMISS while a cover team waits by the rope: the team climbs back first, then the order is carried out (it used to be left on the ground)
+PASS: PATROL while the squad covers the rope: the rope goes up, the squad stays with CJ, the helicopter patrols
+PASS: Nothing interrupts rope work: while CJ or the team is on the ropes every order is answered "wait - rope work in progress" and the work is finished
+PASS: The exit button pressed again while the helicopter slows down for the exit: one exit, the stopping point stays
+PASS: The exit button pressed again while the rope drop is under way: the drop is not ordered twice
+PASS: FLY TO MAP MARKER while a rope drop was still being retried: the retries end with the new destination (the exit button is not left blocked)
+PASS: A stale squad order cannot block the squad row: it is cleared by the team's own loop
+PASS: Guards who were let go stay friends of the gunners (even in FIRE AT ALL) until they are gone
+PASS: More than eight guards walking away at once: the one who left first is removed to make room - even then nobody is handed to the game
 Mocked script execution only: real flight, pathing and animations are not simulated.

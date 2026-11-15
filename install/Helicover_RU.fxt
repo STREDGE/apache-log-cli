@@ -1,242 +1,126 @@
 UCLOAD ~b~ПИЛОТ:~w~ ле╖│ к вам.
-VCLOAD ~b~МЕЗOT:~w~ ЗEНY K BAM.
 UCFOLL ~b~ПИЛОТ:~w~ ле╖│ за вами.
-VCFOLL ~b~МЕЗOT:~w~ ЗEНY ИA BAMЕ.
 UCHOLD ~b~ПИЛОТ:~w~ зави▒а╛ на ме▒▓е.
-VCHOLD ~b~МЕЗOT:~w~ ИABЕCAФ HA MECTE.
 UCDEPT ~b~ПИЛОТ:~w~ возв░а╣а╛▒╝ на баз│. В╗з╗вай▓е в л╛бой момен▓.
-VCDEPT ~b~МЕЗOT:~w~ BOИBPAКAФCТ HA АAИY. BСИСBAЖTE B ЗФАOЖ MOMEHT.
 UCFAIL ~r~HELICOVER:~w~ не │дало▒╝ заг░│зи▓╝ ве░▓оле▓. Пов▓о░и▓е.
-VCFAIL ~r~HELICOVER:~w~ HE YГAЗOCТ ИAВPYИЕTТ BEPTOЗET. МOBTOPЕTE.
 UCOUT ~y~HELICOVER:~w~ в╗йди▓е на │ли╢│, ╖▓об╗ в╗зва▓╝ ве░▓оле▓.
-VCOUT ~y~HELICOVER:~w~ BСЖГЕTE HA YЗЕЙY, НTOАС BСИBATТ BEPTOЗET.
 UCRWAIT ~y~ПИЛОТ:~w~ зде▒╝ не зави▒н│▓╝. В╗йди▓е на о▓к░╗▓ое ме▒▓о.
-VCRWAIT ~y~МЕЗOT:~w~ ИГECТ HE ИABЕCHYTТ. BСЖГЕTE HA OTKPСTOE MECTO.
 UCGCLMB ~y~ПИЛОТ:~w~ зде▒╝ ва▒ не подн┐▓╝. В╗йди▓е на о▓к░╗▓ое ме▒▓о.
-VCGCLMB ~y~МЕЗOT:~w~ ИГECТ BAC HE МOГHХTТ. BСЖГЕTE HA OTKPСTOE MECTO.
 UCMAPOF ~y~HELICOVER:~w~ поле▓ к ме▓ке на ка░▓е недо▒▓│пен.
-VCMAPOF ~y~HELICOVER:~w~ МOЗET K METKE HA KAPTE HEГOCTYМEH.
 UCDBG DBG ~1~
-VCDBG DBG ~1~
 UCNEED ~y~HELICOVER:~w~ ▒на╖ала в╗зови▓е ве░▓оле▓.
-VCNEED ~y~HELICOVER:~w~ CHAНAЗA BСИOBЕTE BEPTOЗET.
 UCVER ~y~HELICOVER:~w~ ме▓ка на ка░▓е не ░або▓ае▓ в ╜▓ой ве░▒ии иг░╗.
-VCVER ~y~HELICOVER:~w~ METKA HA KAPTE HE PAАOTAET B УTOЖ BEPCЕЕ ЕВPС.
 UCNOMAP ~y~HELICOVER:~w~ ▒на╖ала по▒▓ав╝▓е ме▓к│ на ка░▓е.
-VCNOMAP ~y~HELICOVER:~w~ CHAНAЗA МOCTABТTE METKY HA KAPTE.
 UCCHOS ~b~ПИЛОТ:~w~ п░иб╗ли. Нажми▓е в╗╡од, ╖▓об╗ покин│▓╝ ве░▓оле▓.
-VCCHOS ~b~МЕЗOT:~w~ МPЕАСЗЕ. HAДMЕTE BСXOГ, НTOАС МOKЕHYTТ BEPTOЗET.
 UCAIR ~r~ПОЛИЦЕЙСКИЙ ВЕРТОЛЕТ!~w~ С▓░елки о▓ве╖а╛▓ огнем.
-VCAIR ~r~МOЗЕЙEЖCKЕЖ BEPTOЗET!~w~ CTPEЗKЕ OTBEНAФT OВHEM.
 UCCONT ~r~КОНТАКТ!~w~ С▓░елки о▓к░╗ли огон╝.
-VCCONT ~r~KOHTAKT!~w~ CTPEЗKЕ OTKPСЗЕ OВOHТ.
 UCKILL ~g~ЦЕЛЬ УНИЧТОЖЕНА~w~ ~1~
-VCKILL ~g~ЙEЗТ YHЕНTOДEHA~w~ ~1~
 UCCLEAR ~g~СТРЕЛКИ:~w~ ╖и▒▓о.
-VCCLEAR ~g~CTPEЗKЕ:~w~ НЕCTO.
 UCFM0 ~y~СТРЕЛКИ:~w~ п░ек░а▓и▓╝ огон╝.
-VCFM0 ~y~CTPEЗKЕ:~w~ МPEKPATЕTТ OВOHТ.
 UCFM1 ~r~СТРЕЛКИ:~w~ огон╝ по в▒ем, к░оме ▒вои╡.
-VCFM1 ~r~CTPEЗKЕ:~w~ OВOHТ МO BCEM, KPOME CBOЕX.
 UCFM2 ~b~СТРЕЛКИ:~w~ ▒▓░ел┐ем ▓│да, к│да ▒▓░ел┐е▓е в╗.
-VCFM2 ~b~CTPEЗKЕ:~w~ CTPEЗХEM TYГA, KYГA CTPEЗХETE BС.
 UCFM3 ~g~СТРЕЛКИ:~w~ за╣и╣аем CJ.
-VCFM3 ~g~CTPEЗKЕ:~w~ ИAКЕКAEM CJ.
 UCFM4 ~p~СТРЕЛКИ:~w~ п░ик░╗▓ие - ▓ол╝ко воо░│женн╗е в░аги.
-VCFM4 ~p~CTPEЗKЕ:~w~ МPЕKPСTЕE - TOЗТKO BOOPYДEHHСE BPAВЕ.
 UCXROPE ~b~ПИЛОТ:~w~ ▒е▒▓╝ негде - ▒п│▒ка╛ ва▒ по ве░евке.
-VCXROPE ~b~МЕЗOT:~w~ CECTТ HEВГE - CМYCKAФ BAC МO BEPEBKE.
 UCNOPAD ~b~ПИЛОТ:~w~ ░овной пло╣адки не▓ - зави▒а╛ дл┐ ▒п│▒ка.
-VCNOPAD ~b~МЕЗOT:~w~ POBHOЖ МЗOКAГKЕ HET - ИABЕCAФ ГЗХ CМYCKA.
 UCXHERE ~b~ПИЛОТ:~w~ и╣│ ме▒▓о, ╖▓об╗ ва▒ в╗▒ади▓╝.
-VCXHERE ~b~МЕЗOT:~w~ ЕКY MECTO, НTOАС BAC BСCAГЕTТ.
 UCXARR ~b~ПИЛОТ:~w~ в╗▒адка по п░иб╗▓ии.
-VCXARR ~b~МЕЗOT:~w~ BСCAГKA МO МPЕАСTЕЕ.
 UCXWAIT ~y~ПИЛОТ:~w~ подожди▓е, пока ▒┐дем или зави▒нем.
-VCXWAIT ~y~МЕЗOT:~w~ МOГOДГЕTE, МOKA CХГEM ЕЗЕ ИABЕCHEM.
 UCDWAIT ~y~ПИЛОТ:~w~ подожди▓е, пока доле▓им.
-VCDWAIT ~y~МЕЗOT:~w~ МOГOДГЕTE, МOKA ГOЗETЕM.
 UCPAT ~b~ПИЛОТ:~w~ па▓░│ли░│╛ вок░│г ва▒.
-VCPAT ~b~МЕЗOT:~w~ МATPYЗЕPYФ BOKPYВ BAC.
 UCAVOID ~y~ПИЛОТ:~w~ п│▓╝ зак░╗▓ - жд│, пока о▒вободи▓▒┐.
-VCAVOID ~y~МЕЗOT:~w~ МYTТ ИAKPСT - ДГY, МOKA OCBOАOГЕTCХ.
 UCROPE ~b~ПИЛОТ:~w~ подле▓а╛ - иди▓е к ве░евке.
-VCROPE ~b~МЕЗOT:~w~ МOГЗETAФ - ЕГЕTE K BEPEBKE.
 UCRTEAM ~b~ПИЛОТ:~w~ подле▓а╛, ╖▓об╗ в╗▒ади▓╝ о▓░┐д.
-VCRTEAM ~b~МЕЗOT:~w~ МOГЗETAФ, НTOАС BСCAГЕTТ OTPХГ.
 UCRBACK ~b~ПИЛОТ:~w~ подле▓а╛, ╖▓об╗ заб░а▓╝ о▓░┐д.
-VCRBACK ~b~МЕЗOT:~w~ МOГЗETAФ, НTOАС ИAАPATТ OTPХГ.
 UCEVAC ~b~ПИЛОТ:~w~ ▒аж│▒╝ ░┐дом.
-VCEVAC ~b~МЕЗOT:~w~ CAДYCТ PХГOM.
 UCTEAM ~g~ОТРЯД:~w~ о╡░ан┐ем ве░▓оле▓. Сади▓е▒╝, когда б│де▓е го▓ов╗.
-VCTEAM ~g~OTPХГ:~w~ OXPAHХEM BEPTOЗET. CAГЕTECТ, KOВГA АYГETE ВOTOBС.
 UCBOARD ~b~ПИЛОТ:~w~ CJ на бо░▓│. О▓к░ой▓е мен╛ и в╗бе░и▓е ма░╕░│▓.
-VCBOARD ~b~МЕЗOT:~w~ CJ HA АOPTY. OTKPOЖTE MEHФ Е BСАEPЕTE MAPОPYT.
 UCGROVE ~b~ПИЛОТ:~w~ ле▓им на Г░о│в-▒▓░и▓.
-VCGROVE ~b~МЕЗOT:~w~ ЗETЕM HA ВPOYB-CTPЕT.
 UCHOME ~b~ПИЛОТ:~w~ подле▓аем к Г░о│в-▒▓░и▓.
-VCHOME ~b~МЕЗOT:~w~ МOГЗETAEM K ВPOYB-CTPЕT.
 UCARRIV ~b~ПИЛОТ:~w~ ▒ели. Нажми▓е в╗╡од.
-VCARRIV ~b~МЕЗOT:~w~ CEЗЕ. HAДMЕTE BСXOГ.
 UCDAMAG ~r~МЭЙДЭЙ!~w~ К░и▓и╖е▒кие пов░еждени┐ - │╡ож│.
-VCDAMAG ~r~MУЖГУЖ!~w~ KPЕTЕНECKЕE МOBPEДГEHЕХ - YXOДY.
 UCMUST ~b~ПИЛОТ:~w~ жд│, пока ╜кипаж ве░не▓▒┐ на бо░▓.
-VCMUST ~b~МЕЗOT:~w~ ДГY, МOKA УKЕМAД BEPHETCХ HA АOPT.
 UCEMERG ~r~МЭЙДЭЙ!~w~ К░и▓и╖е▒кие пов░еждени┐ - ава░ийна┐ по▒адка.
-VCEMERG ~r~MУЖГУЖ!~w~ KPЕTЕНECKЕE МOBPEДГEHЕХ - ABAPЕЖHAХ МOCAГKA.
 UCNOSEA ~y~HELICOVER:~w~ на Hunter не▓ па▒▒ажи░▒кого ме▒▓а.
-VCNOSEA ~y~HELICOVER:~w~ HA HUNTER HET МACCAДЕPCKOВO MECTA.
 UCNOSIT ~y~ПИЛОТ:~w~ зде▒╝ не ▒е▒▓╝. Найди▓е о▓к░╗▓ое ░овное ме▒▓о.
-VCNOSIT ~y~МЕЗOT:~w~ ИГECТ HE CECTТ. HAЖГЕTE OTKPСTOE POBHOE MECTO.
 UCFAR ~y~ПИЛОТ:~w~ подойди▓е к ве░▓оле▓│ ближе ╖ем на 12 м.
-VCFAR ~y~МЕЗOT:~w~ МOГOЖГЕTE K BEPTOЗETY АЗЕДE НEM HA 12 M.
 UCWAIT ~y~ПИЛОТ:~w~ жд│ ╜кипаж. О▒вободи▓е ем│ до░ог│.
-VCWAIT ~y~МЕЗOT:~w~ ДГY УKЕМAД. OCBOАOГЕTE EMY ГOPOВY.
 UCIN ~y~HELICOVER:~w~ ▒на╖ала ▒┐д╝▓е в ве░▓оле▓.
-VCIN ~y~HELICOVER:~w~ CHAНAЗA CХГТTE B BEPTOЗET.
 UCOFF ~r~HELICOVER:~w~ не ╡ва▓ае▓ ┤айлов. Скопи░│й▓е в▒е в CLEO и пе░езап│▒▓и▓е иг░│.
-VCOFF ~r~HELICOVER:~w~ HE XBATAET БAЖЗOB. CKOМЕPYЖTE BCE B CLEO Е МEPEИAМYCTЕTE ЕВPY.
 UCSWAP ~b~ПИЛОТ:~w~ ве░▓оле▓ заменен.
-VCSWAP ~b~МЕЗOT:~w~ BEPTOЗET ИAMEHEH.
 UCSNO ~y~HELICOVER:~w~ на Hunter не▓ па▒▒ажи░▒кого ме▒▓а - ▒на╖ала в╗йди▓е.
-VCSNO ~y~HELICOVER:~w~ HA HUNTER HET МACCAДЕPCKOВO MECTA - CHAНAЗA BСЖГЕTE.
 UCSFAIL ~r~HELICOVER:~w~ замена не │дала▒╝, о▒▓авлен п░ежний ве░▓оле▓.
-VCSFAIL ~r~HELICOVER:~w~ ИAMEHA HE YГAЗACТ, OCTABЗEH МPEДHЕЖ BEPTOЗET.
 UCCREW ~g~HELICOVER:~w~ ╜кипаж заменен.
-VCCREW ~g~HELICOVER:~w~ УKЕМAД ИAMEHEH.
 UCCFAIL ~r~HELICOVER:~w~ замена ╜кипажа не │дала▒╝, о▒▓авлен п░ежний.
-VCCFAIL ~r~HELICOVER:~w~ ИAMEHA УKЕМAДA HE YГAЗACТ, OCTABЗEH МPEДHЕЖ.
 UCBLOCK ~y~ПИЛОТ:~w~ зде▒╝ не ▒е▒▓╝. В╗бе░и▓е о▓к░╗▓ое ме▒▓о или ЛЕТЕТЬ ЗА МНОЙ.
-VCBLOCK ~y~МЕЗOT:~w~ ИГECТ HE CECTТ. BСАEPЕTE OTKPСTOE MECTO ЕЗЕ ЗETETТ ИA MHOЖ.
 UCLOSE ~y~ПИЛОТ:~w~ ▒на╖ала по▒ади▓е ве░▓оле▓.
-VCLOSE ~y~МЕЗOT:~w~ CHAНAЗA МOCAГЕTE BEPTOЗET.
 UCEXIT ~y~HELICOVER:~w~ ▒на╖ала в╗йди▓е из ве░▓оле▓а.
-VCEXIT ~y~HELICOVER:~w~ CHAНAЗA BСЖГЕTE ЕИ BEPTOЗETA.
 UQALR ~y~ОТРЯД:~w~ о▓░┐д │же на земле.
-VQALR ~y~OTPХГ:~w~ OTPХГ YДE HA ИEMЗE.
 UQNONE ~y~ОТРЯД:~w~ на земле не▓ о▓░┐да.
-VQNONE ~y~OTPХГ:~w~ HA ИEMЗE HET OTPХГA.
 UQFOOT ~y~ОТРЯД:~w~ ╖▓об╗ в╗▒ади▓╝ о▓░┐д, CJ должен б╗▓╝ пе╕ком.
-VQFOOT ~y~OTPХГ:~w~ НTOАС BСCAГЕTТ OTPХГ, CJ ГOЗДEH АСTТ МEОKOM.
 UQCREW ~y~ОТРЯД:~w~ подожди▓е, пока ╜кипаж ве░не▓▒┐ на бо░▓.
-VQCREW ~y~OTPХГ:~w~ МOГOДГЕTE, МOKA УKЕМAД BEPHETCХ HA АOPT.
 UCBUSY ~y~ПИЛОТ:~w~ ава░ийна┐ по▒адка - не мог│ в╗полни▓╝.
-VCBUSY ~y~МЕЗOT:~w~ ABAPЕЖHAХ МOCAГKA - HE MOВY BСМOЗHЕTТ.
 UCSLATE ~y~ПИЛОТ:~w~ ▒дела╛ замен│ ▒░аз│ по▒ле под║ема по ве░евке.
-VCSLATE ~y~МЕЗOT:~w~ CГEЗAФ ИAMEHY CPAИY МOCЗE МOГРEMA МO BEPEBKE.
-UFTEST ~b~ТЕСТ ШРИФТА~w~ АБВГДЕЖЗИЙКЛМНОП абвгдежзийклмноп
-VFTEST ~b~TEST~w~ АБВГДЕЖЗ ИЙКЛМНОП РСТУФХЦЧ ШЩЪЫЬЭЮЯ абвгдежз ийклмноп
+UCXBL ~b~ПИЛОТ:~w~ кнопка в╗╡ода - по▒адка.
+UCXBR ~b~ПИЛОТ:~w~ кнопка в╗╡ода - ▒п│▒к по ве░евке.
+UCRBSY ~y~ПИЛОТ:~w~ подожди▓е, иде▓ ░або▓а на ве░евке.
+UCRCAN ~b~ПИЛОТ:~w~ под║ем о▓менен. Уби░а╛ ве░евки.
+UCRUP ~b~ПИЛОТ:~w~ о▓░┐д, поднимай▓е▒╝ по ве░евкам.
+UCDSQ ~b~ПИЛОТ:~w~ ▒на╖ала забе░│ о▓░┐д, по▓ом │ле▓аем.
 UCFOCUS ~r~СТРЕЛОК ПО CJ!~w~ С▓░елки б╝╛▓ по нем│.
-VCFOCUS ~r~CTPEЗOK МO CJ!~w~ CTPEЗKЕ АТФT МO HEMY.
 UCEVADE ~r~ПОПАДАНИЯ!~w~ Пило▓ │╡оди▓ о▓ огн┐.
-VCEVADE ~r~МOМAГAHЕХ!~w~ МЕЗOT YXOГЕT OT OВHХ.
 UCSHOT ~r~ОБСТРЕЛ!~w~ Пило▓ │╡оди▓ о▓ огн┐.
-VCSHOT ~r~OАCTPEЗ!~w~ МЕЗOT YXOГЕT OT OВHХ.
 UCHELLO ~b~HELICOVER 1.2 БЕТА~w~ го▓ов. Мен╛ CLEO > Helicover.
-VCHELLO ~b~HELICOVER 1.2 АETA~w~ ВOTOB. MEHФ CLEO > HELICOVER.
 UCHELLV ~b~HELICOVER 1.2 БЕТА~w~ го▓ов. Ме▓ка на ка░▓е о▓кл╛╖ена.
-VCHELLV ~b~HELICOVER 1.2 АETA~w~ ВOTOB. METKA HA KAPTE OTKЗФНEHA.
 UGDEP ~b~ПИЛОТ:~w~ о▓░┐д ▒п│▒кае▓▒┐ по ве░евкам.
-VGDEP ~b~МЕЗOT:~w~ OTPХГ CМYCKAETCХ МO BEPEBKAM.
 UGDONE ~g~ОТРЯД:~w~ о▓░┐д на бо░▓│.
-VGDONE ~g~OTPХГ:~w~ OTPХГ HA АOPTY.
 UGFAIL ~r~HELICOVER:~w~ не │дало▒╝ заг░│зи▓╝ о▓░┐д.
-VGFAIL ~r~HELICOVER:~w~ HE YГAЗOCТ ИAВPYИЕTТ OTPХГ.
 UGHOLD ~y~ПИЛОТ:~w~ ▒на╖ала н│жно │▒▓ой╖иво зави▒н│▓╝.
-VGHOLD ~y~МЕЗOT:~w~ CHAНAЗA HYДHO YCTOЖНЕBO ИABЕCHYTТ.
 UGHIGH ~y~ПИЛОТ:~w~ непод╡од┐╣а┐ в╗▒о▓а дл┐ ве░евок. Найди▓е о▓к░╗▓ое ме▒▓о.
-VGHIGH ~y~МЕЗOT:~w~ HEМOГXOГХКAХ BСCOTA ГЗХ BEPEBOK. HAЖГЕTE OTKPСTOE MECTO.
 UGMOVE ~y~ПИЛОТ:~w~ подожди▓е, пока ▒▓абилизи░│ем▒┐.
-VGMOVE ~y~МЕЗOT:~w~ МOГOДГЕTE, МOKA CTAАЕЗЕИЕPYEMCХ.
 UGBLOCK ~y~ПИЛОТ:~w~ не▓ ▒вободной пло╣адки. Найди▓е о▓к░╗▓ое ме▒▓о.
-VGBLOCK ~y~МЕЗOT:~w~ HET CBOАOГHOЖ МЗOКAГKЕ. HAЖГЕTE OTKPСTOE MECTO.
 UGUP ~b~ПИЛОТ:~w~ поднима╛ ва▒.
-VGUP ~b~МЕЗOT:~w~ МOГHЕMAФ BAC.
 UGABO ~b~ПИЛОТ:~w~ CJ на бо░▓│. О▓░┐д поднимае▓▒┐.
-VGABO ~b~МЕЗOT:~w~ CJ HA АOPTY. OTPХГ МOГHЕMAETCХ.
 UGSEAT ~y~ПИЛОТ:~w~ не▓ ▒вободного ме▒▓а.
-VGSEAT ~y~МЕЗOT:~w~ HET CBOАOГHOВO MECTA.
 UGANIM ~y~HELICOVER:~w~ анима╢и┐ ве░евки недо▒▓│пна.
-VGANIM ~y~HELICOVER:~w~ AHЕMAЙЕХ BEPEBKЕ HEГOCTYМHA.
 UPDFAIL ~y~ПИЛОТ:~w~ зде▒╝ не ▒п│▒▓и▓╝ ве░евк│. В╗бе░и▓е д░│гое ме▒▓о.
-VPDFAIL ~y~МЕЗOT:~w~ ИГECТ HE CМYCTЕTТ BEPEBKY. BСАEPЕTE ГPYВOE MECTO.
 UQIN ~g~ОТРЯД:~w~ на земле. Соп░овождаем CJ.
-VQIN ~g~OTPХГ:~w~ HA ИEMЗE. COМPOBOДГAEM CJ.
 UQBACK ~g~ОТРЯД:~w~ о▓░┐д на бо░▓│.
-VQBACK ~g~OTPХГ:~w~ OTPХГ HA АOPTY.
 UQLOST ~r~ОТРЯД ПОТЕРЯН!~w~ Г░│ппа ▒оп░овождени┐ погибла.
-VQLOST ~r~OTPХГ МOTEPХH!~w~ ВPYММA COМPOBOДГEHЕХ МOВЕАЗA.
 UQCOVER ~g~ОТРЯД:~w~ п░ик░╗ваем ва╕│ ╜вак│а╢и╛.
-VQCOVER ~g~OTPХГ:~w~ МPЕKPСBAEM BAОY УBAKYAЙЕФ.
 UQAWAY ~g~ОТРЯД:~w~ по▓е░┐ли ва▒. О▓░┐д о▓озван.
-VQAWAY ~g~OTPХГ:~w~ МOTEPХЗЕ BAC. OTPХГ OTOИBAH.
 UQSTAY ~g~ОТРЯД:~w~ о▒▓аем▒┐ на земле.
-VQSTAY ~g~OTPХГ:~w~ OCTAEMCХ HA ИEMЗE.
 UGLATE ~y~ПИЛОТ:~w~ в╗ не п░и╕ли. Поднима╛ ве░евки.
-VGLATE ~y~МЕЗOT:~w~ BС HE МPЕОЗЕ. МOГHЕMAФ BEPEBKЕ.
 UQXF ~r~ОГОНЬ ПО CJ - СПЕРЕДИ!~w~ П░ик░╗ваем.
-VQXF ~r~OВOHТ МO CJ - CМEPEГЕ!~w~ МPЕKPСBAEM.
 UQSF ~r~СНАЙПЕР - СПЕРЕДИ!~w~ CJ в │к░╗▓ие.
-VQSF ~r~CHAЖМEP - CМEPEГЕ!~w~ CJ B YKPСTЕE.
 UQVF ~r~МАШИНА - СПЕРЕДИ!~w~ Б╝ем по води▓ел╛.
-VQVF ~r~MAОЕHA - CМEPEГЕ!~w~ АТEM МO BOГЕTEЗФ.
 UQRF ~r~КРЫША - СПЕРЕДИ!~w~ С▓░елок наве░╡│.
-VQRF ~r~KPСОA - CМEPEГЕ!~w~ CTPEЗOK HABEPXY.
 UQCF ~r~КОНТАКТ СПЕРЕДИ!~w~ О▓░┐д ▒▓░ел┐е▓.
-VQCF ~r~KOHTAKT CМEPEГЕ!~w~ OTPХГ CTPEЗХET.
 UQAF ~r~КОНТАКТ СПЕРЕДИ!~w~ Ш▓│░м - идем впе░ед.
-VQAF ~r~KOHTAKT CМEPEГЕ!~w~ ОTYPM - ЕГEM BМEPEГ.
 UQXL ~r~ОГОНЬ ПО CJ - СЛЕВА!~w~ П░ик░╗ваем.
-VQXL ~r~OВOHТ МO CJ - CЗEBA!~w~ МPЕKPСBAEM.
 UQSL ~r~СНАЙПЕР - СЛЕВА!~w~ CJ в │к░╗▓ие.
-VQSL ~r~CHAЖМEP - CЗEBA!~w~ CJ B YKPСTЕE.
 UQVL ~r~МАШИНА - СЛЕВА!~w~ Б╝ем по води▓ел╛.
-VQVL ~r~MAОЕHA - CЗEBA!~w~ АТEM МO BOГЕTEЗФ.
 UQRL ~r~КРЫША - СЛЕВА!~w~ С▓░елок наве░╡│.
-VQRL ~r~KPСОA - CЗEBA!~w~ CTPEЗOK HABEPXY.
 UQCL ~r~КОНТАКТ СЛЕВА!~w~ О▓░┐д ▒▓░ел┐е▓.
-VQCL ~r~KOHTAKT CЗEBA!~w~ OTPХГ CTPEЗХET.
 UQAL ~r~КОНТАКТ СЛЕВА!~w~ Ш▓│░м - идем впе░ед.
-VQAL ~r~KOHTAKT CЗEBA!~w~ ОTYPM - ЕГEM BМEPEГ.
 UQXB ~r~ОГОНЬ ПО CJ - СЗАДИ!~w~ П░ик░╗ваем.
-VQXB ~r~OВOHТ МO CJ - CИAГЕ!~w~ МPЕKPСBAEM.
 UQSB ~r~СНАЙПЕР - СЗАДИ!~w~ CJ в │к░╗▓ие.
-VQSB ~r~CHAЖМEP - CИAГЕ!~w~ CJ B YKPСTЕE.
 UQVB ~r~МАШИНА - СЗАДИ!~w~ Б╝ем по води▓ел╛.
-VQVB ~r~MAОЕHA - CИAГЕ!~w~ АТEM МO BOГЕTEЗФ.
 UQRB ~r~КРЫША - СЗАДИ!~w~ С▓░елок наве░╡│.
-VQRB ~r~KPСОA - CИAГЕ!~w~ CTPEЗOK HABEPXY.
 UQCB ~r~КОНТАКТ СЗАДИ!~w~ О▓░┐д ▒▓░ел┐е▓.
-VQCB ~r~KOHTAKT CИAГЕ!~w~ OTPХГ CTPEЗХET.
 UQAB ~r~КОНТАКТ СЗАДИ!~w~ Ш▓│░м - идем впе░ед.
-VQAB ~r~KOHTAKT CИAГЕ!~w~ ОTYPM - ЕГEM BМEPEГ.
 UQXR ~r~ОГОНЬ ПО CJ - СПРАВА!~w~ П░ик░╗ваем.
-VQXR ~r~OВOHТ МO CJ - CМPABA!~w~ МPЕKPСBAEM.
 UQSR ~r~СНАЙПЕР - СПРАВА!~w~ CJ в │к░╗▓ие.
-VQSR ~r~CHAЖМEP - CМPABA!~w~ CJ B YKPСTЕE.
 UQVR ~r~МАШИНА - СПРАВА!~w~ Б╝ем по води▓ел╛.
-VQVR ~r~MAОЕHA - CМPABA!~w~ АТEM МO BOГЕTEЗФ.
 UQRR ~r~КРЫША - СПРАВА!~w~ С▓░елок наве░╡│.
-VQRR ~r~KPСОA - CМPABA!~w~ CTPEЗOK HABEPXY.
 UQCR ~r~КОНТАКТ СПРАВА!~w~ О▓░┐д ▒▓░ел┐е▓.
-VQCR ~r~KOHTAKT CМPABA!~w~ OTPХГ CTPEЗХET.
 UQAR ~r~КОНТАКТ СПРАВА!~w~ Ш▓│░м - идем впе░ед.
-VQAR ~r~KOHTAKT CМPABA!~w~ ОTYPM - ЕГEM BМEPEГ.
 UQCLR ~g~ОТРЯД:~w~ зона за╖и╣ена, ▒оби░аем▒┐ │ CJ.
-VQCLR ~g~OTPХГ:~w~ ИOHA ИAНЕКEHA, COАЕPAEMCХ Y CJ.
 UQDOWN ~r~БОЕЦ ПОГИБ!~w~ По▓е░┐ли одного.
-VQDOWN ~r~АOEЙ МOВЕА!~w~ МOTEPХЗЕ OГHOВO.
 UQCOV ~r~CJ РАНЕН!~w~ П░ик░╗ваем.
-VQCOV ~r~CJ PAHEH!~w~ МPЕKPСBAEM.
 UQMED ~g~МЕДИК:~w~ CJ пе░ев┐зан.
-VQMED ~g~MEГЕK:~w~ CJ МEPEBХИAH.
 UQMEDG ~g~МЕДИК:~w~ бое╢ пе░ев┐зан.
-VQMEDG ~g~MEГЕK:~w~ АOEЙ МEPEBХИAH.
 UQCAR ~g~ОТРЯД:~w~ ▒адим▒┐ в ма╕ин│.
-VQCAR ~g~OTPХГ:~w~ CAГЕMCХ B MAОЕHY.
 UQRLD ~g~ОТРЯД:~w~ пе░еза░┐дка!
-VQRLD ~g~OTPХГ:~w~ МEPEИAPХГKA!
 UQCVR ~g~ОТРЯД:~w~ │╡одим в │к░╗▓ие.
-VQCVR ~g~OTPХГ:~w~ YXOГЕM B YKPСTЕE.
 UQEVAC ~r~СЛИШКОМ ЖАРКО!~w~ CJ ░анен - в╗з╗вай▓е под║ем по ве░евке.
-VQEVAC ~r~CЗЕОKOM ДAPKO!~w~ CJ PAHEH - BСИСBAЖTE МOГРEM МO BEPEBKE.

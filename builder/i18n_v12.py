@@ -1,49 +1,32 @@
-"""Helicover 1.2 language data: every Russian text, and how a Cyrillic letter reaches the game's font.
+"""Helicover 1.2 language data: every Russian text and the codes of the game's Russian font.
 
 The game draws help-box messages (FXT keys) and CLEO menu rows with CFont::PrintString; a text byte becomes a 16-bit code as it is.
-What the font shows for a code depends on the language the GAME is set to (libGTASA 2.00 arm64 + the player's screenshots of the
-first beta's FONT TEST):
+What the font shows for a code depends on the language the GAME is set to (libGTASA 2.00 arm64 + the player's screenshots):
 
-  English / other  the standard font texture has no Cyrillic at all (codes above its last glyph are blanked) -> English only.
   Russian          CFont::UsingRussianLanguage: every font style goes through one atlas (RussianFont.met); the glyph is entry
-                   "code - 0x20" and every code past the end of the atlas is drawn as '@'. On screen: 181 = kha, 182 = tse,
-                   192 = an ellipsis, 193-195 = shield / star / heart, 196+ = '@'. So the letters run in alphabet order,
-                   A-YA = 0x80-0x9F, a-ya = 0xA0-0xBF (Unicode - 0x390), with no IO.                         -> profile 'game'
-  SanLTD           a fan localisation in the French slot (CFont::UsingEFIGSLanguage, language index 1): the ordinary font with
-                   SanLTD's texture. Letters that look Latin use the Latin glyph, the rest sit at 0x80-0x95 (22 of 22 confirmed
-                   on the player's screenshot). The codes of a few lower-case letters are not confirmed, so this profile
-                   writes everything in CAPITALS.                                                            -> profile 'sanltd'
+                   "code - 0x20" and every code past the end of the atlas is drawn as '@'. The letters run in alphabet order,
+                   A-YA = 0x80-0x9F, a-ya = 0xA0-0xBF (Unicode - 0x390), with no IO. Confirmed on the phone (FONT TEST of beta 3).
+  anything else    the font has no Cyrillic (English) or a different, unofficial layout (the SanLTD fan localisation): the mod
+                   stays in English there. The player asked for exactly this: Russian with the game's Russian, English otherwise.
 
-The first beta shipped CP1251 and "russian_table" layouts; both were wrong (that table only serves the keyboard key names).
+Beta 1-2 shipped CP1251 and "russian_table" layouts (both wrong), beta 3 added a SanLTD profile and a LANGUAGE page (removed
+at the player's request).
 """
 import re
 ALPHABET='АБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ'   # 32 letters, no IO: the official atlas has none
-# SanLTD: capital letter -> byte. Latin look-alikes first, then the Cyrillic glyphs of the texture.
-SANLTD={'А':0x41,'В':0x42,'Е':0x45,'Ё':0x45,'К':0x4B,'М':0x4D,'Н':0x48,'О':0x4F,'Р':0x50,'С':0x43,'Т':0x54,'У':0x59,'Х':0x58,
- 'Б':0x80,'Ф':0x81,'Г':0x82,'Д':0x83,'Ж':0x84,'И':0x85,'Й':0x86,'Л':0x87,'З':0x88,'Ц':0x89,'Щ':0x8A,'П':0x8C,'Ч':0x8D,'Ш':0x8E,
- 'Ъ':0x90,'Ы':0x91,'Ь':0x92,'Э':0x93,'Ю':0x94,'Я':0x95}
-PROFILES=('en','game','sanltd')
-def upper_keep_tags(text):
- """Capitals everywhere except inside the ~x~ colour / number tags (they are commands for the game, case matters)."""
- return ''.join(part if re.fullmatch(r'~[^~]~',part) else part.upper() for part in re.split(r'(~[^~]~)',text))
+PROFILES=('en','game')
 def encode(text,profile):
- """Text -> bytes for a profile. Latin text, digits and punctuation stay ASCII; Cyrillic goes to the codes of that font."""
+ """Text -> bytes for a profile. Latin text, digits and punctuation stay ASCII; Cyrillic goes to the codes of the game's Russian font."""
  if profile=='en':return text.encode('ascii')
- if profile=='sanltd':text=upper_keep_tags(text)
  out=bytearray()
  for ch in text:
   if ord(ch)<128:out.append(ord(ch));continue
-  if profile=='game':
-   ch={'Ё':'Е','ё':'е'}.get(ch,ch);i=ALPHABET.find(ch.upper())
-   assert i>=0,('no glyph for',ch)
-   out.append((0x80 if ch.isupper() else 0xA0)+i)
-  else:
-   assert ch in SANLTD,('no SanLTD glyph for',ch)
-   out.append(SANLTD[ch])
+  ch={'Ё':'Е','ё':'е'}.get(ch,ch);i=ALPHABET.find(ch.upper())
+  assert i>=0,('no glyph for',ch)
+  out.append((0x80 if ch.isupper() else 0xA0)+i)
  return bytes(out)
 def ukey(key):return 'U'+key[1:]
-def vkey(key):return 'V'+key[1:]
-def key_for(key,lang):return (key,ukey(key),vkey(key))[lang]
+def key_for(key,lang):return (key,ukey(key))[lang]
 
 # ----------------------------------------------------------------------------------------------- on-screen messages
 # key -> Russian text (standard game Russian: no slang, no quotes, no yo). Colour tags and ~1~ stay as they are.
@@ -144,6 +127,12 @@ RU_MESSAGES={
  'SQRLD':'~g~ОТРЯД:~w~ перезарядка!',
  'SQCVR':'~g~ОТРЯД:~w~ уходим в укрытие.',
  'SQEVAC':'~r~СЛИШКОМ ЖАРКО!~w~ CJ ранен - вызывайте подъем по веревке.',
+ 'HCXBL':'~b~ПИЛОТ:~w~ кнопка выхода - посадка.',
+ 'HCXBR':'~b~ПИЛОТ:~w~ кнопка выхода - спуск по веревке.',
+ 'HCRBSY':'~y~ПИЛОТ:~w~ подождите, идет работа на веревке.',
+ 'HCRUP':'~b~ПИЛОТ:~w~ отряд, поднимайтесь по веревкам.',
+ 'HCDSQ':'~b~ПИЛОТ:~w~ сначала заберу отряд, потом улетаем.',
+ 'HCRCAN':'~b~ПИЛОТ:~w~ подъем отменен. Убираю веревки.',
 }
 _DIRS={'F':'СПЕРЕДИ','L':'СЛЕВА','B':'СЗАДИ','R':'СПРАВА'}
 for _d,_ru in _DIRS.items():
@@ -157,10 +146,10 @@ RU_PLAIN_LIMIT=80   # visible characters in a help-box message
 
 def visible(text):return re.sub(r'~.~','',text)
 def check_keys():
- """Every key must stay unique and at most 7 characters after the U / V rewrite."""
+ """Every key must stay unique and at most 7 characters after the U rewrite."""
  seen={}
  for k in RU_MESSAGES:
-  for lang in (0,1,2):
+  for lang in (0,1):
    kk=key_for(k,lang)
    assert len(kk)<=7 and re.fullmatch(r'[A-Z0-9]+',kk),kk
    assert kk not in seen,(kk,k,seen.get(kk));seen[kk]=k
@@ -171,20 +160,25 @@ def check_keys():
 # id -> (English, Russian). Rows stay short (the CLEO menu panel is narrow): at most 26 characters in English, 28 in Russian.
 MENU={
  'CALL':('CALL HELICOPTER','ПОЗВАТЬ ВЕРТОЛЕТ'),
- 'WAIT':('PLEASE WAIT...','ПОДОЖДИТЕ...'),
- 'SETTINGS':('SETTINGS >','НАСТРОЙКИ (SETTINGS) >'),   # beta: the Latin word keeps the way to LANGUAGE readable if the Cyrillic layout is wrong
+ 'WAIT_IN':('HELICOPTER INBOUND...','ВЕРТОЛЕТ ЛЕТИТ...'),
+ 'WAIT_OUT':('HELICOPTER LEAVING...','ВЕРТОЛЕТ УЛЕТАЕТ...'),
+ 'WAIT_SWAP':('CHANGING, PLEASE WAIT...','ИДЕТ ЗАМЕНА...'),
+ 'SETTINGS':('SETTINGS >','НАСТРОЙКИ >'),
  'GUNFIRE':('GUNNER FIRE >','ОГОНЬ СТРЕЛКОВ >'),
  'FOLLOW':('FOLLOW ME','ЛЕТЕТЬ ЗА МНОЙ'),
  'HOLD':('HOLD HERE','ЖДАТЬ ЗДЕСЬ'),
  'PATROL':('PATROL AROUND ME','ПАТРУЛЬ ВОКРУГ'),
  'ROPE':('CLIMB ABOARD BY ROPE','НА БОРТ ПО ВЕРЕВКЕ'),
+ 'ROPE_CANCEL':('CANCEL ROPE PICKUP','ОТМЕНИТЬ ПОДЪЕМ'),
  'TEAM_ON':('DEPLOY SQUAD','ВЫСАДИТЬ ОТРЯД'),
  'TEAM_OFF':('RECALL SQUAD','ЗАБРАТЬ ОТРЯД'),
+ 'TEAM_DOWN':('SQUAD ROPING DOWN...','ОТРЯД ВЫСАЖИВАЕТСЯ...'),
+ 'TEAM_UP':('SQUAD COMING BACK...','ОТРЯД ВОЗВРАЩАЕТСЯ...'),
  'DISMISS':('DISMISS HELICOPTER','ОТПУСТИТЬ ВЕРТОЛЕТ'),
  'MAP':('FLY TO MAP MARKER','ЛЕТЕТЬ К МЕТКЕ НА КАРТЕ'),
  'GROVE':('FLY TO GROVE STREET','ЛЕТЕТЬ НА ГРОУВ-СТРИТ'),
- 'EXIT_LAND':('EXIT: LAND','ВЫСАДКА: ПОСАДКА'),
- 'EXIT_ROPE':('EXIT: ROPE','ВЫСАДКА: ВЕРЕВКА'),
+ 'EXIT_LAND':('EXIT BUTTON: LAND','КНОПКА ВЫХОДА: ПОСАДКА'),   # switches for the game's exit button, they do nothing by themselves
+ 'EXIT_ROPE':('EXIT BUTTON: ROPE','КНОПКА ВЫХОДА: ВЕРЕВКА'),
  'BACK':('< BACK','< НАЗАД'),
  'SET_TITLE':('HELICOVER / SETTINGS','HELICOVER / НАСТРОЙКИ'),
  'SET_CREW':('CREW >','ЭКИПАЖ >'),
@@ -192,12 +186,9 @@ MENU={
  'SET_WEAPON':('CREW WEAPON >','ОРУЖИЕ ЭКИПАЖА >'),
  'TAC_GUARD':('SQUAD TACTICS: GUARD','ТАКТИКА: ОХРАНА'),
  'TAC_ASSAULT':('SQUAD TACTICS: ASSAULT','ТАКТИКА: ШТУРМ'),
- 'EXB_LAND':('EXIT BUTTON: LAND','КНОПКА ВЫХОДА: ПОСАДКА'),
- 'EXB_ROPE':('EXIT BUTTON: ROPE','КНОПКА ВЫХОДА: ВЕРЕВКА'),
  'MSG_OFF':('MESSAGES: OFF','СООБЩЕНИЯ: ВЫКЛ'),
  'MSG_IMP':('MESSAGES: IMPORTANT','СООБЩЕНИЯ: ВАЖНЫЕ'),
  'MSG_ALL':('MESSAGES: ALL','СООБЩЕНИЯ: ВСЕ'),
- 'LANGUAGE':('LANGUAGE >','LANGUAGE >'),
  'FIRE_TITLE':('HELICOVER / GUNNER FIRE','HELICOVER / ОГОНЬ СТРЕЛКОВ'),
  'FIRE3':('PROTECT ME','ЗАЩИЩАТЬ МЕНЯ'),
  'FIRE4':('ARMED ONLY','ТОЛЬКО ВООРУЖЕННЫЕ'),
@@ -237,15 +228,5 @@ def menu_text(key,profile):
 def state_title(state,en_name,profile):
  return encode('HELICOVER / '+en_name,'en') if profile=='en' else encode('HELICOVER / '+STATE_RU[state],profile)
 
-# FONT TEST: page 1 is for the game's own Russian (profile 'game'), page 2 for SanLTD. Each shows the alphabet as this build writes it;
-# page 2 adds raw codes whose letters are not known yet (the lower-case half of SanLTD), so one screenshot settles them.
-ALPHA_UP1='АБВГДЕЖЗИЙКЛМНОП';ALPHA_UP2='РСТУФХЦЧШЩЪЫЬЭЮЯ';ALPHA_LO1='абвгдежзийклмноп';ALPHA_LO2='рстуфхцчшщъыьэюя'
-RU_MESSAGES['HFTEST']='~b~ТЕСТ ШРИФТА~w~ '+ALPHA_UP1+' '+ALPHA_LO1
-def font_test_rows(profile):
- if profile=='game':return [encode('1: '+s,'game') for s in (ALPHA_UP1,ALPHA_UP2,ALPHA_LO1,ALPHA_LO2)]
- return [encode('2: '+ALPHA_UP1,'sanltd'),encode('2: '+ALPHA_UP2,'sanltd'),b'R: '+bytes(range(0x96,0xA6)),b'R: '+bytes(range(0xA6,0xB0))]
-def _groups(lo,hi,n=8):return b' '.join(bytes(range(i,min(i+n,hi))) for i in range(lo,hi,n))
-# texts that are not a translation: the SanLTD test message shows the raw codes 0x80-0xAF in the help-box font
-FXT_OVERRIDE={('sanltd','HFTEST'):b'~b~TEST~w~ '+_groups(0x80,0xB0)}
-def fxt_text(key,profile):
- return FXT_OVERRIDE.get((profile,key)) or encode(RU_MESSAGES[key],profile)
+def fxt_text(key):
+ return encode(RU_MESSAGES[key],'game')

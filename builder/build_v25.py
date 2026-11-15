@@ -26,6 +26,8 @@ EXIT_MODE=STATE+134;AUTO_EXIT=STATE+135;LOCK_HOLD=STATE+136
 KILLS=STATE+137;LAST_TGT=STATE+138;ENGAGED=STATE+139;CLEAR_AT=STATE+140;ORBIT_I=STATE+141;ORBIT_NEXT=STATE+142
 OVERWATCH_DAMAGE=75;OVERWATCH_CADENCE=900;ORBIT_RADIUS=28.0
 OWN_CAR_CLEAR=3.5   # FOLLOW MY SHOTS from a vehicle: extra metres before the aim ray starts, to clear CJ's own car
+# beta 4 command gate: orders that must not interrupt somebody on a rope; orders that are dropped when they are already in force
+GATE_ROPE_ORDERS=[2,3,4,7,10,11,14,15,16,17];GATE_SAME=[(2,[2]),(3,[3]),(14,[24]),(7,[20,10,11])];MAP_FLIGHT_STATES=[21,25,22]
 # v39b robust exit: rope drop retries with repositioning, and a rope fallback when there is
 # nowhere to land. DROP_RESULT -1 running / 0 done / 1 failed (set by the ground worker).
 ROPE_PENDING=STATE+143;DROP_RESULT=STATE+144;ROPE_TRIES=STATE+145;RETRY_AT=STATE+146;FORCE_ROPE=STATE+147
@@ -56,7 +58,7 @@ SQ_SLOT=STATE+172;SQ_SLOT_SIZE=10   # per guard slot: TASK NEXT TX TY LX LY LT D
 GT_PREV=STATE+225;FOCUS_SEEN=STATE+229;GC_TIME=STATE+250;GC_CAND=STATE+230  # GC_CAND..+18: this round's checked candidates (shooter, primary, 4 squad threats, 13 cells), -1 = none
 # v41 threat board (threat_v41.py): shooter found through bullet traces, fire at the helicopter,
 # the gunners' sorted list, suppression memory, and the squad's cover / reload / call-out state.
-from msg_v42 import say,emit_resolve_lang,LANG,LANG_SETTING,print_key,MSG_UNTIL,MSG_PRIO,LEVEL_ALL,GAME_RU_FLAG,GAME_EFIGS_FLAG,GAME_LANG_BYTE,SANLTD_SLOT
+from msg_v42 import say,emit_resolve_lang,LANG,print_key,MSG_UNTIL,MSG_PRIO,LEVEL_ALL,GAME_RU_FLAG
 import msg_v42 as _mv;assert _mv.HUD==HUD
 from threat_v41 import TB_SHOOTER,TB_SHOOTER_T,HELI_SHOT_T,TRACE_SCAN_T,SHOOTER_FRESH_MS,SCORE_FOCUS,emit_score,emit_trace_scan
 from threat_v41 import CJ_SHOT_T,CJ_AIM_X,CJ_AIM_Y,CJ_AIM_Z,CJ_AIM_PX,CJ_AIM_PY,CJ_AIM_PZ,CJ_AIM_T,CJ_AIM_E,TB_SEARCH_T
@@ -64,6 +66,8 @@ import threat_v41 as _tv;assert _tv.STATE==STATE and _tv.GROUND_PUB==GROUND_PUB
 TS_SAVE=STATE+380   # 4 slots: registers the trace scan borrows
 PREV_HP=STATE+356;PREV_HP_T=STATE+360;GT_YIELD=STATE+364;LS_X=STATE+340;LS_Y=STATE+344;LS_Z=STATE+348;LS_T=STATE+352  # gunner hit tracking / guard last-seen
 BLOCK_T=STATE+390;SQ_CARH=STATE+391;SQ_DRIVES=STATE+392;ESC_LAGGED=STATE+393;ROPE_T0=STATE+394;SQ_LAG=STATE+395   # SQ_LAG..+3: per guard, time since he fell 70 m behind CJ
+AFTER_ROPE=STATE+425;DISMISS_NEXT=STATE+426;LEAVE_ROT=STATE+427   # beta 4: the order that follows once a cancelled pickup's cover team is back aboard / when the panel may ask for the recall again
+ROPE_WAIT=STATE+415;LEAVE=STATE+416;LEAVE_N=STATE+424   # beta 4: the rope hangs waiting for CJ / LEAVE..+7: guards who were let go and walk away / 1 while any is left
 ROPE_BUSY=STATE+406;SWAP_MSG=STATE+407;TEAM_CREW=STATE+408;DISMISS_T=STATE+411;PB_AIM=STATE+412   # PB_AIM..+2: the aim point the gunners were called with   # 1.2 decor: a rope motion is under way / swap message shown / crew setting the ground team wears
 FORM_UX=STATE+399;FORM_UY=STATE+400;FORM_PX=STATE+401;FORM_PY=STATE+402;FORM_T=STATE+403;FORM_CT=STATE+404;FORM_OK=STATE+405   # formation anchor (unit travel direction)
 NOTICE_SKIP=STATE+335;HELLO_AT=STATE+336;KILL_NEXT=STATE+337
@@ -159,7 +163,12 @@ MESSAGES={'HCLOAD': '~b~PILOT:~w~ inbound to your position.',
  'SQCREW': '~y~SQUAD:~w~ wait until the crew is back aboard.',
  'HCBUSY':'~y~PILOT:~w~ emergency landing - cannot comply.',
  'HCSLATE':'~y~PILOT:~w~ I make the change right after the rope.',
- 'HFTEST':'~b~FONT TEST~w~ ABCDEFGH abcdefgh 12345',
+ 'HCXBL':'~b~PILOT:~w~ exit button: I land.',
+ 'HCXBR':'~b~PILOT:~w~ exit button: you go down the rope.',
+ 'HCRBSY':'~y~PILOT:~w~ wait - rope work in progress.',
+ 'HCRCAN':'~b~PILOT:~w~ pickup cancelled. Ropes up.',
+ 'HCRUP':'~b~PILOT:~w~ squad, back up the ropes.',
+ 'HCDSQ':'~b~PILOT:~w~ picking the squad up first, then we leave.',
  'HCFOCUS': '~r~SHOOTER ON CJ!~w~ Gunners focusing fire.',
  'HCEVADE': '~r~TAKING HITS!~w~ Pilot breaking away.',
  'HCSHOT': '~r~TAKING FIRE!~w~ Pilot breaking away.',
@@ -182,7 +191,7 @@ c.set(GAME_OK,1);c.label('GAME_SIG_BAD');c.set(NOTICE_SKIP,-1);c.set(HELLO_AT,0)
 for key in range(PUB,PUB+7):c.set(key,-1)
 for key in range(GROUND_PUB,GROUND_PUB+5):c.set(key,-1)
 c.set(ROPE_COMMAND,0)
-for key,val in [(LANG_SETTING,0),(LANG,0),(ROPE_BUSY,0),(SWAP_MSG,0),(TEAM_CREW,0),(STATE,0),(CMD,0),(OPEN,0),(MODEL,487),(CREW,2),(FIRE,3),(TOUCH,0),(HUD,2),(HP,0),(WEAPON_SETTING,0),(EXIT_MODE,0),(AUTO_EXIT,0),(LOCK_HOLD,0),(ROPE_PENDING,0),(DROP_RESULT,0),(ROPE_TRIES,0),(RETRY_AT,0),(FORCE_ROPE,0),(EXIT_PRESSED,0),(EXIT_LAST,0),(AIR_SEEN,0),(AIR_CALL_NEXT,0),(KILLS,0),(LAST_TGT,-1),(ENGAGED,0),(CLEAR_AT,0),(ORBIT_I,0),(ORBIT_NEXT,0),(TACTICS,0),(ESCORT_PENDING,0),(ST_I,0),(ST_NEXT,0),(HP_PREV,0),(HP_T,0),(EVADE_UNTIL,0),(HELI_SHOT_T,-100000)]:c.set(key,val)
+for key,val in [(LANG,0),(ROPE_WAIT,0),(LEAVE_N,0),(AFTER_ROPE,0),(DISMISS_NEXT,0),(LEAVE_ROT,0),(ROPE_BUSY,0),(SWAP_MSG,0),(TEAM_CREW,0),(STATE,0),(CMD,0),(OPEN,0),(MODEL,487),(CREW,2),(FIRE,3),(TOUCH,0),(HUD,2),(HP,0),(WEAPON_SETTING,0),(EXIT_MODE,0),(AUTO_EXIT,0),(LOCK_HOLD,0),(ROPE_PENDING,0),(DROP_RESULT,0),(ROPE_TRIES,0),(RETRY_AT,0),(FORCE_ROPE,0),(EXIT_PRESSED,0),(EXIT_LAST,0),(AIR_SEEN,0),(AIR_CALL_NEXT,0),(KILLS,0),(LAST_TGT,-1),(ENGAGED,0),(CLEAR_AT,0),(ORBIT_I,0),(ORBIT_NEXT,0),(TACTICS,0),(ESCORT_PENDING,0),(ST_I,0),(ST_NEXT,0),(HP_PREV,0),(HP_T,0),(EVADE_UNTIL,0),(HELI_SHOT_T,-100000)]:c.set(key,val)
 c.label('IDLE');a(1,I(100));c.call('RESOLVE_LANG');a(0x01bd,V(20));a(0xddc,I(HEART),V(20));c.get(19,HELLO_AT);c.eq(19,-1,'HELLO_CHECK');c.go('HELLO_DONE')
 c.label('HELLO_CHECK');c.eq(19,0,'HELLO_DUE');a(0x0085,V(19),V(20));a(0x000a,V(19),I(5000));a(0xddc,I(HELLO_AT),V(19));c.go('HELLO_DONE')
 c.label('HELLO_DUE');c.check(0x001d,[V(20),V(19)],'HELLO_DONE');c.check(0x0256,[I(0)],'HELLO_DONE');c.set(HELLO_AT,-1);c.get(19,GAME_OK);c.eq(19,1,'HELLO_OLD');msg(c,'HCHELLO');c.go('HELLO_DONE')
@@ -262,6 +271,50 @@ c.eq(7,15,'DISPATCH_NORMAL')
 for cmd in [2,3,4,14]:
  nxt='EMERGENCY_REFUSE_'+str(cmd);c.eq(8,cmd,nxt);msg(c,'HCBUSY');c.go('TICK');c.label(nxt)
 c.label('DISPATCH_NORMAL')
+# ---- beta 4 command gate: an order that is already being carried out is not started again, and nothing interrupts rope work.
+# 8@ = the order (0 = none), 7@ = state. A dropped order becomes 0 and the state's own work goes on.
+c.eq(8,0,'GATE');c.go('GATE_PASS')
+c.label('GATE')
+for cmd,states in GATE_SAME:   # the mode that is already on / the flight that is already under way
+ nxt='GATE_SAME_NOT_%d'%cmd;c.eq(8,cmd,nxt)
+ for st in states:
+  n2='GATE_SAME_%d_NOT_%d'%(cmd,st);c.eq(7,st,n2);c.go('GATE_DROP');c.label(n2)
+ c.label(nxt)
+c.call('SQUAD_MOVING')        # 17@ = 1 while the squad is on its way down or back up: its row shows that, a second order is not taken
+for cmd in [16,17]:
+ nxt='GATE_SQUAD_NOT_%d'%cmd;c.eq(8,cmd,nxt);c.eq(17,1,nxt);c.go('GATE_DROP');c.label(nxt)
+c.eq(8,10,'GATE_SQUAD_NOT_10');c.eq(17,1,'GATE_SQUAD_NOT_10');msg(c,'HCRBSY');c.go('GATE_DROP');c.label('GATE_SQUAD_NOT_10')   # the ropes are taken
+# the rope is out for CJ (the rope worker sits in its ACTIVE loop - the cover team is on its way down or the rope hangs waiting - and the
+# helicopter hovers frozen): every order is settled with the rope worker here, so the core never starts another approach under it, and
+# the worker acts on it once the team has landed. 19@ = ESCORT_ON (1 = the men on the ground are the squad)
+c.get(19,ROPE_WAIT);c.eq(19,1,'GATE_NO_WAIT');c.get(19,ESCORT_ON)
+c.eq(8,10,'GW_NOT_10');c.set(ROPE_COMMAND,1);c.go('GATE_DROP');c.label('GW_NOT_10')                       # the rope order again = cancel
+c.eq(8,17,'GW_NOT_17');c.eq(19,1,'GATE_DROP');c.set(ESCORT_CMD,2);c.go('GATE_DROP');c.label('GW_NOT_17')   # recall: the squad goes up these ropes
+c.eq(8,16,'GW_NOT_16');c.eq(19,0,'GATE_DROP');c.set(ESCORT_CMD,1);c.go('GATE_DROP');c.label('GW_NOT_16')   # deploy: the cover team stays down as the squad
+for cmd in [2,4,14]:   # the helicopter is sent elsewhere: a cover team climbs back first and the order follows; a squad simply carries on
+ nxt='GW_NOT_%d'%cmd;c.eq(8,cmd,nxt);c.eq(19,0,'GATE_NO_WAIT');c.set(AFTER_ROPE,cmd);c.set(ROPE_COMMAND,1);c.go('GATE_DROP');c.label(nxt)
+c.label('GATE_NO_WAIT')
+# any other rope work (CJ on the rope, a team going down or up): nothing interrupts it, the pilot says so
+c.get(19,ROPE_BUSY);c.eq(19,1,'GATE_ROPE_FREE')
+for cmd in GATE_ROPE_ORDERS:
+ nxt='GATE_ROPE_NOT_%d'%cmd;c.eq(8,cmd,nxt);msg(c,'HCRBSY');c.go('GATE_DROP');c.label(nxt)
+c.label('GATE_ROPE_FREE')
+# the rope order pressed again on the way in = cancel: the helicopter goes back to following
+c.eq(8,10,'GATE_NOT_ROPE');c.eq(7,19,'GATE_NOT_ROPE');msg(c,'HCRCAN');a(6,V(8),I(2));c.label('GATE_NOT_ROPE')
+# the exit button pressed again while the exit it asked for is already under way: the rope drop is ordered / is being retried over the spot (23), or
+# the helicopter is on its way to the place where CJ gets out (it used to restart: every press pushed the stopping point further on)
+c.eq(8,15,'GATE_NOT_EXIT');c.get(19,DROP_COMMAND);c.eq(19,0,'GATE_DROP')
+c.eq(7,23,'GATE_EXIT_FLY');c.get(19,ROPE_PENDING);c.eq(19,0,'GATE_DROP');c.go('GATE_NOT_EXIT')
+c.label('GATE_EXIT_FLY');c.get(19,AUTO_EXIT);c.eq(19,0,'GATE_EXIT_AUTO');c.go('GATE_NOT_EXIT')
+c.label('GATE_EXIT_AUTO')
+for st in MAP_FLIGHT_STATES:
+ nxt='GATE_EXIT_NOT_%d'%st;c.eq(7,st,nxt);c.go('GATE_DROP');c.label(nxt)
+c.label('GATE_NOT_EXIT')
+for cmd in [2,3,4,14]:        # another order ends an approach for the squad
+ nxt='GATE_KEEP_PENDING_%d'%cmd;c.eq(8,cmd,nxt);c.set(ESCORT_PENDING,0);c.label(nxt)
+c.go('GATE_PASS')
+c.label('GATE_DROP');a(6,V(8),I(0))
+c.label('GATE_PASS')
 for command,label in [(15,'REQUEST_EXIT'),(2,'REQUEST_FOLLOW'),(3,'REQUEST_HOLD'),(4,'REQUEST_DEPART'),(5,'EVAC'),(6,'BOARD_CJ'),(7,'REQUEST_GROVE'),(8,'LEAVE_CJ'),(9,'REQUEST_TAKEOFF'),(10,'REQUEST_ROPE'),(11,'REQUEST_MAP'),(12,'REQUEST_DEST_LAND'),(13,'REQUEST_DEST_ROPE'),(14,'REQUEST_PATROL'),(16,'REQUEST_TEAM_DEPLOY'),(17,'REQUEST_TEAM_RECALL')]:
  nxt='CMD_NEXT_'+str(command);c.eq(8,command,nxt);c.go(label);c.label(nxt)
 # Per-state continuous work.
@@ -376,6 +429,10 @@ c.label('REQUEST_TEAM_DEPLOY');c.get(19,ESCORT_ON);c.eq(19,0,'TEAM_BUSY');c.chec
 c.label('TEAM_DEPLOY_CREW');c.set(ESCORT_PENDING,1);c.eq(24,0,'TEAM_MUSTER');c.go('ROPE_HOVER')
 c.label('TEAM_MUSTER');a(6,V(25),I(18));c.go('START_MUSTER')
 c.label('TEAM_BUSY');msg(c,'SQALR');c.go('TICK')
+# 17@ = 1 while a squad deployment or recall is under way (approach for it, hand-over to the rope worker, the ropes themselves). Uses 19@.
+c.label('SQUAD_MOVING');a(6,V(17),I(1));c.get(19,ESCORT_ON);c.eq(19,2,'SM_NOT_DOWN');c.ret();c.label('SM_NOT_DOWN');c.eq(19,3,'SM_NOT_UP');c.ret();c.label('SM_NOT_UP')
+c.get(19,ESCORT_CMD);c.eq(19,0,'SM_RET');c.eq(7,19,'SM_NO');c.get(19,ESCORT_PENDING);c.eq(19,0,'SM_RET')
+c.label('SM_NO');a(6,V(17),I(0));c.label('SM_RET');c.ret()
 c.label('TEAM_CJ_IN_CAR');msg(c,'SQFOOT');c.go('TICK')
 c.label('REQUEST_TEAM_RECALL');c.get(19,ESCORT_ON);c.eq(19,1,'TEAM_NONE');c.check(0x80db,[V(18),V(5)],'TEAM_EXTRACT');c.set(ESCORT_PENDING,2);c.go('ROPE_HOVER')
 c.label('TEAM_EXTRACT');c.set(ESCORT_CMD,3);c.go('TICK')
@@ -421,9 +478,15 @@ c.label('LEAVE_CJ');c.eq(7,12,'LEAVE_CHECK_PHASE');c.go('LEAVE_ALLOWED')
 c.label('LEAVE_CHECK_PHASE');c.eq(24,3,'LEAVE_GROUND_CHECK');c.eq(7,9,'NOT_LANDED');c.go('LEAVE_ALLOWED')
 c.label('LEAVE_GROUND_CHECK');c.eq(24,1,'NOT_LANDED')
 c.label('LEAVE_ALLOWED');c.check(0x00db,[V(18),V(5)],'TICK');a(0x020a,V(5),I(1));a(0x0085,V(19),V(20));a(0x000a,V(19),I(5000));a(0xddc,I(LOCK_HOLD),V(19));a(0x05cd,V(18),V(5));c.go('TICK')
-c.label('REQUEST_MAP');c.set(AVOID_STAGE,0);c.set(AUTO_EXIT,0);c.check(0x0448,[V(18),V(5)],'NOT_ABOARD');c.get(19,GAME_OK);c.eq(19,1,'MAP_UNSUPPORTED')
+c.label('REQUEST_MAP');c.check(0x0448,[V(18),V(5)],'NOT_ABOARD');c.get(19,GAME_OK);c.eq(19,1,'MAP_UNSUPPORTED')
 if MAP_MARKER:c.call('READ_WAYPOINT');c.eq(29,1,'NO_MAP')
 else:msg(c,'HCMAPOF');c.go('TICK')
+# beta 4: the same marker while the flight to it is already under way: nothing to restart
+c.get(19,AUTO_EXIT);c.eq(19,0,'MAP_NEW');a(6,V(19),I(0))
+for st in MAP_FLIGHT_STATES:
+ nxt='MAP_FLIGHT_NOT_%d'%st;c.eq(7,st,nxt);a(6,V(19),I(1));c.label(nxt)
+c.eq(19,1,'MAP_NEW');c.get(9,DEST_X);c.get(10,DEST_Y);a(0x0509,V(9),V(10),V(26),V(27),V(31));c.check(0x0021,[V(31),F(10)],'TICK')
+c.label('MAP_NEW');c.set(AVOID_STAGE,0);c.set(AUTO_EXIT,0);c.set(ROPE_PENDING,0)   # a new destination ends a rope drop that was still being retried
 a(0xddc,I(DEST_X),V(26));a(0xddc,I(DEST_Y),V(27));a(0xddc,I(DEST_Z),V(28));c.set(GROVE_WAIT,0);c.set(GROVE_NEXT_SCAN,0);c.call('UNFREEZE');a(0x01bd,V(21));state(c,21);c.go('TICK')
 c.label('MAP_CLIMB_TICK');a(0x0819,V(4),V(19));c.check(0x0021,[V(19),F(40)],'MAP_CLIMB_TIMEOUT');c.get(26,DEST_X);c.get(27,DEST_Y);c.get(28,DEST_Z);c.call('RESTORE_FLIGHT');a(0x0087,V(9),V(28));a(0x000b,V(9),F(80));a(0x04a2,V(5),V(26),V(27),V(9),F(45),V(9));a(0x00ad,V(5),F(30));state(c,21);c.go('TICK')
 c.label('MAP_CLIMB_TIMEOUT');a(0x0085,V(17),V(20));a(0x0062,V(17),V(21));c.check(0x0019,[V(17),I(30000)],'TICK');c.call('BLOCK_HOVER');state(c,18);msg(c,'HCGCLMB');c.go('TICK')
@@ -478,7 +541,7 @@ for action,label in [(2,'FOLLOW'),(3,'HOLD'),(4,'DEPART'),(13,'DEPART'),(7,'GROV
 c.go('HOLD')
 c.label('WAIT_ABOARD');state(c,9);c.go('TICK')
 c.label('TAKEOFF');c.check(0x80db,[V(18),V(5)],'TAKEOFF_EXIT_FIRST');c.go('FOLLOW')
-c.label('GROVE');c.set(AUTO_EXIT,0);c.call('UNFREEZE');c.check(0x0448,[V(18),V(5)],'NOT_ABOARD');c.set(AVOID_STAGE,0);c.set(GROVE_STREAM,0);c.set(GROVE_WAIT,0);c.set(GROVE_NEXT_SCAN,0);a(0x01bd,V(21));state(c,10);c.go('TICK')
+c.label('GROVE');c.set(AUTO_EXIT,0);c.set(ROPE_PENDING,0);c.call('UNFREEZE');c.check(0x0448,[V(18),V(5)],'NOT_ABOARD');c.set(AVOID_STAGE,0);c.set(GROVE_STREAM,0);c.set(GROVE_WAIT,0);c.set(GROVE_NEXT_SCAN,0);a(0x01bd,V(21));state(c,10);c.go('TICK')
 c.label('GROVE_CLIMB_TICK');a(0x0819,V(4),V(19));c.check(0x0021,[V(19),F(40)],'GROVE_CLIMB_TIMEOUT');c.go('GROVE_CRUISE')
 c.label('GROVE_CLIMB_TIMEOUT');a(0x0085,V(17),V(20));a(0x0062,V(17),V(21));c.check(0x0019,[V(17),I(30000)],'TICK');c.call('BLOCK_HOVER');state(c,18);msg(c,'HCGCLMB');c.go('TICK')
 c.label('GROVE_CRUISE');c.set(AVOID_STAGE,0);c.set(GROVE_STREAM,0);c.set(GROVE_WAIT,0);c.set(GROVE_NEXT_SCAN,0);c.call('RESTORE_FLIGHT');a(0x0918,V(5),I(1));a(0x0825,V(5));a(0x04df,V(5),I(0));a(0x04a2,V(5),F(GROVE_X),F(GROVE_Y),F(75),F(45),F(90));a(0x00ad,V(5),F(30));state(c,10);c.go('TICK')
@@ -890,9 +953,9 @@ c.label('CREW_REJECT');c.get(19,ACREW);a(0xddc,I(CREW),V(19))
 c.label('CREW_RETURN');c.ret()
 
 p=Script();a=p.add
+MENU_GUARD_MS=350;MENU_REPEAT_MS=1000   # beta 4 tap guard: after a tap or a page change / the same main-page row again
 import i18n_v12 as i18n
-BETA_LANG_TEST=True   # the beta ships the FONT TEST pages; the final release drops them once the right layout is known
-p.label('INIT');a(0);a(6,V(10),I(0));a(6,V(17),I(-999));p.set(DISMISS_T,0)
+p.label('INIT');a(0);a(6,V(10),I(0));a(6,V(16),I(0));a(6,V(25),I(-1));a(6,V(26),I(0));a(6,V(17),I(-999));p.set(DISMISS_T,0)
 p.label('WATCH');a(1,I(50));a(0x01bd,V(20));a(0xddc,I(PANELHEART),V(20));p.call('DISMISS_TICK');p.get(0,0);p.eq(0,0,'WATCH');p.check(0x0256,[I(0)],'WATCH')
 p.get(8,STATE);p.check(0x803b,[V(8),V(17)],'AFTER_NOTICE');a(0x0085,V(17),V(8))
 # 1.1: a state the core entered on its own way (rope hover = 3, follow after the team landed = 2)
@@ -907,38 +970,56 @@ notice={24:'HCPAT',1:'HCLOAD',2:'HCFOLL',3:'HCHOLD',4:'HCDEPT',5:'HCFAIL',6:'HCO
 for st,key in notice.items():
  nxt='NOTICE_NEXT_'+str(st);p.eq(8,st,nxt);say(p,key);p.go('AFTER_NOTICE');p.label(nxt)
 p.label('AFTER_NOTICE');p.get(1,OPEN);p.eq(1,1,'WATCH');p.go('ACQUIRE')
-p.label('ACQUIRE');p.get(0,0);p.eq(0,0,'WATCH');p.set(OPEN,0);p.set(0,1);a(6,V(10),I(0));p.get(13,HEART);a(1,I(250));p.get(14,HEART);p.check(0x803b,[V(13),V(14)],'CORE_MISSING');a(6,V(2),I(0));a(6,V(3),I(-999));p.go('REFRESH')
+p.label('ACQUIRE');p.get(0,0);p.eq(0,0,'WATCH');p.set(OPEN,0);p.set(0,1);a(6,V(10),I(0));a(6,V(25),I(-1));p.get(13,HEART);a(1,I(250));p.get(14,HEART);p.check(0x803b,[V(13),V(14)],'CORE_MISSING');a(6,V(2),I(0));a(6,V(3),I(-999));p.go('REFRESH')
 p.label('MENU_POLL');a(1,I(50));a(0x01bd,V(20));a(0xddc,I(PANELHEART),V(20));p.call('DISMISS_TICK');p.check(0x0256,[I(0)],'CLOSE');a(0x0df4,V(1),I(250));p.eq(1,-2,'PICK');p.go('CLOSE')
 p.label('PICK');p.eq(1,-1,'HAS_PICK');p.go('CHECK_MENU_STATUS')
-p.label('HAS_PICK');p.get(8,STATE)
+# beta 4, every page: nothing is accepted for 0.35 s after a tap was taken or the page changed (16@). A double tap on "CREW >" used to
+# open the page AND pick its first row; a tap already on its way when the squad landed used to hit the row that replaced the old one.
+# Main page only: a row that is being hammered (25@ = the row tapped last, 26@ = when, counted for every tap - taken or not) is taken
+# once; the next tap on it counts after a second's pause. So CANCEL does not turn back into the order it cancelled, and a squad that
+# has just landed is not sent back up by the same burst of taps on "SQUAD ROPING DOWN...". 28@ = 1: this tap is such a repeat.
+p.label('HAS_PICK');a(0x01bd,V(18));a(6,V(28),I(0));p.eq(2,0,'HP_GUARD')
+p.check(0x003b,[V(1),V(25)],'HP_NEW_ROW');a(0x0085,V(27),V(18));a(0x0062,V(27),V(26));a(0x0085,V(26),V(18));p.check(0x8019,[V(27),I(MENU_REPEAT_MS)],'HP_GUARD');a(6,V(28),I(1));p.go('HP_GUARD')
+p.label('HP_NEW_ROW');a(0x0085,V(25),V(1));a(0x0085,V(26),V(18))
+p.label('HP_GUARD');a(0x0085,V(27),V(18));a(0x0062,V(27),V(16));p.check(0x0019,[V(27),I(MENU_GUARD_MS)],'CHECK_MENU_STATUS');p.eq(28,0,'CHECK_MENU_STATUS');a(0x0085,V(16),V(18));p.get(8,STATE)
 # 1.2 menu: every row is ONE action and a mode is marked [X] instead of "cycling blind". The main page follows the situation - no
 # helicopter, busy, CJ on foot or CJ aboard - and its title shows what the helicopter is doing. The CLEO menu has its own CLOSE.
-# Pages (local 2): 0 main, 1 gunner fire, 2 settings, 3 crew, 4 helicopter model, 5 crew weapon, 6 dismiss confirm, 7 language, 8 / 9 font test.
+# Pages (local 2): 0 main, 1 gunner fire, 2 settings, 3 crew, 4 helicopter model, 5 crew weapon, 6 dismiss confirm.
 # Local 3 = key of the drawn page (redrawn when it changes), 7 = situation of the drawn main page, 9 = language scratch.
+# Beta 4: an operation that is under way is shown instead of the button that started it (SQUAD ROPING DOWN..., CANCEL ROPE PICKUP),
+# so nothing can be started twice; the two EXIT BUTTON rows only switch what the game's exit button does.
 NONE_STATES=[0,5,6];BUSY_STATES=[1,4,13,16,17]
 GROUND_STATES=[st for st in STATES if st not in NONE_STATES+BUSY_STATES]
-PROFILES=('en','game','sanltd');SUFFIX=('','_U','_V')
+PROFILES=('en','game');SUFFIX=('','_U')
 FIRE_VALUES=[3,4,2,1,0];CREW_VALUES=[0,1,2];MODEL_VALUES=[487,497,425];WEAPON_VALUES=[0,29,30,31,34]
+MAP_STATES=(25,21,22);GROVE_STATES=(20,10,11)
 def Tx(key,prof,mark=False):return i18n.menu_text(key,prof)+(i18n.MARK.encode('ascii') if mark else b'')
 def main_rows(st,sit,x,prof='en'):
+ """sit 0 no helicopter, 1 busy, 2 CJ on foot (x = team phase * 2 + rope phase), 3 CJ aboard (x = exit mode + 2 * exit under way)."""
  if sit==0:return [Tx('CALL',prof),Tx('SETTINGS',prof)]
- if sit==1:return [Tx('WAIT',prof),Tx('GUNFIRE',prof),Tx('SETTINGS',prof)]
- if sit==2:return [Tx('FOLLOW',prof,st==2),Tx('HOLD',prof,st==3),Tx('PATROL',prof,st==24),Tx('GUNFIRE',prof),Tx('ROPE',prof),Tx('TEAM_OFF' if x else 'TEAM_ON',prof),Tx('SETTINGS',prof),Tx('DISMISS',prof)]
- return [Tx('MAP',prof),Tx('GROVE',prof),Tx('EXIT_LAND',prof,x==0),Tx('EXIT_ROPE',prof,x==1),Tx('GUNFIRE',prof),Tx('SETTINGS',prof)]
-MAIN_VARIANTS=[(st,0,0) for st in NONE_STATES]+[(st,1,0) for st in BUSY_STATES]+[(st,sit,x) for st in GROUND_STATES for sit in (2,3) for x in (0,1)]
-def setup_rows(tac,ex,hud,prof):
- return [Tx('SET_CREW',prof),Tx('SET_MODEL',prof),Tx('SET_WEAPON',prof),Tx('TAC_ASSAULT' if tac else 'TAC_GUARD',prof),Tx('EXB_ROPE' if ex else 'EXB_LAND',prof),Tx(('MSG_OFF','MSG_IMP','MSG_ALL')[hud],prof),Tx('LANGUAGE',prof),Tx('BACK',prof)]
+ if sit==1:return [Tx({1:'WAIT_IN',4:'WAIT_OUT',13:'WAIT_OUT'}.get(st,'WAIT_SWAP'),prof),Tx('GUNFIRE',prof),Tx('SETTINGS',prof)]
+ if sit==2:
+  team,rope=divmod(x,2)
+  return [Tx('FOLLOW',prof,st==2),Tx('HOLD',prof,st==3 and not rope),Tx('PATROL',prof,st==24),Tx('GUNFIRE',prof),Tx('ROPE_CANCEL' if rope else 'ROPE',prof),
+          Tx(('TEAM_ON','TEAM_OFF','TEAM_DOWN','TEAM_UP')[team],prof),Tx('SETTINGS',prof),Tx('DISMISS',prof)]
+ mode,exiting=x%2,x//2
+ return [Tx('MAP',prof,st in MAP_STATES and not exiting),Tx('GROVE',prof,st in GROVE_STATES),Tx('EXIT_LAND',prof,mode==0),Tx('EXIT_ROPE',prof,mode==1),Tx('GUNFIRE',prof),Tx('SETTINGS',prof)]
+MAIN_VARIANTS=[(st,0,0) for st in NONE_STATES]+[(st,1,0) for st in BUSY_STATES]+[(st,2,x) for st in GROUND_STATES for x in range(8)]+[(st,3,x) for st in GROUND_STATES for x in range(4)]
+def main_key(st,sit,x):return st*1000+sit*100+x
+def setup_rows(tac,hud,prof):
+ return [Tx('SET_CREW',prof),Tx('SET_MODEL',prof),Tx('SET_WEAPON',prof),Tx('TAC_ASSAULT' if tac else 'TAC_GUARD',prof),Tx(('MSG_OFF','MSG_IMP','MSG_ALL')[hud],prof),Tx('BACK',prof)]
 PREF_PAGES=[(1,FIRE,FIRE_VALUES,'FIRE_TITLE','FIRE%d'),(3,CREW,CREW_VALUES,'CREW_TITLE','CREW%d'),(4,MODEL,MODEL_VALUES,'MODEL_TITLE','MODEL%d'),(5,WEAPON_SETTING,WEAPON_VALUES,'WEAPON_TITLE','WEAPON%d')]
-LANG_ROWS=['AUTO','ENGLISH','RUSSIAN (GAME RUSSIAN)','RUSSIAN (SANLTD)']+(['FONT TEST'] if BETA_LANG_TEST else [])+['< BACK']
-for page,label in [(0,'PICK_MAIN'),(1,'PICK_FIRE'),(2,'PICK_SETUP'),(3,'PICK_CREW'),(4,'PICK_MODEL'),(5,'PICK_WEAPON'),(6,'PICK_DISMISS'),(7,'PICK_LANG'),(8,'PICK_FTEST1'),(9,'PICK_FTEST2')]:
+for page,label in [(0,'PICK_MAIN'),(1,'PICK_FIRE'),(2,'PICK_SETUP'),(3,'PICK_CREW'),(4,'PICK_MODEL'),(5,'PICK_WEAPON'),(6,'PICK_DISMISS')]:
  nxt='PAGE_PICK_NEXT_'+str(page);p.eq(2,page,nxt);p.go(label);p.label(nxt)
 p.go('MENU_POLL')
 def page(n):
- a(6,V(2),I(n));a(6,V(3),I(-999));p.go('REFRESH')
+ a(6,V(2),I(n));a(6,V(3),I(-999));a(6,V(25),I(-1));p.go('REFRESH')
 def pick(index,label):
  nxt='PICK_NOT_'+label+'_'+str(len(p.rows));p.eq(1,index,nxt);p.go(label);p.label(nxt)
 p.label('FORCE_REFRESH');a(6,V(3),I(-999));p.go('REFRESH')
 p.label('PICK_MAIN')
+# beta 4: nothing is taken while what is drawn is out of date (the page is redrawn first)
+p.call('MAIN_KEY');p.check(0x003b,[V(6),V(3)],'CHECK_MENU_STATUS')
 for sit,actions in [(0,['DO_CALL','OPEN_SETUP']),(1,['FORCE_REFRESH','OPEN_FIRE','OPEN_SETUP']),(2,['DO_FOLLOW','DO_HOLD','DO_PATROL','OPEN_FIRE','DO_ROPE','DO_TEAM_TOGGLE','OPEN_SETUP','OPEN_DISMISS']),(3,['DO_MAP','DO_GROVE','DO_EXIT_LAND','DO_EXIT_ROPE','OPEN_FIRE','OPEN_SETUP'])]:
  nxt='PICK_MAIN_SIT_'+str(sit);p.eq(7,sit,nxt)
  for index,label in enumerate(actions):pick(index,label)
@@ -947,7 +1028,7 @@ p.go('MENU_POLL')
 # models of the CREW / HELICOPTER pages are requested while the page is open (no waiting at the moment of the choice) and released after
 p.label('OPEN_CREW');p.call('PRELOAD_SKINS');page(3)
 p.label('OPEN_MODEL');p.call('PRELOAD_MODELS');page(4)
-for label,n in [('OPEN_MAIN',0),('OPEN_FIRE',1),('OPEN_SETUP',2),('OPEN_WEAPON',5),('OPEN_DISMISS',6),('OPEN_LANG',7),('OPEN_FTEST1',8),('OPEN_FTEST2',9)]:p.label(label);page(n)
+for label,n in [('OPEN_MAIN',0),('OPEN_FIRE',1),('OPEN_SETUP',2),('OPEN_WEAPON',5),('OPEN_DISMISS',6)]:p.label(label);page(n)
 p.label('PRELOAD_SKINS')
 for model in [105,106,107,285,287]:a(0x0247,I(model))
 p.ret()
@@ -957,26 +1038,37 @@ p.ret()
 p.label('UNLOAD')
 for model in [105,106,107,285,287,487,497,425]:a(0x0249,I(model))
 p.ret()
-p.label('DO_TEAM_TOGGLE');p.get(9,ESCORT_ON);p.eq(9,1,'DO_TEAM_DEPLOY');p.go('DO_TEAM_RECALL')
+# the squad row acts by what is true right now (not by what was drawn): deploy, recall, or nothing while the squad is on the ropes
+p.label('DO_TEAM_TOGGLE');p.call('TEAM_PHASE');p.eq(12,0,'TT_NOT_DEPLOY');p.go('DO_TEAM_DEPLOY');p.label('TT_NOT_DEPLOY');p.eq(12,1,'FORCE_REFRESH');p.go('DO_TEAM_RECALL')
 # DISMISS: with the team on the ground the squad is recalled by rope first and the helicopter leaves when it is back (DISMISS_TICK)
 p.label('PICK_DISMISS');pick(0,'DO_DISMISS_ASK');p.go('OPEN_MAIN')
 p.label('DO_DISMISS_ASK')
 for st in [1,4,13]:
  nxt='ALLOW_DISMISS_'+str(st);p.eq(8,st,nxt);p.go('FORCE_REFRESH');p.label(nxt)
-p.get(9,ESCORT_ON);p.eq(9,1,'DO_DISMISS_NOW');p.set(CMD,17);a(0x01bd,V(20));a(0xddc,I(DISMISS_T),V(20));a(1,I(200));a(6,V(2),I(0));p.go('CHECK_MENU_STATUS')
-p.label('DO_DISMISS_NOW');p.set(CMD,4);a(1,I(200));a(6,V(2),I(0));p.go('CHECK_MENU_STATUS')
+# beta 4: the order is carried out by DISMISS_TICK - at once with everybody aboard, after the squad is back otherwise
+a(0x01bd,V(20));a(0xddc,I(DISMISS_T),V(20));p.set(DISMISS_NEXT,0);p.call('DT_PHASE');p.eq(22,0,'DDA_SQUAD');p.go('DDA_GO')
+p.label('DDA_SQUAD');say(p,'HCDSQ')
+p.label('DDA_GO');p.call('DISMISS_TICK');a(1,I(200));a(6,V(2),I(0));p.go('CHECK_MENU_STATUS')
+# DISMISS_TICK (every pass of the panel, menu open or not) while a dismissal is pending: nothing while ropes move or the squad is on its
+# way; squad on the ground - the recall is asked for (again every 6 s: a first try may meet a bad site) and after 45 s the helicopter
+# leaves without it; everybody aboard - the helicopter is sent home. Uses 19@, 21@ - 24@.
 p.label('DISMISS_TICK');p.get(19,DISMISS_T);p.eq(19,0,'DT_ACTIVE');p.ret()
-p.label('DT_ACTIVE');p.get(21,STATE);p.eq(21,0,'DT_HERE');p.set(DISMISS_T,0);p.ret()
-p.label('DT_HERE');p.get(21,ESCORT_ON);p.eq(21,0,'DT_WAIT');p.go('DT_GO')
-p.label('DT_WAIT');a(0x0085,V(21),V(20));a(0x0062,V(21),V(19));p.check(0x0019,[V(21),I(45000)],'DT_RET')
+p.label('DT_ACTIVE');p.get(21,STATE)
+for st in [0,1,4,5,6,13]:   # no helicopter (any more), or it is leaving already
+ nxt='DT_ST_%d'%st;p.eq(21,st,nxt);p.set(DISMISS_T,0);p.ret();p.label(nxt)
+p.get(21,ROPE_BUSY);p.eq(21,1,'DT_FREE');p.ret()
+p.label('DT_FREE');p.call('DT_PHASE');p.eq(22,0,'DT_SQUAD');p.go('DT_GO')
+p.label('DT_SQUAD');p.eq(22,1,'DT_RET')
+a(0x0085,V(21),V(20));a(0x0062,V(21),V(19));p.check(0x0019,[V(21),I(45000)],'DT_ASK');p.go('DT_GO')
+p.label('DT_ASK');p.get(21,DISMISS_NEXT);p.check(0x001d,[V(20),V(21)],'DT_RET');a(0x0085,V(21),V(20));a(0x000a,V(21),I(6000));a(0xddc,I(DISMISS_NEXT),V(21));p.set(CMD,17);p.ret()
 p.label('DT_GO');p.set(DISMISS_T,0);p.set(CMD,4)
 p.label('DT_RET');p.ret()
-# settings: three sub-pages, three one-tap switches, the language
+# settings: three sub-pages and two one-tap switches
 p.label('PICK_SETUP')
-for index,label in [(0,'OPEN_CREW'),(1,'OPEN_MODEL'),(2,'OPEN_WEAPON'),(3,'TOGGLE_TACTICS'),(4,'TOGGLE_EXIT'),(5,'TOGGLE_HUD'),(6,'OPEN_LANG'),(7,'LEAVE_SETUP')]:pick(index,label)
+for index,label in [(0,'OPEN_CREW'),(1,'OPEN_MODEL'),(2,'OPEN_WEAPON'),(3,'TOGGLE_TACTICS'),(4,'TOGGLE_HUD'),(5,'LEAVE_SETUP')]:pick(index,label)
 p.go('MENU_POLL')
 p.label('LEAVE_SETUP');p.call('UNLOAD');p.go('OPEN_MAIN')
-for label,key in [('TOGGLE_TACTICS',TACTICS),('TOGGLE_EXIT',EXIT_MODE)]:
+for label,key in [('TOGGLE_TACTICS',TACTICS)]:
  p.label(label);p.get(9,key);p.eq(9,0,label+'_OFF');p.set(key,1);p.go('FORCE_REFRESH');p.label(label+'_OFF');p.set(key,0);p.go('FORCE_REFRESH')
 p.label('TOGGLE_HUD');p.get(9,HUD);a(0x000a,V(9),I(-1));p.check(0x0019,[V(9),I(-1)],'TOGGLE_HUD_WRAP');a(0xddc,I(HUD),V(9));p.go('FORCE_REFRESH')
 p.label('TOGGLE_HUD_WRAP');p.set(HUD,2);p.go('FORCE_REFRESH')
@@ -985,76 +1077,71 @@ for key,pag,choices,back in [(FIRE,1,[(i,v) for i,v in enumerate(FIRE_VALUES)],'
  for idx,val in choices:
   nxt='OPTION_NEXT_'+str(pag)+'_'+str(idx);p.eq(1,idx,nxt);p.set(key,val);p.go('FORCE_REFRESH');p.label(nxt)
  p.go(back)
-# language: AUTO / ENGLISH / RUSSIAN 1 / RUSSIAN 2 (what is in force is LANG, resolved by the core from this setting)
-p.label('PICK_LANG')
-for idx in range(4):
- nxt='LANG_NEXT_%d'%idx;p.eq(1,idx,nxt);p.set(LANG_SETTING,idx);a(1,I(250));p.go('FORCE_REFRESH');p.label(nxt)
-if BETA_LANG_TEST:p.eq(1,4,'LANG_NOT_TEST');p.go('OPEN_FTEST1');p.label('LANG_NOT_TEST');p.eq(1,5,'LANG_NOT_BACK')
-else:p.eq(1,4,'LANG_NOT_BACK')
-p.go('OPEN_SETUP');p.label('LANG_NOT_BACK');p.go('MENU_POLL')
-p.label('PICK_FTEST1');pick(4,'FT_MSG1');pick(5,'OPEN_FTEST2');pick(6,'OPEN_LANG');p.go('MENU_POLL')
-p.label('PICK_FTEST2');pick(4,'FT_MSG2');pick(5,'OPEN_FTEST1');pick(6,'OPEN_LANG');p.go('MENU_POLL')
-p.label('FT_MSG1');a(0x03e5,S('UFTEST'));p.go('MENU_POLL')
-p.label('FT_MSG2');a(0x03e5,S('VFTEST'));p.go('MENU_POLL')
-for label,cmd in [('DO_EXIT_NOW',15),('DO_CALL',1),('DO_FOLLOW',2),('DO_HOLD',3),('DO_GROVE',7),('DO_ROPE',10),('DO_MAP',11),('DO_PATROL',14),('DO_TEAM_DEPLOY',16),('DO_TEAM_RECALL',17)]:
+for label,cmd in [('DO_CALL',1),('DO_FOLLOW',2),('DO_HOLD',3),('DO_GROVE',7),('DO_ROPE',10),('DO_MAP',11),('DO_PATROL',14),('DO_TEAM_DEPLOY',16),('DO_TEAM_RECALL',17)]:
  p.label(label)
  # No commands while spawning/departing/retreating: the page is redrawn instead.
  for st in [1,4,13]:
   nxt='ALLOW_'+label+'_'+str(st);p.eq(8,st,nxt);p.go('FORCE_REFRESH');p.label(nxt)
+ if cmd!=17:p.set(DISMISS_T,0)   # another order withdraws a dismissal that still waits for the squad
  p.set(CMD,cmd);a(1,I(200))
  p.go('CHECK_MENU_STATUS')
-# one-tap exits: they also become what the on-screen exit button does
-p.label('DO_EXIT_LAND');p.set(EXIT_MODE,0);p.go('DO_EXIT_NOW')
-p.label('DO_EXIT_ROPE');p.set(EXIT_MODE,1);p.go('DO_EXIT_NOW')
-# 6@ = key of the main page now (state*100 + situation*10 + team / exit method), 5@ = situation
+# the two EXIT BUTTON rows are switches: they choose what the game's own exit button does and start nothing themselves
+p.label('DO_EXIT_LAND');p.set(EXIT_MODE,0);say(p,'HCXBL');p.go('FORCE_REFRESH')
+p.label('DO_EXIT_ROPE');p.set(EXIT_MODE,1);say(p,'HCXBR');p.go('FORCE_REFRESH')
+# 6@ = key of the main page now (state*1000 + situation*100 + x), 5@ = situation; x: on foot = squad phase*2 + rope phase, aboard = exit mode (+2 while an exit is under way)
 p.label('MAIN_KEY');p.get(8,STATE);a(6,V(5),I(2));a(6,V(12),I(0))
 for sit,group in [(0,NONE_STATES),(1,BUSY_STATES)]:
  for st in group:nxt='MK_%d_%d'%(sit,st);p.eq(8,st,nxt);a(6,V(5),I(sit));p.go('MK_DONE');p.label(nxt)
-a(0x01f5,I(0),V(11));p.get(12,PUB+1);p.check(0x056e,[V(12)],'MK_GROUND');p.check(0x0448,[V(11),V(12)],'MK_GROUND');a(6,V(5),I(3));p.get(12,EXIT_MODE);p.go('MK_DONE')
-p.label('MK_GROUND');p.get(12,ESCORT_ON);p.eq(12,1,'MK_NO_TEAM');p.go('MK_DONE');p.label('MK_NO_TEAM');a(6,V(12),I(0))
-p.label('MK_DONE');a(0x0085,V(6),V(8));a(0x0012,V(6),I(100));a(0x0085,V(11),V(5));a(0x0012,V(11),I(10));a(0x005a,V(6),V(11));a(0x005a,V(6),V(12));p.ret()
-p.label('SETUP_KEY');p.get(6,TACTICS);a(0x0012,V(6),I(100));p.get(11,EXIT_MODE);a(0x0012,V(11),I(10));a(0x005a,V(6),V(11));p.get(11,HUD);a(0x005a,V(6),V(11));p.ret()
+a(0x01f5,I(0),V(11));p.get(12,PUB+1);p.check(0x056e,[V(12)],'MK_GROUND');p.check(0x0448,[V(11),V(12)],'MK_GROUND');a(6,V(5),I(3));p.get(12,EXIT_MODE);p.get(15,AUTO_EXIT);p.eq(15,0,'MK_EXITING');p.go('MK_DONE')
+p.label('MK_EXITING');a(0x000a,V(12),I(2));p.go('MK_DONE')
+p.label('MK_GROUND');p.call('TEAM_PHASE');a(0x0012,V(12),I(2));p.call('ROPE_PHASE');a(0x005a,V(12),V(15))
+p.label('MK_DONE');a(0x0085,V(6),V(8));a(0x0012,V(6),I(1000));a(0x0085,V(11),V(5));a(0x0012,V(11),I(100));a(0x005a,V(6),V(11));a(0x005a,V(6),V(12));p.ret()
+# 12@ = squad phase: 0 aboard (DEPLOY), 1 on the ground (RECALL), 2 roping down, 3 coming back. Uses 11@, 15@.
+def emit_team_phase(name,out,on,tmp):
+ L=lambda x:name+'_'+x
+ p.label(name);a(6,V(out),I(0));p.get(on,ESCORT_ON)
+ p.eq(on,2,L('ON_N2'));a(6,V(out),I(2));p.ret();p.label(L('ON_N2'));p.eq(on,3,L('ON_N3'));a(6,V(out),I(3));p.ret();p.label(L('ON_N3'))
+ p.get(tmp,ESCORT_CMD);p.eq(tmp,1,L('CMD_N1'));a(6,V(out),I(2));p.ret();p.label(L('CMD_N1'));p.eq(tmp,2,L('CMD_N2'));a(6,V(out),I(3));p.ret();p.label(L('CMD_N2'))
+ p.get(tmp,STATE);p.eq(tmp,19,L('STEADY'));p.get(tmp,ESCORT_PENDING);p.eq(tmp,1,L('PEND_N1'));a(6,V(out),I(2));p.ret();p.label(L('PEND_N1'));p.eq(tmp,2,L('STEADY'));a(6,V(out),I(3));p.ret()
+ p.label(L('STEADY'));p.eq(on,1,L('RET'));a(6,V(out),I(1));p.label(L('RET'));p.ret()
+emit_team_phase('TEAM_PHASE',12,11,15)
+emit_team_phase('DT_PHASE',22,23,24)   # the same for DISMISS_TICK, which runs between the menu's own steps and must not touch its registers
+# 15@ = 1 while a rope pickup of CJ is under way: the helicopter is coming in for it, or the rope hangs waiting for him. Uses 11@.
+p.label('ROPE_PHASE');p.get(15,ROPE_WAIT);p.eq(15,1,'RP_APPROACH');p.ret()
+p.label('RP_APPROACH');a(6,V(15),I(0));p.get(11,STATE);p.eq(11,19,'RP_RET');p.get(11,ESCORT_PENDING);p.eq(11,0,'RP_RET');a(6,V(15),I(1));p.label('RP_RET');p.ret()
+p.label('SETUP_KEY');p.get(6,TACTICS);a(0x0012,V(6),I(10));p.get(11,HUD);a(0x005a,V(6),V(11));p.ret()
 p.label('CHECK_MENU_STATUS');p.eq(2,0,'CMS_FIRE');p.call('MAIN_KEY');p.go('CMS_COMPARE')
 p.label('CMS_FIRE');p.eq(2,1,'CMS_SETUP');p.get(6,FIRE);p.go('CMS_COMPARE')
 p.label('CMS_SETUP');p.eq(2,2,'CMS_CREW');p.call('SETUP_KEY');p.go('CMS_COMPARE')
 p.label('CMS_CREW');p.eq(2,3,'CMS_MODEL');p.get(6,CREW);p.go('CMS_COMPARE')
 p.label('CMS_MODEL');p.eq(2,4,'CMS_WEAPON');p.get(6,MODEL);p.go('CMS_COMPARE')
-p.label('CMS_WEAPON');p.eq(2,5,'CMS_LANG');p.get(6,WEAPON_SETTING);p.go('CMS_COMPARE')
-p.label('CMS_LANG');p.eq(2,7,'MENU_POLL');p.get(6,LANG_SETTING)
-p.label('CMS_COMPARE');p.check(0x803b,[V(6),V(3)],'MENU_POLL');p.go('REFRESH')
+p.label('CMS_WEAPON');p.eq(2,5,'MENU_POLL');p.get(6,WEAPON_SETTING)
+p.label('CMS_COMPARE');p.check(0x803b,[V(6),V(3)],'MENU_POLL');a(0x01bd,V(16));p.go('REFRESH')   # 16@ = when the page last changed under the player's finger
 p.label('REFRESH');a(0x0df3)
-for pageid in range(10):
+for pageid in range(7):
  nxt='DRAW_NEXT_'+str(pageid);p.eq(2,pageid,nxt);p.go('DRAW_'+str(pageid));p.label(nxt)
 p.go('CLOSE')
 _draw=[0]
 def draw(base,count):
  """Point V4 at the blob of the language in force (V9 = LANG) and show it with `count` rows."""
  _draw[0]+=1;k='DRW%d'%_draw[0]
- p.get(9,LANG);p.eq(9,0,k+'_R1');a(0xdd0,V(4),L(base));p.go('SHOW_%d'%count)
- p.label(k+'_R1');p.eq(9,1,k+'_R2');a(0xdd0,V(4),L(base+'_U'));p.go('SHOW_%d'%count)
- p.label(k+'_R2');a(0xdd0,V(4),L(base+'_V'));p.go('SHOW_%d'%count)
+ p.get(9,LANG);p.eq(9,0,k+'_RU');a(0xdd0,V(4),L(base));p.go('SHOW_%d'%count)
+ p.label(k+'_RU');a(0xdd0,V(4),L(base+'_U'));p.go('SHOW_%d'%count)
 p.label('DRAW_0');p.call('MAIN_KEY');a(0x0085,V(3),V(6));a(0x0085,V(7),V(5))
 for st,sit,x in MAIN_VARIANTS:
- nxt='DRAW_MAIN_NEXT_%d_%d_%d'%(st,sit,x);p.eq(6,st*100+sit*10+x,nxt);draw('MAIN_%d_%d_%d'%(st,sit,x),len(main_rows(st,sit,x)));p.label(nxt)
+ nxt='DRAW_MAIN_NEXT_%d_%d_%d'%(st,sit,x);p.eq(6,main_key(st,sit,x),nxt);draw('MAIN_%d_%d_%d'%(st,sit,x),len(main_rows(st,sit,x)));p.label(nxt)
 a(6,V(7),I(0));draw('MAIN_0_0_0',2)
 p.label('DRAW_2');p.call('SETUP_KEY');a(0x0085,V(3),V(6))
 for tac in (0,1):
- for ex in (0,1):
-  for hud in (0,1,2):
-   nxt='DRAW_SETUP_NEXT_%d%d%d'%(tac,ex,hud);p.eq(6,tac*100+ex*10+hud,nxt);draw('SETUP_%d%d%d'%(tac,ex,hud),8);p.label(nxt)
-draw('SETUP_002',8)
+ for hud in (0,1,2):
+  nxt='DRAW_SETUP_NEXT_%d%d'%(tac,hud);p.eq(6,tac*10+hud,nxt);draw('SETUP_%d%d'%(tac,hud),6);p.label(nxt)
+draw('SETUP_02',6)
 for pageid,key,values,_,_ in PREF_PAGES:
  p.label('DRAW_'+str(pageid));p.get(8,key);a(0x0085,V(3),V(8))
  for val in values:
   nxt='DRAW_PREF_NEXT_'+str(pageid)+'_'+str(val);p.eq(8,val,nxt);draw('PREF_'+str(pageid)+'_'+str(val),len(values)+1);p.label(nxt)
  draw('PREF_'+str(pageid)+'_'+str(values[0]),len(values)+1)
-p.label('DRAW_6');a(6,V(3),I(-1));p.get(9,ESCORT_ON);p.eq(9,1,'DRAW_6_PLAIN');draw('DISMISS_MENU_T',2);p.label('DRAW_6_PLAIN');draw('DISMISS_MENU',2)
-p.label('DRAW_7');p.get(8,LANG_SETTING);a(0x0085,V(3),V(8))
-for sv in range(4):
- nxt='DRAW_LANG_NEXT_%d'%sv;p.eq(8,sv,nxt);a(0xdd0,V(4),L('LANG_%d'%sv));p.go('SHOW_%d'%len(LANG_ROWS));p.label(nxt)
-a(0xdd0,V(4),L('LANG_0'));p.go('SHOW_%d'%len(LANG_ROWS))
-p.label('DRAW_8');a(6,V(3),I(-1));a(0xdd0,V(4),L('FTEST_1'));p.go('SHOW_7')
-p.label('DRAW_9');a(6,V(3),I(-1));a(0xdd0,V(4),L('FTEST_2'));p.go('SHOW_7')
+p.label('DRAW_6');a(6,V(3),I(-1));p.call('DT_PHASE');p.eq(22,0,'DRAW_6_TEAM');draw('DISMISS_MENU',2);p.label('DRAW_6_TEAM');draw('DISMISS_MENU_T',2)   # squad down or on the ropes: "recall squad first"
 for count in range(1,9):p.label('SHOW_'+str(count));a(0xdf2,V(4),I(count));p.go('MENU_POLL')
 p.label('CORE_MISSING');a(0xdd0,V(4),L('OFFLINE_MENU'));a(0xdf2,V(4),I(1))
 p.label('OFFLINE_POLL');a(1,I(50));a(0x01bd,V(20));a(0xddc,I(PANELHEART),V(20));p.check(0x0256,[I(0)],'CLOSE');a(0xdf4,V(1),I(250));p.eq(1,-1,'CLOSE');p.go('OFFLINE_POLL')
@@ -1070,21 +1157,16 @@ for prof,suf in zip(PROFILES,SUFFIX):
  p.blob('DISMISS_MENU'+suf,i18n.menu_text('DISMISS_TITLE',prof),[Tx('DISMISS_YES',prof),Tx('DISMISS_NO',prof)])
  p.blob('DISMISS_MENU_T'+suf,i18n.menu_text('DISMISS_TITLE',prof),[Tx('DISMISS_YES_TEAM',prof),Tx('DISMISS_NO',prof)])
  for tac in (0,1):
-  for ex in (0,1):
-   for hud in (0,1,2):p.blob('SETUP_%d%d%d'%(tac,ex,hud)+suf,i18n.menu_text('SET_TITLE',prof),setup_rows(tac,ex,hud,prof))
+  for hud in (0,1,2):p.blob('SETUP_%d%d'%(tac,hud)+suf,i18n.menu_text('SET_TITLE',prof),setup_rows(tac,hud,prof))
  for pg,_,values,title,fmt in PREF_PAGES:
   for val in values:
    p.blob('PREF_'+str(pg)+'_'+str(val)+suf,i18n.menu_text(title,prof),[Tx(fmt%v,prof,v==val) for v in values]+[Tx('BACK',prof)])
-for sv in range(4):p.blob('LANG_%d'%sv,'LANGUAGE',[(r+(' [X]' if i==sv else '')) for i,r in enumerate(LANG_ROWS)])
-for n,prof,name in ((1,'game','GAME RUSSIAN'),(2,'sanltd','SANLTD')):
- p.blob('FTEST_%d'%n,'FONT TEST %d / 2'%n,i18n.font_test_rows(prof)+['SHOW MESSAGE (%s)'%name,'NEXT >' if n==1 else '< PREVIOUS','< BACK'])
 
 launch=Script();a=launch.add
 launch.label('ENTRY');a(0);a(1,I(400));launch.get(1,PANELHEART);a(1,I(250));launch.get(2,PANELHEART);launch.check(0x803b,[V(1),V(2)],'MISSING');launch.set(OPEN,1);a(0x004e)
 launch.label('MISSING')
 for _ofs,_val in GAME_SIG:a(0x0dd8,V(1),I(_ofs),I(4),I(1));launch.check(0x0039,[V(1),I(_val)],'MISSING_EN')   # only on the known build is the game's language flag read
-a(0x0dd8,V(1),I(GAME_RU_FLAG),I(1),I(1));launch.eq(1,1,'MISSING_EFIGS');a(0x03e5,S('UCOFF'));a(0x004e)
-launch.label('MISSING_EFIGS');a(0x0dd8,V(1),I(GAME_EFIGS_FLAG),I(1),I(1));launch.eq(1,1,'MISSING_EN');a(0x0dd8,V(1),I(GAME_LANG_BYTE),I(1),I(1));launch.eq(1,SANLTD_SLOT,'MISSING_EN');a(0x03e5,S('VCOFF'));a(0x004e)
+a(0x0dd8,V(1),I(GAME_RU_FLAG),I(1),I(1));launch.eq(1,1,'MISSING_EN');a(0x03e5,S('UCOFF'));a(0x004e)
 launch.label('MISSING_EN');a(0x03e5,S('HCOFF'));a(0x004e)
 
 # Dedicated fire worker: no global faction hatred and no automatic armed turrets.
@@ -1184,6 +1266,11 @@ for var in [0,2,3,4,5,6]:
  f.check(0x803b,[V(29),V(var)],'FRIEND_FOUND')
 for i in range(5):
  f.get(31,GROUND_PUB+i);f.check(0x803b,[V(29),V(31)],'FRIEND_FOUND')
+# beta 4: guards who were let go and are walking away are still ours (checked only while there are any)
+f.get(31,LEAVE_N);f.eq(31,1,'NF_NO_LEAVERS')
+for k in range(8):
+ f.get(31,LEAVE+k);f.check(0x803b,[V(29),V(31)],'FRIEND_FOUND')
+f.label('NF_NO_LEAVERS')
 a(6,V(30),I(1));f.ret()
 f.label('FRIEND_FOUND');f.ret()
 f.label('STOP_COMBAT');f.get(30,FIRE_ACTIVE);f.eq(30,1,'STOP_COMBAT_END');f.set(FIRE_ACTIVE,0);f.set(FIRE_TASK_TARGET,-1);f.set(FIRE_TASK_MODE,-1)
