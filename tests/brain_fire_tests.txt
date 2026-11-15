@@ -1,0 +1,16 @@
+PASS: An armed gang member turns to CJ 25 m away: weapons on him at once, the line of sight is asked for, and the first rounds go out 200-300 ms later - a human reaction, not the same instant for everybody
+PASS: HOLD FIRE: nobody fires, even at a man shooting CJ
+PASS: DEFEND: an armed gang member who is not looking at CJ is covered - weapons on him, no fire. ARMED ONLY (and the old "fire at all"): he is engaged. An armed civilian never is
+PASS: WHERE I SHOOT: only the man CJ locks on, hits, or whose head his rounds pass - and for 3 s after; an attacker CJ ignores is left alone
+PASS: Police with a wanted level: an armed policeman is covered, fired at only once he has attacked ("answer"); with "evade" never
+PASS: No order to fire when CJ is within 2 m of the line (wider with range), or stands up to 40 m behind the target; CJ behind the muzzle does not block
+PASS: Our own people and allies in or behind the line stop the shot; so does a passer-by in front of the target, and one behind it unless the target is already hurting CJ
+PASS: Vehicles: fire at a man in a car is aimed at him; a car below 700 health or burning within 18 m of CJ or ours is not fired at at all; far away it may be; a car bearing down on CJ gets its tyres shot
+PASS: A pistol does not reach 60 m; a door gunner does not fire across his own cabin (the gunner on that side does); the pilot gets no fire orders
+PASS: Nobody fires through a wall: the line of sight is asked for (about three times a second), fire starts when it clears and stops within 0.5 s when it closes
+PASS: Targets are shared out: four attackers get one shooter each; a rifle close by gets two or three and the far pistol still gets one; never more than three on one man
+PASS: Nobody changes his man from tick to tick while the picture stays the same
+PASS: First round at a new man: 300-400 ms from a standing start (40 different guards), about 72 ms quicker when already fighting
+PASS: Fire comes in bursts of 0.7-1.4 s with 0.3-0.5 s between them (on the trigger 72% of the time), never one endless stream
+PASS: 60 random fights (25 s each, guards and CJ running about, cars, police, every fire rule): 28325 orders to fire, checked one by one by an independent calculation - none with CJ or one of ours in the line, at a friend, against the fire rule, or at a car that could blow up beside CJ
+The core only. Nothing here has run in the game.

@@ -1,0 +1,13 @@
+PASS: On the real libGTASA.so the mod finds all 66 instruction words, changes exactly three GOT slots (page made writable, then read-only again; never executable) and nothing else in the game; two items in Mods Settings
+PASS: The game's own CTheScripts::Process and CHud::Draw are still called, once per call of the mod's functions
+PASS: Another game build (one instruction differs, e.g. the health field at another offset) or the per-frame slot already taken by another mod: nothing is changed, the log says exactly what differed
+PASS: The HUD or gunshot slot taken by another mod: those two are left alone and the brain still watches and records (no markers, no shots) - it says so in the log
+PASS: An unknown CLEO build: the brain still watches (it just cannot tell who is ours) and keeps looking for CLEO from a waiting thread
+PASS: The world is read correctly out of the game's memory: CJ, 11 people (type, weapon, position, facing, vehicle and seat), vehicles (speed, driver, burning, helicopter), our people and roles from the scripts' shared values (a stale handle ignored), recruited homies from the player's group - and judged: armed Balla = THREAT, burning car and car on a collision course = hazards, Grove / recruit / ours = friends
+PASS: The report written on the emulated arm64 CPU replays on this computer to the same decisions, digest for digest: the core is bit-exact across the two architectures
+PASS: Lines of sight are asked from the game chest to chest (buildings, vehicles and objects block; people do not): armed people to CJ, and the pairs the core asked about
+PASS: Events: every gunshot is seen through the hook (and still reaches the game), damage to CJ and to ours is found from their health with the right inflictor (a car = its driver), a civilian's gun on CJ comes from his task - Balla = ATTACKER, civilian = THREAT, the policeman firing elsewhere is only watched
+PASS: Markers: a strip at the top centre in the colour of the alert level, and a square with a dark edge 1.25 m over every judged person (red attacker, orange threat, yellow watched, green ours, blue ally); nothing behind the camera or off screen; "Brain markers: Off" and the pause menu draw nothing
+PASS: When CJ dies a report is saved by itself
+PASS: No pools yet, no player yet, a full pool of 139 people (64 nearest are taken), entities without a matrix or without an intelligence object, the clock jumping back after a load: no fault, and the report still replays exactly
+The phone build on an emulated CPU with the real libGTASA.so; the world in memory is laid out by the test. Not run in the game.
