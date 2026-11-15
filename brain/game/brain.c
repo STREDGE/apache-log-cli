@@ -84,6 +84,9 @@ extern void *memset(void *d, int c, u64 n);
 static const char CLEO_VERSION_TEXT[] = "CLEO ANDROID (64-260403)";
 
 #define RD(type, addr) (*(type *)(addr))
+/* A ped and a vehicle can have the same pool handle: in everything handed to the core a vehicle's id carries bit 31. */
+#define VID(h) ((h) ? ((h) | 0x80000000u) : 0)
+#define VHANDLE(id) ((id) & 0x7fffffffu)
 static u64 G, g_cleo;           /* libGTASA base; libSAcleo64 base when it is the known build, else 0 */
 static u64 slen(const char *s) { u64 n = 0; while (s[n]) n++; return n; }
 
@@ -245,7 +248,7 @@ static void fill_ped(hcb_ped *o, const u8 *ped, u32 handle, const struct pool *p
     } else o->target = handle_of(pp, RD(const u8 *, ped + 0x8e0), PED_STRIDE);     /* CJ: his lock-on target */
     if (RD(u8, ped + 0x585) & 1) {
         const u8 *veh = RD(const u8 *, ped + 0x708);
-        o->vehicle = handle_of(vp, veh, VEH_STRIDE);
+        o->vehicle = VID(handle_of(vp, veh, VEH_STRIDE));
         if (o->vehicle) { if (RD(const u8 *, veh + 0x5a0) == ped) o->flags2 |= HCB_PF2_DRIVER; else o->seat = 1; }
     }
     if (RD(const u8 *, ped + 0x900)) o->flags2 |= HCB_PF2_ON_FIRE;
@@ -254,7 +257,7 @@ static void fill_veh(hcb_veh *o, const u8 *veh, u32 handle, const struct pool *p
     const u8 *m = RD(const u8 *, veh + 0x18);
     u32 type = RD(u32, veh + 0x738);
     memset(o, 0, sizeof *o);
-    o->id = handle;
+    o->id = VID(handle);
     o->driver = handle_of(pp, RD(const u8 *, veh + 0x5a0), PED_STRIDE);
     set_vec(&o->pos, pos_of(veh), 1.0f);
     set_vec(&o->vel, (const float *)(veh + 0x68), 50.0f);
@@ -336,7 +339,7 @@ static int build_snapshot(hcb_snapshot *s, const hcb_out *prev) {
     struct pool pp, vp;
     const u8 *cj = player_ped(), *wanted, *e;
     const float *cjp;
-    u32 cj_h, i, n, k, v, flag, los_left = 10;
+    u32 cj_h, i, n, k, v, flag, los_left = 6;                    /* rays per look are rationed: 6 here + 12 answers below */
     float best[HCB_MAX_PEDS], d;
     u32 idx[HCB_MAX_PEDS];
 
@@ -356,7 +359,7 @@ static int build_snapshot(hcb_snapshot *s, const hcb_out *prev) {
     if (shared_get(HC_FIRE, &v) && v <= 4) s->roe = (u8)v;
 
     /* ours: what the scripts have published (a handle that no longer names a live ped is dropped) */
-    if (shared_get(HC_PUB + 1, &v) && obj_of(&vp, v, VEH_STRIDE)) s->heli = v;
+    if (shared_get(HC_PUB + 1, &v) && obj_of(&vp, v, VEH_STRIDE)) s->heli = VID(v);
     for (k = 0; k < 10 && s->n_ours < HCB_MAX_OURS; k++) {
         u32 key = k < 5 ? HC_PUB + 2 + k : HC_GROUND + (k - 5);
         if (!shared_get(key, &v) || !obj_of(&pp, v, PED_STRIDE) || v == cj_h) continue;
@@ -423,11 +426,11 @@ static int build_snapshot(hcb_snapshot *s, const hcb_out *prev) {
         e = obj_of(&pp, s->ours[k], PED_STRIDE);
         if (e) watch_damage(s, s->ours[k], RD(float, e + 0x6ac) + RD(float, e + 0x6b4), RD(u32, e + 0x948), RD(const u8 *, e + 0x940), (signed char)RD(u8, e + 0x93c), &pp, &vp);
     }
-    e = obj_of(&vp, s->heli, VEH_STRIDE);
+    e = obj_of(&vp, VHANDLE(s->heli), VEH_STRIDE);
     if (e) watch_damage(s, s->heli, RD(float, e + 0x634), (u32)(u64)RD(const u8 *, e + 0x698), RD(const u8 *, e + 0x698), (signed char)RD(u8, e + 0x694), &pp, &vp);
 
     /* the lines of sight the core asked for on the previous look */
-    for (i = 0; i < prev->n_queries && s->n_los < HCB_MAX_LOS; i++) {
+    for (i = 0; i < prev->n_queries && s->n_los < 12; i++) {           /* (the core asks again for what was not answered) */
         const u8 *a = obj_of(&pp, prev->queries[i].from, PED_STRIDE), *b = obj_of(&pp, prev->queries[i].to, PED_STRIDE);
         hcb_los *l = &s->los[s->n_los++];
         l->from = prev->queries[i].from; l->to = prev->queries[i].to;
@@ -514,7 +517,7 @@ static void draw(void) {
     if (!get_pool(PED_POOL, &pp) || !get_pool(VEH_POOL, &vp)) return;
     for (i = 0; i < g_shown.n_marks; i++) {
         const hcb_mark *m = &g_shown.marks[i];
-        const u8 *e = m->kind == HCB_KIND_PED ? obj_of(&pp, m->id, PED_STRIDE) : obj_of(&vp, m->id, VEH_STRIDE), *c;
+        const u8 *e = m->kind == HCB_KIND_PED ? obj_of(&pp, m->id, PED_STRIDE) : obj_of(&vp, VHANDLE(m->id), VEH_STRIDE), *c;
         const float *p;
         if (!e || !m->seen || m->cls > HCB_CLS_ATTACKER || m->cls == HCB_CLS_NEUTRAL) continue;
         p = pos_of(e);
@@ -552,6 +555,7 @@ static void add_menu_items(void) {
 
 /* ---------- install ---------- */
 static u64 g_page, g_cleo_base, g_cleo_size;
+static int g_slots;
 static int ends_with(const char *s, const char *tail) {
     u64 n, m = slen(tail), i;
     if (!s) return 0;
@@ -592,9 +596,9 @@ static int try_install(void) {
             lg(", expected "); tx(&g_log, GTA_WORDS[i].word); lg("\nnothing changed. Helicover Brain does not run on this game.\n");
             return -1;
         }
-    if (RD(u64, G + GOT_SCRIPTS) != G + GOT_SCRIPTS_TARGET || RD(u64, G + GOT_HUD) != G + GOT_HUD_TARGET || RD(u64, G + GOT_GUNSHOT) != G + GOT_GUNSHOT_TARGET) {
-        lg("a GOT slot of libGTASA.so is not what it should be (another mod has taken it?): scripts "); tx(&g_log, RD(u64, G + GOT_SCRIPTS) - G);
-        lg(" hud "); tx(&g_log, RD(u64, G + GOT_HUD) - G); lg(" gunshot "); tx(&g_log, RD(u64, G + GOT_GUNSHOT) - G); lg("\nnothing changed.\n");
+    if (RD(u64, G + GOT_SCRIPTS) != G + GOT_SCRIPTS_TARGET) {
+        lg("the GOT slot of CTheScripts::Process is not what it should be (another mod has taken it?): "); tx(&g_log, RD(u64, G + GOT_SCRIPTS) - G);
+        lg("\nnothing changed. Helicover Brain cannot run beside that mod.\n");
         return -1;
     }
     /* CLEO: only its shared values are read, and only when it is the known build */
@@ -608,14 +612,15 @@ static int try_install(void) {
     if (hcb_brain_size() > BRAIN_BYTES) { lg("internal: brain larger than its buffer\n"); return -1; }
     hcb_init(BRAIN, 1);
     hcb_rec_init(&g_rec, BOX_BYTES);
-    if (!got_swap(GOT_GUNSHOT, GOT_GUNSHOT_TARGET, (u64)&brain_gunshot, &a)) { lg("could not change the gunshot slot - nothing changed\n"); return -1; }
-    g_gunshot_orig = (gunshot_fn)a;
-    if (!got_swap(GOT_HUD, GOT_HUD_TARGET, (u64)&brain_hud, &b)) { lg("could not change the HUD slot\n"); return -1; }
-    g_hud_orig = (void_fn)b;
-    if (!got_swap(GOT_SCRIPTS, GOT_SCRIPTS_TARGET, (u64)&brain_scripts, &c)) { lg("could not change the scripts slot\n"); return -1; }
-    g_scripts_orig = (void_fn)c;
+    /* the per-frame slot is what the brain cannot do without; without the other two it still watches and records */
+    if (!got_swap(GOT_SCRIPTS, GOT_SCRIPTS_TARGET, (u64)&brain_scripts, &c)) { lg("could not change the scripts slot - nothing changed\n"); return -1; }
+    g_scripts_orig = (void_fn)c; g_slots = 1;
+    if (got_swap(GOT_GUNSHOT, GOT_GUNSHOT_TARGET, (u64)&brain_gunshot, &a)) { g_gunshot_orig = (gunshot_fn)a; g_slots++; }
+    else { lg("the gunshot slot is taken or could not be changed: shots will not be seen (damage still is)\n"); }
+    if (got_swap(GOT_HUD, GOT_HUD_TARGET, (u64)&brain_hud, &b)) { g_hud_orig = (void_fn)b; g_slots++; }
+    else { lg("the HUD slot is taken or could not be changed: no markers on screen (the report still works)\n"); }
     __atomic_store_n(&g_ready, 1, __ATOMIC_RELEASE);
-    lg("libGTASA.so base "); tx(&g_log, G); lg("\n66 instruction words match; three GOT slots point at the brain (no code changed)\nthe brain is watching\n");
+    lg("libGTASA.so base "); tx(&g_log, G); lg("\n66 instruction words match; GOT slots pointing at the brain: "); tu(&g_log, (u64)g_slots); lg(" of 3 (no code changed)\nthe brain is watching\n");
     return 1;
 }
 static void *waiter(void *arg) {

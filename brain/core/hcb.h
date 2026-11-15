@@ -149,7 +149,7 @@ typedef struct hcb_ped {
 } hcb_ped;
 
 typedef struct hcb_veh {
-    uint32_t id;
+    uint32_t id;        /* must never equal the id of a ped (the game adapter sets bit 31 on vehicle ids) */
     uint32_t driver;    /* ped id; 0 = empty */
     hcb_vec pos;
     hcb_vec vel;
