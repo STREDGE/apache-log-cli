@@ -9,6 +9,7 @@ PASS: Vehicles: fire at a man in a car is aimed at him; a car below 700 health o
 PASS: A pistol does not reach 60 m; a door gunner does not fire across his own cabin (the gunner on that side does); the pilot gets no fire orders
 PASS: Nobody fires through a wall: the line of sight is asked for on every tick, fire starts when it clears and stops within 0.2 s when it closes
 PASS: Two gunners in one door: the rear one fires past the man kneeling beside him (his rounds start 5.5 m out, clear of the helicopter) - in the real fight this cost 9% of the fire; one of ours further down the line still stops the shot
+PASS: 1.4 door gunners fire their own weapon: in bursts the brain paces, also with CJ sitting in the cabin (behind the cabin wall); a man 10 m in front of CJ on the line is not fired at (a round of the game flies on), and the rear gunner holds when his mate in the door is in his line
 PASS: A gunner's round ends 0.6 m past the point it is aimed at, so CJ 10 m behind the target does not stop a gunner (it stops a guard firing the game's own weapon); CJ 2 m behind the target stops everybody
 PASS: Every round is asked for at the moment it leaves, with the positions of that frame: CJ stepping within 2 m of the line, one of ours in it, a passer-by, a damaged car beside CJ, an order that is stale or was for another man - the round does not go
 PASS: A door gunner's rounds (the script asks every frame): never closer together than 130 ms, usually within 180 ms, with the pauses of his bursts; each on its own line - from 5.5 m outside the helicopter (0.8 m when dismounted), scattered round the man by up to 0.1 m + 1 % of the range (more from a fast helicopter), ending 0.6 m past the point aimed at
@@ -24,5 +25,8 @@ PASS: Nobody changes his man from tick to tick while the picture stays the same
 PASS: First round at a new man: 300-400 ms from a standing start (40 different guards), about 70 ms quicker when already fighting
 PASS: A door gunner fires in bursts of 0.7-1.4 s with 0.3-0.5 s between them (on the trigger 71% of the time), never one endless stream; a guard on foot gets a plain fire / cease fire - his bursts are the game's own weapon handling
 PASS: CJ crosses the line of fire: the guard holds with his weapon still on the man, and fires on the very next look when the line is clear - no second reaction time
-PASS: 60 random fights (25 s each, guards and CJ running about, cars, police, every fire rule): 35083 orders to fire, checked one by one by an independent calculation - none with CJ or one of ours in the line, at a friend, against the fire rule, or at a car that could blow up beside CJ
+PASS: A man who ducks out of sight while CJ is in the line is not fired at when the line clears: his sight is asked all the time the rule holds, an old "clear" is never used
+PASS: A pair that was not asked about for a while (hold fire, out of range) needs a fresh answer before anybody fires: a "clear" from before the break is never used
+PASS: His man falls: he takes the other attacker at once (the sight of everybody in range is asked again on every look)
+PASS: 60 random fights (25 s each, guards and CJ running about, cars, police, every fire rule): 35109 orders to fire, checked one by one by an independent calculation - none with CJ or one of ours in the line, at a friend, against the fire rule, or at a car that could blow up beside CJ
 The core only. Nothing here has run in the game.

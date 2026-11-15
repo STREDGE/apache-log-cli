@@ -36,6 +36,9 @@ class BrainSim:
         self.rounds = []            # every hcb_round the scripts were given (fired or refused): for the tests
         self.said = []              # (time, guard, state): what each guard on foot was told, frame by frame
         self.looks = 0
+        self.probe_q = []           # the cover questions of the last look (answered in the next snapshot)
+        self.say = (0, 0, 0)        # the commander's last words: (seq, HCB_SAY_*, direction)
+        self.words = []             # (time, HCB_SAY_*, direction): everything the commander said
 
     # ------------------------------------------------------------ the world as a snapshot
     @staticmethod
@@ -144,6 +147,14 @@ class BrainSim:
         s.roe = roe if 0 <= roe <= 4 else h.HCB_ROE_DEFEND
         s.police = h.HCB_POLICE_EVADE if w.shared[b.POLICE] == 1 else h.HCB_POLICE_ANSWER
         s.mission_free = int(w.shared[b.MISSIONS] == 1)
+        s.tactics = int(w.shared[b.TACTICS] == 1)
+        # the cover questions: is a man crouching at `at` hidden from the threat's chest, is there ground under it
+        s.n_probes = len(self.probe_q)
+        for o, (at, frm) in zip(s.probes, self.probe_q):
+            o.at = h.vec(*at)
+            setattr(o, 'from', h.vec(*frm))
+            o.hidden = int(not self.sight(w, list(frm), [at[0], at[1], at[2] - .3]))
+            o.ground = int(not any(math.dist(at[:2], hp[:2]) < hr for hp, hr in getattr(w, 'holes', [])))
         ours = self.ours(w)
         s.n_ours = len(ours)
         for i, (who, role) in enumerate(ours):
@@ -196,8 +207,68 @@ class BrainSim:
         self.out = self.brain.think(self.snap)
         self.looks += 1
         self.asked = [(getattr(q, 'from'), q.to) for q in self.out.queries[:self.out.n_queries]]
+        self.probe_q = [((q.at.x, q.at.y, q.at.z), (getattr(q, 'from').x, getattr(q, 'from').y, getattr(q, 'from').z)) for q in self.out.probe_q[:self.out.n_probe_q]]
+        if self.out.say:
+            self.say = (self.out.say_seq, self.out.say, self.out.say_dir)
+            self.words.append((w.now, self.out.say, self.out.say_dir))
 
     # ------------------------------------------------------------ opcode 0E48
+    def post(self, w, v, f):
+        who = v[f]
+        v[f + 1] = -1
+        for p in (self.out.posts[:self.out.n_posts] if self.out is not None else []):
+            if p.who == who:
+                v[f + 1], v[f + 2], v[f + 3], v[f + 4], v[f + 5] = p.move, p.at.x, p.at.y, p.at.z, p.crouch
+                v[f + 6], v[f + 7], v[f + 8], v[f + 9] = p.look.x, p.look.y, p.look.z, p.duty
+                return
+
+    def detail(self, w, v, f):
+        o = self.out
+        v[f], v[f + 1], v[f + 2] = self.say
+        if o is None:
+            v[f + 3] = v[f + 4] = v[f + 8] = 0; v[f + 5] = v[f + 6] = v[f + 7] = 0.
+            return
+        v[f + 3], v[f + 4], v[f + 5], v[f + 6], v[f + 7], v[f + 8] = o.duty, o.cover_ok, o.cover_at.x, o.cover_at.y, o.cover_at.z, o.lead
+
+    def pilot(self, w, v, f):
+        """1.4: the brain's pilot (the real core, hcb_pilot.c). In: 0 helicopter, 1/2 the point, 3 the roofs, 4 flags (1 stop,
+        2 the last step was refused). Out: 1-3 where to be now, 4 metres left, 5 speed (-1 = no pilot). The turn is applied
+        the way the adapter does it after the scripts: the world's heading (and its pitch and bank) follow the matrix."""
+        import ctypes
+        heli = v[f]
+        v[f + 5] = -1
+        if heli not in w.cars or heli != w.shared[b.PUB + 1]:
+            return
+        car = w.cars[heli]
+        st = getattr(self, 'pilots', None)
+        if st is None:
+            st = self.pilots = {}
+        p, last = st.get(heli, (None, None))
+        hd = math.radians(car.get('heading', 0.))
+        if p is None or last is None or not 0 <= w.now - last <= 500:
+            p = h.hcb_pilot()
+            speed = float(w.shared.get(b.CR_V, 0.) or 0.)
+            h.LIB.hcb_pilot_reset(ctypes.byref(p), h.vec(*car['pos']), h.vec(-math.sin(hd) * speed, math.cos(hd) * speed, 0.), h.vec(-math.sin(hd), math.cos(hd), 0.))
+            last = w.now - 16
+        # the real position on the ground plane; the height is the pilot's own (SET_CAR_COORDINATES puts a helicopter a bit
+        # higher than asked - read back, it would climb a little every frame), unless something moved it a long way
+        z = p.pos.z if abs(car['pos'][2] - p.pos.z) < 8. else car['pos'][2]
+        p.pos = h.vec(car['pos'][0], car['pos'][1], z)
+        i = h.hcb_pilot_in()
+        i.target = h.vec(float(v[f + 1]), float(v[f + 2]), 0.)
+        i.ground, i.dt, i.stop, i.blocked = float(v[f + 3]), max(.001, (w.now - last) / 1000.), int(v[f + 4]) & 1, (int(v[f + 4]) >> 1) & 1
+        o = h.hcb_pilot_out()
+        h.LIB.hcb_pilot_step(ctypes.byref(p), ctypes.byref(i), ctypes.byref(o))
+        st[heli] = (p, w.now)
+        v[f + 1], v[f + 2], v[f + 3], v[f + 4], v[f + 5] = o.pos.x, o.pos.y, o.pos.z, o.dist, o.speed
+        car['heading'] = math.degrees(math.atan2(-o.fwd.x, o.fwd.y)) % 360.
+        car['pitch'], car['bank'] = math.degrees(math.asin(max(-1., min(1., o.fwd.z)))), math.degrees(math.asin(max(-1., min(1., -o.right.z))))
+        self.flown = getattr(self, 'flown', 0) + 1
+
+    def posts(self):
+        """who -> hcb_post of the last look (for the tests)"""
+        return {p.who: p for p in (self.out.posts[:self.out.n_posts] if self.out is not None else [])}
+
     def friends(self, w, who):
         return [w.coords(o) for o, _ in self.ours(w) if o != who and o not in w.dead]
 
@@ -210,6 +281,12 @@ class BrainSim:
             self.guard(w, v, first)
         elif cmd == 3 and count >= 5:
             self.status(w, v, first, count)
+        elif cmd == 4 and count >= 10:
+            self.post(w, v, first)
+        elif cmd == 5 and count >= 9:
+            self.detail(w, v, first)
+        elif cmd == 6 and count >= 6:
+            self.pilot(w, v, first)
         else:
             raise AssertionError(('0E48: unknown command or too few variables', cmd, count))
 

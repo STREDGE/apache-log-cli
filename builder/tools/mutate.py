@@ -1,5 +1,5 @@
 """Mutation check: break one rule at a time in a scratch copy of builder/ and make sure the tests notice.
-   python3 tools/mutate.py            all mutants      python3 tools/mutate.py --new     only the 1.2 ones      --b4  only the beta 4 ones      --b5  only the beta 5 ones      --b6  only the beta 6 ones      --b7  only the 1.3 (brain) ones      (names as arguments pick single mutants)
+   python3 tools/mutate.py            all mutants      python3 tools/mutate.py --new     only the 1.2 ones      --b4  only the beta 4 ones      --b5  only the beta 5 ones      --b6  only the beta 6 ones      --b7  only the 1.3 (brain) ones      --b8  only the 1.4 ones      (names as arguments pick single mutants)
    A line 'MISSED ... <<<<<<' means a rule has no test that guards it."""
 import shutil,subprocess,sys,os,tempfile
 from pathlib import Path
@@ -236,8 +236,25 @@ M17=[
  ('brain_mock.py',"for k in range(18):","for k in range(10):",'17 let-go guards are ours for the brain'),
  (B,"f.label('NO_HELI');f.set(FIRE_ACTIVE,0);f.set(FIRE_TARGET,-1);f.set(ENGAGED,0);f.set(CLEAR_AT,0);f.go('WAIT')","f.label('NO_HELI');f.go('WAIT')",'17 no helicopter: the fight is over for the gunners'),
 ]
+M18=[   # 1.4: gunners fire their own weapons, seated on the skid; the protective detail (the brain's posts and the commander's words)
+ (B,"f.check(0x0019,[V(9),I(0)],resting);a(6,V(27),I(1));f.eq(9,2,hold)","f.check(0x0019,[V(9),I(0)],resting);a(6,V(27),I(1))",'18 gunners: the drive-by only on the brain\'s "fire"'),
+ (B,"f.label(hold);f.get(30,G_FIRE+g);f.check(0x8039,[V(30),I(-1)],check_aim);f.set(G_FIRE+g,-1);f.go(issue)","f.label(hold);f.go(check_aim)",'18 gunners: "no fire" stops the drive-by in the same frame'),
+ (B,"I(1 if var in [3,5] else 0),I(100))","I(0),I(100))",'18 gunners fire out of their own side'),
+ (B,"(POSE,2),(POSE_DONE,2)","(POSE,1),(POSE_DONE,1)",'18 gunners sit on the skid by default'),
+ (B,"c.eq(17,2,'ATTACH_PLACE_'+str(var));a(0x000b,V(11),F(-SEAT_DROP))","c.eq(17,2,'ATTACH_PLACE_'+str(var));a(0x000b,V(11),F(0))",'18 seated gunners sit lower'),
+ (Q,"s.get(31,b.BRAIN_HELLO);s.check(0x0039,[V(31),I(b.BRAIN_MAGIC)],R)   # never the opcode","s.get(31,b.BRAIN_HELLO)   # never the opcode",'18 squad posts: no opcode before the handshake'),
+ (Q,"s.label(P+'CR_SET');a(0x04eb,V(G),V(26));setk(k,'COVER',26)","s.label(P+'CR_SET');setk(k,'COVER',26)",'18 squad: crouched where the post says'),
+ (Q,"s.check(0x0039,[V(20),I(2)],walk);alive(21,walk)","alive(21,walk)",'18 squad: fire on the move only with the brain\'s leave'),
+ (Q,"s.get(31,b.SQ_PACE+k);s.check(0x003b,[V(31),V(22)],issue)\n","\n",'18 squad: a new pace renews the order'),
+ (Q,"s.label('SAY_NEW');a(0xddc,I(b.SQ_SAY_SEQ),V(23));s.eq(19,-1,'SAY_WHAT');s.go('SAY_DONE')","s.label('SAY_NEW');a(0xddc,I(b.SQ_SAY_SEQ),V(23))",'18 squad: words said before the start are not said'),
+ (Q,"s.get(19,b.SQ_SAY_SEQ);s.check(0x003b,[V(19),V(23)],'SAY_NEW');s.go('SAY_DONE')","s.go('SAY_NEW')",'18 squad: the commander\'s words once, when new'),
+ (Q,"s.label(P+'ON_FOOT');s.check(0x0021,[V(24),F(40)],P+'NEAR');post_spot(G,R);","s.label(P+'ON_FOOT');s.check(0x0021,[V(24),F(40)],P+'NEAR');a(0x0087,V(26),V(9));a(0x0087,V(27),V(10));a(0x0087,V(28),V(11));",'18 squad: far behind, the way is to his post'),
+ (Q,"s.label(P+'LOOK');s.eq(30,0,P+'SECTOR')","s.label(P+'LOOK');s.go(P+'SECTOR')",'18 squad: at ease in peace'),
+]
 if sys.argv[1:2]==['--new']:
- M=M12+M14+M15+M16+M17;sys.argv.pop(1)
+ M=M12+M14+M15+M16+M17+M18;sys.argv.pop(1)
+elif sys.argv[1:2]==['--b8']:
+ M=M18;sys.argv.pop(1)
 elif sys.argv[1:2]==['--b7']:
  M=M17;sys.argv.pop(1)
 elif sys.argv[1:2]==['--b6']:
@@ -250,7 +267,7 @@ elif sys.argv[1:2]==['--12']:
  M=M12;sys.argv.pop(1)
 elif sys.argv[1:2]==['--old']:
  sys.argv.pop(1)
-else:M=M+M12+M14+M15+M16+M17
+else:M=M+M12+M14+M15+M16+M17+M18
 if os.environ.get('HC_MUT_SHARD'):   # 'i/n': every n-th mutant starting with the i-th (several runs side by side, each with its own HC_MUT_ROOT)
  i_,n_=map(int,os.environ['HC_MUT_SHARD'].split('/'));M=M[i_::n_]
 only=sys.argv[1:]

@@ -225,8 +225,11 @@ assert not firing(sc), 'he steps behind a wall: fire stops on the second tick'
 passed('Nobody fires through a wall: the line of sight is asked for on every tick, fire starts when it clears and stops within 0.2 s when it closes')
 
 # ------------------------------------------------------------------ door gunners: rounds made by the script along a checked line
-def heli_scene(cj_at=(0., 0.), z=31., **kw):
+def heli_scene(cj_at=(0., 0.), z=31., rounds=True, **kw):
+    """rounds=True: the 1.3 door gunner, whose rounds the script makes along a checked line (the round API is kept and tested);
+    rounds=False: the 1.4 door gunner, who fires his own weapon and is judged like a guard on foot."""
     sc = Scene(**kw)
+    sc.brain.cfg.gunner_weapon = 0. if rounds else 1.
     sc.cj['pos'] = [cj_at[0], cj_at[1], 1.]
     sc.heli = sc.veh(0, 40, z=z, cls=HCB_VC_HELI)            # facing north: the right door looks east
     pilot = sc.our(0, 41, HCB_ROLE_PILOT, z=z)
@@ -248,6 +251,36 @@ sc.shot(g, (-30., 0., 1.), dst=1)
 fired = run(sc, 12)
 assert rear not in fired and HOLD[sc.orders[rear].hold] == 'FRIEND', (fired, holds(sc))
 passed('Two gunners in one door: the rear one fires past the man kneeling beside him (his rounds start 5.5 m out, clear of the helicopter) - in the real fight this cost 9% of the fire; one of ours further down the line still stops the shot')
+
+# ------------------------------------------------------------------ 1.4: the door gunner fires his own weapon
+def gstate(sc, who, target):
+    return sc.brain.squad(who, target, sc.time, sc.peds[who]['pos'], sc.peds[target]['pos'], sc.cj['pos'], [sc.peds[o]['pos'] for o in sc.ours if o != who])
+# CJ sits in the helicopter: the gunner on the side of a man who fires at it answers (CJ is inside, behind the cabin wall) ...
+sc, front, rear = heli_scene(cj_at=(-0.3, 40.), rounds=False)
+sc.cj['vehicle'] = sc.heli
+g = sc.ped(30, 40, pedtype=GANG, weapon=AK, z=1.)
+sc.shot(g, (0., 40., 31.), dst=1)
+states = []
+for _ in range(14):
+    sc.step(1)
+    states.append(gstate(sc, front, g))
+assert 2 in states and 3 in states and states.index(2) >= 1, ('his own weapon, in bursts (fire / a breath) after the reaction time', states)
+# ... but not when CJ stands on the ground 10 m behind the man: a round of the game flies on past its target (a script's round did not)
+sc, front, rear = heli_scene(cj_at=(40., 41.8), z=2., rounds=False)
+g = sc.ped(30, 41, pedtype=GANG, weapon=AK)
+sc.shot(g, (40., 41.8, 1.), dst=1)
+seen = []
+for _ in range(12):
+    sc.step(1)
+    seen.append(gstate(sc, front, g))
+assert 2 not in seen and not firing(sc), ('CJ behind the man: no fire with a weapon whose round flies on', seen, holds(sc))
+# ... and the man beside him in the door counts: the rear gunner's line passes 0.1 m from the front one
+sc, front, rear = heli_scene(cj_at=(-30., 0.), rounds=False)
+g = sc.ped(3, 75, pedtype=GANG, weapon=AK, z=31.)
+sc.shot(g, (-30., 0., 1.), dst=1)
+fired = run(sc, 12)
+assert front in fired and rear not in fired and HOLD[sc.orders[rear].hold] == 'FRIEND', (fired, holds(sc))
+passed('1.4 door gunners fire their own weapon: in bursts the brain paces, also with CJ sitting in the cabin (behind the cabin wall); a man 10 m in front of CJ on the line is not fired at (a round of the game flies on), and the rear gunner holds when his mate in the door is in his line')
 
 sc, front, rear = heli_scene(cj_at=(40., 41.8), z=2.)  # the helicopter hovers low: a flat line, and CJ stands 10 m behind the target on it
 g = sc.ped(30, 41, pedtype=GANG, weapon=AK)
@@ -707,6 +740,56 @@ for seed in range(12):
             break
 assert delays == [100] * 12, delays
 passed('CJ crosses the line of fire: the guard holds with his weapon still on the man, and fires on the very next look when the line is clear - no second reaction time')
+
+sc = Scene()
+me = sc.our(0, 4, HCB_ROLE_SQUAD, weapon=M4)
+sc.cj['pos'] = [0., -6., 1.]
+g = sc.ped(25, 4, pedtype=GANG, weapon=AK)
+sc.shot(g, (0., -6., 1.), dst=1)
+run(sc, 8)
+assert firing(sc, g)
+sc.cj['pos'] = [12., 4.5, 1.]                          # CJ steps into the line ...
+run(sc, 2)
+sc.los_fn = lambda a, b: False                         # ... and meanwhile the man ducks behind a wall
+run(sc, 3)
+sc.cj['pos'] = [0., -6., 1.]                           # the line is clear again: nobody fires at the wall
+for k in range(10):
+    sc.step(1)
+    assert not firing(sc), k
+passed('A man who ducks out of sight while CJ is in the line is not fired at when the line clears: his sight is asked all the time the rule holds, an old "clear" is never used')
+
+sc = Scene()
+me = sc.our(0, 4, HCB_ROLE_SQUAD, weapon=M4)
+sc.cj['pos'] = [0., -6., 1.]
+g = sc.ped(25, 4, pedtype=GANG, weapon=AK)
+sc.shot(g, (0., -6., 1.), dst=1)
+run(sc, 8)
+assert firing(sc, g)
+sc.roe = HCB_ROE_HOLD                                  # the player says "hold fire" for a moment ...
+run(sc, 2)
+sc.los_fn = lambda a, b: False                         # ... the man ducks behind a wall meanwhile ...
+sc.roe = HCB_ROE_DEFEND                                # ... and the rule is lifted again: no round at the wall
+for k in range(10):
+    sc.step(1)
+    assert not firing(sc), k
+passed('A pair that was not asked about for a while (hold fire, out of range) needs a fresh answer before anybody fires: a "clear" from before the break is never used')
+
+sc = Scene()
+me = sc.our(0, 4, HCB_ROLE_SQUAD, weapon=M4)
+sc.cj['pos'] = [0., -6., 1.]
+a_ = sc.ped(25, 4, pedtype=GANG, weapon=AK)
+b_ = sc.ped(-20, 10, pedtype=GANG, weapon=AK)
+sc.shot(a_, (0., -6., 1.), dst=1)
+sc.shot(b_, (0., -6., 1.), dst=1)
+run(sc, 8)
+first = sc.orders[me].target
+assert firing(sc, first)
+sc.peds[first]['flags'] |= HCB_PF_DEAD                  # his man falls after a while: the other one is fought at once
+run(sc, 20)
+other = b_ if first == a_ else a_
+run(sc, 6)
+assert firing(sc, other), 'the sight of every man in range is asked again on every look, not only that of his own man'
+passed('His man falls: he takes the other attacker at once (the sight of everybody in range is asked again on every look)')
 
 # ------------------------------------------------------------------ the hard rules hold in any mess: random fights, an independent check
 def check_orders(sc, s):

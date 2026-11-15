@@ -61,6 +61,9 @@ API u32 hcb_struct_size(int which) {
     case 11: return sizeof(hcb_order);
     case 12: return sizeof(hcb_shot);
     case 13: return sizeof(hcb_round);
+    case 14: return sizeof(hcb_pilot);
+    case 15: return sizeof(hcb_pilot_in);
+    case 16: return sizeof(hcb_pilot_out);
     }
     return 0;
 }
@@ -107,6 +110,8 @@ API void hcb_init(hcb_brain *b, u32 seed) {
     b->cfg.scatter_m = 0.1f;
     b->cfg.scatter_per_m = 0.01f;
     b->cfg.scatter_per_ms = 0.02f;
+    b->cfg.gunner_weapon = 1;
+    b->cfg.cabin_skip_m = 1.5f;
 }
 
 HID track *hcb_find(hcb_brain *b, u32 id) {
@@ -211,6 +216,11 @@ static void on_event(hcb_brain *b, const hcb_snapshot *s, const hcb_event *e) {
     int i;
     if (e->type == HCB_EV_SHOT) {
         if (e->src && e->src == s->player.id) {      /* CJ's own fire points at people: the man he hit, or anybody his round passed close by */
+            float dx = e->b.x - e->a.x, dy = e->b.y - e->a.y, l2 = dx * dx + dy * dy;
+            if (l2 > 0.04f && l2 == l2) {
+                float l = f_sqrt(l2);
+                b->dt.cj_shot_t = e->time ? e->time : 1; b->dt.cj_shot_dir.x = dx / l; b->dt.cj_shot_dir.y = dy / l; b->dt.cj_shot_dir.z = 0;
+            }
             if (e->dst && !hcb_is_ours(s, e->dst)) { t = hcb_find(b, e->dst); if (t) t->cj_marked = e->time; }
             for (i = 0; i < HCB_MAX_TRACKS; i++) {
                 t = &b->tr[i];
@@ -501,6 +511,14 @@ API void hcb_think(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         h = hcb_fnv(h, o->who); h = hcb_fnv(h, o->target); h = hcb_fnv(h, ((u32)o->fire << 24) | ((u32)o->aim_at << 16) | ((u32)o->hold << 8) | o->ready);
     }
     for (i = 0; i < out->n_queries; i++) { h = hcb_fnv(h, out->queries[i].from); h = hcb_fnv(h, out->queries[i].to); }
+    hcb_detail_plan(b, s, out);
+    for (i = 0; i < out->n_posts; i++) {
+        const hcb_post *p = &out->posts[i];
+        h = hcb_fnv(h, p->who); h = hcb_fnv(h, hcb_bits(p->at.x)); h = hcb_fnv(h, hcb_bits(p->at.y));
+        h = hcb_fnv(h, ((u32)p->move << 24) | ((u32)p->crouch << 16) | ((u32)p->duty << 8) | p->job);
+    }
+    for (i = 0; i < out->n_probe_q; i++) { h = hcb_fnv(h, hcb_bits(out->probe_q[i].at.x)); h = hcb_fnv(h, hcb_bits(out->probe_q[i].at.y)); }
+    h = hcb_fnv(h, ((u32)out->say << 24) | ((u32)out->say_dir << 16) | out->say_seq); h = hcb_fnv(h, ((u32)out->cover_ok << 8) | out->duty);
     for (i = 0; i < out->n_marks; i++) {
         const hcb_mark *m = &out->marks[i];
         if (m->cls >= HCB_CLS_WATCH && !out->top) out->top = m->id;

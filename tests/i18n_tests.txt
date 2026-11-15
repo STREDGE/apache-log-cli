@@ -1,14 +1,14 @@
 PASS: The simulated font of the game's Russian reproduces the player's screenshots of beta 1 (@@♥ц@х@)
 PASS: Game Russian: А-Я = 0x80-0x9F, а-я = 0xA0-0xBF (х = 181, ц = 182 as on the screenshot), Latin and tags untouched; it is the only Russian layout
-PASS: Helicover.fxt (ASCII) holds the 125 English messages, Helicover_RU.fxt the same ones with U keys (no third layout, no test message), same colour tags
-PASS: Every one of the 125 messages reads back as its Russian text in the simulated font, no @ anywhere
+PASS: Helicover.fxt (ASCII) holds the 130 English messages, Helicover_RU.fxt the same ones with U keys (no third layout, no test message), same colour tags
+PASS: Every one of the 130 messages reads back as its Russian text in the simulated font, no @ anywhere
 PASS: The language follows the game: its own Russian -> Russian; English, SanLTD (the French slot), German, Italian, Spanish, Japanese -> English; an unknown build -> English
 PASS: Changing the game language while playing changes the mod's language at once (messages: English keys / U keys)
 PASS: The kill counter ("TARGET DOWN n") is printed with the English key or its U key, like every other message
 PASS: With the game in Russian the menu is Russian and reads correctly in the simulated font: main page, state in the title, settings
 PASS: The fire page in Russian: four rules and the two switches (police, missions), every row readable in the simulated font
 PASS: Aboard in Russian: the two exit-button switches; switching shows the Russian hint and starts nothing
-PASS: Every one of the 249 menu pages has an English and a Russian version with the same rows; at most 8 rows, none longer than 26 (RU 30) characters; no language page, no FONT TEST
+PASS: Every one of the 255 menu pages has an English and a Russian version with the same rows; at most 8 rows, none longer than 26 (RU 30) characters; no language page, no FONT TEST
 PASS: The launcher's "files missing" message is Russian in the game's Russian and English otherwise
 PASS: CALL HELICOPTER: once called the page is the FOLLOWING page - there is no CALL row to press twice, and one helicopter exists
 PASS: While the helicopter is being prepared, swapped or is leaving the first row says so ("HELICOPTER INBOUND...", "CHANGING, PLEASE WAIT...", "HELICOPTER LEAVING...") and orders nothing
@@ -37,12 +37,12 @@ PASS: CALL HELICOPTER: the pilot's answer is on the screen within 3 frames of th
 PASS: The line is drawn every frame while the message lasts (exactly its time, to the frame) and never after: wipe on, size, colour, centred, line width, outline, text - one line of text per frame
 PASS: A new message replaces the one on screen in the next frame: never two at once, no queue
 PASS: In the game's Russian the line shows the U key of the same message ("МАШИНА ГОРИТ! Отойдите от нее.")
-PASS: Each of the 125 messages is drawn with its own text in both languages (two-level dispatch by number)
+PASS: Each of the 130 messages is drawn with its own text in both languages (two-level dispatch by number)
 PASS: Who takes the line: an answer to a refused order always; an equally or more important call at once; a call one level lower only after the line has been readable for 1.2 s; anything lower waits for it to end
 PASS: The acknowledgement of an order ("PILOT: following you") takes the line at once whatever is on it; an alarm may replace it at once, a routine call after 1.2 s. MESSAGES: OFF still silences it (not the answers to refused orders), IMPORTANT drops only chatter
 PASS: No script but the launcher ("files missing") uses the help box any more
 PASS: Pilot, gunners and every squad member (also after a change of clothes) get the game's empty decision maker: punched or shot at they keep their task instead of ducking with their hands over their heads; TASK_DUCK (the scared pose) is not used anywhere
-PASS: Door gunners kneel on the skids by default (TASK_TOGGLE_DUCK right after they are mounted)
-PASS: SETTINGS > "GUNNERS: KNEELING / STANDING" switches the pose at once (crew re-mounted once, weapons back in their hands)
+PASS: Door gunners sit on the skids by default (mounted 0.45 m lower and 0.15 m further out than kneeling, crouched right after they are mounted)
+PASS: SETTINGS > "GUNNERS: SITTING / KNEELING / STANDING" goes round with each tap and switches the pose at once (crew re-mounted once, weapons back in their hands)
 PASS: After a fight the gunners go back to one knee (clearing their fire task would leave them standing)
 Mocked script execution only: the Russian layout was confirmed on the player's phone (beta 3); the look of the menu itself is the game's.

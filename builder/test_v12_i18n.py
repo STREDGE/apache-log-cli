@@ -94,7 +94,7 @@ MAIN_RU=('ЛЕТЕТЬ ЗА МНОЙ [X]','ЖДАТЬ ЗДЕСЬ','ПАТРУЛ�
 w,c,p=open_menu(True)
 assert rows_of(w)==[i18n.encode(x,'game') for x in MAIN_RU],rows_of(w)
 assert [draw_game(r_) for r_ in rows_of(w)]==list(MAIN_RU) and draw_game(w.menu[0])=='HELICOVER / ЛЕТИТ ЗА ВАМИ',[draw_game(r_) for r_ in w.menu]
-press(w,(c,p),6,5);assert [draw_game(r_) for r_ in w.menu]==['HELICOVER / НАСТРОЙКИ','CLOSE','ЭКИПАЖ >','МОДЕЛЬ ВЕРТОЛЕТА >','ОРУЖИЕ ЭКИПАЖА >','ТАКТИКА: ОХРАНА','СООБЩЕНИЯ: ВСЕ','СТРЕЛКИ: С КОЛЕНА','< НАЗАД'],[draw_game(r_) for r_ in w.menu]
+press(w,(c,p),6,5);assert [draw_game(r_) for r_ in w.menu]==['HELICOVER / НАСТРОЙКИ','CLOSE','ЭКИПАЖ >','МОДЕЛЬ ВЕРТОЛЕТА >','ОРУЖИЕ ЭКИПАЖА >','ТАКТИКА: ОХРАНА','СООБЩЕНИЯ: ВСЕ','СТРЕЛКИ: СИДЯ','< НАЗАД'],[draw_game(r_) for r_ in w.menu]
 passed('With the game in Russian the menu is Russian and reads correctly in the simulated font: main page, state in the title, settings')
 w,c,p=open_menu(True);press(w,(c,p),3,5)
 assert [draw_game(r_) for r_ in w.menu]==['HELICOVER / ОГОНЬ СТРЕЛКОВ','CLOSE','ЗАЩИЩАТЬ МЕНЯ [X]','ТОЛЬКО ВООРУЖЕННЫЕ','ТАМ, ГДЕ СТРЕЛЯЮ Я','НЕ СТРЕЛЯТЬ','ПОЛИЦИЯ: ОТВЕЧАТЬ','МИССИИ: ОБОРОНА','< НАЗАД'],[draw_game(r_) for r_ in w.menu]
@@ -367,7 +367,7 @@ def probe_vm(name,w):
  keep=b.OUT;b.OUT=PROBE_DIR
  try:return VM(name,w)
  finally:b.OUT=keep
-PROBE={4:'HCBUSY',3:'HCBURN',2:'HCCLEAR',1:'SQRLD',5:'HCFOLL'}   # an answer to a refused order, an alarm, a routine call, chatter; 5 = the acknowledgement of an order
+PROBE={4:'HCBUSY',3:'HCBURN',2:'HCCLEAR',1:'SQCAR',5:'HCFOLL'}   # an answer to a refused order, an alarm, a routine call, chatter; 5 = the acknowledgement of an order
 assert [mv.PRIO[PROBE[k_]] for k_ in (4,3,2,1,5)]==[4,3,2,1,2] and PROBE[5] in mv.ORDER_ACK and PROBE[2] not in mv.ORDER_ACK
 for new in PROBE:
  sc=asm.Script();a_=sc.add;a_(0);mv.say(sc,PROBE[new]);sc.label('END');a_(1,asm.I(100000));sc.go('END');_keep=asm.OUT;asm.OUT=PROBE_DIR;sc.build('SayProbe%d'%new,'csa');asm.OUT=_keep   # scratch scripts, built outside build/ so that nothing can ship them
@@ -400,17 +400,21 @@ for name in ('Helicover_Core','Helicover_Ground','Helicover_Squad','Helicover_Fi
  ins,order=cw.parse(name);assert not [a_ for a_ in order if (ins[a_][0]&0x7fff)==0x5c5],name
 passed('Pilot, gunners and every squad member (also after a change of clothes) get the game\'s empty decision maker: punched or shot at they keep their task instead of ducking with their hands over their heads; TASK_DUCK (the scared pose) is not used anywhere')
 
-# =================================================================== beta 6: door gunners kneel
+# =================================================================== 1.4: door gunners sit on the skids (beta 6: kneel)
 def pose_calls(w,c):return {c.v[v]:[x[2][1] for x in calls(w,0x4eb) if x[2][0]==c.v[v]] for v in (13,14,15,16)}
+def seats(w,c):return {x[2][0]:x[2][2:5] for x in calls(w,0x464) if x[2][0] in [c.v[v] for v in (13,14,15,16)]}
 w,c,p=open_menu();pc=pose_calls(w,c);assert all(v and v[-1]==1 for v in pc.values()),pc
 att={x[2][0]:x[0] for x in calls(w,0x464)};assert all([x[0] for x in calls(w,0x4eb) if x[2]==[g_,1]][-1]>=att[g_] for g_ in att),'the crouch is asked for after the attach'
-passed('Door gunners kneel on the skids by default (TASK_TOGGLE_DUCK right after they are mounted)')
-press(w,(c,p),6,4);assert rows_of(w)[5]==b'GUNNERS: KNEELING';w.calls.clear();press(w,(c,p),5,6)
-assert rows_of(w)[5]==b'GUNNERS: STANDING' and w.shared[b.POSE]==0 and len(calls(w,0x464))==4 and all(v and v[-1]==0 for v in pose_calls(w,c).values()),(rows_of(w),pose_calls(w,c))
+sit=seats(w,c);assert all(abs(o[2]-(-.1-b.SEAT_DROP))<.01 and abs(abs(o[0])-(1.4+b.SEAT_OUT))<.01 for o in sit.values()),sit
+passed('Door gunners sit on the skids by default (mounted %.2f m lower and %.2f m further out than kneeling, crouched right after they are mounted)'%(b.SEAT_DROP,b.SEAT_OUT))
+press(w,(c,p),6,4);assert rows_of(w)[5]==b'GUNNERS: SITTING';w.calls.clear();press(w,(c,p),5,6)
+assert rows_of(w)[5]==b'GUNNERS: KNEELING' and w.shared[b.POSE]==1 and len(calls(w,0x464))==4 and all(v and v[-1]==1 for v in pose_calls(w,c).values()),(rows_of(w),pose_calls(w,c))
+assert all(abs(o[2]+.1)<.01 and abs(abs(o[0])-1.4)<.01 for o in seats(w,c).values()),seats(w,c)
 assert all(w.weapons[c.v[v]]!=0 for v in (13,14,15,16)),'re-mounting strips the weapons: they are handed back at once'
-w.calls.clear();w.now+=1100;press(w,(c,p),5,6);assert rows_of(w)[5]==b'GUNNERS: KNEELING' and all(v and v[-1]==1 for v in pose_calls(w,c).values())
+w.calls.clear();w.now+=1100;press(w,(c,p),5,6);assert rows_of(w)[5]==b'GUNNERS: STANDING' and w.shared[b.POSE]==0 and all(v and v[-1]==0 for v in pose_calls(w,c).values())
+w.calls.clear();w.now+=1100;press(w,(c,p),5,6);assert rows_of(w)[5]==b'GUNNERS: SITTING' and w.shared[b.POSE]==2 and all(v and v[-1]==1 for v in pose_calls(w,c).values())
 w.calls.clear();w.step(c,p,n=20);assert not calls(w,0x464),'the crew is re-mounted once per change, not every pass'
-passed('SETTINGS > "GUNNERS: KNEELING / STANDING" switches the pose at once (crew re-mounted once, weapons back in their hands)')
+passed('SETTINGS > "GUNNERS: SITTING / KNEELING / STANDING" goes round with each tap and switches the pose at once (crew re-mounted once, weapons back in their hands)')
 w,c,f=g['fire_world']();npc=g['target'](w);w.damage.add((1,npc));w.step(c,f,n=14);w.calls.clear();w.exists.discard(npc);w.step(c,f,n=20)
 gun=[c.v[v] for v in (13,14,15,16)];assert calls(w,0x687) and all([x[0] for x in calls(w,0x4eb) if x[2]==[g_,1]] for g_ in gun if g_ in w.attach),(len(calls(w,0x687)),[x[2] for x in calls(w,0x4eb)])
 passed('After a fight the gunners go back to one knee (clearing their fire task would leave them standing)')

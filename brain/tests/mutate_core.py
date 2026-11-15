@@ -6,6 +6,8 @@ from pathlib import Path
 SRC = Path(__file__).resolve().parent.parent
 ROOT = Path(os.environ.get('HCB_MUT_ROOT') or Path(tempfile.gettempdir()) / 'hcb_mut')
 C = 'core/hcb_core.c'
+D = 'core/hcb_detail.c'
+P = 'core/hcb_pilot.c'
 M = [
  (C, "hostile && armed && on_foot && dist <= c->near_m && (facing >= c->facing_cos || hunting) && !blocked", "hostile && armed && on_foot && (facing >= c->facing_cos || hunting) && !blocked", 'armed facing: close only'),
  (C, "hostile && armed && on_foot && dist <= c->near_m && (facing >= c->facing_cos || hunting) && !blocked", "hostile && armed && on_foot && dist <= c->near_m && !blocked", 'armed facing: turned to CJ'),
@@ -91,7 +93,6 @@ M += [
  (F, "if (!hcb_is_firearm(me->weapon) || dist > range) return HCB_HOLD_RANGE;", "if (!hcb_is_firearm(me->weapon)) return HCB_HOLD_RANGE;", 'fire: range'),
  (F, "    if (!l->clear) return HCB_HOLD_NO_LOS;", "", 'fire: not through a wall'),
  (F, "if (!l || s->time - l->time > 600) return SOFT_LOS;", "if (!l || s->time - l->time > 600) return HCB_HOLD_NONE;", 'fire: not before the line of sight is known'),
- (F, "    ask(out, me->id, t->last.id);\n    if (!l ||", "    if (!l) ask(out, me->id, t->last.id);\n    if (!l ||", 'fire: the line of sight is asked on every look'),
  (F, "case HCB_ROE_DEFEND: fire = t->cls >= HCB_CLS_THREAT; break;", "case HCB_ROE_DEFEND: fire = t->cls >= HCB_CLS_WATCH; break;", 'fire rule: DEFEND'),
  (F, "fire = t->cls >= HCB_CLS_THREAT || armed_hostile; break;", "fire = t->cls >= HCB_CLS_THREAT; break;", 'fire rule: ARMED'),
  (F, "case HCB_ROE_FOLLOW: fire = t->cj_marked && now - t->cj_marked < (u32)c->follow_ms; break;", "case HCB_ROE_FOLLOW: fire = t->cls >= HCB_CLS_THREAT; break;", 'fire rule: FOLLOW'),
@@ -168,6 +169,32 @@ M += [
  (F, "if (!done[i] && !busy[i] && (why[i][j] == HCB_HOLD_NONE || why[i][j] == SOFT_LOS)) cs[j].free = 1;", "if (!done[i] && !busy[i]) cs[j].free = 1;", 'free hands count only if he may fire at the man'),
  (F, "return shot_check(cb, q, 1) == HCB_HOLD_NONE ? 2 : 3;", "return 2;", 'guard: cease fire in the same frame'),
  (F, "gunner = is_gunner(sh->role) && !as_guard;", "gunner = is_gunner(sh->role);", 'guard: a man on foot is judged as one, whatever his role'),
+ (F, "    if (mine) ask(out, me->id, t->last.id);\n", "\n", 'sight of his own man is asked while a rule holds the fire'),
+ (D, "if (radii[i] > 0.01f && v_dot(d, u) > toward) continue;", "", 'detail: CJ is never sent towards the shooter'),
+ (D, "return c->hidden && c->ground ? 1 : 0;", "return c->hidden ? 1 : 0;", 'detail: no cover without ground under it'),
+ (D, "if (out->n_probe_q >= HCB_MAX_PROBES) return;", "if (out->n_probe_q >= HCB_MAX_PROBES) out->n_probe_q = 0;", 'detail: cover questions a look are limited'),
+ (D, "if (now - c->answered > COVER_KEEP_MS) return -1;", "return -1;", 'detail: a fresh answer is not asked again'),
+ (D, "else if (now - dt->anchor_since >= 1500) { dt->anchor = d;", "else { dt->anchor = d;", 'detail: the formation turns only after 1.5 s on a new course'),
+ (D, "if (job == 1) at = v_add(cjp, v_mul(u, 1.3f));", "if (0) at = v_add(cjp, v_mul(u, 1.3f));", 'detail: a suspect - the bodyguard steps between him and CJ'),
+ (D, "if (n_team == 2 && moving[0] && moving[1]) {", "if (0) {", 'detail: bounding overwatch'),
+ (D, "cj_in = dt->cj_cover_ok && dist2d(cjp, dt->cj_cover) < 1.6f;", "cj_in = 0;", 'detail: CJ in cover - the bodyguard crouches beside him'),
+ (D, "duty = b->alert >= HCB_ALERT_EVACUATE && threat ? HCB_DUTY_RING", "duty = 0 && threat ? HCB_DUTY_RING", 'detail: too hot - a tight ring'),
+ (D, "(!dt->evac_said || now - dt->evac_said >= SAY_EVAC_MS)", "(1)", 'detail: "we pull out" not repeated for 20 s'),
+ (D, "if (dt->lead && n) say = HCB_SAY_TAKE_OVER;", "", 'detail: the new commander says he has taken over'),
+ (D, "if (dt->cj_shot_t && now - dt->cj_shot_t < 1200) {", "if (0) {", 'detail: nobody stands in front of CJ\'s gun'),
+ (D, "if (dt->cj_cover_ok && !cj_in && (!dt->cover_said || now - dt->cover_said >= SAY_COVER_MS))", "if (dt->cj_cover_ok && !cj_in)", 'detail: "into cover" not said every look'),
+ (D, "for (i = 0; i < n; i++) if (i != lead) { if (close < 0) close = i;", "for (i = 0; i < n; i++) if (1) { if (close < 0) close = i;", 'detail: the commander is not also the bodyguard'),
+ (P, "    if (in->stop) vdes = f_min(vdes, f_max(f_sqrt(2.0f * BRAKE * f_max(0.0f, dist - 0.9f * TAU_V * f_sqrt(p->vel.x * p->vel.x + p->vel.y * p->vel.y))), f_min(2.0f, 0.5f * dist)));", "    if (in->stop) vdes = f_min(vdes, f_max(f_sqrt(2.0f * BRAKE * dist), f_min(2.0f, 0.5f * dist)));", 'pilot: braking starts early enough not to overshoot'),
+ (P, "if (dist > 20.0f) vdes *= f_clamp(1.0f - f_abs(err) / 1.7f, 0.25f, 1.0f);", "", 'pilot: slower for a sharp turn'),
+ (P, "if (a_len > a_max) a = v_mul(a, a_max / a_len);", "", 'pilot: at most 5 m/s2'),
+ (P, "pitch_want = f_clamp(-f_atan(a_fwd / G_ACC)", "pitch_want = f_clamp(f_atan(a_fwd / G_ACC)", 'pilot: nose down to speed up'),
+ (P, "roll_want = f_clamp(f_atan(a_side / G_ACC), -BANK_MAX, BANK_MAX);", "roll_want = f_clamp(-f_atan(a_side / G_ACC), -BANK_MAX, BANK_MAX);", 'pilot: banked into the turn'),
+ (P, "out->right = v_sub(v_mul(r0, cr), v_mul(u1, sr));", "out->right = v_add(v_mul(r0, cr), v_mul(u1, sr));", 'pilot: the matrix rows match the bank'),
+ (P, "    if (p->pos.z < ground + 10.0f || in->blocked) vdes = 0.0f;", "    if (in->blocked) vdes = 0.0f;", 'pilot: below the roofs, up first'),
+ (P, "    if (in->blocked) { p->vel.x = p->vel.y = 0; a.x = a.y = 0; }\n", "\n", 'pilot: a refused step stops it at once'),
+ (P, "    if (dt > 0.1f) dt = 0.1f;", "", 'pilot: a long frame is flown as a short one'),
+ (P, "clear = hover + (CLEAR - hover) * f_clamp((dist - 60.0f) / 200.0f, 0.0f, 1.0f);", "clear = hover;", 'pilot: high while travelling, low only near the point'),
+ (P, "    if (in->stop && p->pos.z - (ground + clear) > 3.0f) {", "    if (0) {", 'pilot: down in time after a tall roof'),
 ]
 only = sys.argv[1:]
 missed = 0
@@ -186,7 +213,7 @@ for fname, old, new, name in M:
     p.write_text(t.replace(old, new))
     env = dict(os.environ, HCB_OUT=str(ROOT / 'out'))
     caught = False
-    for test in ('test_core.py', 'test_fire.py'):
+    for test in ('test_core.py', 'test_fire.py', 'test_detail.py', 'test_pilot.py'):
         r = subprocess.run([sys.executable, str(ROOT / 'brain' / 'tests' / test)], capture_output=True, text=True, env=env)
         if r.returncode:
             caught = True
