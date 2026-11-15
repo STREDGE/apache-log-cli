@@ -220,7 +220,7 @@ typedef struct hcb_cfg {
 typedef struct hcb_brain hcb_brain;
 
 uint32_t hcb_brain_size(void);
-uint32_t hcb_struct_size(int which);   /* 0 ped, 1 veh, 2 event, 3 snapshot, 4 out, 5 cfg, 6 mark: layout check for bindings */
+uint32_t hcb_struct_size(int which);   /* 0 ped, 1 veh, 2 event, 3 snapshot, 4 out, 5 cfg, 6 mark, 7 track_info, 8 rec, 9 box_head: layout check */
 void hcb_init(hcb_brain *b, uint32_t seed);
 hcb_cfg *hcb_config(hcb_brain *b);
 void hcb_think(hcb_brain *b, const hcb_snapshot *s, hcb_out *out);
@@ -247,7 +247,11 @@ typedef struct hcb_track_info {
 } hcb_track_info;
 int hcb_track(const hcb_brain *b, uint32_t id, hcb_track_info *info);
 
-/* ---- black box: a ring of the latest snapshots in a caller-provided buffer */
+/* ---- black box: a ring of the latest snapshots in a caller-provided buffer.
+ * Besides the snapshots the adapter stores the brain's own memory every few seconds, so a replay can start from
+ * the first such record in the file and reproduce every later decision exactly even though older records are gone. */
+#define HCB_REC_SNAPSHOT 1
+#define HCB_REC_STATE 2
 typedef struct hcb_rec {
     uint32_t cap;
     uint32_t start;         /* offset of the oldest whole record */
@@ -259,9 +263,30 @@ typedef struct hcb_rec {
 void hcb_rec_init(hcb_rec *r, uint32_t cap);
 /* Append one snapshot (+ the digest of what was decided on it). buf is the caller's buffer of r->cap bytes. */
 void hcb_rec_push(hcb_rec *r, uint8_t *buf, const hcb_snapshot *s, uint32_t digest);
-/* Read the record at *offset (start with r->start, stop at r->end). Returns 1 and moves *offset on, 0 at the end
-   or on damaged data. */
-int hcb_rec_next(const uint8_t *buf, uint32_t end, uint32_t *offset, hcb_snapshot *s, uint32_t *digest);
+/* Append the brain's memory as it is now (call it BEFORE hcb_think on the next snapshot). */
+void hcb_rec_push_state(hcb_rec *r, uint8_t *buf, const hcb_brain *b);
+/* Read the record at *offset (start with r->start, stop at r->end) and move *offset on. Returns 0 at the end or on
+   damaged data, HCB_REC_SNAPSHOT (s and digest filled) or HCB_REC_STATE (state, a block of hcb_brain_size() bytes,
+   filled when it is not NULL). */
+int hcb_rec_next(const uint8_t *buf, uint32_t end, uint32_t *offset, hcb_snapshot *s, uint32_t *digest, hcb_brain *state);
+
+/* The report file the player sends: this head, then the records [start, end) of the ring, then free text. */
+typedef struct hcb_box_head {
+    uint8_t magic[8];       /* "HCBBOX1" */
+    uint32_t version;       /* HCB_VERSION */
+    uint32_t brain_size;
+    uint32_t snapshot_size;
+    uint32_t ped_size;
+    uint32_t veh_size;
+    uint32_t event_size;
+    uint32_t records;
+    uint32_t dropped;
+    uint32_t data_len;
+    uint32_t text_len;
+    uint32_t seed;
+    uint32_t reserved;
+} hcb_box_head;
+void hcb_box_head_fill(hcb_box_head *h, const hcb_rec *r, const hcb_brain *b, uint32_t text_len);
 
 /* Weapon knowledge shared with the adapter and the tests. */
 #define HCB_WC_NONE 0

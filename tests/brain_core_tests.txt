@@ -18,8 +18,10 @@ PASS: The alert level rises at once (calm, wary, threat, combat) and comes down 
 PASS: Four riflemen on CJ at once, or any attacker while CJ is below 30 health, means EVACUATE; a cutscene lets the level fall
 PASS: Contacts are ranked by the damage they can be expected to do to CJ: the rifle already on him, then the rifle close by, then the pistol at long range, then the man looking away; the same rifle counts for less the further away it is, and a pistol at 60 m for nothing
 PASS: 300 people around CJ (64 fit in a snapshot, 96 in memory): the six who fired, standing further away than all of them, are never pushed out
-PASS: Black box: a random 30 s fight (300 snapshots, 416 kB) decodes byte for byte and replays in a fresh brain to exactly the same decisions, tick by tick
-PASS: Black box in a small buffer: the oldest records make room (237 dropped), the last 63 are intact and in order; a damaged record is refused
+PASS: Black box: a random 30 s fight (300 snapshots, 417 kB) decodes byte for byte and replays in a fresh brain to exactly the same decisions, tick by tick
+PASS: Black box with the brain's memory stored every 5 s: after the ring has dropped its beginning, a replay from the first stored state reproduces all 150 later decisions exactly (a cold start on the same data gets 20 of the first 20 wrong)
+PASS: The report file (head, records, text) reads back whole; a file that is not a report, is cut short or comes from another version of the brain is refused with a plain reason. tools/replay.py turns a report into a timeline (alert changes, who became a threat and why) and confirms the replay is exact
+PASS: Black box in a small buffer: the oldest records make room (238 dropped), the last 62 are intact and in order; a damaged record is refused
 PASS: Twenty random fights run twice give identical decisions: the core has no hidden state and no hidden randomness
 PASS: 300 snapshots of pure noise (counts beyond the arrays, NaNs, wild ids) and a damaged black box: no crash, outputs stay in range
 The core only. Nothing here has run in the game.

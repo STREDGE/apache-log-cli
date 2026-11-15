@@ -96,7 +96,7 @@ typedef struct vtrack {
 } vtrack;
 struct hcb_brain {
     hcb_cfg cfg;
-    u32 time, ticks, rng, alert_since, calm_since;
+    u32 time, ticks, rng, seed, alert_since, calm_since, reserved;
     u8 alert, started, reserved0, reserved1;
     track tr[HCB_MAX_TRACKS];
     vtrack vt[HCB_MAX_VTRACKS];
@@ -114,12 +114,14 @@ API u32 hcb_struct_size(int which) {
     case 6: return sizeof(hcb_mark);
     case 7: return sizeof(hcb_track_info);
     case 8: return sizeof(hcb_rec);
+    case 9: return sizeof(hcb_box_head);
     }
     return 0;
 }
 API hcb_cfg *hcb_config(hcb_brain *b) { return &b->cfg; }
 API void hcb_init(hcb_brain *b, u32 seed) {
     zero(b, sizeof *b);
+    b->seed = seed;
     b->rng = seed ? seed : 0x9e3779b9u;
     b->cfg.near_m = 40;
     b->cfg.watch_m = 60;
@@ -443,48 +445,86 @@ API int hcb_track(const hcb_brain *b, u32 id, hcb_track_info *o) {
 }
 
 /* ------------------------------------------------------------------ black box
- * A record: u32 length of the whole record, u32 digest, the head of the snapshot (everything before `ours`), then
- * only the used entries of ours / our_role / peds / vehs / events. */
+ * A record: u32 length of the whole record, u32 kind, then
+ *   snapshot: u32 digest, the head of the snapshot (everything before `ours`), then only the used entries of
+ *             ours / our_role / peds / vehs / events;
+ *   state:    the brain's memory, byte for byte. */
 #define HEAD ((u32)__builtin_offsetof(hcb_snapshot, ours))
 static u32 put(u8 *buf, u32 at, const void *src, u32 n) { copy(buf + at, src, n); return at + n; }
 static u32 rd32(const u8 *p) { return (u32)p[0] | ((u32)p[1] << 8) | ((u32)p[2] << 16) | ((u32)p[3] << 24); }
 API void hcb_rec_init(hcb_rec *r, u32 cap) { zero(r, sizeof *r); r->cap = cap; }
+/* Room for `need` bytes at the end: forget the oldest records until half the buffer is free, then slide the rest
+   to the front. Returns 0 when the record can never fit. */
+static int make_room(hcb_rec *r, u8 *buf, u32 need) {
+    u32 i;
+    if (need > r->cap / 2) return 0;
+    if (r->end + need <= r->cap) return 1;
+    while (r->start < r->end && r->end - r->start > r->cap / 2) { r->start += rd32(buf + r->start); r->dropped++; r->records--; }
+    for (i = 0; i < r->end - r->start; i++) buf[i] = buf[r->start + i];
+    r->end -= r->start; r->start = 0;
+    return 1;
+}
+static u32 snapshot_len(u32 no, u32 np, u32 nv, u32 ne) {
+    return 12 + HEAD + no * 4 + ((no + 3) & ~3u) + np * sizeof(hcb_ped) + nv * sizeof(hcb_veh) + ne * sizeof(hcb_event);
+}
 API void hcb_rec_push(hcb_rec *r, u8 *buf, const hcb_snapshot *s, u32 digest) {
     u32 no = s->n_ours < HCB_MAX_OURS ? s->n_ours : HCB_MAX_OURS, np = s->n_peds < HCB_MAX_PEDS ? s->n_peds : HCB_MAX_PEDS;
     u32 nv = s->n_vehs < HCB_MAX_VEHS ? s->n_vehs : HCB_MAX_VEHS, ne = s->n_events < HCB_MAX_EVENTS ? s->n_events : HCB_MAX_EVENTS;
-    u32 need = 8 + HEAD + no * 4 + ((no + 3) & ~3u) + np * sizeof(hcb_ped) + nv * sizeof(hcb_veh) + ne * sizeof(hcb_event), at, i;
+    u32 need = snapshot_len(no, np, nv, ne), kind = HCB_REC_SNAPSHOT, at, head_at;
     u8 pad[4] = {0, 0, 0, 0};
-    if (need > r->cap) return;
-    if (r->end + need > r->cap) {
-        /* out of room: forget the oldest records until half the buffer is free, then slide the rest to the front */
-        while (r->start < r->end && r->end - r->start > r->cap / 2) { r->start += rd32(buf + r->start); r->dropped++; r->records--; }
-        for (i = 0; i < r->end - r->start; i++) buf[i] = buf[r->start + i];
-        r->end -= r->start; r->start = 0;
-    }
+    u16 n;
+    if (!make_room(r, buf, need)) return;
     at = r->end;
-    at = put(buf, at, &need, 4); at = put(buf, at, &digest, 4); at = put(buf, at, s, HEAD);
+    at = put(buf, at, &need, 4); at = put(buf, at, &kind, 4); at = put(buf, at, &digest, 4);
+    head_at = at; at = put(buf, at, s, HEAD);
+    /* the counts in the record are the ones really written (a snapshot may claim more than the arrays hold) */
+    n = (u16)np; copy(buf + head_at + __builtin_offsetof(hcb_snapshot, n_peds), &n, 2);
+    n = (u16)nv; copy(buf + head_at + __builtin_offsetof(hcb_snapshot, n_vehs), &n, 2);
+    n = (u16)ne; copy(buf + head_at + __builtin_offsetof(hcb_snapshot, n_events), &n, 2);
+    n = (u16)no; copy(buf + head_at + __builtin_offsetof(hcb_snapshot, n_ours), &n, 2);
     at = put(buf, at, s->ours, no * 4); at = put(buf, at, s->our_role, no); at = put(buf, at, pad, ((no + 3) & ~3u) - no);
     at = put(buf, at, s->peds, np * sizeof(hcb_ped)); at = put(buf, at, s->vehs, nv * sizeof(hcb_veh)); at = put(buf, at, s->events, ne * sizeof(hcb_event));
     r->end = at; r->records++;
 }
-API int hcb_rec_next(const u8 *buf, u32 end, u32 *offset, hcb_snapshot *s, u32 *digest) {
-    u32 at = *offset, len, no, np, nv, ne, need;
-    if (at + 8 + HEAD > end) return 0;
-    len = rd32(buf + at);
-    if (len < 8 + HEAD || at + len > end) return 0;
+API void hcb_rec_push_state(hcb_rec *r, u8 *buf, const hcb_brain *b) {
+    u32 need = 8 + sizeof(struct hcb_brain), kind = HCB_REC_STATE, at;
+    if (!make_room(r, buf, need)) return;
+    at = r->end;
+    at = put(buf, at, &need, 4); at = put(buf, at, &kind, 4); at = put(buf, at, b, sizeof(struct hcb_brain));
+    r->end = at; r->records++;
+}
+API int hcb_rec_next(const u8 *buf, u32 end, u32 *offset, hcb_snapshot *s, u32 *digest, hcb_brain *state) {
+    u32 at = *offset, len, kind, no, np, nv, ne;
+    if (at + 8 > end) return 0;
+    len = rd32(buf + at); kind = rd32(buf + at + 4);
+    if (len < 8 || len > end - at) return 0;
+    if (kind == HCB_REC_STATE) {
+        if (len != 8 + sizeof(struct hcb_brain)) return 0;
+        if (state) copy(state, buf + at + 8, sizeof(struct hcb_brain));
+        *offset = at + len;
+        return HCB_REC_STATE;
+    }
+    if (kind != HCB_REC_SNAPSHOT || len < 12 + HEAD) return 0;
     zero(s, sizeof *s);
-    if (digest) *digest = rd32(buf + at + 4);
-    copy(s, buf + at + 8, HEAD);
+    if (digest) *digest = rd32(buf + at + 8);
+    copy(s, buf + at + 12, HEAD);
     no = s->n_ours; np = s->n_peds; nv = s->n_vehs; ne = s->n_events;
     if (no > HCB_MAX_OURS || np > HCB_MAX_PEDS || nv > HCB_MAX_VEHS || ne > HCB_MAX_EVENTS) return 0;
-    need = 8 + HEAD + no * 4 + ((no + 3) & ~3u) + np * sizeof(hcb_ped) + nv * sizeof(hcb_veh) + ne * sizeof(hcb_event);
-    if (need != len) return 0;
-    at += 8 + HEAD;
+    if (snapshot_len(no, np, nv, ne) != len) return 0;
+    at += 12 + HEAD;
     copy(s->ours, buf + at, no * 4); at += no * 4;
     copy(s->our_role, buf + at, no); at += (no + 3) & ~3u;
     copy(s->peds, buf + at, np * sizeof(hcb_ped)); at += np * sizeof(hcb_ped);
     copy(s->vehs, buf + at, nv * sizeof(hcb_veh)); at += nv * sizeof(hcb_veh);
     copy(s->events, buf + at, ne * sizeof(hcb_event)); at += ne * sizeof(hcb_event);
     *offset = at;
-    return 1;
+    return HCB_REC_SNAPSHOT;
+}
+API void hcb_box_head_fill(hcb_box_head *h, const hcb_rec *r, const hcb_brain *b, u32 text_len) {
+    static const char magic[8] = {'H', 'C', 'B', 'B', 'O', 'X', '1', 0};
+    zero(h, sizeof *h);
+    copy(h->magic, magic, 8);
+    h->version = HCB_VERSION; h->brain_size = sizeof(struct hcb_brain); h->snapshot_size = sizeof(hcb_snapshot);
+    h->ped_size = sizeof(hcb_ped); h->veh_size = sizeof(hcb_veh); h->event_size = sizeof(hcb_event);
+    h->records = r->records; h->dropped = r->dropped; h->data_len = r->end - r->start; h->text_len = text_len; h->seed = b->seed;
 }

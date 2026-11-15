@@ -336,10 +336,11 @@ assert all(sc.brain.cls(s) == HCB_CLS_ATTACKER for s in shooters) and sc.brain.o
 passed('300 people around CJ (64 fit in a snapshot, 96 in memory): the six who fired, standing further away than all of them, are never pushed out')
 
 # ------------------------------------------------------------------ black box: record, decode, replay
-def random_fight(seed, ticks=300, recorder=None):
+def random_fight(seed, ticks=300, recorder=None, state_every=0):
     rnd = random.Random(seed)
     sc = Scene(wanted=rnd.choice([0, 0, 2]))
     sc.recorder = recorder
+    sc.state_every = state_every
     for k in range(4):
         sc.our(rnd.uniform(-5, 5), rnd.uniform(-5, 5), HCB_ROLE_SQUAD + k, weapon=AK)
     digests = []
@@ -385,9 +386,49 @@ assert all(bytes(a) == bytes(b_) for (a, _), b_ in zip(tail, sc.snapshots[-len(t
 broken = Recorder(1 << 20)
 sc_, _ = random_fight(13, ticks=30, recorder=broken)
 assert len(broken.records()) == 30
-at = broken.rec.start + 8 + hcb_snapshot.n_peds.offset           # the first record now claims one ped more than it holds
+at = broken.rec.start + 12 + hcb_snapshot.n_peds.offset           # the first record now claims one ped more than it holds
 broken.buf[at] += 1
 assert broken.records() == [], 'a record whose length does not match its counts is refused, not read past its end'
+# the brain's own memory is stored every 5 s: a replay that starts there is exact even though the beginning is gone
+ring = Recorder(700 * 1024)
+sc, digests = random_fight(14, ticks=400, recorder=ring, state_every=50)
+recs = ring.all()
+first_state = next(i for i, r in enumerate(recs) if r[0] == 'state')
+kept = [r for r in recs if r[0] == 'snapshot']
+assert ring.rec.dropped > 0 and len(kept) < 400 and first_state > 0, (ring.rec.dropped, len(kept), first_state)
+replay = Brain(seed=99)
+after = 0
+for r in recs[first_state:]:
+    if r[0] == 'state':
+        ctypes.memmove(replay.mem, r[1], len(r[1]))
+    else:
+        assert replay.think(r[1]).digest == r[2], 'a replay from a stored state reproduces every later decision'
+        after += 1
+cold = Brain()
+differs = sum(cold.think(r[1]).digest != r[2] for r in kept[:20])
+assert after > 100 and differs > 0, (after, differs)
+passed('Black box with the brain\'s memory stored every 5 s: after the ring has dropped its beginning, a replay from the first stored state reproduces all %d later decisions exactly (a cold start on the same data gets %d of the first 20 wrong)' % (after, differs))
+# the report file
+import hcb_py as _h
+data = ring.box(sc.brain, 'device: test\n')
+head, recs2, text = _h.read_box(data)
+assert head.seed == 1 and _h.read_box(Recorder(4096).box(Brain(seed=77)))[0].seed == 77, 'the seed the brain was started with travels in the report'
+assert text == 'device: test\n' and head.records == ring.rec.records and head.dropped == ring.rec.dropped and len(recs2) == len(recs) and [r[0] for r in recs2] == [r[0] for r in recs]
+assert all(bytes(a[1]) == bytes(b_[1]) for a, b_ in zip(recs, recs2))
+for bad, why in ((b'junk' + data, 'not a'), (data[:len(data) // 2], 'cut short'), (data[:8] + bytes([9]) + data[9:], 'another version')):
+    try:
+        _h.read_box(bad)
+        raise AssertionError('accepted a bad report: ' + why)
+    except ValueError as e:
+        assert why in str(e), (why, str(e))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'tools'))
+import replay as replay_tool
+head, text, ticks = replay_tool.replay(data)
+exact = [t for t in ticks if t['exact']]
+assert len(ticks) == len(kept) and len(exact) == after and all(t['match'] for t in exact)
+report = replay_tool.summarize(data)
+assert 'reproduce the phone\'s decisions exactly' in report and 'ATTACKER' in report and 'alert COMBAT' in report and 'device: test' in report, report[:600]
+passed('The report file (head, records, text) reads back whole; a file that is not a report, is cut short or comes from another version of the brain is refused with a plain reason. tools/replay.py turns a report into a timeline (alert changes, who became a threat and why) and confirms the replay is exact')
 passed('Black box in a small buffer: the oldest records make room (%d dropped), the last %d are intact and in order; a damaged record is refused' % (small.rec.dropped, len(tail)))
 for seed in range(20):
     a = random_fight(100 + seed, ticks=120)[1]

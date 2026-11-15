@@ -50,7 +50,10 @@ M = [
  (C, "float k = cls == HCB_CLS_ATTACKER ? 1.0f : why == HCB_WHY_AIMS_AT_CJ ? 0.8f : cls == HCB_CLS_THREAT ? 0.4f : 0.1f;", "float k = 1.0f;", 'expected damage: by what he is doing'),
  (C, "if (dist <= range * 0.3f) return 0.6f;", "return 0.6f;", 'expected damage: by distance'),
  (C, "while (r->start < r->end && r->end - r->start > r->cap / 2) { r->start += rd32(buf + r->start); r->dropped++; r->records--; }", "r->start = r->end; r->dropped += r->records; r->records = 0;", 'black box: only the oldest half goes'),
- (C, "if (need != len) return 0;", "", 'black box: damaged records are refused'),
+ (C, "if (snapshot_len(no, np, nv, ne) != len) return 0;", "", 'black box: damaged records are refused'),
+ (C, "if (state) copy(state, buf + at + 8, sizeof(struct hcb_brain));", "", 'black box: the stored memory is given back'),
+ (C, "at = put(buf, at, &need, 4); at = put(buf, at, &kind, 4); at = put(buf, at, b, sizeof(struct hcb_brain));", "at = put(buf, at, &need, 4); at = put(buf, at, &kind, 4); at += sizeof(struct hcb_brain);", 'black box: the memory is stored'),
+ (C, "h->seed = b->seed;", "", 'report: the seed travels with it'),
 ]
 only = sys.argv[1:]
 missed = 0

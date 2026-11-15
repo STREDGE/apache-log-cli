@@ -38,7 +38,7 @@ def _parse(text):
 CONSTS, STRUCTS = _parse(HEADER.read_text())
 globals().update(CONSTS)
 globals().update(STRUCTS)
-__all__ = list(CONSTS) + list(STRUCTS) + ['Brain', 'Scene', 'LIB', 'vec', 'build', 'CONSTS', 'STRUCTS', 'Recorder']
+__all__ = list(CONSTS) + list(STRUCTS) + ['Brain', 'Scene', 'LIB', 'vec', 'build', 'CONSTS', 'STRUCTS', 'Recorder', 'read_box', 'decode']
 
 
 def build():
@@ -59,7 +59,7 @@ LIB.hcb_struct_size.restype = ctypes.c_uint32
 LIB.hcb_config.restype = ctypes.POINTER(hcb_cfg)
 LIB.hcb_weapon_dps.restype = ctypes.c_float
 LIB.hcb_weapon_range.restype = ctypes.c_float
-for _i, _n in enumerate(['hcb_ped', 'hcb_veh', 'hcb_event', 'hcb_snapshot', 'hcb_out', 'hcb_cfg', 'hcb_mark', 'hcb_track_info', 'hcb_rec']):
+for _i, _n in enumerate(['hcb_ped', 'hcb_veh', 'hcb_event', 'hcb_snapshot', 'hcb_out', 'hcb_cfg', 'hcb_mark', 'hcb_track_info', 'hcb_rec', 'hcb_box_head']):
     assert LIB.hcb_struct_size(_i) == ctypes.sizeof(STRUCTS[_n]), ('layout differs between C and Python', _n, LIB.hcb_struct_size(_i), ctypes.sizeof(STRUCTS[_n]))
     assert ctypes.sizeof(STRUCTS[_n]) % 4 == 0, _n
 
@@ -98,6 +98,22 @@ class Brain:
         return m.why if m else (self.track(id).why if self.track(id) else None)
 
 
+def decode(buf, start, end):
+    """Records of a black box, oldest first, decoded by the core itself: [('snapshot', hcb_snapshot, digest) | ('state', bytes)]."""
+    out, off = [], ctypes.c_uint32(start)
+    state = ctypes.create_string_buffer(LIB.hcb_brain_size())
+    while True:
+        s, d = hcb_snapshot(), ctypes.c_uint32()
+        kind = LIB.hcb_rec_next(buf, end, ctypes.byref(off), ctypes.byref(s), ctypes.byref(d), state)
+        if kind == HCB_REC_SNAPSHOT:
+            out.append(('snapshot', s, d.value))
+        elif kind == HCB_REC_STATE:
+            out.append(('state', state.raw))
+        else:
+            break
+    return out
+
+
 class Recorder:
     def __init__(self, cap=1 << 20):
         self.rec = hcb_rec()
@@ -107,15 +123,39 @@ class Recorder:
     def push(self, snapshot, digest):
         LIB.hcb_rec_push(ctypes.byref(self.rec), self.buf, ctypes.byref(snapshot), digest)
 
+    def push_state(self, brain):
+        LIB.hcb_rec_push_state(ctypes.byref(self.rec), self.buf, brain.mem)
+
+    def all(self):
+        return decode(self.buf, self.rec.start, self.rec.end)
+
     def records(self):
-        """[(snapshot, digest)] oldest first, decoded by the core itself."""
-        out, off = [], ctypes.c_uint32(self.rec.start)
-        while True:
-            s, d = hcb_snapshot(), ctypes.c_uint32()
-            if not LIB.hcb_rec_next(self.buf, self.rec.end, ctypes.byref(off), ctypes.byref(s), ctypes.byref(d)):
-                break
-            out.append((s, d.value))
-        return out
+        """[(snapshot, digest)] oldest first."""
+        return [(r[1], r[2]) for r in self.all() if r[0] == 'snapshot']
+
+    def box(self, brain, text=''):
+        """The report file exactly as the phone writes it: head, records, text."""
+        raw = text.encode('utf-8')
+        head = hcb_box_head()
+        LIB.hcb_box_head_fill(ctypes.byref(head), ctypes.byref(self.rec), brain.mem, len(raw))
+        return bytes(head) + bytes(self.buf[self.rec.start:self.rec.end]) + raw
+
+
+def read_box(data):
+    """Parse a report file. Returns (head, records, text); raises ValueError with a plain reason when it cannot be used."""
+    n = ctypes.sizeof(hcb_box_head)
+    if len(data) < n or data[:7] != b'HCBBOX1':
+        raise ValueError('not a Helicover Brain report')
+    head = hcb_box_head.from_buffer_copy(data[:n])
+    mine = dict(version=HCB_VERSION, brain_size=LIB.hcb_brain_size(), snapshot_size=ctypes.sizeof(hcb_snapshot), ped_size=ctypes.sizeof(hcb_ped),
+                veh_size=ctypes.sizeof(hcb_veh), event_size=ctypes.sizeof(hcb_event))
+    for k, v in mine.items():
+        if getattr(head, k) != v:
+            raise ValueError('the report was written by another version of the brain (%s %d, here %d)' % (k, getattr(head, k), v))
+    if n + head.data_len + head.text_len > len(data):
+        raise ValueError('the report is cut short')
+    buf = (ctypes.c_uint8 * max(head.data_len, 1)).from_buffer_copy(data[n:n + head.data_len].ljust(1, b'\0'))
+    return head, decode(buf, 0, head.data_len), data[n + head.data_len:n + head.data_len + head.text_len].decode('utf-8', 'replace')
 
 
 class Scene:
@@ -132,6 +172,7 @@ class Scene:
         self.wanted, self.on_mission, self.cutscene, self.heli = wanted, on_mission, 0, 0
         self.next_id = 0x100
         self.recorder = None
+        self.state_every = 0     # with a recorder: store the brain's memory every this many ticks
         self.snapshots = []
 
     def _id(self):
@@ -223,6 +264,8 @@ class Scene:
             self.time += ms
             self.frame += 1
             s = self.snapshot()
+            if self.recorder and self.state_every and self.frame % self.state_every == 1:
+                self.recorder.push_state(self.brain)
             out = self.brain.think(s)
             if self.recorder:
                 self.recorder.push(s, out.digest)
