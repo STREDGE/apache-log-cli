@@ -16,7 +16,9 @@ for _op,_name,_n in [(0x020a,'SET_CAR_DOORS_LOCKED',2),(0x0a52,'IS_WIDGET_RELEAS
  (0x0634,'TASK_KILL_CHAR_ON_FOOT_WHILE_DUCKING',5),(0x07a5,'TASK_KILL_CHAR_ON_FOOT_TIMED',3),(0x0667,'TASK_AIM_GUN_AT_COORD',5),
  (0x0633,'TASK_LEAVE_ANY_CAR',1),(0x081a,'SET_CHAR_WEAPON_SKILL',2),(0x0856,'SET_CHAR_ALLOWED_TO_DUCK',2),(0x06ac,'GET_CHAR_SPEED',2),
  (0x05f5,'TASK_FOLLOW_PATH_NODES_TO_COORD',6),(0x0350,'SET_CHAR_STAY_IN_SAME_PLACE',2),(0x05ba,'TASK_STAND_STILL',2),(0x0639,'TASK_TURN_CHAR_TO_FACE_CHAR',2),
- (0x078f,'TASK_CLIMB',2),(0x0637,'TASK_GO_TO_COORD_WHILE_SHOOTING',8),(0x05c5,'TASK_DUCK',2)]:
+ (0x078f,'TASK_CLIMB',2),(0x0637,'TASK_GO_TO_COORD_WHILE_SHOOTING',8),(0x05c5,'TASK_DUCK',2),
+ # 1.2: GET_RANDOM_FLOAT_IN_RANGE (min, max, result): checked in libGTASA (ProcessCommands500To599 case 0x208: two floats in, one float out)
+ (0x0208,'GENERATE_RANDOM_FLOAT_IN_RANGE',3)]:
  LIB.setdefault(_op,{'id':'%04X'%_op,'name':_name,'num_params':_n})
 STATE=0x48454d00;CMD=STATE+1;HEART=STATE+2
 # Protocol: commands 1 summon, 2 follow, 3 hold, 4 depart.
@@ -39,7 +41,10 @@ class Script:
  def get(self,var,key):self.add(0xddd,V(var),I(key))
  def call(self,n):self.add(0x50,L(n))
  def ret(self):self.add(0x51)
- def blob(self,label,title,items):self.data[label]=struct.pack('<I',0)+(title+'\0CLOSE\0'+'\0'.join(items)+'\0\0').encode('ascii')
+ def blob(self,label,title,items):
+  # 1.2: text may be str (ASCII) or bytes (Cyrillic in the game's byte codes)
+  def b(x):return x.encode('ascii') if isinstance(x,str) else bytes(x)
+  self.data[label]=struct.pack('<I',0)+b(title)+b'\0CLOSE\0'+b'\0'.join(b(i) for i in items)+b'\0\0'
  def build(self,name,ext):
   def param(t,v,labels=None):
    if t==9:return b'\x09'+v.encode('ascii').ljust(8,b'\0')

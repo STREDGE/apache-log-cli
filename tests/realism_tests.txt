@@ -1,0 +1,56 @@
+PASS: Rope glide from 40 m eases out in about 3-4 s, never above 25 m/s, and takes the same time at 30 and 10 fps (3200 ms / 3201 ms)
+PASS: Exit by rope at 20 m/s: the destination is 30 m ahead (speed + 10 m), so the helicopter slows down on the way
+PASS: A script-flown helicopter (frozen, no real speed) is slowed by its cruise speed: 40 m/s means a point 50 m ahead
+PASS: Exit by rope at walking pace: freeze right here and drop
+PASS: Scripted cruise starts at the real speed (0.3 m in the first 16 ms frame, then 1.6 m per 100 ms), not from a standstill
+PASS: Blocked-landing state ends by itself: back to FOLLOW after 15 s with CJ on foot, kept while CJ is aboard
+PASS: Emergency landing (CJ aboard, hull below 350): lands below at once and refuses FOLLOW while it is down
+PASS: Emergency landing skips a blocked spot and takes the first clear one 25 m around
+PASS: Hull below 350 with CJ on foot: the pilot retreats (it no longer depends on the crew phase)
+PASS: A guard 150 m behind for 60 s is let go (deleted out of sight); the rest of the team carries on
+PASS: The same guard in view is handed back to the game (01C2), never deleted on screen
+PASS: Everybody lagging for 60 s: "lost you, team stands down", ESCORT_ON cleared, not a single teleport
+PASS: Catching up within 70 m clears the lag clock
+PASS: CJ drives a 4-door car: guards 0, 1, 2 take passenger seats 0, 1, 2 (guard 3 has no seat)
+PASS: CJ is a passenger of somebody else's car: the guards do not climb in
+PASS: A bike / two-seater has one passenger seat: only guard 0 rides
+PASS: Recall: the pilot waits up to 25 s for the guards; the one who cannot get there stays behind and is never teleported
+PASS: A guard in a car gets out first (task) and then runs to his rope; no teleport out of the car
+PASS: Rope pickup nobody takes: after 90 s the ropes go up and the helicopter is free again
+PASS: CJ dies / is arrested while a team deployment starts: ESCORT_ON is reset, support is not stuck on a team that never came
+PASS: Recall for a team that no longer exists: the pilot does not hang frozen, he goes back to FOLLOW
+PASS: Formation anchor: walking 60+ degrees off the old direction for 1.5 s re-anchors it, a short sidestep does not
+PASS: Standing still (turning, aiming) never rotates the formation: the guards do not run round CJ
+PASS: Slots are placed in the anchored frame: ahead = travel direction, right = (uy, -ux)
+PASS: CJ shooting ahead: the guard in front of him steps 2 m out of his line of fire, the others stay in place
+PASS: When CJ stops shooting the guard returns to his slot
+PASS: Assault: a guard 27 m from CJ turns back to his slot (25 m cap, was 40 m)
+PASS: Assault: the medic stays with CJ
+PASS: Guards keep the target they are on while it lives (no flipping when the threat list is reshuffled)
+PASS: The squad adopts a shooter the bullet-trace scan found, even 45 m away outside its own search
+PASS: CJ aim line: only a round whose line passes within 1.5 m of him within 350 ms of his own shot counts as his
+PASS: CJ aim line: a round that flew past him pointing away from where he faces is not his aim (80 deg counts, 120 deg does not); in a car any direction counts
+PASS: Bullet traces are read every frame (30/s) while CJ shoots and only on the 100 ms tick (7/s) when he does not
+PASS: Hits on the helicopter: a line within 6 m counts, one 12 m away does not
+PASS: The reverse search for a shooter runs at most four times a second even under a stream of rounds (21 passes in 6 s)
+PASS: Door gunners scatter their bullets (about +-0.5 m at 40 m) instead of putting every round on one point
+PASS: The scatter grows with the distance to the target (0.65 m at 8 m, 1.00 m at 70 m)
+PASS: The team that ropes down wears the crew setting: Grove 106/107, Army 287, SWAT 285 (it was always SWAT)
+PASS: Changing the crew on the menu re-dresses the team on the ground at once: same spot, heading, health and armour, nobody teleports
+PASS: Grove clothes alternate between the two Families skins
+PASS: A guard in a car keeps the old clothes until he steps out, then changes in place
+PASS: Changing the crew weapon arms the team on the ground at once
+PASS: Door gunners created by a crew change are armed immediately
+PASS: Model swap: instant, except while somebody hangs on a rope (then right after it ends, one message)
+PASS: Helicopter swapped while the ropes are out: the rope session carries on with the new helicopter, still frozen on the spot
+PASS: Helicopter model changed while the escort team is on the ground: the team is not recalled or lost
+PASS: Crew changed while the ropes are out: the rope session carries on, the helicopter stays frozen on its spot
+PASS: Model swap asked for during the climb waits for the end of the rope work, then CJ sits in the new helicopter
+PASS: A crew change asked for during CJ's climb waits for the end of the rope work: CJ is not left on the ground
+PASS: A crew change in the middle of a squad recall does not cancel it: the squad climbs aboard first, then the crew changes
+PASS: Exit requested during a scripted flight keeps the helicopter on its cruise and its speed: it slows down smoothly, no dead stop
+PASS: Releasing the helicopter clears the cruise speed
+PASS: After a live re-skin the clean-up deletes only real objects (no ped handle in the platform slot)
+PASS: Boarding muster: each guard walks to the side of the helicopter he is mounted on (it was mirrored: a 4 m snap through the fuselage)
+PASS: A whole day - deploy, fire fight, CJ drives off, the squad cannot keep up, dismiss - without a single teleport of a person
+Mocked script execution only: real flight, pathing and animations are not simulated.

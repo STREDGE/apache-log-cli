@@ -46,7 +46,7 @@ HCNOSIT ~y~PILOT:~w~ cannot land here. Move to open, level ground.
 HCFAR ~y~PILOT:~w~ come within 12 m of the helicopter.
 HCWAIT ~y~PILOT:~w~ waiting for the crew. Clear their path.
 HCIN ~y~HELICOVER:~w~ get in the helicopter first.
-HCOFF ~r~HELICOVER:~w~ files missing. Copy all 7 files to CLEO and restart.
+HCOFF ~r~HELICOVER:~w~ files missing. Copy all files to CLEO and restart.
 HCSWAP ~b~PILOT:~w~ helicopter changed.
 HCSNO ~y~HELICOVER:~w~ the Hunter has no passenger seat - get out first.
 HCSFAIL ~r~HELICOVER:~w~ change failed, kept the current helicopter.
@@ -59,11 +59,14 @@ SQALR ~y~SQUAD:~w~ the team is already on the ground.
 SQNONE ~y~SQUAD:~w~ no team on the ground.
 SQFOOT ~y~SQUAD:~w~ CJ must be on foot to receive the team.
 SQCREW ~y~SQUAD:~w~ wait until the crew is back aboard.
+HCBUSY ~y~PILOT:~w~ emergency landing - cannot comply.
+HCSLATE ~y~PILOT:~w~ I make the change right after the rope.
+HFTEST ~b~FONT TEST~w~ ABCDEFGH abcdefgh 12345
 HCFOCUS ~r~SHOOTER ON CJ!~w~ Gunners focusing fire.
 HCEVADE ~r~TAKING HITS!~w~ Pilot breaking away.
 HCSHOT ~r~TAKING FIRE!~w~ Pilot breaking away.
-HCHELLO ~b~HELICOVER 1.1~w~ ready. CLEO menu > Helicover.
-HCHELLV ~b~HELICOVER 1.1~w~ ready. Map marker off on this game version.
+HCHELLO ~b~HELICOVER 1.2 BETA~w~ ready. CLEO menu > Helicover.
+HCHELLV ~b~HELICOVER 1.2 BETA~w~ ready. Map marker is off here.
 RGDEP ~b~PILOT:~w~ team going down the ropes.
 RGDONE ~g~SQUAD:~w~ team back aboard.
 RGFAIL ~r~HELICOVER:~w~ could not load the team.
@@ -80,6 +83,9 @@ SQIN ~g~SQUAD:~w~ on the ground. Escorting CJ.
 SQBACK ~g~SQUAD:~w~ team back aboard.
 SQLOST ~r~SQUAD LOST!~w~ The escort team is down.
 SQCOVER ~g~SQUAD:~w~ covering your extraction.
+SQAWAY ~g~SQUAD:~w~ lost you. Team stands down.
+SQSTAY ~g~SQUAD:~w~ staying on the ground.
+RGLATE ~y~PILOT:~w~ you did not come. Ropes up.
 SQXF ~r~SHOTS AT CJ - FRONT!~w~ Covering him.
 SQSF ~r~SNIPER - FRONT!~w~ Keep CJ in cover.
 SQVF ~r~CAR INCOMING - FRONT!~w~ Hitting the driver.
