@@ -1,0 +1,89 @@
+/* Helicover Brain - core internals shared by the core's own source files. Not part of the interface. */
+#ifndef HCB_INT_H
+#define HCB_INT_H
+#include "hcb.h"
+
+#define API __attribute__((visibility("default")))
+#define HID __attribute__((visibility("hidden")))
+typedef uint32_t u32;
+typedef uint16_t u16;
+typedef uint8_t u8;
+
+/* ------------------------------------------------------------------ small maths */
+static inline float f_abs(float a) { return a < 0 ? -a : a; }
+static inline float f_min(float a, float b) { return a < b ? a : b; }
+static inline float f_max(float a, float b) { return a > b ? a : b; }
+static inline float f_clamp(float a, float lo, float hi) { return a < lo ? lo : a > hi ? hi : a; }
+static inline float f_sqrt(float x) {
+    union { float f; u32 i; } u;
+    float y;
+    if (x <= 0) return 0;
+    u.f = x;
+    u.i = 0x1fbd1df5u + (u.i >> 1);          /* first guess, then four Newton steps */
+    y = u.f;
+    y = 0.5f * (y + x / y); y = 0.5f * (y + x / y); y = 0.5f * (y + x / y); y = 0.5f * (y + x / y);
+    return y;
+}
+static inline hcb_vec v_sub(hcb_vec a, hcb_vec b) { hcb_vec r; r.x = a.x - b.x; r.y = a.y - b.y; r.z = a.z - b.z; return r; }
+static inline hcb_vec v_add(hcb_vec a, hcb_vec b) { hcb_vec r; r.x = a.x + b.x; r.y = a.y + b.y; r.z = a.z + b.z; return r; }
+static inline hcb_vec v_mul(hcb_vec a, float k) { hcb_vec r; r.x = a.x * k; r.y = a.y * k; r.z = a.z * k; return r; }
+static inline float v_dot(hcb_vec a, hcb_vec b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+static inline float v_len(hcb_vec a) { return f_sqrt(v_dot(a, a)); }
+static inline float v_dist(hcb_vec a, hcb_vec b) { return v_len(v_sub(a, b)); }
+/* Distance from p to the segment a-b; *t = where along it (0..1) the nearest point lies. */
+static inline float seg_dist(hcb_vec p, hcb_vec a, hcb_vec b, float *t) {
+    hcb_vec ab = v_sub(b, a), ap = v_sub(p, a);
+    float l2 = v_dot(ab, ab), k = l2 > 1e-6f ? f_clamp(v_dot(ap, ab) / l2, 0, 1) : 0;
+    if (t) *t = k;
+    return v_dist(p, v_add(a, v_mul(ab, k)));
+}
+static inline void zero(void *p, u32 n) { u8 *q = p; while (n--) *q++ = 0; }
+static inline void copy(void *d, const void *s, u32 n) { u8 *a = d; const u8 *b = s; while (n--) *a++ = *b++; }
+
+/* ------------------------------------------------------------------ the brain */
+typedef struct track {
+    hcb_ped last;
+    u32 first_seen, last_seen, last_hostile, last_shot, cj_hit_him, cj_marked;
+    float damage_cj, damage_ours, aim_ms, edps, dist;
+    u16 shots_at_cj, shots_at_ours, shots_total;
+    u8 used, seen, cls, why, best_weapon, friendly, aims_at_ours, aim_latch;
+} track;
+typedef struct vtrack {
+    hcb_veh last;
+    u32 last_seen;
+    float edps, dist;
+    u8 used, seen, cls, why;
+} vtrack;
+/* one of our shooters between ticks: whom he is on, since when, where he is in his burst */
+typedef struct shooter {
+    u32 id, target, since, fire_from, burst_until, pause_until;
+    u8 used, hold, role, reserved;
+} shooter;
+/* what is known about lines of sight (answers of the adapter), and what has been asked */
+#define HCB_LOS_CACHE 64
+typedef struct losent {
+    u32 from, to, time;
+    u8 used, clear, reserved0, reserved1;
+} losent;
+struct hcb_brain {
+    hcb_cfg cfg;
+    u32 time, ticks, rng, seed, alert_since, calm_since, reserved;
+    u8 alert, started, reserved0, reserved1;
+    track tr[HCB_MAX_TRACKS];
+    vtrack vt[HCB_MAX_VTRACKS];
+    shooter sh[HCB_MAX_OURS];
+    losent los[HCB_LOS_CACHE];
+};
+
+
+/* hcb_core.c */
+HID track *hcb_find(hcb_brain *b, u32 id);
+HID int hcb_is_ours(const hcb_snapshot *s, u32 id);
+HID const hcb_ped *hcb_ped_of(const hcb_snapshot *s, u32 id);
+HID u32 hcb_fnv(u32 h, u32 v);
+HID u32 hcb_bits(float f);
+HID u32 hcb_rand(hcb_brain *b);
+HID int hcb_is_firearm(int w);
+/* hcb_fire.c */
+HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out);
+#endif

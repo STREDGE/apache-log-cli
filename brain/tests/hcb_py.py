@@ -59,7 +59,7 @@ LIB.hcb_struct_size.restype = ctypes.c_uint32
 LIB.hcb_config.restype = ctypes.POINTER(hcb_cfg)
 LIB.hcb_weapon_dps.restype = ctypes.c_float
 LIB.hcb_weapon_range.restype = ctypes.c_float
-for _i, _n in enumerate(['hcb_ped', 'hcb_veh', 'hcb_event', 'hcb_snapshot', 'hcb_out', 'hcb_cfg', 'hcb_mark', 'hcb_track_info', 'hcb_rec', 'hcb_box_head']):
+for _i, _n in enumerate(['hcb_ped', 'hcb_veh', 'hcb_event', 'hcb_snapshot', 'hcb_out', 'hcb_cfg', 'hcb_mark', 'hcb_track_info', 'hcb_rec', 'hcb_box_head', 'hcb_los', 'hcb_order']):
     assert LIB.hcb_struct_size(_i) == ctypes.sizeof(STRUCTS[_n]), ('layout differs between C and Python', _n, LIB.hcb_struct_size(_i), ctypes.sizeof(STRUCTS[_n]))
     assert ctypes.sizeof(STRUCTS[_n]) % 4 == 0, _n
 
@@ -162,7 +162,7 @@ class Scene:
     """A little world for tests: CJ at the origin facing north (+y), people and cars added by hand, time in 100 ms steps.
     Positions are metres, x east, y north. `step()` builds the snapshot, lets the brain think and moves everybody on."""
 
-    def __init__(self, brain=None, wanted=0, on_mission=0):
+    def __init__(self, brain=None, wanted=0, on_mission=0, roe=None):
         self.brain = brain or Brain()
         self.time = 100000
         self.frame = 0
@@ -170,6 +170,11 @@ class Scene:
                        target=0, vehicle=0, model=0, seat=0)
         self.peds, self.vehs, self.events, self.ours = {}, {}, [], {}
         self.wanted, self.on_mission, self.cutscene, self.heli = wanted, on_mission, 0, 0
+        self.roe, self.police = HCB_ROE_DEFEND if roe is None else roe, HCB_POLICE_ANSWER
+        self.walls = []          # [(x1, y1, x2, y2)]: segments that block the line of sight (answers to the brain's questions)
+        self.los_fn = None       # or a function (from_id, to_id) -> bool
+        self.asked = []          # the questions of the last tick
+        self.orders = {}         # who -> hcb_order of the last tick
         self.next_id = 0x100
         self.recorder = None
         self.state_every = 0     # with a recorder: store the brain's memory every this many ticks
@@ -233,11 +238,35 @@ class Scene:
         o.health, o.armour, o.model, o.pedtype, o.weapon = p['health'], p['armour'], p['model'], p['pedtype'], p['weapon']
         o.flags, o.flags2, o.seat = p['flags'] | (HCB_PF_SHOOTING if p.get('shot') else 0), p['flags2'], p['seat']
 
+    def pos_of(self, id):
+        return (self.peds.get(id) or self.vehs.get(id) or self.cj)['pos'] if id != 1 else self.cj['pos']
+
+    def sees(self, a, b):
+        """The adapter's answer to "is there a clear line from a to b"."""
+        if a not in self.peds or b not in self.peds:
+            return False
+        if self.los_fn:
+            return bool(self.los_fn(a, b))
+        p, q = self.peds[a]['pos'], self.peds[b]['pos']
+
+        def cross(o, u, v):
+            return (u[0] - o[0]) * (v[1] - o[1]) - (u[1] - o[1]) * (v[0] - o[0])
+        for x1, y1, x2, y2 in self.walls:
+            w1, w2 = (x1, y1), (x2, y2)
+            if cross(p, q, w1) * cross(p, q, w2) < 0 and cross(w1, w2, p) * cross(w1, w2, q) < 0:
+                return False
+        return True
+
     def snapshot(self):
         import math
         s = hcb_snapshot()
         s.time, s.frame, s.heli = self.time, self.frame, self.heli
-        s.wanted, s.on_mission, s.cutscene = self.wanted, self.on_mission, self.cutscene
+        s.wanted, s.on_mission, s.cutscene, s.roe, s.police = self.wanted, self.on_mission, self.cutscene, self.roe, self.police
+        s.n_los = len(self.asked)
+        for o, (a, b) in zip(s.los, self.asked):
+            o.to = b
+            o.clear = int(self.sees(a, b))
+            setattr(o, 'from', a)
         self._fill_ped(s.player, self.cj)
         near = sorted(self.peds.values(), key=lambda p: math.dist(p['pos'], self.cj['pos']))
         s.n_peds = min(len(near), HCB_MAX_PEDS)
@@ -271,6 +300,8 @@ class Scene:
                 self.recorder.push(s, out.digest)
             self.snapshots.append(s)
             self.events = []
+            self.asked = [(getattr(q, 'from'), q.to) for q in out.queries[:out.n_queries]]
+            self.orders = {o.who: hcb_order.from_buffer_copy(bytes(o)) for o in out.orders[:out.n_orders]}
             for p in list(self.peds.values()) + [self.cj]:
                 p.pop('shot', None)
                 p['pos'] = [p['pos'][i] + p['vel'][i] * ms / 1000. for i in range(3)]

@@ -1,43 +1,7 @@
 /* Helicover Brain - core: memory of contacts, threat assessment, alert level, black box.
  * Plain C, no libc, no game code, no allocation. Only + - * / on floats (and -ffp-contract=off in the build), so a
  * recorded fight replays bit for bit on any machine. */
-#include "hcb.h"
-
-#define API __attribute__((visibility("default")))
-typedef uint32_t u32;
-typedef uint16_t u16;
-typedef uint8_t u8;
-
-/* ------------------------------------------------------------------ small maths */
-static float f_abs(float a) { return a < 0 ? -a : a; }
-static float f_min(float a, float b) { return a < b ? a : b; }
-static float f_max(float a, float b) { return a > b ? a : b; }
-static float f_clamp(float a, float lo, float hi) { return a < lo ? lo : a > hi ? hi : a; }
-static float f_sqrt(float x) {
-    union { float f; u32 i; } u;
-    float y;
-    if (x <= 0) return 0;
-    u.f = x;
-    u.i = 0x1fbd1df5u + (u.i >> 1);          /* first guess, then four Newton steps */
-    y = u.f;
-    y = 0.5f * (y + x / y); y = 0.5f * (y + x / y); y = 0.5f * (y + x / y); y = 0.5f * (y + x / y);
-    return y;
-}
-static hcb_vec v_sub(hcb_vec a, hcb_vec b) { hcb_vec r; r.x = a.x - b.x; r.y = a.y - b.y; r.z = a.z - b.z; return r; }
-static hcb_vec v_add(hcb_vec a, hcb_vec b) { hcb_vec r; r.x = a.x + b.x; r.y = a.y + b.y; r.z = a.z + b.z; return r; }
-static hcb_vec v_mul(hcb_vec a, float k) { hcb_vec r; r.x = a.x * k; r.y = a.y * k; r.z = a.z * k; return r; }
-static float v_dot(hcb_vec a, hcb_vec b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
-static float v_len(hcb_vec a) { return f_sqrt(v_dot(a, a)); }
-static float v_dist(hcb_vec a, hcb_vec b) { return v_len(v_sub(a, b)); }
-/* Distance from p to the segment a-b; *t = where along it (0..1) the nearest point lies. */
-static float seg_dist(hcb_vec p, hcb_vec a, hcb_vec b, float *t) {
-    hcb_vec ab = v_sub(b, a), ap = v_sub(p, a);
-    float l2 = v_dot(ab, ab), k = l2 > 1e-6f ? f_clamp(v_dot(ap, ab) / l2, 0, 1) : 0;
-    if (t) *t = k;
-    return v_dist(p, v_add(a, v_mul(ab, k)));
-}
-static void zero(void *p, u32 n) { u8 *q = p; while (n--) *q++ = 0; }
-static void copy(void *d, const void *s, u32 n) { u8 *a = d; const u8 *b = s; while (n--) *a++ = *b++; }
+#include "hcb_int.h"
 
 /* ------------------------------------------------------------------ weapons */
 API int hcb_weapon_class(int w) {
@@ -78,29 +42,7 @@ API float hcb_weapon_range(int w) {
     }
     return 1.6f;
 }
-static int is_firearm(int w) { int c = hcb_weapon_class(w); return c >= HCB_WC_PISTOL && c <= HCB_WC_HEAVY; }
-
-/* ------------------------------------------------------------------ the brain */
-typedef struct track {
-    hcb_ped last;
-    u32 first_seen, last_seen, last_hostile, last_shot, cj_hit_him;
-    float damage_cj, damage_ours, aim_ms, edps, dist;
-    u16 shots_at_cj, shots_at_ours, shots_total;
-    u8 used, seen, cls, why, best_weapon, friendly, aims_at_ours, aim_latch;
-} track;
-typedef struct vtrack {
-    hcb_veh last;
-    u32 last_seen;
-    float edps, dist;
-    u8 used, seen, cls, why;
-} vtrack;
-struct hcb_brain {
-    hcb_cfg cfg;
-    u32 time, ticks, rng, seed, alert_since, calm_since, reserved;
-    u8 alert, started, reserved0, reserved1;
-    track tr[HCB_MAX_TRACKS];
-    vtrack vt[HCB_MAX_VTRACKS];
-};
+HID int hcb_is_firearm(int w) { int c = hcb_weapon_class(w); return c >= HCB_WC_PISTOL && c <= HCB_WC_HEAVY; }
 
 API u32 hcb_brain_size(void) { return sizeof(struct hcb_brain); }
 API u32 hcb_struct_size(int which) {
@@ -115,6 +57,8 @@ API u32 hcb_struct_size(int which) {
     case 7: return sizeof(hcb_track_info);
     case 8: return sizeof(hcb_rec);
     case 9: return sizeof(hcb_box_head);
+    case 10: return sizeof(hcb_los);
+    case 11: return sizeof(hcb_order);
     }
     return 0;
 }
@@ -137,9 +81,23 @@ API void hcb_init(hcb_brain *b, u32 seed) {
     b->cfg.melee_m = 7.0f;
     b->cfg.calm_ms = 6000;
     b->cfg.evac_danger = 220;
+    b->cfg.cj_line_m = 2.0f;
+    b->cfg.line_per_m = 0.02f;
+    b->cfg.friend_line_m = 1.25f;
+    b->cfg.bystander_line_m = 0.8f;
+    b->cfg.backstop_m = 40;
+    b->cfg.explode_m = 18;
+    b->cfg.car_floor = 700;
+    b->cfg.react_min_ms = 150;
+    b->cfg.react_max_ms = 350;
+    b->cfg.burst_min_ms = 600;
+    b->cfg.burst_max_ms = 1400;
+    b->cfg.pause_min_ms = 200;
+    b->cfg.pause_max_ms = 500;
+    b->cfg.follow_ms = 3000;
 }
 
-static track *find(hcb_brain *b, u32 id) {
+HID track *hcb_find(hcb_brain *b, u32 id) {
     int i;
     if (!id) return 0;
     for (i = 0; i < HCB_MAX_TRACKS; i++) if (b->tr[i].used && b->tr[i].last.id == id) return &b->tr[i];
@@ -160,17 +118,17 @@ static track *slot(hcb_brain *b) {
     return &b->tr[best];
 }
 static track *touch(hcb_brain *b, u32 id, u32 now) {
-    track *t = find(b, id);
+    track *t = hcb_find(b, id);
     if (!t) { t = slot(b); t->used = 1; t->last.id = id; t->first_seen = now; t->last_seen = now; }
     return t;
 }
-static int is_ours(const hcb_snapshot *s, u32 id) {
+HID int hcb_is_ours(const hcb_snapshot *s, u32 id) {
     int i;
     if (!id) return 0;
     for (i = 0; i < s->n_ours && i < HCB_MAX_OURS; i++) if (s->ours[i] == id) return 1;
     return id == s->heli;
 }
-static const hcb_ped *ped_of(const hcb_snapshot *s, u32 id) {
+HID const hcb_ped *hcb_ped_of(const hcb_snapshot *s, u32 id) {
     int i;
     if (id == s->player.id) return &s->player;
     for (i = 0; i < s->n_peds && i < HCB_MAX_PEDS; i++) if (s->peds[i].id == id) return &s->peds[i];
@@ -206,27 +164,35 @@ static void on_event(hcb_brain *b, const hcb_snapshot *s, const hcb_event *e) {
     track *t;
     int i;
     if (e->type == HCB_EV_SHOT) {
-        if (!e->src || e->src == s->player.id || is_ours(s, e->src)) return;
+        if (e->src && e->src == s->player.id) {      /* CJ's own fire points at people: the man he hit, or anybody his round passed close by */
+            if (e->dst && !hcb_is_ours(s, e->dst)) { t = hcb_find(b, e->dst); if (t) t->cj_marked = e->time; }
+            for (i = 0; i < HCB_MAX_TRACKS; i++) {
+                t = &b->tr[i];
+                if (t->used && t->seen && !t->friendly && fired_at(e->a, e->b, t->last.pos, 1.5f)) t->cj_marked = e->time;
+            }
+            return;
+        }
+        if (!e->src || hcb_is_ours(s, e->src)) return;
         t = touch(b, e->src, s->time);
-        if (!t->seen && !ped_of(s, e->src)) t->last.pos = e->a;     /* a shooter beyond the snapshot: at least where he is */
+        if (!t->seen && !hcb_ped_of(s, e->src)) t->last.pos = e->a;     /* a shooter beyond the snapshot: at least where he is */
         t->shots_total++;
         t->last_shot = e->time;
         if (e->dst == s->player.id || fired_at(e->a, e->b, s->player.pos, c->shot_pass_m)) {
             t->shots_at_cj++; t->last_hostile = e->time; return;
         }
-        if (is_ours(s, e->dst)) { t->shots_at_ours++; t->last_hostile = e->time; return; }
+        if (hcb_is_ours(s, e->dst)) { t->shots_at_ours++; t->last_hostile = e->time; return; }
         for (i = 0; i < s->n_ours && i < HCB_MAX_OURS; i++) {
-            const hcb_ped *o = ped_of(s, s->ours[i]);
+            const hcb_ped *o = hcb_ped_of(s, s->ours[i]);
             if (o && fired_at(e->a, e->b, o->pos, c->shot_pass_m)) { t->shots_at_ours++; t->last_hostile = e->time; return; }
         }
     } else if (e->type == HCB_EV_DAMAGE) {
         if (e->src == s->player.id) {                 /* CJ hit somebody: remembered, it is his business */
-            if (e->dst && !is_ours(s, e->dst)) { t = touch(b, e->dst, s->time); t->cj_hit_him = e->time; }
+            if (e->dst && !hcb_is_ours(s, e->dst)) { t = touch(b, e->dst, s->time); t->cj_hit_him = e->time; t->cj_marked = e->time; }
             return;
         }
-        if (!e->src || is_ours(s, e->src)) return;
+        if (!e->src || hcb_is_ours(s, e->src)) return;
         if (e->dst == s->player.id) { t = touch(b, e->src, s->time); t->damage_cj += e->value; t->last_hostile = e->time; }
-        else if (is_ours(s, e->dst)) { t = touch(b, e->src, s->time); t->damage_ours += e->value; t->last_hostile = e->time; }
+        else if (hcb_is_ours(s, e->dst)) { t = touch(b, e->src, s->time); t->damage_ours += e->value; t->last_hostile = e->time; }
     }
 }
 
@@ -243,9 +209,9 @@ static void judge(hcb_brain *b, const hcb_snapshot *s, track *t, float dt) {
     const hcb_ped *p = &t->last, *cj = &s->player;
     hcb_vec to_cj = v_sub(cj->pos, p->pos);
     float dist = v_len(to_cj), facing, closing, range = hcb_weapon_range(p->weapon);
-    int armed = is_firearm(p->weapon), wclass = hcb_weapon_class(p->weapon), hostile = hostile_type(s, p);
+    int armed = hcb_is_firearm(p->weapon), wclass = hcb_weapon_class(p->weapon), hostile = hostile_type(s, p);
     int on_foot = !p->vehicle, blocked = (p->flags2 & HCB_PF2_LOS_KNOWN) && !(p->flags2 & HCB_PF2_LOS_CLEAR);
-    int aims_cj = p->target && p->target == cj->id, aims_ours = p->target && is_ours(s, p->target);
+    int aims_cj = p->target && p->target == cj->id, aims_ours = p->target && hcb_is_ours(s, p->target);
     int defensive = s->on_mission && (p->flags & HCB_PF_MISSION);
     u32 now = s->time;
     u8 cls = HCB_CLS_NEUTRAL, why = HCB_WHY_NONE;
@@ -253,6 +219,7 @@ static void judge(hcb_brain *b, const hcb_snapshot *s, track *t, float dt) {
 
     t->dist = dist;
     if (p->weapon > t->best_weapon && hcb_weapon_class(p->weapon) != HCB_WC_NONE) t->best_weapon = p->weapon;
+    if (cj->target && cj->target == p->id) t->cj_marked = now;      /* CJ has him in his sights */
     facing = dist > 0.01f ? v_dot(p->fwd, to_cj) / dist : 1;
     closing = dist > 0.01f ? v_dot(p->vel, to_cj) / dist : 0;
 
@@ -264,7 +231,7 @@ static void judge(hcb_brain *b, const hcb_snapshot *s, track *t, float dt) {
     if (t->aim_ms >= c->aim_ms) t->aim_latch = 1;
     else if (t->aim_ms <= 0) t->aim_latch = 0;
 
-    if (is_ours(s, p->id)) { t->friendly = 1; t->cls = HCB_CLS_FRIEND; t->why = HCB_WHY_OURS; t->edps = 0; return; }
+    if (hcb_is_ours(s, p->id)) { t->friendly = 1; t->cls = HCB_CLS_FRIEND; t->why = HCB_WHY_OURS; t->edps = 0; return; }
     t->friendly = (u8)ally(t, now, c);
     if (t->friendly) { t->cls = HCB_CLS_FRIEND; t->why = HCB_WHY_ALLY; t->edps = 0; return; }
 
@@ -304,9 +271,9 @@ static void judge_vehicle(hcb_brain *b, const hcb_snapshot *s, vtrack *v) {
     const hcb_ped *cj = &s->player;
     hcb_vec rel = v_sub(cj->pos, h->pos), rv = v_sub(h->vel, cj->vel);
     float speed2 = v_dot(rv, rv), dist = v_len(rel);
-    track *drv = find(b, h->driver);
+    track *drv = hcb_find(b, h->driver);
     v->dist = dist; v->cls = HCB_CLS_NEUTRAL; v->why = HCB_WHY_NONE; v->edps = 0;
-    if (h->id == s->heli || h->id == cj->vehicle || (drv && drv->friendly) || is_ours(s, h->driver)) { v->cls = HCB_CLS_FRIEND; v->why = HCB_WHY_OURS; return; }
+    if (h->id == s->heli || h->id == cj->vehicle || (drv && drv->friendly) || hcb_is_ours(s, h->driver)) { v->cls = HCB_CLS_FRIEND; v->why = HCB_WHY_OURS; return; }
     if ((h->flags & HCB_VF_BURNING) && !(h->flags & HCB_VF_WRECKED) && dist <= c->burn_m) {
         v->cls = HCB_CLS_THREAT; v->why = HCB_WHY_BURNING; v->edps = 60 * (1 - dist / (c->burn_m * 1.5f)); return;
     }
@@ -324,12 +291,13 @@ static void judge_vehicle(hcb_brain *b, const hcb_snapshot *s, vtrack *v) {
     if (drv && drv->cls >= HCB_CLS_WATCH) { v->cls = drv->cls; v->why = drv->why; }
 }
 
-static u32 fnv(u32 h, u32 v) {
+HID u32 hcb_fnv(u32 h, u32 v) {
     int i;
     for (i = 0; i < 4; i++) { h ^= (v >> (8 * i)) & 0xff; h *= 16777619u; }
     return h;
 }
-static u32 bits(float f) { union { float f; u32 i; } u; u.f = f; return u.i; }
+HID u32 hcb_bits(float f) { union { float f; u32 i; } u; u.f = f; return u.i; }
+HID u32 hcb_rand(hcb_brain *b) { u32 x = b->rng; x ^= x << 13; x ^= x >> 17; x ^= x << 5; b->rng = x; return x; }
 /* marks ordered: most dangerous class first, then expected damage, then nearest */
 static int before(const hcb_mark *a, const hcb_mark *b) {
     if (a->cls != b->cls) return a->cls > b->cls;
@@ -360,7 +328,7 @@ API void hcb_think(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         const hcb_ped *p = &s->peds[i];
         track *t;
         if (!p->id || p->id == s->player.id) continue;
-        if (p->flags & HCB_PF_DEAD) { t = find(b, p->id); if (t) t->used = 0; continue; }
+        if (p->flags & HCB_PF_DEAD) { t = hcb_find(b, p->id); if (t) t->used = 0; continue; }
         t = touch(b, p->id, now);
         t->last = *p; t->seen = 1; t->last_seen = now;
     }
@@ -383,31 +351,38 @@ API void hcb_think(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
     out->time = now;
     for (i = 0; i < HCB_MAX_TRACKS; i++) {
         track *t = &b->tr[i];
-        hcb_mark m;
         u32 keep;
         if (!t->used) continue;
         judge(b, s, t, dt);
         /* how long an unseen contact is remembered depends on what he was */
         keep = t->cls == HCB_CLS_ATTACKER ? (u32)c->attacker_ms : t->cls >= HCB_CLS_WATCH ? (u32)(c->forget_ms * 3) : (u32)c->forget_ms;
-        if (!t->seen && now - t->last_seen > keep) { t->used = 0; continue; }
+        if (!t->seen && now - t->last_seen > keep) t->used = 0;
+    }
+    for (i = 0; i < HCB_MAX_VTRACKS; i++) {
+        vtrack *v = &b->vt[i];
+        hcb_mark m;
+        track *drv;
+        if (!v->used) continue;
+        if (!v->seen) { if (now - v->last_seen > (u32)c->forget_ms) v->used = 0; continue; }
+        judge_vehicle(b, s, v);
+        if (v->why != HCB_WHY_RAMMING && v->why != HCB_WHY_BURNING) continue;     /* occupants are marked as people */
+        /* whoever drives a car at CJ is a threat for as long as he does */
+        drv = v->why == HCB_WHY_RAMMING ? hcb_find(b, v->last.driver) : 0;
+        if (drv && !drv->friendly && drv->cls < HCB_CLS_THREAT) { drv->cls = HCB_CLS_THREAT; drv->why = HCB_WHY_RAMMING; drv->edps = v->edps; }
+        else { threats++; danger += v->edps; }
+        m.id = v->last.id; m.edps = v->edps; m.dist = v->dist; m.kind = HCB_KIND_VEH; m.cls = v->cls; m.why = v->why; m.seen = 1;
+        add_mark(out, m);
+    }
+    for (i = 0; i < HCB_MAX_TRACKS; i++) {
+        track *t = &b->tr[i];
+        hcb_mark m;
+        if (!t->used) continue;
         if (t->cls == HCB_CLS_ATTACKER) attackers++;
         if (t->cls >= HCB_CLS_THREAT) threats++;
         if (t->cls == HCB_CLS_WATCH) watch++;
         danger += t->edps;
         if (t->cls == HCB_CLS_NEUTRAL) continue;
         m.id = t->last.id; m.edps = t->edps; m.dist = t->dist; m.kind = HCB_KIND_PED; m.cls = t->cls; m.why = t->why; m.seen = t->seen;
-        add_mark(out, m);
-    }
-    for (i = 0; i < HCB_MAX_VTRACKS; i++) {
-        vtrack *v = &b->vt[i];
-        hcb_mark m;
-        if (!v->used) continue;
-        if (!v->seen) { if (now - v->last_seen > (u32)c->forget_ms) v->used = 0; continue; }
-        judge_vehicle(b, s, v);
-        if (v->why != HCB_WHY_RAMMING && v->why != HCB_WHY_BURNING) continue;     /* occupants are marked as people */
-        threats++;
-        danger += v->edps;
-        m.id = v->last.id; m.edps = v->edps; m.dist = v->dist; m.kind = HCB_KIND_VEH; m.cls = v->cls; m.why = v->why; m.seen = 1;
         add_mark(out, m);
     }
 
@@ -423,18 +398,24 @@ API void hcb_think(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
 
     out->alert = b->alert; out->danger = danger;
     out->n_threats = (u8)(threats > 255 ? 255 : threats); out->n_attackers = (u8)(attackers > 255 ? 255 : attackers);
+    hcb_fire_plan(b, s, out);
+    for (i = 0; i < out->n_orders; i++) {
+        const hcb_order *o = &out->orders[i];
+        h = hcb_fnv(h, o->who); h = hcb_fnv(h, o->target); h = hcb_fnv(h, ((u32)o->fire << 24) | ((u32)o->aim_at << 16) | ((u32)o->hold << 8) | o->ready);
+    }
+    for (i = 0; i < out->n_queries; i++) { h = hcb_fnv(h, out->queries[i].from); h = hcb_fnv(h, out->queries[i].to); }
     for (i = 0; i < out->n_marks; i++) {
         const hcb_mark *m = &out->marks[i];
         if (m->cls >= HCB_CLS_WATCH && !out->top) out->top = m->id;
-        h = fnv(h, m->id); h = fnv(h, ((u32)m->kind << 24) | ((u32)m->cls << 16) | ((u32)m->why << 8) | m->seen); h = fnv(h, bits(m->edps));
+        h = hcb_fnv(h, m->id); h = hcb_fnv(h, ((u32)m->kind << 24) | ((u32)m->cls << 16) | ((u32)m->why << 8) | m->seen); h = hcb_fnv(h, hcb_bits(m->edps));
     }
-    h = fnv(h, out->alert); h = fnv(h, bits(danger));
+    h = hcb_fnv(h, out->alert); h = hcb_fnv(h, hcb_bits(danger));
     out->digest = h;
     b->time = now; b->ticks++; b->started = 1;
 }
 
 API int hcb_track(const hcb_brain *b, u32 id, hcb_track_info *o) {
-    const track *t = find((hcb_brain *)b, id);
+    const track *t = hcb_find((hcb_brain *)b, id);
     if (!t) return 0;
     zero(o, sizeof *o);
     o->id = id; o->first_seen = t->first_seen; o->last_seen = t->last_seen; o->last_hostile = t->last_hostile;
@@ -464,13 +445,14 @@ static int make_room(hcb_rec *r, u8 *buf, u32 need) {
     r->end -= r->start; r->start = 0;
     return 1;
 }
-static u32 snapshot_len(u32 no, u32 np, u32 nv, u32 ne) {
-    return 12 + HEAD + no * 4 + ((no + 3) & ~3u) + np * sizeof(hcb_ped) + nv * sizeof(hcb_veh) + ne * sizeof(hcb_event);
+static u32 snapshot_len(u32 no, u32 np, u32 nv, u32 ne, u32 nl) {
+    return 12 + HEAD + no * 4 + ((no + 3) & ~3u) + np * sizeof(hcb_ped) + nv * sizeof(hcb_veh) + ne * sizeof(hcb_event) + nl * sizeof(hcb_los);
 }
 API void hcb_rec_push(hcb_rec *r, u8 *buf, const hcb_snapshot *s, u32 digest) {
     u32 no = s->n_ours < HCB_MAX_OURS ? s->n_ours : HCB_MAX_OURS, np = s->n_peds < HCB_MAX_PEDS ? s->n_peds : HCB_MAX_PEDS;
     u32 nv = s->n_vehs < HCB_MAX_VEHS ? s->n_vehs : HCB_MAX_VEHS, ne = s->n_events < HCB_MAX_EVENTS ? s->n_events : HCB_MAX_EVENTS;
-    u32 need = snapshot_len(no, np, nv, ne), kind = HCB_REC_SNAPSHOT, at, head_at;
+    u32 nl = s->n_los < HCB_MAX_LOS ? s->n_los : HCB_MAX_LOS;
+    u32 need = snapshot_len(no, np, nv, ne, nl), kind = HCB_REC_SNAPSHOT, at, head_at;
     u8 pad[4] = {0, 0, 0, 0};
     u16 n;
     if (!make_room(r, buf, need)) return;
@@ -482,8 +464,10 @@ API void hcb_rec_push(hcb_rec *r, u8 *buf, const hcb_snapshot *s, u32 digest) {
     n = (u16)nv; copy(buf + head_at + __builtin_offsetof(hcb_snapshot, n_vehs), &n, 2);
     n = (u16)ne; copy(buf + head_at + __builtin_offsetof(hcb_snapshot, n_events), &n, 2);
     n = (u16)no; copy(buf + head_at + __builtin_offsetof(hcb_snapshot, n_ours), &n, 2);
+    n = (u16)nl; copy(buf + head_at + __builtin_offsetof(hcb_snapshot, n_los), &n, 2);
     at = put(buf, at, s->ours, no * 4); at = put(buf, at, s->our_role, no); at = put(buf, at, pad, ((no + 3) & ~3u) - no);
     at = put(buf, at, s->peds, np * sizeof(hcb_ped)); at = put(buf, at, s->vehs, nv * sizeof(hcb_veh)); at = put(buf, at, s->events, ne * sizeof(hcb_event));
+    at = put(buf, at, s->los, nl * sizeof(hcb_los));
     r->end = at; r->records++;
 }
 API void hcb_rec_push_state(hcb_rec *r, u8 *buf, const hcb_brain *b) {
@@ -494,7 +478,7 @@ API void hcb_rec_push_state(hcb_rec *r, u8 *buf, const hcb_brain *b) {
     r->end = at; r->records++;
 }
 API int hcb_rec_next(const u8 *buf, u32 end, u32 *offset, hcb_snapshot *s, u32 *digest, hcb_brain *state) {
-    u32 at = *offset, len, kind, no, np, nv, ne;
+    u32 at = *offset, len, kind, no, np, nv, ne, nl;
     if (at + 8 > end) return 0;
     len = rd32(buf + at); kind = rd32(buf + at + 4);
     if (len < 8 || len > end - at) return 0;
@@ -508,15 +492,16 @@ API int hcb_rec_next(const u8 *buf, u32 end, u32 *offset, hcb_snapshot *s, u32 *
     zero(s, sizeof *s);
     if (digest) *digest = rd32(buf + at + 8);
     copy(s, buf + at + 12, HEAD);
-    no = s->n_ours; np = s->n_peds; nv = s->n_vehs; ne = s->n_events;
-    if (no > HCB_MAX_OURS || np > HCB_MAX_PEDS || nv > HCB_MAX_VEHS || ne > HCB_MAX_EVENTS) return 0;
-    if (snapshot_len(no, np, nv, ne) != len) return 0;
+    no = s->n_ours; np = s->n_peds; nv = s->n_vehs; ne = s->n_events; nl = s->n_los;
+    if (no > HCB_MAX_OURS || np > HCB_MAX_PEDS || nv > HCB_MAX_VEHS || ne > HCB_MAX_EVENTS || nl > HCB_MAX_LOS) return 0;
+    if (snapshot_len(no, np, nv, ne, nl) != len) return 0;
     at += 12 + HEAD;
     copy(s->ours, buf + at, no * 4); at += no * 4;
     copy(s->our_role, buf + at, no); at += (no + 3) & ~3u;
     copy(s->peds, buf + at, np * sizeof(hcb_ped)); at += np * sizeof(hcb_ped);
     copy(s->vehs, buf + at, nv * sizeof(hcb_veh)); at += nv * sizeof(hcb_veh);
     copy(s->events, buf + at, ne * sizeof(hcb_event)); at += ne * sizeof(hcb_event);
+    copy(s->los, buf + at, nl * sizeof(hcb_los)); at += nl * sizeof(hcb_los);
     *offset = at;
     return HCB_REC_SNAPSHOT;
 }

@@ -31,7 +31,7 @@ M=[
  ('build_v25_squad.py',"s.check(0x0021,[V(18),F(6)],P+'SPD_GO');a(6,V(20),I(7))","s.check(0x0021,[V(18),F(6)],P+'SPD_GO');a(6,V(20),I(6))",'sprint'),
 ]
 M+=[
- ('msg_v42.py',"s.get(18,MSG_PRIO);s.check(0x0019,[V(18),I(p)],show);s.go(skip)","s.go(show)",'dispatcher priority'),
+ ('msg_v42.py',"  s.get(18,MSG_PRIO);s.check(0x0019,[V(18),I(p)],show)\n","  s.go(show)\n",'dispatcher priority'),
  ('msg_v42.py',"s.get(18,HUD);s.check(0x0019,[V(18),I(LEVEL_IMPORTANT if p==CHATTER else LEVEL_OFF)],skip)","pass",'dispatcher level'),
  ('msg_v42.py',"s.get(18,MSG_UNTIL);s.check(0x001d,[V(18),V(19)],show)","s.go(show)",'dispatcher hold time'),
  ('build_v25.py',"p.get(19,NOTICE_SKIP);p.check(0x003b,[V(8),V(19)],'NOTICE_SAY')","p.go('NOTICE_SAY')",'notice skip'),

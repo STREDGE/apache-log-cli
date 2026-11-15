@@ -12,7 +12,7 @@
 #define HCB_H
 #include <stdint.h>
 
-#define HCB_VERSION 1          /* layout of the structs below; a black box says which version wrote it */
+#define HCB_VERSION 2          /* layout of the structs below; a black box says which version wrote it */
 
 #define HCB_MAX_PEDS 64        /* peds in one snapshot (nearest to CJ first) */
 #define HCB_MAX_VEHS 40
@@ -21,6 +21,7 @@
 #define HCB_MAX_MARKS 48       /* contacts reported back for the debug markers */
 #define HCB_MAX_TRACKS 96      /* people the brain remembers at one time */
 #define HCB_MAX_VTRACKS 48
+#define HCB_MAX_LOS 32          /* line-of-sight questions per tick (answered by the adapter in the next snapshot) */
 
 /* ---- ped flags (hcb_ped.flags) */
 #define HCB_PF_DEAD 1
@@ -95,6 +96,34 @@
 #define HCB_KIND_PED 0
 #define HCB_KIND_VEH 1
 
+/* ---- the player's fire rule (hcb_snapshot.roe; the numbers are the FIRE setting of the scripts) */
+#define HCB_ROE_HOLD 0         /* nobody fires */
+#define HCB_ROE_LEGACY_ALL 1   /* the old "fire at all": treated as ARMED - the brain does not shoot passers-by */
+#define HCB_ROE_FOLLOW 2       /* only what CJ himself is shooting at */
+#define HCB_ROE_DEFEND 3       /* threats and attackers (the default) */
+#define HCB_ROE_ARMED 4        /* ... and every armed hostile in sight */
+/* ---- police with a wanted level (hcb_snapshot.police) */
+#define HCB_POLICE_ANSWER 0    /* fire back at policemen who are shooting */
+#define HCB_POLICE_EVADE 1     /* never fire at the police: get CJ out instead */
+
+/* ---- orders to our shooters (hcb_order) */
+#define HCB_AIM_BODY 0
+#define HCB_AIM_DRIVER 1       /* a man in a vehicle: at him, not at the engine */
+#define HCB_AIM_TYRE 2         /* stop the vehicle without blowing it up */
+#define HCB_HOLD_NONE 0        /* firing */
+#define HCB_HOLD_NO_TARGET 1
+#define HCB_HOLD_ROE 2
+#define HCB_HOLD_CJ_IN_LINE 3
+#define HCB_HOLD_CJ_BEHIND 4   /* CJ stands behind the target */
+#define HCB_HOLD_FRIEND 5      /* one of ours or an ally in or behind the line */
+#define HCB_HOLD_BYSTANDER 6
+#define HCB_HOLD_CAR_NEAR 7    /* a damaged or burning vehicle close enough to hurt CJ or ours if it blows */
+#define HCB_HOLD_NO_LOS 8      /* something in the way (or not yet known: the question has been asked) */
+#define HCB_HOLD_RANGE 9
+#define HCB_HOLD_REACTING 10   /* target taken, weapon coming up: a human reaction time */
+#define HCB_HOLD_PAUSE 11      /* between two bursts */
+#define HCB_HOLD_COVERING 12   /* weapon on a suspect, finger off the trigger */
+
 typedef struct hcb_vec {
     float x;
     float y;
@@ -148,6 +177,15 @@ typedef struct hcb_event {
     uint8_t reserved1;
 } hcb_event;
 
+typedef struct hcb_los {
+    uint32_t from;      /* one of ours */
+    uint32_t to;        /* a contact */
+    uint8_t clear;      /* answer: 1 = nothing between them */
+    uint8_t reserved0;
+    uint8_t reserved1;
+    uint8_t reserved2;
+} hcb_los;
+
 typedef struct hcb_snapshot {
     uint32_t time;      /* game time, ms */
     uint32_t frame;
@@ -160,7 +198,11 @@ typedef struct hcb_snapshot {
     uint8_t hour;
     uint8_t weather;
     uint8_t interior;
-    uint8_t roe;        /* the player's fire mode setting */
+    uint8_t roe;        /* HCB_ROE_*: the player's fire rule */
+    uint8_t police;     /* HCB_POLICE_* */
+    uint8_t reserved0;
+    uint8_t reserved1;
+    uint8_t reserved2;
     hcb_vec cam_pos;
     hcb_vec cam_fwd;
     uint16_t n_peds;
@@ -169,11 +211,14 @@ typedef struct hcb_snapshot {
     uint16_t n_ours;
     uint16_t events_lost;   /* events that did not fit since the previous snapshot */
     uint16_t peds_lost;     /* peds in range that did not fit */
+    uint16_t n_los;         /* answers to the questions of the previous hcb_out */
+    uint16_t reserved3;
     uint32_t ours[HCB_MAX_OURS];
     uint8_t our_role[HCB_MAX_OURS];
     hcb_ped peds[HCB_MAX_PEDS];
     hcb_veh vehs[HCB_MAX_VEHS];
     hcb_event events[HCB_MAX_EVENTS];
+    hcb_los los[HCB_MAX_LOS];
 } hcb_snapshot;
 
 typedef struct hcb_mark {
@@ -186,6 +231,16 @@ typedef struct hcb_mark {
     uint8_t seen;       /* 1 = in this snapshot, 0 = remembered (out of sight) */
 } hcb_mark;
 
+typedef struct hcb_order {
+    uint32_t who;       /* one of ours */
+    uint32_t target;    /* 0 = nobody */
+    hcb_vec aim;        /* the point to aim at */
+    uint8_t fire;       /* 1 = fire now */
+    uint8_t aim_at;     /* HCB_AIM_* */
+    uint8_t hold;       /* HCB_HOLD_*: why not firing */
+    uint8_t ready;      /* 1 = weapon up */
+} hcb_order;
+
 typedef struct hcb_out {
     uint32_t time;
     uint32_t digest;    /* checksum of everything decided this tick: a replay must reproduce it */
@@ -196,6 +251,12 @@ typedef struct hcb_out {
     uint8_t n_threats;  /* contacts at THREAT or above */
     uint8_t n_attackers;
     hcb_mark marks[HCB_MAX_MARKS];
+    uint8_t n_orders;
+    uint8_t n_queries;
+    uint8_t reserved0;
+    uint8_t reserved1;
+    hcb_order orders[HCB_MAX_OURS];
+    hcb_los queries[HCB_MAX_LOS];
 } hcb_out;
 
 /* Tunable numbers. hcb_init fills in the defaults; tests and the tuning runs change them. */
@@ -214,13 +275,29 @@ typedef struct hcb_cfg {
     float melee_m;          /* somebody with a blade or a bat running at CJ inside this range */
     float calm_ms;          /* quiet time before the alert level goes down one step */
     float evac_danger;      /* total expected damage per second at which the brain wants CJ out */
+    /* fire discipline: the hard rules */
+    float cj_line_m;        /* no round whose line passes this close to CJ ... */
+    float line_per_m;       /* ... plus this much per metre of range (dispersion) */
+    float friend_line_m;    /* the same for ours and allies */
+    float bystander_line_m;
+    float backstop_m;       /* how far behind the target CJ and friends are looked for */
+    float explode_m;        /* a vehicle this close to CJ or ours must not be blown up */
+    float car_floor;        /* ... so it is not fired at below this health */
+    /* how a human shoots */
+    float react_min_ms;
+    float react_max_ms;
+    float burst_min_ms;
+    float burst_max_ms;
+    float pause_min_ms;
+    float pause_max_ms;
+    float follow_ms;        /* FOLLOW: how long somebody CJ shot at stays a target */
 } hcb_cfg;
 
 /* The brain itself is one opaque block of hcb_brain_size() bytes that the caller provides (no allocation). */
 typedef struct hcb_brain hcb_brain;
 
 uint32_t hcb_brain_size(void);
-uint32_t hcb_struct_size(int which);   /* 0 ped, 1 veh, 2 event, 3 snapshot, 4 out, 5 cfg, 6 mark, 7 track_info, 8 rec, 9 box_head: layout check */
+uint32_t hcb_struct_size(int which);   /* 0 ped, 1 veh, 2 event, 3 snapshot, 4 out, 5 cfg, 6 mark, 7 track_info, 8 rec, 9 box_head, 10 los, 11 order */
 void hcb_init(hcb_brain *b, uint32_t seed);
 hcb_cfg *hcb_config(hcb_brain *b);
 void hcb_think(hcb_brain *b, const hcb_snapshot *s, hcb_out *out);
