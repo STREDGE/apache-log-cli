@@ -10,7 +10,7 @@ mkdir -p "$OUT/stubs"
 cat > "$OUT/stubs/c.c" <<'S'
 void mprotect(void){} void getpagesize(void){}
 void open(void){} void read(void){} void write(void){} void close(void){} void dl_iterate_phdr(void){}
-void pthread_create(void){} void usleep(void){} void clock_gettime(void){}
+void pthread_create(void){} void usleep(void){} void clock_gettime(void){} void syscall(void){} void sigaction(void){}
 S
 cat > "$OUT/stubs/dl.c" <<'S'
 void dladdr(void){} void dlopen(void){} void dlsym(void){}

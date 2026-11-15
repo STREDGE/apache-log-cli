@@ -532,6 +532,28 @@ sc.shot(g, (40., 41.8, 1.), dst=1)
 run(sc, 8)
 assert sc.orders[front].fire, 'as a door gunner (his rounds end at the man) he may fire'
 assert sc.brain.squad(front, g, sc.time, sc.peds[front]['pos'], sc.peds[g]['pos'], sc.cj['pos'], []) == 3, 'asked as a guard on foot: his rounds fly on to CJ - no'
+# a position that is not a number (or a helicopter speed that is not one) never becomes a round: the game hangs on such a line
+sc, front, rear = heli_scene()
+g = sc.ped(30, 0, pedtype=GANG, weapon=AK)
+sc.shot(g, (0., 0., 1.), dst=1)
+run(sc, 8)
+b = sc.brain
+assert sc.orders[front].fire or sc.orders[rear].fire, holds(sc)
+who = front if sc.orders[front].fire else rear
+me_ = sc.peds[who]['pos']
+nan, inf = float('nan'), float('inf')
+bad = 0
+for k_, (to_, cj_, spd) in enumerate([((nan, 0., 1.), None, 0.), ((30., nan, 1.), None, 0.), ((30., 0., inf), None, 0.), ((600., 0., 1.), None, 0.),
+                                      ((30., 0., 1.), (nan, 0., 1.), 0.), ((30., 0., 1.), None, nan), ((30., 0., 1.), None, inf)]):
+    r_ = b.round(who, g, sc.time + 200 * (k_ + 1), me_, to_, cj_ or sc.cj['pos'], [], spd, True)
+    if r_ is not None:
+        vals = [r_.muzzle.x, r_.muzzle.y, r_.muzzle.z, r_.end.x, r_.end.y, r_.end.z, r_.to.x, r_.to.y, r_.to.z]
+        assert all(v - v == 0 for v in vals), (k_, vals)
+        bad += 1
+r_ = b.round(who, g, sc.time + 5000, me_, (30., 0., 1.), sc.cj['pos'], [], 12., True)
+assert r_ is not None and all(v - v == 0 for v in [r_.muzzle.x, r_.end.x, r_.end.z]), '(control: a sane line gives a round)'
+assert bad == 2, ('only the two with a nonsense speed give a round, and it is a sane one', bad)
+passed('A position that is not a number, one 600 m away, or CJ at no number gives no round; a nonsense helicopter speed is taken as 0 - the game never gets such a line')
 passed('A guard on foot (he fires the game\'s own weapon) is told: a suspect to keep a weapon on, fire, or "your man, but no fire" - in the very frame CJ comes into his line, while his weapon is coming up, and when three rifles are on the man already; hold fire leaves him no man at all')
 
 # ------------------------------------------------------------------ the car CJ is shooting at

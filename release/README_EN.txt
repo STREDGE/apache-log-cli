@@ -6,6 +6,14 @@ Call a support helicopter: it flies in from far away, follows CJ and covers him 
 gunners. Drop a four-man team on foot, get picked up by rope, fly to the map marker or Grove
 Street and get out there by landing or by rope.
 
+FIXED IN BRAIN 0.2.1 (the scripts are the same)
+- The game hung when the helicopter came in to Grove Street / the map marker: the brain spent almost half of every
+  frame on line-of-sight checks, and in a busy street with shooting the game all but stopped. The checks now have a
+  hard budget (at most 2.5 ms a frame, the brain at most a quarter of the time), and coordinates that are not a
+  number or lie off the map never reach the game.
+- Should the game still hang or crawl, the mod saves a report by itself and writes to mods/hcbrain_log.txt where the
+  game stopped. Close the game and send mods/hcbrain_log.txt and the newest mods/hcbrain_report_NN.bin.
+
 NEW IN 1.3 BETA 1 - THE BRAIN CONTROLS THE FIRE
 - The archive has two parts now: the scripts (CLEO folder) and the mod libHelicoverBrain64.so (mods
   folder). The brain decides who of your people fires at whom and when; the scripts only carry it out.

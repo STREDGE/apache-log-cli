@@ -118,6 +118,7 @@ class Emu:
         self.mod_path = mod or MOD
         self.uc = uc = Uc(UC_ARCH_ARM64, UC_MODE_ARM)
         self.imports, self.fs, self.fds, self.polys, self.items, self.prot, self.los_calls, self.threads = {}, {}, {}, [], [], [], [], []
+        self.signals, self.sigactions, self.clock_step, self.deliver = [], [], 5, None
         self.clock, self.sautils, self.walls, self.orig_calls = 1000, sautils, False, {'scripts': 0, 'hud': 0, 'gunshot': 0}
         uc.mem_map(GTA, GTA_SIZE); uc.mem_write(GTA, GTA_IMAGE)
         for slot, target in ((GOT_SCRIPTS, F_SCRIPTS), (GOT_HUD, F_HUD), (GOT_GUNSHOT, F_GUNSHOT)):      # what the linker binds at load
@@ -338,8 +339,27 @@ class Emu:
         elif n == 'sau:3': self.items.append(dict(name=self.cstr(x[2]), init=x[3], cb=x[7], labels=[self.cstr(self.r64(x[6] + 8 * k)) for k in range(x[5] + 1)])); ret = len(self.items)
         elif n == 'pthread_create': self.threads.append((x[2], x[3])); ret = 0
         elif n == 'usleep': ret = 0
-        elif n == 'clock_gettime':
-            self.clock += 137; uc.mem_write(x[1], struct.pack('<qq', self.clock // 1000000, (self.clock % 1000000) * 1000)); ret = 0
+        elif n == 'clock_gettime':      # the real clock: it moves with the frames (frame()) and a little with every reading (clock_step us)
+            self.clock += self.clock_step; uc.mem_write(x[1], struct.pack('<qq', self.clock // 1000000, (self.clock % 1000000) * 1000)); ret = 0
+        elif n == 'sigaction':
+            act = bytes(uc.mem_read(x[1], 32)) if x[1] else None
+            self.sigactions.append((x[0], struct.unpack('<iiQQQ', act) if act else None)); ret = 0
+            if x[2]: uc.mem_write(x[2], struct.pack('<iiQQQ', 0, 0, 0xdead0, 0, 0))   # the previous handler (the game had one)
+        elif n == 'syscall':
+            if x[0] == 172: ret = 4242                       # getpid
+            elif x[0] == 178: ret = 4243                     # gettid
+            elif x[0] == 131:                                # tgkill: delivered at once when the test says so
+                self.signals.append((x[1], x[2], x[3])); ret = 0
+                if self.deliver:
+                    uc.reg_write(X[0], x[3]); uc.reg_write(X[1], 0); uc.reg_write(X[2], self.deliver[1])
+                    uc.reg_write(UC_ARM64_REG_PC, self.deliver[0]); return
+            elif x[0] == 270:                                # process_vm_readv: a bad address is an error, not a fault
+                lb, ln = struct.unpack('<QQ', bytes(uc.mem_read(x[2], 16))); rb, rn = struct.unpack('<QQ', bytes(uc.mem_read(x[4], 16)))
+                try:
+                    uc.mem_write(lb, bytes(uc.mem_read(rb, rn))); ret = rn
+                except UcError:
+                    ret = (1 << 64) - 14
+            else: ret = (1 << 64) - 38
         uc.reg_write(UC_ARM64_REG_X0, ret & ((1 << 64) - 1))
 
     def _fd(self, path):
@@ -373,14 +393,14 @@ class Emu:
         uc.mem_write(uc.reg_read(X[2]), struct.pack('<f', 40.)); uc.mem_write(uc.reg_read(X[3]), struct.pack('<f', 40.))
         self._ret(uc, 1)
 
-    def call(self, addr, x=(), s=()):
+    def call(self, addr, x=(), s=(), count=20000000):
         uc = self.uc
         for i, v in enumerate(x):
             uc.reg_write(X[i], v & ((1 << 64) - 1))
         for i, v in enumerate(s):
             uc.reg_write(S[i], struct.unpack('<I', struct.pack('<f', v))[0])
         uc.reg_write(UC_ARM64_REG_SP, STACK + 0xf0000); uc.reg_write(UC_ARM64_REG_LR, SENT)
-        uc.emu_start(addr, SENT, count=20000000)
+        uc.emu_start(addr, SENT, count=count)
         return uc.reg_read(UC_ARM64_REG_X0)
 
     def load(self):
@@ -393,6 +413,7 @@ class Emu:
         """What the game does in a frame: scripts (through the GOT slot), then the HUD."""
         for _ in range(n):
             self.w32(GTA + TIME_MS, self.r32(GTA + TIME_MS) + ms)
+            self.clock += ms * 1000
             self.call(self.slot(GOT_SCRIPTS))
             if hud:
                 self.call(self.slot(GOT_HUD))
@@ -453,7 +474,7 @@ assert 'the brain is running' in log and '%d instruction words match' % N_WORDS 
 assert sorted(changed_bytes(e)) == sorted([GOT_SCRIPTS, GOT_HUD, GOT_GUNSHOT]), 'exactly three GOT slots of the game differ, nothing else'
 rw = [p for p in e.prot if p[2] == 3]; ro = [p for p in e.prot if p[2] == 1]
 assert len(rw) == len(ro) == 3 and all(p[0] % 0x4000 == 0 and p[1] == 0x4000 for p in e.prot) and not [p for p in e.prot if p[2] & 4], e.prot
-assert [i['name'] for i in e.items] == ['Brain markers', 'Brain report'] and e.items[0]['init'] == 0 and not e.threads
+assert [i['name'] for i in e.items] == ['Brain markers', 'Brain report'] and e.items[0]['init'] == 0 and len(e.threads) == 1 and 'hang recorder on' in log, (e.threads, log)
 assert not e.cleo_changes(), 'CLEO is not touched before the game runs its scripts'
 passed('On the real libGTASA.so the mod finds all %d instruction words, changes exactly three GOT slots (page made writable, then read-only again; never executable) and nothing else in the game; two items in Mods Settings, the markers off by default' % N_WORDS)
 e.frame(n=3)
@@ -521,7 +542,7 @@ def no_bridge(text, **kw):
 
 
 e, ch = no_bridge('CLEO not recognised', cleo='CLEO ANDROID (64-999999)')
-assert len(e.threads) == 1 and not ch, [hex(c) for c in ch]
+assert len(e.threads) == 2 and not ch, [hex(c) for c in ch]     # waiting for CLEO, and the hang recorder
 e, ch = no_bridge('CLEO\'s code is not the build the bridge was made for', tweak=lambda e: e.uc.mem_write(CI + I_REGISTER + 4, struct.pack('<I', 0xd503201f)))
 assert ch == [I_REGISTER & ~7]
 e, ch = no_bridge('CLEO\'s plugin table is not where it should be', tweak=lambda e: e.w64(CI + 0x27d9b8 + 8 * 19, CI + 0x38e80))
@@ -834,6 +855,100 @@ e.frame(n=5)
 head, text, ticks = replay_tool.replay(e.save())
 assert len(ticks) >= 30 and max(t['snapshot'].n_peds for t in ticks) == h.HCB_MAX_PEDS and max(t['snapshot'].peds_lost for t in ticks) > 50 and all(t['match'] for t in ticks if t['exact'])
 passed('No pools yet, no player yet, a full pool of 139 people (64 nearest are taken), entities without a matrix or without an intelligence object, the clock jumping back after a load: no fault, the opcode answers "nothing" and the report still replays exactly')
+
+# ------------------------------------------------------------------ a crowded street with every ray expensive
+# (the freeze at Grove Street in 1.3 beta 1: a ray for every pair on every look, 20-25 looks a second - the frames grew
+# longer, the brain looked in every one of them, the game all but stopped)
+def crowd(ray_us):
+    e = Emu(); e.load()
+    pilot, g1, g2, g3, g4 = e.ped(0, 8, 25., pedtype=8), *(e.ped(x, 9, 25., pedtype=8, weapon=31) for x in (1.4, -1.4, 1.5, -1.5))
+    heli = e.veh(0, 8, 25., vtype=3, driver=pilot)
+    e.share(HC_STATE + 7, 3); e.share(HC_STATE + 21, e.handle(heli) & 0x7fffffff)
+    for k, p in enumerate((pilot, g1, g2, g3, g4)):
+        e.share(HC_STATE + 22 + k, e.handle(p))
+    cops = [e.ped(math.cos(k * .4) * (15 + k), math.sin(k * .4) * (15 + k), pedtype=7, weapon=30, face=(-math.cos(k * .4), -math.sin(k * .4))) for k in range(24)]
+    e.share(HC_HELLO, 0)
+    e.frame(n=3)
+    e.clock_step = ray_us                                            # every reading of the clock moves it on this much: a ray is measured as ray_us
+    return e, cops
+e, cops = crowd(300)
+per_frame, answered, asked_pairs = [], set(), set()
+for k in range(60):
+    if k % 3 == 0:
+        e.gunshot(cops[k % 24], (0., 0.5, 1.))
+    n0 = len(e.los_calls); e.frame(ms=50, hud=False); per_frame.append(len(e.los_calls) - n0)
+head, text, ticks = replay_tool.replay(e.save())
+for t in ticks:
+    o, s_ = t['out'], t['snapshot']
+    asked_pairs |= {(getattr(q, 'from'), q.to) for q in o.queries[:o.n_queries]}
+    answered |= {(getattr(l, 'from'), l.to) for l in s_.los[:s_.n_los]}
+assert max(per_frame) <= 2500 // 300 + 2, ('a frame never spends much more than 2.5 ms on rays', max(per_frame))
+assert len(asked_pairs) > 40 and len(asked_pairs - answered) <= 4, ('every question is answered in turn', len(asked_pairs), len(asked_pairs - answered))
+looks = len(ticks); share_ = sum(per_frame) * 300 / (60 * 50000.)
+assert 'looks put off to keep the brain under a quarter of the time' in text and share_ < 0.3 and all(t['match'] for t in ticks), (share_, looks)
+cheap, _ = crowd(10)
+n_cheap = []
+for k in range(20):
+    n0 = len(cheap.los_calls); cheap.frame(ms=50, hud=False); n_cheap.append(len(cheap.los_calls) - n0)
+assert max(n_cheap) > max(per_frame) and max(n_cheap) <= 10 + 32 + 2, (n_cheap, per_frame)
+passed('A crowded street (4 door gunners, 24 armed men, shots every 150 ms) with rays costing 0.3 ms each: at most %d rays a frame (2.5 ms), every one of the %d questions answered in turn, the brain under a quarter of the time (%.0f %%); with cheap rays more per frame, never more than 10 + 32 a look' % (max(per_frame), len(asked_pairs), share_ * 100))
+
+# a man whose position is not a number (a broken entity): he is left out, no ray and no round ever gets such a point
+e = Emu(); e.load()
+pilot, g1 = e.ped(0, 8, 25., pedtype=8), e.ped(1.4, 9, 25., pedtype=8, weapon=31)
+heli = e.veh(0, 8, 25., vtype=3, driver=pilot)
+e.share(HC_STATE + 7, 3); e.share(HC_STATE + 21, e.handle(heli) & 0x7fffffff); e.share(HC_STATE + 22, e.handle(pilot)); e.share(HC_STATE + 23, e.handle(g1))
+bad = e.ped(20, 0, pedtype=7, weapon=30, face=(-1., 0.))
+e.share(HC_HELLO, 0); e.frame(n=3)
+m = e.r64(bad + 0x18); e.wf(m + 0x30, float('nan'), 0., 1.)            # his position becomes "not a number"
+t_nan = e.r32(GTA + TIME_MS)
+far = e.ped(5000., 0, pedtype=7, weapon=30, face=(-1., 0.))           # and one far off the map
+e.gunshot(bad, (0., 0.5, 1.))
+e.los_calls.clear()
+for k in range(20):
+    e.frame(ms=50, hud=False); e.opcode(3, 9, CMD_GUNNER, handle=e.handle(g1))
+finite = lambda v: all(c - c == 0 and abs(c) < 4000 for c in v)
+assert e.los_calls is not None and all(finite(c[0]) and finite(c[1]) for c in e.los_calls), [c[:2] for c in e.los_calls if not (finite(c[0]) and finite(c[1]))][:2]
+head, text, ticks = replay_tool.replay(e.save())
+ids = {p.id for t in ticks if t['snapshot'].time > t_nan for p in t['snapshot'].peds[:t['snapshot'].n_peds]}
+assert any(p.id == e.handle(bad) for t in ticks if t['snapshot'].time <= t_nan for p in t['snapshot'].peds[:t['snapshot'].n_peds]), '(control: before, he was in it)'
+assert e.handle(bad) not in ids and e.handle(far) not in ids and all(t['match'] for t in ticks), 'neither is in the brain\'s picture'
+passed('A man whose position is not a number, and one 5 km off the map: neither enters the brain\'s picture, and no ray or round is ever given such a point (the game\'s search through the map never ends on one)')
+
+# the hang recorder: the game's frames stop, not paused - the log says where its thread is and the black box is saved
+e = Emu(); e.load()
+gang = e.ped(20, 0, pedtype=7, weapon=30, face=(-1., 0.))
+e.share(HC_STATE + 0, 10); e.share(HC_HELLO, 0)
+e.frame(n=5)
+recorder = e.threads[-1]
+SP_, CODE = STACK + 0x40000, GTA + 0x3f4010
+e.w64(SP_ + 0x58, CODE)                                              # a return address left on its stack
+e.fs['/proc/self/task/4243/stat'] = b'4243 (GLThread 1) S 1 2 3'
+e.fs['/proc/self/task/4243/syscall'] = ('98 0x1 0x2 0x3 0x4 0x5 0x6 0x%x 0x%x\n' % (SP_, GTA + 0x228714)).encode()
+reports0 = len(e.reports())
+e.call(recorder[0], x=(recorder[1],), count=3000000)
+log = e.log()
+assert 'HANG: no new frame for 6 s' in log and 'asleep' in log and 'look 6' in log and '+0=10' in log, log[-900:]
+assert ('pc 0x%016x' % (GTA + 0x228714)) in log and ('on the stack 0x%016x' % CODE) in log and not e.signals, log[-600:]
+assert len(e.reports()) == reports0 + 1 and b'the game hung' in e.report()
+# the same, but the thread is running round a loop: it is asked for its registers with a signal (and the old handler is put back)
+e.fs['/proc/self/task/4243/stat'] = b'4243 (GLThread 1) R 1 2 3'
+FP_ = STACK + 0x41000
+e.w64(FP_, FP_ + 0x100); e.w64(FP_ + 8, GTA + 0x4d63e0); e.w64(FP_ + 0x100, 0); e.w64(FP_ + 0x108, GTA + 0x4d8e70)
+UC_ = e.alloc(0x400)
+e.w64(UC_ + 440, GTA + 0x3f4020); e.w64(UC_ + 424, GTA + 0x3f3e20); e.w64(UC_ + 416, FP_); e.w64(UC_ + 432, SP_)
+e.deliver = None
+e.call(recorder[0], x=(recorder[1],), count=200000)                 # (to learn the handler: the first sigaction)
+handler = [a for a in e.sigactions if a[1] and a[1][2]][0][1][2]
+e.signals.clear(); e.sigactions.clear(); e.deliver = (handler, UC_)
+open_before = e.log()
+e.call(recorder[0], x=(recorder[1],), count=3000000)
+log = e.log()[len(open_before) - 200:]
+assert len(e.signals) == 6 and all(sg == (4242, 4243, 27) for sg in e.signals), e.signals
+assert ('pc 0x%016x' % (GTA + 0x3f4020)) in log and ('lr 0x%016x' % (GTA + 0x3f3e20)) in log and ('called from 0x%016x' % (GTA + 0x4d63e0)) in log and ('called from 0x%016x' % (GTA + 0x4d8e70)) in log, log[-900:]
+assert e.sigactions[0][0] == 27 and e.sigactions[0][1][0] & 4 and e.sigactions[-1][1] == (0, 0, 0xdead0, 0, 0), e.sigactions
+assert 'running' in log
+passed('The hang recorder: no new frame for 6 s and not paused - the log tells where the game\'s thread is (asleep: from /proc; running in a loop: from its registers, taken with one signal, the game\'s own handler put back after), the calls that led there, return addresses on its stack and the place of every CLEO script; the black box is saved by itself')
 
 # the black box: two halves that take turns (a build with small halves, the same source)
 small_dir = tempfile.mkdtemp()
