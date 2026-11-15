@@ -1296,10 +1296,10 @@ f.get(30,BR_KILLS);f.eq(30,-1,'KILL_KNOWN');a(0xddc,I(BR_KILLS),V(11));f.go('KIL
 f.label('KILL_KNOWN');f.check(0x803b,[V(30),V(11)],'KILL_DONE');a(0xddc,I(BR_KILLS),V(11));f.get(31,KILLS);a(0x000a,V(31),I(1));a(0xddc,I(KILLS),V(31))
 f.get(30,HUD);f.eq(30,LEVEL_ALL,'KILL_DONE');f.get(30,KILL_NEXT);a(0x01bd,V(14));f.check(0x001d,[V(14),V(30)],'KILL_DONE');a(0x000a,V(14),I(2000));a(0xddc,I(KILL_NEXT),V(14));print_key(f,'HCKILL','KILLP_',number=(V(31),I(2000),I(1)))
 f.label('KILL_DONE')
-# "contact" when somebody attacks (or the alert reaches COMBAT), "area clear" once it has been quiet (calm / wary) for 3 s.
+# "contact" when somebody attacks; "area clear" once nobody dangerous has been left (seen or remembered) for 3 s.
 # While the squad is on the ground it makes these calls itself.
-f.check(0x0019,[V(8),I(2)],'CONTACT_NO');f.set(CLEAR_AT,0);f.get(30,ENGAGED);f.eq(30,0,'CONTACT_DONE');f.set(ENGAGED,1);f.get(30,SQ_GROUP);f.eq(30,0,'CONTACT_DONE');msg(f,'HCCONT');f.go('CONTACT_DONE')
-f.label('CONTACT_NO');f.check(0x8019,[V(8),I(1)],'CONTACT_DONE');f.get(30,ENGAGED);f.eq(30,1,'CONTACT_DONE');f.get(30,CLEAR_AT);a(0x01bd,V(31));f.eq(30,0,'CLEAR_TIMED');a(0x000a,V(31),I(3000));a(0xddc,I(CLEAR_AT),V(31));f.go('CONTACT_DONE')
+f.check(0x0019,[V(10),I(0)],'CONTACT_NO');f.set(CLEAR_AT,0);f.get(30,ENGAGED);f.eq(30,0,'CONTACT_DONE');f.set(ENGAGED,1);f.get(30,SQ_GROUP);f.eq(30,0,'CONTACT_DONE');msg(f,'HCCONT');f.go('CONTACT_DONE')
+f.label('CONTACT_NO');f.check(0x8019,[V(9),I(0)],'CONTACT_DONE');f.get(30,ENGAGED);f.eq(30,1,'CONTACT_DONE');f.get(30,CLEAR_AT);a(0x01bd,V(31));f.eq(30,0,'CLEAR_TIMED');a(0x000a,V(31),I(3000));a(0xddc,I(CLEAR_AT),V(31));f.go('CONTACT_DONE')
 f.label('CLEAR_TIMED');f.check(0x001d,[V(31),V(30)],'CONTACT_DONE');f.set(ENGAGED,0);f.set(CLEAR_AT,0);f.get(30,SQ_GROUP);f.eq(30,0,'CONTACT_DONE');msg(f,'HCCLEAR')
 f.label('CONTACT_DONE')
 # ---- one question per gunner per frame
