@@ -56,7 +56,7 @@ SQ_SLOT=STATE+172;SQ_SLOT_SIZE=10   # per guard slot: TASK NEXT TX TY LX LY LT D
 GT_PREV=STATE+225;FOCUS_SEEN=STATE+229;GC_TIME=STATE+250;GC_CAND=STATE+230  # GC_CAND..+18: this round's checked candidates (shooter, primary, 4 squad threats, 13 cells), -1 = none
 # v41 threat board (threat_v41.py): shooter found through bullet traces, fire at the helicopter,
 # the gunners' sorted list, suppression memory, and the squad's cover / reload / call-out state.
-from msg_v42 import say,emit_resolve_lang,LANG,LANG_SETTING,print_key,MSG_UNTIL,MSG_PRIO,LEVEL_ALL
+from msg_v42 import say,emit_resolve_lang,LANG,LANG_SETTING,print_key,MSG_UNTIL,MSG_PRIO,LEVEL_ALL,GAME_RU_FLAG,GAME_EFIGS_FLAG,GAME_LANG_BYTE,SANLTD_SLOT
 import msg_v42 as _mv;assert _mv.HUD==HUD
 from threat_v41 import TB_SHOOTER,TB_SHOOTER_T,HELI_SHOT_T,TRACE_SCAN_T,SHOOTER_FRESH_MS,SCORE_FOCUS,emit_score,emit_trace_scan
 from threat_v41 import CJ_SHOT_T,CJ_AIM_X,CJ_AIM_Y,CJ_AIM_Z,CJ_AIM_PX,CJ_AIM_PY,CJ_AIM_PZ,CJ_AIM_T,CJ_AIM_E,TB_SEARCH_T
@@ -917,7 +917,7 @@ p.label('HAS_PICK');p.get(8,STATE)
 # Local 3 = key of the drawn page (redrawn when it changes), 7 = situation of the drawn main page, 9 = language scratch.
 NONE_STATES=[0,5,6];BUSY_STATES=[1,4,13,16,17]
 GROUND_STATES=[st for st in STATES if st not in NONE_STATES+BUSY_STATES]
-PROFILES=('en','cp1251','glyph');SUFFIX=('','_U','_V')
+PROFILES=('en','game','sanltd');SUFFIX=('','_U','_V')
 FIRE_VALUES=[3,4,2,1,0];CREW_VALUES=[0,1,2];MODEL_VALUES=[487,497,425];WEAPON_VALUES=[0,29,30,31,34]
 def Tx(key,prof,mark=False):return i18n.menu_text(key,prof)+(i18n.MARK.encode('ascii') if mark else b'')
 def main_rows(st,sit,x,prof='en'):
@@ -929,7 +929,7 @@ MAIN_VARIANTS=[(st,0,0) for st in NONE_STATES]+[(st,1,0) for st in BUSY_STATES]+
 def setup_rows(tac,ex,hud,prof):
  return [Tx('SET_CREW',prof),Tx('SET_MODEL',prof),Tx('SET_WEAPON',prof),Tx('TAC_ASSAULT' if tac else 'TAC_GUARD',prof),Tx('EXB_ROPE' if ex else 'EXB_LAND',prof),Tx(('MSG_OFF','MSG_IMP','MSG_ALL')[hud],prof),Tx('LANGUAGE',prof),Tx('BACK',prof)]
 PREF_PAGES=[(1,FIRE,FIRE_VALUES,'FIRE_TITLE','FIRE%d'),(3,CREW,CREW_VALUES,'CREW_TITLE','CREW%d'),(4,MODEL,MODEL_VALUES,'MODEL_TITLE','MODEL%d'),(5,WEAPON_SETTING,WEAPON_VALUES,'WEAPON_TITLE','WEAPON%d')]
-LANG_ROWS=['AUTO','ENGLISH','RUSSIAN 1 (CP1251)','RUSSIAN 2 (GAME FONT)']+(['FONT TEST'] if BETA_LANG_TEST else [])+['< BACK']
+LANG_ROWS=['AUTO','ENGLISH','RUSSIAN (GAME RUSSIAN)','RUSSIAN (SANLTD)']+(['FONT TEST'] if BETA_LANG_TEST else [])+['< BACK']
 for page,label in [(0,'PICK_MAIN'),(1,'PICK_FIRE'),(2,'PICK_SETUP'),(3,'PICK_CREW'),(4,'PICK_MODEL'),(5,'PICK_WEAPON'),(6,'PICK_DISMISS'),(7,'PICK_LANG'),(8,'PICK_FTEST1'),(9,'PICK_FTEST2')]:
  nxt='PAGE_PICK_NEXT_'+str(page);p.eq(2,page,nxt);p.go(label);p.label(nxt)
 p.go('MENU_POLL')
@@ -1076,14 +1076,15 @@ for prof,suf in zip(PROFILES,SUFFIX):
   for val in values:
    p.blob('PREF_'+str(pg)+'_'+str(val)+suf,i18n.menu_text(title,prof),[Tx(fmt%v,prof,v==val) for v in values]+[Tx('BACK',prof)])
 for sv in range(4):p.blob('LANG_%d'%sv,'LANGUAGE',[(r+(' [X]' if i==sv else '')) for i,r in enumerate(LANG_ROWS)])
-for n,prof in ((1,'cp1251'),(2,'glyph')):
- p.blob('FTEST_%d'%n,'FONT TEST %d / 2'%n,i18n.font_test_rows(prof)+['SHOW MESSAGE (RUS %d)'%n,'NEXT >' if n==1 else '< PREVIOUS','< BACK'])
+for n,prof,name in ((1,'game','GAME RUSSIAN'),(2,'sanltd','SANLTD')):
+ p.blob('FTEST_%d'%n,'FONT TEST %d / 2'%n,i18n.font_test_rows(prof)+['SHOW MESSAGE (%s)'%name,'NEXT >' if n==1 else '< PREVIOUS','< BACK'])
 
 launch=Script();a=launch.add
 launch.label('ENTRY');a(0);a(1,I(400));launch.get(1,PANELHEART);a(1,I(250));launch.get(2,PANELHEART);launch.check(0x803b,[V(1),V(2)],'MISSING');launch.set(OPEN,1);a(0x004e)
 launch.label('MISSING')
 for _ofs,_val in GAME_SIG:a(0x0dd8,V(1),I(_ofs),I(4),I(1));launch.check(0x0039,[V(1),I(_val)],'MISSING_EN')   # only on the known build is the game's language flag read
-a(0x0dd8,V(1),I(0xCE1771),I(1),I(1));launch.eq(1,1,'MISSING_EN');a(0x03e5,S('VCOFF'));a(0x004e)
+a(0x0dd8,V(1),I(GAME_RU_FLAG),I(1),I(1));launch.eq(1,1,'MISSING_EFIGS');a(0x03e5,S('UCOFF'));a(0x004e)
+launch.label('MISSING_EFIGS');a(0x0dd8,V(1),I(GAME_EFIGS_FLAG),I(1),I(1));launch.eq(1,1,'MISSING_EN');a(0x0dd8,V(1),I(GAME_LANG_BYTE),I(1),I(1));launch.eq(1,SANLTD_SLOT,'MISSING_EN');a(0x03e5,S('VCOFF'));a(0x004e)
 launch.label('MISSING_EN');a(0x03e5,S('HCOFF'));a(0x004e)
 
 # Dedicated fire worker: no global faction hatred and no automatic armed turrets.

@@ -1,13 +1,15 @@
-PASS: Both layouts cover all 66 Cyrillic letters without collisions; CP1251 А = 0xC0, glyph slot of А = 0xC1 (russian_table of libGTASA)
-PASS: Helicover.fxt (ASCII) holds the English messages, Helicover_RU.fxt the same ones with U keys in CP1251 and V keys in glyph codes, same colour tags
-PASS: The glyph-coded lines read back to the original Russian text
-PASS: AUTO follows the game flag (Russian game -> RUSSIAN 2 in the beta, otherwise English); the other settings are explicit; an unknown build stays English
-PASS: Notices use the English, CP1251 or glyph-coded key depending on the language
-PASS: The main menu is drawn in Russian in either byte layout: rows and the state in the title
-PASS: Every menu page has an English, a CP1251 and a glyph-coded version with the same rows; at most 8 rows, none longer than 26 (RU 30) characters
-PASS: SETTINGS > LANGUAGE: AUTO / ENGLISH / RUSSIAN 1 / RUSSIAN 2, the choice applies at once and the pages follow
-PASS: FONT TEST pages show the alphabet in both layouts and print a test message with the matching key
-PASS: The FONT TEST pages together cover every Russian letter except Ё / ё (which the texts never use)
+PASS: The two simulated fonts reproduce the player's screenshots of beta 1 (@@♥ц@х@ in the game's Russian; FGHIJ... / N5SHGM in SanLTD)
+PASS: Game Russian: А-Я = 0x80-0x9F, а-я = 0xA0-0xBF (х = 181, ц = 182 as on the screenshot); SanLTD: capitals only, Latin look-alikes + 0x80-0x95
+PASS: Helicover.fxt (ASCII) holds the English messages, Helicover_RU.fxt the same ones with U keys for the game's Russian and V keys for SanLTD, same colour tags
+PASS: Every one of the 121 messages reads back as its Russian text in both simulated fonts (mixed case in the game's Russian, capitals in SanLTD), no @ anywhere
+PASS: The SanLTD test message carries the raw codes 0x80-0xAF in groups of eight
+PASS: AUTO follows the game: its own Russian -> game layout, the French slot with the EFIGS font (SanLTD) -> SanLTD layout, English / German / Italian / Spanish / Japanese -> English; explicit settings win; an unknown build stays English
+PASS: Notices use the English key, the U key (game Russian) or the V key (SanLTD) depending on the language
+PASS: The main menu in Russian reads correctly in both simulated fonts: rows and the state in the title
+PASS: Every menu page has an English, a game-Russian and a SanLTD version with the same rows; at most 8 rows, none longer than 26 (RU 30) characters, no unreadable code in any title or row
+PASS: SETTINGS > LANGUAGE: AUTO / ENGLISH / RUSSIAN (GAME RUSSIAN) / RUSSIAN (SANLTD), the choice applies at once and the pages follow
+PASS: FONT TEST: page 1 is the alphabet for the game's Russian, page 2 the capitals and the unknown codes for SanLTD; each prints its test message
+PASS: The launcher's "files missing" message is English, game Russian or SanLTD by the same rule as AUTO
 PASS: DISMISS with a squad on the ground: recall first, the helicopter leaves when the squad is back aboard
 PASS: A recall that never finishes does not keep the helicopter for ever: DISMISS goes through after 45 s
 PASS: DISMISS without a squad is immediate after the confirmation
