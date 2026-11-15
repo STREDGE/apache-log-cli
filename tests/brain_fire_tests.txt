@@ -18,5 +18,6 @@ PASS: Targets are shared out: four attackers get one shooter each; a rifle close
 PASS: Nobody changes his man from tick to tick while the picture stays the same
 PASS: First round at a new man: 300-400 ms from a standing start (40 different guards), about 70 ms quicker when already fighting
 PASS: A door gunner fires in bursts of 0.7-1.4 s with 0.3-0.5 s between them (on the trigger 71% of the time), never one endless stream; a guard on foot gets a plain fire / cease fire - his bursts are the game's own weapon handling
-PASS: 60 random fights (25 s each, guards and CJ running about, cars, police, every fire rule): 35456 orders to fire, checked one by one by an independent calculation - none with CJ or one of ours in the line, at a friend, against the fire rule, or at a car that could blow up beside CJ
+PASS: CJ crosses the line of fire: the guard holds with his weapon still on the man, and fires on the very next look when the line is clear - no second reaction time
+PASS: 60 random fights (25 s each, guards and CJ running about, cars, police, every fire rule): 35771 orders to fire, checked one by one by an independent calculation - none with CJ or one of ours in the line, at a friend, against the fire rule, or at a car that could blow up beside CJ
 The core only. Nothing here has run in the game.

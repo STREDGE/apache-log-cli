@@ -461,6 +461,27 @@ share = pattern.count('F') / 300.
 assert .55 <= share <= .9, share
 passed('A door gunner fires in bursts of %.1f-%.1f s with %.1f-%.1f s between them (on the trigger %d%% of the time), never one endless stream; a guard on foot gets a plain fire / cease fire - his bursts are the game\'s own weapon handling' % (min(bursts) / 1000., max(bursts) / 1000., min(pauses) / 1000., max(pauses) / 1000., share * 100))
 
+delays = []
+for seed in range(12):
+    sc = Scene(brain=Brain(seed=seed + 1))
+    me = sc.our(0, 4, HCB_ROLE_SQUAD, weapon=M4)
+    sc.cj['pos'] = [0., -6., 1.]
+    g = sc.ped(25, 4, pedtype=GANG, weapon=AK)
+    sc.shot(g, (0., -6., 1.), dst=1)
+    run(sc, 8)
+    assert firing(sc, g)
+    sc.cj['pos'] = [12., 4.5, 1.]                      # CJ crosses the line of fire
+    run(sc, 5)
+    assert not firing(sc) and HOLD[sc.orders[me].hold] == 'CJ_IN_LINE' and sc.orders[me].target == g
+    sc.cj['pos'] = [0., -6., 1.]                       # ... and is out of it again
+    for k in range(1, 8):
+        sc.step(1)
+        if firing(sc, g):
+            delays.append(k * 100)
+            break
+assert delays == [100] * 12, delays
+passed('CJ crosses the line of fire: the guard holds with his weapon still on the man, and fires on the very next look when the line is clear - no second reaction time')
+
 # ------------------------------------------------------------------ the hard rules hold in any mess: random fights, an independent check
 def check_orders(sc, s):
     """Every fire order of this tick against the rules, computed here from the snapshot (not by the core)."""

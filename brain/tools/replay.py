@@ -19,7 +19,8 @@ EVENT = {h.HCB_EV_SHOT: 'shot', h.HCB_EV_DAMAGE: 'damage', h.HCB_EV_EXPLOSION: '
 
 
 def replay(data):
-    """Returns (head, text, ticks): ticks = [dict(snapshot, out (a copy), match (bool), exact (bool))]."""
+    """Returns (head, text, ticks): ticks = [dict(snapshot, out (a copy), match (bool), exact (bool), rounds)];
+    rounds = the rounds of ours asked for after that look and before the next (hcb_round)."""
     head, records, text = h.read_box(data)
     brain = h.Brain(seed=head.seed)
     ticks, exact = [], False
@@ -28,9 +29,13 @@ def replay(data):
             ctypes.memmove(brain.mem, r[1], len(r[1]))
             exact = True
             continue
+        if r[0] == 'round':
+            if ticks:
+                ticks[-1]['rounds'].append(h.hcb_round.from_buffer_copy(bytes(r[1])))
+            continue
         out = brain.think(r[1])
         copy = h.hcb_out.from_buffer_copy(bytes(out))
-        ticks.append(dict(snapshot=r[1], out=copy, match=copy.digest == r[2], exact=exact))
+        ticks.append(dict(snapshot=r[1], out=copy, match=copy.digest == r[2], exact=exact, rounds=[]))
     return head, text, ticks
 
 
@@ -50,7 +55,16 @@ def summarize(data, everything=False):
     lines.append('time span: %.1f s, peds per snapshot %d..%d, events lost %d, peds lost %d' % (
         (ticks[-1]['snapshot'].time - t0) / 1000., min(t['snapshot'].n_peds for t in ticks), max(t['snapshot'].n_peds for t in ticks),
         sum(t['snapshot'].events_lost for t in ticks), max(t['snapshot'].peds_lost for t in ticks)))
-    last_alert, last_marks = None, {}
+    HOLD = {v: k[9:].lower().replace('_', ' ') for k, v in h.CONSTS.items() if k.startswith('HCB_HOLD_')}
+    fired = sum(1 for t in ticks for r in t['rounds'] if r.verdict == h.HCB_HOLD_NONE and r.ray)
+    refused = {}
+    for t in ticks:
+        for r in t['rounds']:
+            if r.verdict != h.HCB_HOLD_NONE or not r.ray:
+                why = HOLD.get(r.verdict, r.verdict) if r.verdict != h.HCB_HOLD_NONE else 'the ray was blocked'
+                refused[why] = refused.get(why, 0) + 1
+    lines.append('rounds of the door gunners: %d let go; refused (noted at most four times a second per gunner): %s' % (fired, ', '.join('%s %d' % kv for kv in sorted(refused.items())) or 'none'))
+    last_alert, last_marks, last_orders = None, {}, {}
     for t in ticks:
         s, o = t['snapshot'], t['out']
         stamp = '%7.1fs' % ((s.time - t0) / 1000.)
@@ -71,6 +85,15 @@ def summarize(data, everything=False):
             if id not in marks:
                 lines.append('%s   %#x no longer of interest' % (stamp, id))
         last_marks = marks
+        orders = {od.who: (od.target, od.fire, od.hold) for od in o.orders[:o.n_orders]}
+        for who, (target, fire, hold) in orders.items():
+            was = last_orders.get(who, (0, 0, 0))
+            if target != was[0] or (everything and (fire, hold) != was[1:]):
+                lines.append('%s   ours %#x -> %s' % (stamp, who, ('%#x, %s' % (target, 'FIRE' if fire else HOLD.get(hold, hold))) if target else 'no target'))
+        last_orders = orders
+        if everything:
+            for r in t['rounds']:
+                lines.append('%s     round %#x at %#x: %s' % (stamp, r.who, r.target, 'let go' if r.verdict == h.HCB_HOLD_NONE and r.ray else 'refused, ' + (HOLD.get(r.verdict, r.verdict) if r.verdict != h.HCB_HOLD_NONE else 'the ray was blocked')))
     return '\n'.join(lines)
 
 

@@ -259,7 +259,10 @@ HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                 if (cs[j].fire && cs[j].value > best) { best = cs[j].value; bj = j; }
                 if (!cs[j].fire && cs[j].t->cls >= HCB_CLS_WATCH && s->roe != HCB_ROE_HOLD && (cover < 0 || cs[j].value > cs[cover].value)) cover = j;
             }
-            sh->target = 0; sh->fire_from = 0; sh->burst_until = 0; sh->pause_until = 0;
+            /* a man he had his weapon on and may not fire at just now (CJ in the line, a wall) is still his man: when the
+               line clears he fires without a new reaction time */
+            if (bj < 0 || sh->target != cs[bj].t->last.id) { sh->target = 0; sh->fire_from = 0; }
+            sh->burst_until = 0; sh->pause_until = 0;
             if (bj >= 0) { o->hold = why[i][bj] == SOFT_LOS ? HCB_HOLD_NO_LOS : why[i][bj]; o->target = cs[bj].t->last.id; o->aim = cs[bj].t->last.pos; o->ready = 1; }
             else if (cover >= 0) { o->hold = HCB_HOLD_COVERING; o->target = cs[cover].t->last.id; o->aim = cs[cover].t->last.pos; o->ready = 1; }
             else { o->hold = s->roe == HCB_ROE_HOLD && n ? HCB_HOLD_ROE : HCB_HOLD_NO_TARGET; o->ready = (u8)(b->alert >= HCB_ALERT_THREAT); }

@@ -18,7 +18,9 @@ ANCHORS = [(0x4f23a0, 'ped pool element 0x9c8'), (0x4f241c, 'vehicle pool elemen
            (0x40fbb0, 'vehicle health +0x634'), (0x40eef8, 'passenger count +0x5e8'), (0x41bc70, 'vehicle fire +0x5f8'), (0x4f0478, 'player data +0x8'),
            (0x3f69c0, 'wanted stars +0x2c'), (0x4efb14, 'player info size 0x1d8'), (0x5dd8b0, 'use-gun target +0x28'), (0x5e3020, 'kill-ped target +0x20'),
            (0x4efee8, 'matrix pointer +0x18'), (0x4efef0, 'matrix position +0x30'), (0x4f03b4, 'move speed +0x68'), (0x4269a0, 'model index +0x32'),
-           (0x5ab86c, 'group members +0x8'), (0x3fcfb0, 'player group +0x4c')]
+           (0x5ab86c, 'group members +0x8'), (0x3fcfb0, 'player group +0x4c'),
+           (0x50cf18, 'line of sight: page of the GOT entry of pIgnoreEntity'), (0x50cf24, 'line of sight: the GOT entry +0x180'),
+           (0x3f1fcc, 'CollectParameters (CLEO reads opcode parameters with it)'), (0x3f2654, 'GetPointerToScriptVariable')]
 SLOTS = [('SCRIPTS', 0x845438, 0x3f3ad8), ('HUD', 0x845ec8, 0x51f6f0), ('GUNSHOT', 0x843f10, 0x442854)]
 
 

@@ -125,6 +125,8 @@ c = collections.Counter(l.split(' -> ')[0][:60] for l in log)
 for l in log[:150]: print(' ', l[:230])
 print(len(log), 'events; tail:'); [print(' ', l[:230]) for l in log[-25:]]
 open(P + '.image', 'wb').write(bytes(uc.mem_read(BASE, top)))
+# the names of the import stubs whose addresses are baked into the image (brain/tests/test_adapter.py runs CLEO's own code and answers them)
+import json; json.dump({hex(k): v for k, v in names.items()}, open(P + '.image.names.json', 'w'))
 used = mm[0] - MMAP
 if used: open(P + '.mmap', 'wb').write(bytes(uc.mem_read(MMAP, used)))
 print('mmap used', hex(used), 'heap used', hex(heap[0] - HEAP))

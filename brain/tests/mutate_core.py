@@ -105,6 +105,7 @@ M += [
  (F, "if (now < sh->burst_until) { o->fire = 1; o->hold = HCB_HOLD_NONE; sh->last_fire = now; }", "if (1) { o->fire = 1; o->hold = HCB_HOLD_NONE; sh->last_fire = now; }", 'timing: bursts end'),
  (F, "sh->pause_until = now + (u32)rnd_between(b, c->pause_min_ms, c->pause_max_ms);", "sh->pause_until = now;", 'timing: a pause between bursts'),
  (F, "else if (!is_gunner(sh->role)) { o->fire = 1; o->hold = HCB_HOLD_NONE; sh->last_fire = now; }", "", 'timing: a guard on foot is not paced'),
+ (F, "if (bj < 0 || sh->target != cs[bj].t->last.id) { sh->target = 0; sh->fire_from = 0; }", "if (1) { sh->target = 0; sh->fire_from = 0; }", 'timing: no second reaction after a blocked line'),
  (F, "else if (cover >= 0) { o->hold = HCB_HOLD_COVERING;", "else if (0) { o->hold = HCB_HOLD_COVERING;", 'covering a suspect'),
  (F, "|| role < HCB_ROLE_GUNNER) { me[i] = 0; done[i] = 1; }", ") { me[i] = 0; done[i] = 1; }", 'the pilot does not shoot'),
  (C, "if (cj->target && cj->target == p->id) t->cj_marked = now;", "", 'follow: the man CJ locks on'),
