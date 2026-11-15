@@ -1,5 +1,5 @@
 """Mutation check: break one rule at a time in a scratch copy of builder/ and make sure the tests notice.
-   python3 tools/mutate.py            all mutants      python3 tools/mutate.py --new     only the 1.2 ones      --b4  only the beta 4 ones      (names as arguments pick single mutants)
+   python3 tools/mutate.py            all mutants      python3 tools/mutate.py --new     only the 1.2 ones      --b4  only the beta 4 ones      --b5  only the beta 5 ones      (names as arguments pick single mutants)
    A line 'MISSED ... <<<<<<' means a rule has no test that guards it."""
 import shutil,subprocess,sys,os,tempfile
 from pathlib import Path
@@ -194,15 +194,41 @@ M14=[
  ('build_v25.py',"p.label('DDA_SQUAD');say(p,'HCDSQ')","p.label('DDA_SQUAD')",'14 dismiss says why it waits'),
  ('build_v25.py',"p.call('DT_PHASE');p.eq(22,0,'DRAW_6_TEAM');draw('DISMISS_MENU',2)","p.go('DRAW_6_TEAM');draw('DISMISS_MENU',2)",'14 dismiss page by squad'),
 ]
+B='build_v25.py'
+M15=[   # beta 5: the menu opens at once
+ (B,"launch.check(0x8019,[V(2),I(PANEL_FRESH_MS)],'PANEL_SLOW');","",'15 launcher: an old stamp is no proof'),
+ (B,"launch.check(0x0019,[V(2),I(-1)],'PANEL_SLOW')","a(0)",'15 launcher: a stamp from the future is no proof'),
+ (B,"launch.eq(1,0,'PANEL_SEEN');launch.go('PANEL_SLOW')","launch.go('PANEL_SEEN')",'15 launcher: no stamp at all'),
+ (B,"launch.label('ENTRY');a(0);","launch.label('ENTRY');a(0);a(1,I(400));",'15 launcher: no fixed pause'),
+ (B,"launch.check(0x003b,[V(2),V(1)],'PANEL_OK');","",'15 launcher: old stamp but alive'),
+ (B,"launch.check(0x001d,[V(2),V(3)],'PANEL_SLOW_LOOP')","launch.go('PANEL_SLOW_LOOP')",'15 launcher: gives up'),
+ (B,"PANEL_PROOF_MS=650","PANEL_PROOF_MS=6500",'15 launcher: gives up in time'),
+ (B,"p.check(0x8019,[V(14),I(CORE_FRESH_MS)],'CORE_SLOW');","",'15 panel: an old core stamp is no proof'),
+ (B,"p.check(0x0019,[V(14),I(-1)],'CORE_SLOW')","a(0)",'15 panel: a core stamp from the future is no proof'),
+ (B,"p.eq(13,0,'CORE_SEEN');p.go('CORE_SLOW')","p.go('CORE_SEEN')",'15 panel: no core stamp at all'),
+ (B,"p.label('CORE_SEEN');","p.label('CORE_SEEN');a(1,I(250));",'15 panel: no fixed pause'),
+ (B,"p.check(0x003b,[V(14),V(13)],'CORE_OK');","",'15 panel: old core stamp but alive'),
+ (B,"CORE_PROOF_MS=250","CORE_PROOF_MS=2500",'15 panel: OFFLINE in time'),
+ (B,"p.label('WATCH');a(1,I(0));","p.label('WATCH');a(1,I(50));",'15 panel: watches every frame'),
+ (B,"p.label('MENU_POLL');a(1,I(0));","p.label('MENU_POLL');a(1,I(50));",'15 panel: taps read every frame'),
+ (B," p.set(CMD,cmd)   # beta 5"," p.set(CMD,cmd);a(1,I(200))   # beta 5",'15 panel: no pause after a tap'),
+ (B,"c.get(19,CMD);c.eq(19,0,'NAP_END');","",'15 core: an order ends the nap'),
+ (B,"a(0x000a,V(19),I(100));a(0xddc,I(NAP_UNTIL),V(19))","a(0xddc,I(NAP_UNTIL),V(19))",'15 core: the nap is 100 ms'),
+ (B,"c.check(0x801d,[V(17),V(19)],'NAP_LOOP')","c.check(0x001d,[V(19),V(17)],'NAP_LOOP')",'15 core: the nap ends on time'),
+ (B,"c.label('IDLE');c.call('NAP')","c.label('IDLE');a(1,I(100))",'15 core: idle nap'),
+ (B,"c.label('TICK_NORMAL_WAIT');c.call('NAP')","c.label('TICK_NORMAL_WAIT');a(1,I(100))",'15 core: flight nap'),
+]
 if sys.argv[1:2]==['--new']:
- M=M12+M14;sys.argv.pop(1)
+ M=M12+M14+M15;sys.argv.pop(1)
+elif sys.argv[1:2]==['--b5']:
+ M=M15;sys.argv.pop(1)
 elif sys.argv[1:2]==['--b4']:
  M=M14;sys.argv.pop(1)
 elif sys.argv[1:2]==['--12']:
  M=M12;sys.argv.pop(1)
 elif sys.argv[1:2]==['--old']:
  sys.argv.pop(1)
-else:M=M+M12+M14
+else:M=M+M12+M14+M15
 only=sys.argv[1:]
 for fname,old,new,name in M:
  if only and name not in only:continue

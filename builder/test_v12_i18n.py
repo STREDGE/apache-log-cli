@@ -1,4 +1,4 @@
-"""Helicover 1.2 language and menu (beta 4): one rule for the language - the game's own Russian -> Russian, anything else -> English -
+"""Helicover 1.2 language and menu (beta 4, beta 5: the menu opens at once): one rule for the language - the game's own Russian -> Russian, anything else -> English -
 no language page, no FONT TEST, no SanLTD layout; the menu pages in both languages; rows that show an operation in progress instead of
 a button that could be pressed twice; the exit rows as switches; DISMISS with a squad on the ground.
 The game's Russian font is simulated from libGTASA's CFont code; the layout itself was confirmed on the player's phone (beta 3)."""
@@ -230,6 +230,92 @@ w.calls.clear();press(w,(c,p),3,4);press(w,(c,p),1,4)
 assert w.menu[0]==b'HELICOVER / HELICOPTER' and {x[2][0] for x in calls(w,0x247)}=={487,497,425},'the helicopter models when the HELICOPTER page opens'
 w.calls.clear();press(w,(c,p),3,4);press(w,(c,p),5,4);assert w.menu[0]==b'HELICOVER / FOLLOWING' and {x[2][0] for x in calls(w,0x249)}>={285,287,487,497,425},'and released when the pages are left'
 passed('Crew and helicopter models are pre-requested while their pages are open, so choosing one does not stall a frame')
+
+# =================================================================== beta 5: the menu opens at once
+def frames_until(w,vms,cond,limit=60):
+ for n in range(1,limit+1):
+  w.step(*vms)
+  if cond(w):return n
+ return None
+def main_page(w):return w.menu is not None and w.menu[0]==b'HELICOVER / FOLLOWING'
+OFFLINE=i18n.menu_text('OFFLINE_TITLE','en')
+def missing(w):return [x[2][0] for x in calls(w,0x3e5) if x[2][0] in('HCOFF','UCOFF')]
+def offline_page(w):return w.menu is not None and w.menu[0]==OFFLINE
+def launch_world(frame_ms=100,phase=0,order=0,core=True,panel=True,summoned=True):
+ w=World();c=VM('Helicover_Core',w);p=VM('Helicover_Panel',w);w.step(c,p,n=3)
+ if summoned:summon(w,c)
+ w.frame_ms=frame_ms;w.step(c,p,n=phase);launch=VM('Helicover',w)
+ vms=[v for v,on in ((c,core),(p,panel))if on];vms=vms+[launch] if order==0 else [launch]+vms[::-1]
+ return w,c,p,vms
+slowest=0
+for frame_ms in (100,33,16):
+ for phase in range(8):
+  for order in (0,1):
+   w,c,p,vms=launch_world(frame_ms,phase,order);n=frames_until(w,vms,main_page);assert n is not None and n<=2,(frame_ms,phase,order,n);slowest=max(slowest,n)
+   assert w.shared[b.OPEN]==0 and not missing(w),'the request is taken and nothing is reported missing'
+passed('Tapping "helicover" in the CLEO list: the menu is on the screen %d frame(s) later at 10, 30 and 60 fps, whatever the scripts were doing (it used to take 0.9 s of fixed pauses)'%slowest)
+# the launcher's proof of life when the stamp is no use: the panel is not there / has stopped / the stamp is out of date
+w=World();launch=VM('Helicover',w);n=frames_until(w,(launch,),missing);assert n is not None and n*100<=b.PANEL_PROOF_MS+200 and w.shared[b.OPEN]==0 and w.menu is None,n
+w,c,p,vms=launch_world(panel=False);w.now+=3000;n=frames_until(w,vms,missing)
+assert n is not None and n*100<=b.PANEL_PROOF_MS+200 and missing(w)==['HCOFF'] and w.shared[b.OPEN]==0 and w.menu is None,(n,w.menu)
+w,c,p,vms=launch_world(panel=False);w.shared[b.PANELHEART]=w.now+60000;n=frames_until(w,vms,missing);assert n is not None and w.shared[b.OPEN]==0,'a stamp ahead of the clock is no proof of life either'
+passed('No menu script (never started, or stopped a few seconds ago): the launcher says "files missing" within 0.7 s and leaves no open request behind')
+for order in (0,1):
+ for shift in (5000,-60000):     # the scripts were held while the clock ran / a loaded save put the clock back
+  w,c,p,vms=launch_world(order=order)
+  if shift>0:w.now+=shift
+  else:w.shared[b.PANELHEART]=w.now-shift;w.shared[b.HEART]=w.now-shift
+  n=frames_until(w,vms,main_page);assert n is not None and n<=3 and not missing(w),(order,shift,n,w.menu)
+passed('A heartbeat that is out of date (or ahead of the clock after a loaded save) with both scripts alive: the menu still opens, 3 frames at most - a stale stamp alone never means "missing"')
+# the panel's proof of life for the core
+for frame_ms in (100,33,16):
+ w=World();p=VM('Helicover_Panel',w);w.frame_ms=frame_ms;w.step(p,n=3);launch=VM('Helicover',w);n=frames_until(w,(p,launch),lambda w:w.menu is not None)
+ assert offline_page(w) and n*frame_ms<=b.CORE_PROOF_MS+3*frame_ms,(frame_ms,n,w.menu)
+w,c,p,vms=launch_world(core=False);w.step(p,n=30);n=frames_until(w,vms,lambda w:w.menu is not None);assert offline_page(w) and n*100<=b.CORE_PROOF_MS+300,(n,w.menu)
+w.events.append(0);w.step(*vms,n=3);assert not orders_given(w),'the OFFLINE page orders nothing'
+w,c,p,vms=launch_world(core=False);w.shared[b.HEART]=w.now+60000;n=frames_until(w,vms,lambda w:w.menu is not None);assert offline_page(w),'a core stamp ahead of the clock is no proof of life either'
+for stamp in (-5000,60000):     # the core is alive but its stamp is no use: the panel waits for the next one instead of giving up
+ w,c,p,vms=launch_world();w.shared[b.OPEN]=1;w.shared[b.HEART]=w.now+stamp;n=frames_until(w,(p,c),lambda w:w.menu is not None);assert main_page(w) and n<=3,(stamp,n,w.menu)
+passed('No core script (never started, or stopped 3 s ago): the OFFLINE page, 0.25 s after the tap')
+# an order is picked up at once: the page follows the tap
+slow_page=slow_call=0
+for frame_ms in (100,33,16):
+ for phase in range(6):
+  w,c,p=open_menu();w.frame_ms=frame_ms;w.step(c,p,n=phase);w.calls.clear();w.events.append(1)
+  n=frames_until(w,(c,p),lambda w:rows_of(w)[1]==b'HOLD HERE [X]');assert n is not None and n<=2 and orders_given(w)==[3],(frame_ms,phase,n,w.menu);slow_page=max(slow_page,n)
+  w,c,p=open_menu(summoned=False);w.frame_ms=frame_ms;w.step(c,p,n=phase);w.calls.clear();w.events.append(0)
+  n=frames_until(w,(c,p),lambda w:w.shared[b.STATE]!=0);assert n is not None and n<=2,(frame_ms,phase,n);slow_call=max(slow_call,n)
+  n=frames_until(w,(c,p),main_page);assert n is not None and n<=3 and len(calls(w,0xa5))==1,(frame_ms,phase,n,w.menu)
+passed('A tapped row: the core takes the order within %d frame(s) and the page shows the result within %d (HOLD HERE gets its [X], CALL HELICOPTER turns into the FOLLOWING page) - no fixed 0.2 s pause, no waiting for the core\'s 0.1 s tick'%(slow_call,slow_page))
+# CLEO may keep reporting a tap for up to 250 ms (the second argument of 0DF4): with a page that now changes at once the same
+# report must not land on the new page
+def tap_run(frame_ms,row,sticky_ms):
+ w,c,p=open_menu();w.frame_ms=frame_ms;w.step(c,p,n=3);w.calls.clear();t0=w.now;w.events.append(row);w.step(c,p)
+ while w.now-t0<sticky_ms:w.events.clear();w.events.append(row);w.step(c,p)
+ w.events.clear();w.step(c,p,n=int(600/frame_ms));return w.menu,orders_given(w),[w.shared[k] for k in (b.FIRE,b.CREW,b.MODEL,b.TACTICS,b.EXIT_MODE,b.HUD,b.DISMISS_T)]
+for frame_ms in (100,33,16):
+ for row in range(8):assert tap_run(frame_ms,row,250)==tap_run(frame_ms,row,0) and len(tap_run(frame_ms,row,250)[1])<=1,(frame_ms,row,tap_run(frame_ms,row,250),tap_run(frame_ms,row,0))
+passed('A tap that CLEO keeps reporting for 0.25 s does exactly what a single report does on all 8 rows at 10, 30 and 60 fps: one order at most, and nothing is chosen on the page that has just opened')
+# the core's nap: 100 ms as before when nothing is asked, cut short by an order, never a frame-by-frame loop
+for frame_ms,lo,hi in ((100,19,21),(33,14,16),(16,17,19)):
+ w,c,_=setup();summon(w,c);w.frame_ms=frame_ms;w.step(c,n=5);w.calls.clear();w.step(c,n=int(2000/frame_ms))
+ beats=len([x for x in calls(w,0xddc) if x[2][0]==b.HEART]);assert lo<=beats<=hi,(frame_ms,beats)
+passed('Nothing asked: the core still works once per 0.1 s (20 passes in 2 s at 10 fps, 15 at 30 fps, 18 at 60 fps - the same as with the plain pause)')
+late={}
+for sit in ('none','follow','aboard','squad','rope','leaving'):
+ for cmd in range(1,40):
+  w,c,p=setup(True)
+  if sit!='none':summon(w,c)
+  if sit=='aboard':w.incar[1]=c.v[5]
+  ground=VM('Helicover_Ground',w);sq=VM('Helicover_Squad',w);V=(c,p,ground,sq);w.step(*V,n=3)
+  if sit in('squad','rope'):w.shared[b.CMD]=16;w.step(*V,n=6)
+  if sit=='squad':hover(w,c);w.step(*V,n=40)
+  if sit=='leaving':w.shared[b.CMD]=4;w.step(*V,n=6)
+  w.frame_ms=16;w.shared[b.CMD]=cmd;n=frames_until(w,V,lambda w:w.shared[b.CMD]==0,limit=30)
+  if n is None or n>(7 if sit=='leaving' else 2):late[(sit,cmd)]=n
+  assert not invariants(w),(sit,cmd,invariants(w))
+assert not late,late
+passed('Any order number in any situation (no helicopter, following, aboard, squad down, roping, leaving) is taken or dropped within 2 frames (while leaving: 0.1 s) - an order never stays pending, so the nap cannot turn into a busy loop')
 
 text='\n'.join(results)+'\nMocked script execution only: the Russian layout was confirmed on the player\'s phone (beta 3); the look of the menu itself is the game\'s.\n'
 (b.OUT/'i18n_tests.txt').write_text(text);print(text)

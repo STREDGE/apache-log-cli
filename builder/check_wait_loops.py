@@ -23,7 +23,26 @@ def succ(ins,a):
 def check(name):
     ins,order=parse(name)
     nodes=[a for a in order if (ins[a][0]&0x7fff)!=0x0001]
-    g={a:[b for b in succ(ins,a) if b in ins and (ins[b][0]&0x7fff)!=0x0001] for a in nodes}
+    # A subroutine that cannot return without passing a WAIT (beta 5: the core's NAP) is itself a wait:
+    # the caller's return point is then not reachable 'for free' from the GOSUB.
+    memo={}
+    def always_waits(entry):
+        if entry not in memo:
+            memo[entry]=True;seen=set();todo=[entry];ok=True   # (recursion is treated as waiting; the scripts have none)
+            while todo and ok:
+                a=todo.pop()
+                if a in seen or a not in ins or (ins[a][0]&0x7fff)==0x0001:continue
+                seen.add(a);base=ins[a][0]&0x7fff
+                if base==0x0051:ok=False
+                elif base==0x0050:
+                    if not always_waits(-ins[a][1][0]):todo.append(ins[a][2])
+                else:todo.extend(succ(ins,a))
+            memo[entry]=ok
+        return memo[entry]
+    def edges(a):
+        if (ins[a][0]&0x7fff)==0x0050 and always_waits(-ins[a][1][0]):return [-ins[a][1][0]]
+        return succ(ins,a)
+    g={a:[b for b in edges(a) if b in ins and (ins[b][0]&0x7fff)!=0x0001] for a in nodes}
     # Tarjan SCC
     idx={};low={};st=[];on=set();res=[];n=[0]
     sys.setrecursionlimit(100000)

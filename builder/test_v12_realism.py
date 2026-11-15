@@ -38,7 +38,7 @@ def glide_time(frame_ms):
   w.step(c,ground);zs.append(list(w.car))
   if w.shared[b.STATE]==3:break
  assert w.shared[b.STATE]==3,(w.shared[b.STATE],frame_ms)
- dz=[math.dist(zs[i],zs[i-1]) for i in range(3,len(zs))]   # (the first frames include the one-off model height offset of SET_CAR_COORDINATES)
+ dz=[math.dist(zs[i],zs[i-1]) for i in range(4,len(zs))]   # (the first frames include the one-off model height offset of SET_CAR_COORDINATES and the first step after the test's own teleport, which lands in the middle of a core nap)
  return w.now-t0,max(dz)/(frame_ms/1000.)
 t100,v100=glide_time(100);t33,v33=glide_time(33)
 assert abs(t100-t33)<=900 and v100<=26 and v33<=26,(t100,t33,v100,v33)
