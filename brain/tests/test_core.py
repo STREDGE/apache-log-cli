@@ -561,7 +561,7 @@ at = broken.rec.start + 12 + hcb_snapshot.n_peds.offset           # the first re
 broken.buf[at] += 1
 assert broken.records() == [], 'a record whose length does not match its counts is refused, not read past its end'
 # the brain's own memory is stored every 5 s: a replay that starts there is exact even though the beginning is gone
-ring = Recorder(700 * 1024)
+ring = Recorder(900 * 1024)
 sc, digests = random_fight(14, ticks=400, recorder=ring, state_every=50)
 recs = ring.all()
 first_state = next(i for i, r in enumerate(recs) if r[0] == 'state')

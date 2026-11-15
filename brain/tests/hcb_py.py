@@ -3,7 +3,7 @@ so there is one description of the layout), the host build of the core, and a sm
 
     from hcb_py import *            # constants HCB_..., structs hcb_ped ..., Brain, Scene
 """
-import ctypes, os, re, subprocess, sys
+import ctypes, math, os, re, subprocess, sys
 from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
@@ -244,6 +244,12 @@ class Scene:
         self.wanted, self.on_mission, self.cutscene, self.heli, self.mission_free = wanted, on_mission, 0, 0, 0
         self.roe, self.police = HCB_ROE_DEFEND if roe is None else roe, HCB_POLICE_ANSWER
         self.walls = []          # [(x1, y1, x2, y2)]: segments that block the line of sight (answers to the brain's questions)
+        self.holes = []          # [(x, y, r)]: no ground there (water, a drop): a cover question about such a spot says "no ground"
+        self.probe_q = []        # the cover questions of the last tick (answered in the next snapshot)
+        self.posts = {}          # who -> hcb_post of the last tick (the protective detail)
+        self.walk_posts = False  # True: our guards on foot go to their posts as the scripts would make them
+        self.said = []           # (time, HCB_SAY_*, dir) of the commander
+        self.tactics = 0
         self.los_fn = None       # or a function (from_id, to_id) -> bool
         self.asked = []          # the questions of the last tick
         self.orders = {}         # who -> hcb_order of the last tick
@@ -313,6 +319,16 @@ class Scene:
     def pos_of(self, id):
         return (self.peds.get(id) or self.vehs.get(id) or self.cj)['pos'] if id != 1 else self.cj['pos']
 
+    def blocked(self, p, q):
+        """Does a wall stand between the points p and q (on the ground plan)?"""
+        def cross(o, u, v):
+            return (u[0] - o[0]) * (v[1] - o[1]) - (u[1] - o[1]) * (v[0] - o[0])
+        for x1, y1, x2, y2 in self.walls:
+            w1, w2 = (x1, y1), (x2, y2)
+            if cross(p, q, w1) * cross(p, q, w2) < 0 and cross(w1, w2, p) * cross(w1, w2, q) < 0:
+                return True
+        return False
+
     def sees(self, a, b):
         """The adapter's answer to "is there a clear line from a to b"."""
         if a not in self.peds or b not in self.peds:
@@ -335,6 +351,13 @@ class Scene:
         s.time, s.frame, s.heli = self.time, self.frame, self.heli
         s.wanted, s.on_mission, s.cutscene, s.roe, s.police = self.wanted, self.on_mission, self.cutscene, self.roe, self.police
         s.mission_free = self.mission_free
+        s.tactics = self.tactics
+        s.n_probes = len(self.probe_q)
+        for o, (at, frm) in zip(s.probes, self.probe_q):
+            o.at = vec(*at)
+            setattr(o, 'from', vec(*frm))
+            o.hidden = int(self.blocked(frm, at))
+            o.ground = int(not any(math.dist(at[:2], (hx, hy)) < hr for hx, hy, hr in self.holes))
         s.n_los = len(self.asked)
         for o, (a, b) in zip(s.los, self.asked):
             o.to = b
@@ -375,6 +398,18 @@ class Scene:
             self.events = []
             self.asked = [(getattr(q, 'from'), q.to) for q in out.queries[:out.n_queries]]
             self.orders = {o.who: hcb_order.from_buffer_copy(bytes(o)) for o in out.orders[:out.n_orders]}
+            self.probe_q = [((q.at.x, q.at.y, q.at.z), (getattr(q, 'from').x, getattr(q, 'from').y, getattr(q, 'from').z)) for q in out.probe_q[:out.n_probe_q]]
+            self.posts = {p_.who: hcb_post.from_buffer_copy(bytes(p_)) for p_ in out.posts[:out.n_posts]}
+            if out.say:
+                self.said.append((self.time, out.say, out.say_dir))
+            if self.walk_posts:
+                for who, p_ in self.posts.items():
+                    if who in self.peds and p_.move:
+                        me, to = self.peds[who]['pos'], [p_.at.x, p_.at.y, me_z] if (me_z := self.peds[who]['pos'][2]) is not None else None
+                        d = math.dist(me[:2], to[:2])
+                        step = min(d, (1.4, 3.5, 5.5)[p_.move - 1] * ms / 1000.)
+                        if d > 1e-6:
+                            self.peds[who]['pos'] = [me[0] + (to[0] - me[0]) * step / d, me[1] + (to[1] - me[1]) * step / d, me[2]]
             for p in list(self.peds.values()) + [self.cj]:
                 p.pop('shot', None)
                 p['pos'] = [p['pos'][i] + p['vel'][i] * ms / 1000. for i in range(3)]

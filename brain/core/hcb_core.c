@@ -503,6 +503,14 @@ API void hcb_think(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         h = hcb_fnv(h, o->who); h = hcb_fnv(h, o->target); h = hcb_fnv(h, ((u32)o->fire << 24) | ((u32)o->aim_at << 16) | ((u32)o->hold << 8) | o->ready);
     }
     for (i = 0; i < out->n_queries; i++) { h = hcb_fnv(h, out->queries[i].from); h = hcb_fnv(h, out->queries[i].to); }
+    hcb_detail_plan(b, s, out);
+    for (i = 0; i < out->n_posts; i++) {
+        const hcb_post *p = &out->posts[i];
+        h = hcb_fnv(h, p->who); h = hcb_fnv(h, hcb_bits(p->at.x)); h = hcb_fnv(h, hcb_bits(p->at.y));
+        h = hcb_fnv(h, ((u32)p->move << 24) | ((u32)p->crouch << 16) | ((u32)p->duty << 8) | p->job);
+    }
+    for (i = 0; i < out->n_probe_q; i++) { h = hcb_fnv(h, hcb_bits(out->probe_q[i].at.x)); h = hcb_fnv(h, hcb_bits(out->probe_q[i].at.y)); }
+    h = hcb_fnv(h, ((u32)out->say << 24) | ((u32)out->say_dir << 16) | out->say_seq); h = hcb_fnv(h, ((u32)out->cover_ok << 8) | out->duty);
     for (i = 0; i < out->n_marks; i++) {
         const hcb_mark *m = &out->marks[i];
         if (m->cls >= HCB_CLS_WATCH && !out->top) out->top = m->id;

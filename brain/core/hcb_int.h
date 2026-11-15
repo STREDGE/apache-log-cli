@@ -75,6 +75,23 @@ typedef struct losent {
     u32 from, to, time;
     u8 used, clear, reserved0, reserved1;
 } losent;
+/* the protective detail: what the cover questions have shown, and the detail's own memory */
+#define HCB_MAX_COVERS 192
+typedef struct cover {
+    hcb_vec at, from;       /* a spot, and the threat it was tested against */
+    u32 asked, answered;    /* when the question went out, when the answer came (0 = not yet) */
+    u8 used, hidden, ground, reserved0;
+} cover;
+typedef struct detail {
+    hcb_vec anchor;         /* the formation's "ahead": the way CJ travels (unit, flat) */
+    hcb_vec anchor_try;     /* a new way he has started to go, and since when */
+    u32 anchor_since;
+    hcb_vec cj_cover;       /* where CJ should be: a spot hidden from the threat */
+    hcb_vec threat;         /* the threat the detail fights now */
+    u32 threat_id, contact_since, cover_said, evac_said, safe_said, lead, mover, clear_said;
+    u16 say_seq;
+    u8 cj_cover_ok, duty, last_say, say_dir;
+} detail;
 struct hcb_brain {
     hcb_cfg cfg;
     u32 time, ticks, rng, seed, alert_since, calm_since, kills;
@@ -83,6 +100,8 @@ struct hcb_brain {
     vtrack vt[HCB_MAX_VTRACKS];
     shooter sh[HCB_MAX_OURS];
     losent los[HCB_LOS_CACHE];
+    cover cv[HCB_MAX_COVERS];
+    detail dt;
 };
 
 
@@ -97,4 +116,6 @@ HID int hcb_is_firearm(int w);
 HID vtrack *hcb_vfind(hcb_brain *b, u32 id);
 /* hcb_fire.c */
 HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out);
+/* hcb_detail.c */
+HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out);
 #endif

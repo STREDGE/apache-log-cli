@@ -88,11 +88,14 @@ extern void *memset(void *d, int c, u64 n);
 #define HC_LEAVE (HC_STATE + 416)           /* +0..7 guards who were let go and walk away: still ours (never a target, never in a line of fire) */
 #define HC_HELLO (HC_STATE + 440)           /* the scripts create it with 0; the brain answers with HELLO_MAGIC */
 #define HC_POLICE (HC_STATE + 441)          /* 0 answer policemen who fire, 1 never fire at the police */
+#define HC_TACTICS (HC_STATE + 156)         /* the squad's tactics: 0 GUARD, 1 ASSAULT */
 #define HC_MISSION (HC_STATE + 442)         /* 0 defensive in missions, 1 as usual */
 #define HELLO_MAGIC 0x42520021U             /* "BR", interface 2, the opcode is registered */
 #define BRAIN_OPCODE 0x0E48
 #define CMD_GUNNER 1                        /* 9 variables: in handle; out state (0 rest, 1 aim, 2 fire this round), target, muzzle xyz, end xyz */
 #define CMD_SQUAD 2                         /* 3 variables: in handle; out state (0 nothing, 1 cover, 2 fire, 3 cease fire now), target */
+#define CMD_POST 4                          /* 10 variables: in handle; out move (-1 no post, 0 stay, 1 walk, 2 run, 3 sprint), x y z, crouch, look x y z, duty */
+#define CMD_DETAIL 5                        /* 9 variables: out what the commander said last (seq, HCB_SAY_*, direction), duty, cover for CJ (ok, x y z), commander */
 #define CMD_STATUS 3                        /* 5 variables: out alert, threats, attackers, kills, the most dangerous man; 8: + ms since CJ fired, direction x, y; 9: + ms since a stranger fired at our helicopter */
 #define IGNORE_ENTITY 0xbdcaf8UL            /* CWorld::pIgnoreEntity */
 #define GOT_IGNORE 0x84b180UL               /* the GOT entry the line-of-sight code reads its address from */
@@ -222,6 +225,7 @@ static u64 g_tick_us_sum;
 #define RAY_ASK_FIRST 8U
 static u64 g_frame_ray_us, g_ray_us_max, g_think_cost_us, g_think_end_us, g_frame_at_us, g_gap_max_us, g_frame_brain_us_max;
 static u32 g_rays_bad, g_rays_skipped, g_rounds_bad, g_looks_skipped, g_rays_look_max, g_ask_cursor, g_slow_run, g_crawls;
+static u16 g_say_seq; static u8 g_say, g_say_dir;   /* the commander's last words (the scripts poll them every frame) */
 static volatile u32 g_where;            /* where the game thread is inside the brain (for the hang recorder): 0 outside */
 static volatile long g_main_tid;
 static int g_ready, g_dump_request, g_was_alive, g_busy, g_urgent, g_ignore_ok, g_bridge;     /* g_bridge: 0 not yet, 1 opcode registered, -1 cannot */
@@ -484,6 +488,7 @@ static int build_snapshot(hcb_snapshot *s, const hcb_out *prev) {
     if (shared_get(HC_FIRE, &v) && v <= 4) s->roe = (u8)v;
     if (shared_get(HC_POLICE, &v)) s->police = v == 1 ? HCB_POLICE_EVADE : HCB_POLICE_ANSWER;
     if (shared_get(HC_MISSION, &v)) s->mission_free = v == 1;
+    if (shared_get(HC_TACTICS, &v)) s->tactics = v == 1;
 
     /* ours: what the scripts have published (a handle that no longer names a live ped is dropped) */
     if (shared_get(HC_PUB + 1, &v) && obj_of(&vp, v, VEH_STRIDE)) s->heli = VID(v);
@@ -595,6 +600,24 @@ static int build_snapshot(hcb_snapshot *s, const hcb_out *prev) {
         if (rest) g_ask_cursor = (g_ask_cursor + r) % rest;
         g_rays_skipped += nq - asked;
     }
+    /* the cover questions of the protective detail: is a man crouching at `at` hidden from the threat's chest, and is there
+       ground just under the spot? (two rays each, within the same budget) */
+    {
+        u32 nq = prev->n_probe_q < HCB_MAX_PROBES ? prev->n_probe_q : HCB_MAX_PROBES;
+        for (i = 0; i < nq && ray_budget_left(); i++) {
+            const hcb_probe *q = &prev->probe_q[i];
+            hcb_probe *a = &s->probes[s->n_probes++];
+            float from[3], low[3], up[3], down[3];
+            *a = *q;
+            from[0] = q->from.x; from[1] = q->from.y; from[2] = q->from.z;
+            low[0] = q->at.x; low[1] = q->at.y; low[2] = q->at.z - 0.3f;
+            up[0] = q->at.x; up[1] = q->at.y; up[2] = q->at.z + 0.5f;
+            down[0] = q->at.x; down[1] = q->at.y; down[2] = q->at.z - 1.9f;
+            a->hidden = (u8)!ray(from, low, 0);
+            a->ground = (u8)!ray(up, down, 0);
+        }
+        g_rays_skipped += nq - i;
+    }
     if (g_rays - rays0 > g_rays_look_max) g_rays_look_max = g_rays - rays0;
     /* who is ours, for the gunshot hook */
     g_our_ent[0] = cj; g_our_ent[1] = obj_of(&vp, VHANDLE(s->heli), VEH_STRIDE);
@@ -667,6 +690,7 @@ static void think(void) {
     }
     if (fresh || g_ticks % 50 == 0) hcb_rec_push_state(&g_rec[g_cur], g_box[g_cur], BRAIN);
     hcb_think(BRAIN, &g_snap, &g_out);
+    if (g_out.say) { g_say_seq = g_out.say_seq; g_say = g_out.say; g_say_dir = g_out.say_dir; }
     hcb_rec_push(&g_rec[g_cur], g_box[g_cur], &g_snap, g_out.digest);
     memcpy(&g_shown, &g_out, sizeof g_shown);
     g_ticks++;
@@ -759,6 +783,22 @@ static void cmd_squad(int *v) {
     fill_shot(&q, who, o.target, &pp, cj, me, him, 0, 0);
     v[1] = hcb_squad_state(BRAIN, &q);
 }
+/* A guard of the detail: where to be and how (the fire order is asked for separately, command 2) */
+static void cmd_post(int *v) {
+    u32 who = (u32)v[0], i;
+    v[1] = -1;
+    for (i = 0; i < g_out.n_posts; i++) {
+        const hcb_post *p = &g_out.posts[i];
+        if (p->who != who) continue;
+        v[1] = p->move; put_f(v + 2, p->at.x); put_f(v + 3, p->at.y); put_f(v + 4, p->at.z);
+        v[5] = p->crouch; put_f(v + 6, p->look.x); put_f(v + 7, p->look.y); put_f(v + 8, p->look.z); v[9] = p->duty;
+        return;
+    }
+}
+static void cmd_detail(int *v) {
+    v[0] = g_say_seq; v[1] = g_say; v[2] = g_say_dir; v[3] = g_out.duty; v[4] = g_out.cover_ok;
+    put_f(v + 5, g_out.cover_at.x); put_f(v + 6, g_out.cover_at.y); put_f(v + 7, g_out.cover_at.z); v[8] = (int)g_out.lead;
+}
 /* v[5] = ms since CJ last fired (-1 = long ago), v[6], v[7] = the direction of that shot (unit vector, floats): the
    squad steps out of his line of fire */
 static void cmd_status(int *v, int count) {
@@ -792,6 +832,8 @@ HIDDEN void brain_opcode(void *script, u8 **ip, u16 opcode, const char *name) {
     if (cmd == CMD_GUNNER && count >= 9) cmd_gunner(vars);
     else if (cmd == CMD_SQUAD && count >= 3) cmd_squad(vars);
     else if (cmd == CMD_STATUS && count >= 5) cmd_status(vars, count);
+    else if (cmd == CMD_POST && count >= 10) cmd_post(vars);
+    else if (cmd == CMD_DETAIL && count >= 9) cmd_detail(vars);
     g_busy = 0; g_where = 0;
 }
 /* Is this the CLEO the bridge was studied on, and has it found the same game? 0 = yes, else what is wrong. */
@@ -857,6 +899,22 @@ HIDDEN void brain_scripts(void) {
 typedef void (*poly_fn)(float x1, float y1, float x2, float y2, float x3, float y3, float x4, float y4, const u8 *rgba);
 typedef int (*screen_fn)(const float *in, float *out, float *w, float *h, int far_clip, int near_clip);
 static void square(float x, float y, float r, const u8 *c) { ((poly_fn)(G + G_DRAW_POLY))(x - r, y - r, x + r, y - r, x - r, y + r, x + r, y + r, c); }
+/* Where CJ is to go (the commander's "into cover"): a pulsing green chevron over the spot and a dot on it, drawn whatever the
+   debug markers setting is - it is the detail's sign to the player, the way a bodyguard points. */
+static void draw_cover(void) {
+    static const u8 GREEN[4] = {60, 230, 110, 235}, DARK[4] = {0, 0, 0, 170};
+    float W = (float)RD(int, G + RSGLOBAL + 8), H = (float)RD(int, G + RSGLOBAL + 12), top[3], foot[3], st[3], sf[3], w, h, k, r;
+    u32 t = RD(u32, G + TIME_MS) % 1000;
+    if (!g_shown.cover_ok || !g_ticks || RD(u8, G + USER_PAUSE) || W < 100 || H < 100) return;
+    foot[0] = g_shown.cover_at.x; foot[1] = g_shown.cover_at.y; foot[2] = g_shown.cover_at.z - 0.9f;
+    top[0] = foot[0]; top[1] = foot[1]; top[2] = foot[2] + 1.6f + 0.25f * (t < 500 ? (float)t / 500.0f : (float)(1000 - t) / 500.0f);
+    if (!((screen_fn)(G + G_CALC_SCREEN))(top, st, &w, &h, 1, 1) || !((screen_fn)(G + G_CALC_SCREEN))(foot, sf, &w, &h, 1, 1)) return;
+    if (st[0] < 0 || st[0] > W || st[1] < 0 || st[1] > H) return;
+    k = H * 0.022f; r = H * 0.006f;
+    ((poly_fn)(G + G_DRAW_POLY))(st[0] - k * 1.15f, st[1] - k * 1.15f, st[0] + k * 1.15f, st[1] - k * 1.15f, st[0], st[1] + k * 0.55f, st[0], st[1] + k * 0.55f, DARK);
+    ((poly_fn)(G + G_DRAW_POLY))(st[0] - k, st[1] - k, st[0] + k, st[1] - k, st[0], st[1] + k * 0.4f, st[0], st[1] + k * 0.4f, GREEN);
+    if (sf[0] >= 0 && sf[0] <= W && sf[1] >= 0 && sf[1] <= H) { square(sf[0], sf[1], r + 2, DARK); square(sf[0], sf[1], r, GREEN); }
+}
 static void draw(void) {
     static const u8 COL[5][4] = {{60, 200, 90, 220}, {150, 150, 150, 0}, {250, 220, 40, 230}, {255, 140, 0, 240}, {240, 40, 40, 255}};
     static const u8 ALLY[4] = {70, 150, 255, 220}, EDGE[4] = {0, 0, 0, 200}, BAR[5][4] = {{90, 90, 90, 150}, {250, 220, 40, 220}, {255, 140, 0, 230}, {240, 40, 40, 240}, {255, 255, 255, 255}};
@@ -891,7 +949,7 @@ static void draw(void) {
 }
 HIDDEN void brain_hud(void) {
     g_hud_orig();
-    if (g_ready && !g_busy) { g_busy = 1; g_where = 3; draw(); g_where = 0; g_busy = 0; }
+    if (g_ready && !g_busy) { g_busy = 1; g_where = 3; draw_cover(); draw(); g_where = 0; g_busy = 0; }
 }
 
 /* ---------- Mods Settings (SAUtils) ---------- */

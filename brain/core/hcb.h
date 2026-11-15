@@ -21,6 +21,7 @@
 #define HCB_MAX_MARKS 48       /* contacts reported back for the debug markers */
 #define HCB_MAX_TRACKS 96      /* people the brain remembers at one time */
 #define HCB_MAX_VTRACKS 48
+#define HCB_MAX_PROBES 8        /* cover questions per tick (a point, and where the threat is: is the point hidden from it, is there ground?) */
 #define HCB_MAX_LOS 96          /* line-of-sight questions per tick (answered by the adapter in the next snapshot) */
 
 /* ---- ped flags (hcb_ped.flags) */
@@ -180,6 +181,51 @@ typedef struct hcb_event {
     uint8_t reserved1;
 } hcb_event;
 
+/* A cover question and its answer: is the point `at` (on the ground, a man crouching there) hidden from `from` (the threat's
+   chest), and is there ground under it? Asked by the core in hcb_out, answered by the adapter (two rays) in the next snapshot. */
+typedef struct hcb_probe {
+    hcb_vec at;
+    hcb_vec from;
+    uint8_t hidden;     /* the ray from `from` to a crouching chest at `at` is blocked */
+    uint8_t ground;     /* there is something to stand on just below `at` */
+    uint8_t reserved0;
+    uint8_t reserved1;
+} hcb_probe;
+
+/* What one guard on foot is to do (the protective detail, stage 3): where to be, how fast to get there, standing or
+   crouched (in cover he fights crouched: the game's own duck-and-fire), where to look, and what he is doing. Whom to fire
+   at and whether is still the fire order. */
+#define HCB_DUTY_CALM 0         /* walking with CJ in the formation, watching his sector */
+#define HCB_DUTY_WATCH 1        /* a suspect: weapon up, between him and CJ */
+#define HCB_DUTY_SHIELD 2       /* personal bodyguard: his body between CJ and the threat */
+#define HCB_DUTY_COVER 3        /* fighting from cover */
+#define HCB_DUTY_BOUND 4        /* moving to the next cover while his mate covers him */
+#define HCB_DUTY_HOLD 5         /* holding his place, covering a mate who moves */
+#define HCB_DUTY_RING 6         /* evacuation: a tight ring round CJ */
+#define HCB_ROLE_LEAD 1         /* the commander (call sign Alpha) */
+#define HCB_ROLE_CLOSE 2        /* the personal bodyguard, at CJ's side */
+#define HCB_ROLE_POINT 3        /* the fire team: ahead / towards the threat */
+#define HCB_ROLE_REAR 4         /* the fire team: the rear / the other flank */
+typedef struct hcb_post {
+    uint32_t who;
+    hcb_vec at;         /* where to be */
+    hcb_vec look;       /* where to look / point the weapon when there is nobody to fire at */
+    uint8_t move;       /* 0 stay where you are, 1 walk, 2 run, 3 sprint */
+    uint8_t crouch;     /* 1 = crouched there */
+    uint8_t duty;       /* HCB_DUTY_* */
+    uint8_t job;        /* HCB_ROLE_LEAD .. HCB_ROLE_REAR */
+} hcb_post;
+
+/* What the commander says (hcb_out.say), with a direction from CJ's point of view (hcb_out.say_dir: 0 ahead, 1 right,
+   2 behind, 3 left) */
+#define HCB_SAY_NONE 0
+#define HCB_SAY_TAKE_COVER 1    /* "CJ, into cover - <dir>!" (the place is marked on the screen) */
+#define HCB_SAY_IN_COVER 2      /* "CJ is in cover, we hold" */
+#define HCB_SAY_FOLLOW_ME 3     /* "CJ, stay with me, we move" (no cover near: the detail moves with him, the bodyguard covers) */
+#define HCB_SAY_EVAC 4          /* "Too hot - we pull out, call the pickup" */
+#define HCB_SAY_TAKE_OVER 5     /* "the commander is down - I have command" */
+#define HCB_SAY_CLEAR 6         /* "clear - regroup on CJ" */
+
 typedef struct hcb_los {
     uint32_t from;      /* one of ours */
     uint32_t to;        /* a contact */
@@ -204,7 +250,7 @@ typedef struct hcb_snapshot {
     uint8_t roe;        /* HCB_ROE_*: the player's fire rule */
     uint8_t police;     /* HCB_POLICE_* */
     uint8_t mission_free; /* 1 = the player wants mission characters treated like anybody else (default 0: defensive) */
-    uint8_t reserved1;
+    uint8_t tactics;    /* the squad's tactics on the menu: 0 GUARD (stay close to CJ), 1 ASSAULT (push towards the threat) */
     uint8_t reserved2;
     hcb_vec cam_pos;
     hcb_vec cam_fwd;
@@ -215,7 +261,8 @@ typedef struct hcb_snapshot {
     uint16_t events_lost;   /* events that did not fit since the previous snapshot */
     uint16_t peds_lost;     /* peds in range that did not fit */
     uint16_t n_los;         /* answers to the questions of the previous hcb_out */
-    uint16_t reserved3;
+    uint16_t n_probes;      /* answers to the cover questions of the previous hcb_out */
+    hcb_probe probes[HCB_MAX_PROBES];
     uint32_t ours[HCB_MAX_OURS];
     uint8_t our_role[HCB_MAX_OURS];
     hcb_ped peds[HCB_MAX_PEDS];
@@ -259,6 +306,18 @@ typedef struct hcb_out {
     uint16_t kills;     /* contacts that died while our people were firing at them (running total, wraps) */
     hcb_order orders[HCB_MAX_OURS];
     hcb_los queries[HCB_MAX_LOS];
+    /* the protective detail (stage 3) */
+    uint8_t n_posts;
+    uint8_t n_probe_q;
+    uint8_t say;        /* HCB_SAY_*: what the commander says this tick (also repeated in say_last until the next) */
+    uint8_t say_dir;
+    uint16_t say_seq;   /* goes up by one with every new thing said */
+    uint8_t cover_ok;   /* 1 = cover_at is where CJ should go (mark it on the screen) */
+    uint8_t duty;       /* the detail's state: HCB_DUTY_CALM / WATCH / COVER (a fight) / RING (evacuation) */
+    hcb_vec cover_at;
+    uint32_t lead;      /* the commander now */
+    hcb_post posts[HCB_MAX_OURS];
+    hcb_probe probe_q[HCB_MAX_PROBES];
 } hcb_out;
 
 /* Tunable numbers. hcb_init fills in the defaults; tests and the tuning runs change them. */
