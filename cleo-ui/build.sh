@@ -9,6 +9,7 @@ mkdir -p "$OUT/stubs"
 cat > "$OUT/stubs/c.c" <<'S'
 void mprotect(void){} void getpagesize(void){}
 void open(void){} void read(void){} void write(void){} void close(void){} void dl_iterate_phdr(void){}
+void pthread_create(void){} void usleep(void){} void clock_gettime(void){}
 S
 cat > "$OUT/stubs/dl.c" <<'S'
 void dladdr(void){} void dlopen(void){} void dlsym(void){}
@@ -22,3 +23,10 @@ clang $T -O2 -fPIC -ffreestanding -fno-builtin -fno-stack-protector -fvisibility
   -o "$OUT/libCleoUIProbe64.so" cleoui_probe.c -L"$OUT/stubs" -lc -ldl
 llvm-strip --strip-unneeded "$OUT/libCleoUIProbe64.so" 2>/dev/null || true
 echo "built $OUT/libCleoUIProbe64.so"
+clang $T -O2 -fPIC -ffreestanding -fno-builtin -fno-stack-protector -fvisibility=hidden \
+  -Wall -Wextra -Wno-unused-parameter \
+  -nostdlib -shared -fuse-ld=lld -Wl,-soname,libCleoUI64.so \
+  -Wl,-z,max-page-size=16384 -Wl,--hash-style=both -Wl,-z,now -Wl,--no-undefined \
+  -o "$OUT/libCleoUI64.so" cleoui.c -L"$OUT/stubs" -lc -ldl
+llvm-strip --strip-unneeded "$OUT/libCleoUI64.so" 2>/dev/null || true
+echo "built $OUT/libCleoUI64.so"
