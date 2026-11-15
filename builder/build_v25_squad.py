@@ -61,7 +61,7 @@ s.label('INIT');a(0)
 s.set(b.SQ_GROUP,0);s.set(b.SQ_TICK,0);s.set(b.SQ_SCAN_NEXT,0);s.set(b.SQ_MSG_NEXT,0);s.set(b.SQ_MEDIC_NEXT,0);reset_threats();reset_slots()
 s.label('LOOP');a(1,I(0));a(0x01bd,V(12));a(0xddc,I(b.SQ_HEART),V(12))
 s.call('BRAIN_FRAME')                                    # every frame: the brain's word for each guard
-s.get(19,b.SQ_TICK);s.check(0x001d,[V(12),V(19)],'LOOP')   # everything else ten times a second
+s.get(19,b.SQ_TICK);s.check(0x801d,[V(19),V(12)],'LOOP')   # everything else ten times a second (due when the time HAS come: at 10 fps that is every frame)
 a(0x0085,V(19),V(12));a(0x000a,V(19),I(100));a(0xddc,I(b.SQ_TICK),V(19))
 s.check(0x0256,[I(0)],'RELEASE');s.get(19,b.STATE)
 for st in [0,1,4,5,6,13]:
@@ -158,10 +158,10 @@ s.label('CALL_CONTACT');s.set(b.SQ_CLEAR_AT,0);s.get(19,b.SQ_CONTACT);s.eq(19,0,
 s.label('CALL_NEW_TOP');s.get(19,b.SQ_CALLED);s.check(0x803b,[V(13),V(19)],'CALL_RET');s.check(0x0019,[V(8),I(0)],'CALL_RET');s.get(19,b.SQ_MSG_NEXT);s.check(0x001d,[V(12),V(19)],'CALL_RET');a(6,V(26),I(1))
 s.label('CALL_ANNOUNCE');alive(13,'CALL_RET');a(0xddc,I(b.SQ_CALLED),V(13))
 # kind (27@): 0 plain, 1 shooting at CJ, 2 sniper, 3 vehicle, 4 roof
-a(6,V(27),I(0));s.check(0x0019,[V(8),I(0)],'KIND_NOT_X');a(6,V(27),I(1));s.go('KIND_DONE')
-s.label('KIND_NOT_X');a(0x0470,V(13),V(19));s.check(0x0019,[V(19),I(32)],'KIND_NOT_S');s.check(0x0019,[V(19),I(34)],'KIND_S');s.go('KIND_NOT_S');s.label('KIND_S');a(6,V(27),I(2));s.go('KIND_DONE')
+a(6,V(27),I(0));a(0x0470,V(13),V(19));s.check(0x0019,[V(19),I(32)],'KIND_NOT_S');s.check(0x0019,[V(19),I(34)],'KIND_S');s.go('KIND_NOT_S');s.label('KIND_S');a(6,V(27),I(2));s.go('KIND_DONE')
 s.label('KIND_NOT_S');s.check(0x00df,[V(13)],'KIND_NOT_V');a(6,V(27),I(3));s.go('KIND_DONE')
-s.label('KIND_NOT_V');a(0x00a0,V(13),V(20),V(21),V(22));a(0x0063,V(22),V(11));s.check(0x0021,[V(22),F(6)],'KIND_DONE');a(6,V(27),I(4))
+s.label('KIND_NOT_V');a(0x00a0,V(13),V(20),V(21),V(22));a(0x0063,V(22),V(11));s.check(0x0021,[V(22),F(6)],'KIND_NOT_R');a(6,V(27),I(4));s.go('KIND_DONE')
+s.label('KIND_NOT_R');s.check(0x0019,[V(8),I(0)],'KIND_DONE');a(6,V(27),I(1))   # somebody is attacking: "shots at CJ"
 s.label('KIND_DONE')
 # direction (28@) of the threat relative to CJ's heading: 0 front, 1 left, 2 rear, 3 right
 a(0x00a0,V(13),V(20),V(21),V(22));a(0x0063,V(20),V(9));a(0x0063,V(21),V(10));a(0x0604,V(20),V(21),V(29));a(0x0172,V(0),V(30));a(0x0063,V(29),V(30))
@@ -231,10 +231,19 @@ def move_to(k,G,speed,ms=2500,every=800):
  s.label(drift);s.get(29,fk(k,'TX'));s.get(30,fk(k,'TY'));a(0x0509,V(26),V(27),V(29),V(30),V(31));s.check(0x0021,[V(31),F(1.0)],'G%d_RET'%k)
  s.label(issue);a(0x04eb,V(G),I(0))
  a(0x05d3,V(G),V(26),V(27),V(28),speed,I(ms));setk(k,'TX',26);setk(k,'TY',27);setk_lit(k,'TASK',1);later(k,every);s.ret()
+def may_fire(k,no):
+ """Go on while the brain lets this guard fire at his man (state 2); else jump to `no` - he keeps his man (CJ or one of ours is in his
+ line just now) and does everything his tactics ask for except pull the trigger."""
+ s.get(31,b.SQ_BR_ST+k);s.check(0x0039,[V(31),I(2)],no)
+def hold_aim(k,G):
+ """Weapon on his man 25@, no fire (TASK 18). Returns from the guard routine."""
+ issue=uid('HOLD_ISSUE');same_order(k,18,25,issue);s.label(issue);a(0x00a0,V(25),V(26),V(27),V(28));a(0x0667,V(G),V(26),V(27),V(28),I(1000));order(k,18,25,600)
 def shoot_move(k,G,every=1200):
- """Run to 26-28 while firing at 25@ (TASK 12); re-issued for a new target or after `every` ms."""
+ """Run to 26-28 while firing at 25@ (TASK 12); re-issued for a new target or after `every` ms. Not allowed to fire: the same run without it."""
+ no=uid('SHOOTMOVE_HOLD');may_fire(k,no)
  issue=uid('SHOOTMOVE_ISSUE');same_order(k,12,25,issue);s.label(issue);a(0x04eb,V(G),I(0))
  a(0x0637,V(G),V(26),V(27),V(28),I(6),F(.5),F(1.0),V(25));setk(k,'TX',26);setk(k,'TY',27);order(k,12,25,every)
+ s.label(no);move_to(k,G,I(6),2500,every)
 def same_order(k,task,target_var,issue):
  """Return from the guard routine while the guard already runs `task` on target_var and the order
  has not expired; otherwise continue at `issue` (placed right after this call)."""
@@ -245,7 +254,8 @@ def shield(k,G,front,lateral):
  a(0x0087,V(26),V(29));a(0x0013,V(26),F(front));a(0x005b,V(26),V(9));a(0x0087,V(28),V(30));a(0x0013,V(28),F(-lateral));a(0x005b,V(26),V(28))
  a(0x0087,V(27),V(30));a(0x0013,V(27),F(front));a(0x005b,V(27),V(10));a(0x0087,V(28),V(29));a(0x0013,V(28),F(lateral));a(0x005b,V(27),V(28))
  a(0x0087,V(28),V(11));a(0x0509,V(21),V(22),V(26),V(27),V(31));fire=uid('SHIELD_FIRE');s.check(0x0021,[V(31),F(1.4)],fire);shoot_move(k,G,1200)
- s.label(fire);issue=uid('SHIELD_ISSUE');same_order(k,3,25,issue);s.label(issue);a(0x074d,V(G),V(25),I(1500));order(k,3,25,1200)
+ s.label(fire);no=uid('SHIELD_HOLD');may_fire(k,no);issue=uid('SHIELD_ISSUE');same_order(k,3,25,issue);s.label(issue);a(0x074d,V(G),V(25),I(1500));order(k,3,25,1200)
+ s.label(no);hold_aim(k,G)
 COVER_DIRS=[(3.5,0),(2.5,2.5),(0,3.5),(-2.5,2.5),(-3.5,0),(-2.5,-2.5),(0,-3.5),(2.5,-2.5)]
 def take_cover(k,G,limit,duck):
  """v41: under fire (the threat is shooting, or this guard is below 50 HP) look once for low cover
@@ -274,11 +284,14 @@ def take_cover(k,G,limit,duck):
  s.label(P+'GO');s.get(26,b.CV_X+k);s.get(27,b.CV_Y+k);s.get(28,b.CV_Z+k);a(0x0509,V(21),V(22),V(26),V(27),V(31));s.check(0x0021,[V(31),F(1.0)],duck);shoot_move(k,G,2500)
 def engage_duck(k,G,limit=None):
  if limit is None:
-  issue=uid('DUCK_ISSUE');same_order(k,8,25,issue);s.label(issue);a(0x0634,V(G),V(25),I(1),I(1000),I(60));order(k,8,25,3000);return
+  no=uid('DUCK_HOLD');may_fire(k,no);issue=uid('DUCK_ISSUE');same_order(k,8,25,issue);s.label(issue);a(0x0634,V(G),V(25),I(1),I(1000),I(60));order(k,8,25,3000)
+  s.label(no);hold_aim(k,G);return
  duck=uid('DUCK_HERE');take_cover(k,G,limit,duck);s.label(duck)
- issue=uid('DUCK_ISSUE');same_order(k,8,25,issue);s.label(issue);a(0x0634,V(G),V(25),I(1),I(1000),I(60));order(k,8,25,3000)
+ no=uid('DUCK_HOLD');may_fire(k,no);issue=uid('DUCK_ISSUE');same_order(k,8,25,issue);s.label(issue);a(0x0634,V(G),V(25),I(1),I(1000),I(60));order(k,8,25,3000)
+ s.label(no);hold_aim(k,G)
 def engage_timed(k,G):
- issue=uid('TIMED_ISSUE');same_order(k,10,25,issue);s.label(issue);a(0x07a5,V(G),V(25),I(3000));order(k,10,25,2500)
+ no=uid('TIMED_HOLD');may_fire(k,no);issue=uid('TIMED_ISSUE');same_order(k,10,25,issue);s.label(issue);a(0x07a5,V(G),V(25),I(3000));order(k,10,25,2500)
+ s.label(no);hold_aim(k,G)
 def leash(k,G,limit,speed):
  """Further than `limit` from CJ (70% of it when this guard is below 50 HP): go back to the
  formation point instead of fighting."""
@@ -334,10 +347,9 @@ def guard(k):
  a(0x0604,V(29),V(30),V(31));a(0x0173,V(G),V(31));a(0x04eb,V(G),I(0));a(0x078f,V(G),I(1));setk_lit(k,'TASK',11);later(k,1800);s.ret()
  s.label(P+'VAULT_DONE')
  # ---- combat: the man the brain has given this guard (it shares the men out, keeps a guard on his man and puts two on the worst)
+ # (told to cease fire - CJ or one of ours is in his line - he still moves as his tactics say, to the shield point or to cover, without
+ # firing: see may_fire. The brain looks again from where he then stands.)
  a(0x0085,V(25),V(13+k));alive(25,P+'PEACE')
- # told to cease fire (CJ or one of ours in his line): weapon on the man, no fire, until the brain lets him again
- s.get(31,b.SQ_BR_ST+k);s.eq(31,3,P+'COMBAT')
- hold=uid(P+'HOLD');same_order(k,18,25,hold);s.label(hold);a(0x00a0,V(25),V(26),V(27),V(28));a(0x0667,V(G),V(26),V(27),V(28),I(1000));order(k,18,25,600)
  s.label(P+'COMBAT');a(0x00a0,V(25),V(26),V(27),V(28));a(0x0087,V(29),V(26));a(0x0063,V(29),V(9));a(0x0087,V(30),V(27));a(0x0063,V(30),V(10))
  a(0x0509,V(9),V(10),V(26),V(27),V(31));s.check(0x0023,[F(.5),V(31)],P+'D_OK');a(0x0007,V(31),F(.5));s.label(P+'D_OK');a(0x0073,V(29),V(31));a(0x0073,V(30),V(31))
  a(0x0226,V(0),V(31));s.check(0x0019,[V(31),I(35)],P+'CRIT')

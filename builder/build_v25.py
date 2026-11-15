@@ -1306,7 +1306,9 @@ f.label('CONTACT_DONE')
 a(6,V(27),I(0))
 for var in [3,4,5,6]:
  g=var-3;skip='G%d_SKIP'%var;nofire='G%d_NOFIRE'%var;issue='G%d_AIM'%var;resting='G%d_REST'%var
- alive(f,var,skip);a(0x0085,V(8),V(var));a(0x0e48,V(8),I(9),I(1))   # 9@ state, 10@ the man, 11-13@ round start, 14-16@ round end
+ # a crewman who has left the helicopter (after a landing) is a guard on foot: the squad worker asks the brain for him, and he fires the
+ # game's own weapon - no rounds are made for him here
+ alive(f,var,skip);f.check(0x0a32,[V(var)],skip);a(0x0085,V(8),V(var));a(0x0e48,V(8),I(9),I(1))   # 9@ state, 10@ the man, 11-13@ round start, 14-16@ round end
  f.eq(9,2,nofire);a(0x06bc,V(11),V(12),V(13),V(14),V(15),V(16),I(ROUND_DAMAGE));f.label(nofire)
  f.check(0x0019,[V(9),I(0)],resting);a(6,V(27),I(1))
  # weapon on the man: an aiming task (it does not fire) for a new man, and again every 0.7 s because he moves

@@ -589,7 +589,11 @@ e.share(HC_POLICE, 1); e.share(HC_MISSION, 1); e.frame(n=1)
 s = replay_tool.replay(e.save())[2][-1]['snapshot']
 assert s.police == h.HCB_POLICE_EVADE and s.mission_free == 1
 e.share(HC_POLICE, 0); e.share(HC_MISSION, 0)
-passed('Lines of sight are asked from the game chest to chest (buildings, vehicles and objects block; people do not): armed people to CJ, and every pair the core asked about. The player\'s settings "police" and "missions" are read from the scripts\' shared values')
+e.share(HC_STATE + 27, 1); e.frame(n=1)                              # the helicopter has landed: the crew are guards on foot now
+s = replay_tool.replay(e.save())[2][-1]['snapshot']
+assert sorted(s.our_role[:s.n_ours]) == [1, 6, 6, 7, 7], list(s.our_role[:s.n_ours])
+e.share(HC_STATE + 27, 0); e.frame(n=1)
+passed('Lines of sight are asked from the game chest to chest (buildings, vehicles and objects block; people do not): armed people to CJ, and every pair the core asked about. The player\'s settings "police" and "missions" are read from the scripts\' shared values; the crew count as door gunners only while they are mounted (on foot they fire the game\'s own weapon and are judged like the ground team)')
 
 # shots, a weapon on CJ, damage
 e.aim(civ, e.cj); e.w32(civ + 0x730, 22)

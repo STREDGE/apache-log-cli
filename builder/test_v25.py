@@ -310,6 +310,14 @@ def invariants(w):
  crew=[h for h,k in w.kind.items() if w.creator.get(h)=='Helicover_Core' and k in ('pilot','ped') and alive(h) and h not in w.released]
  if len(crew)>(10 if w.shared[b.STATE] in (16,17) else 5):bad.append(('more than a pilot and four gunners',crew))
  if w.bullet_violations:bad.append(('rounds too close to CJ or to one of ours',w.bullet_violations[:3]))
+ # 1.3: nobody of ours is given a task that fires the game's own weapon unless the brain has said "fire" to him, for that man, in that frame
+ ours={w.shared[b.PUB+i] for i in range(2,7)}|{w.shared[b.GROUND_PUB+i] for i in range(5)}|({x[1] for x in w.brain.said} if w.brain is not None else set())
+ leave={(t,who):(st,man) for t,who,st,man in (w.brain.said if w.brain is not None else [])}
+ wild=[(t,hex(op),v[:2]) for t,op,v in w.calls if op in (0x74d,0x634,0x637,0x7a5,0x713) and v and v[0] in ours and leave.get((t,v[0]),(0,0))[0]!=2]
+ wild+=[(t,hex(op),v[:2]) for t,op,v in w.calls if op==0x668 and v and v[0] in ours]   # fire at a place: nobody checks a line to a place
+ if wild:bad.append(('a firing task without the brain\'s leave',wild[:3]))
+ aimed=[(t,hex(op),v) for t,op,v in w.calls if op in (0x74d,0x634,0x7a5) and v and v[0] in ours and leave.get((t,v[0]),(0,0))[1]!=v[1]]+[(t,hex(op),v) for t,op,v in w.calls if op==0x637 and v and v[0] in ours and leave.get((t,v[0]),(0,0))[1]!=v[7]]
+ if aimed:bad.append(('a firing task at somebody the brain did not name',aimed[:3]))
  return bad
 def setup(panel=False):
  w=World();c=VM('Helicover_Core',w);p=VM('Helicover_Panel',w) if panel else None;v=[c]+([p] if p else []);w.step(*v,n=3);return w,c,p

@@ -156,8 +156,11 @@ M += [
  (F, "if (sh) sh->next_round = time + 60;", "", 'rounds: a blocked ray is tried again soon'),
  (F, "if (!sh || sh->hold != HCB_HOLD_NONE || !sh->target || sh->target != in->target) return 0;", "if (!sh) return 0;", 'rounds: only at the man he is ordered to fire at'),
  (F, "if (len < out + 1.0f) { sh->next_round = in->time + 100; return 0; }", "", 'rounds: not at a man at the muzzle'),
- (F, "|| sh->hold == HCB_HOLD_CAR_NEAR || sh->hold == HCB_HOLD_ROE ? 3 : sh->ready ? 1 : 0;", "|| sh->hold == HCB_HOLD_CAR_NEAR || sh->hold == HCB_HOLD_ROE ? 3 : 2;", 'guard: cover is not fire'),
- (F, "return hcb_shot_check(cb, q) == HCB_HOLD_NONE ? 2 : 3;", "return 2;", 'guard: cease fire in the same frame'),
+ (F, "if (sh->hold == HCB_HOLD_COVERING) return sh->ready ? 1 : 0;", "", 'guard: a suspect is only covered'),
+ (F, "if (sh->hold != HCB_HOLD_NONE || sh->aim != sh->target) return 3;", "", 'guard: his man, but no fire'),
+ (F, "why[i][bj] == HCB_HOLD_NONE ? HCB_HOLD_ENOUGH : why[i][bj];", "why[i][bj];", 'the fourth rifle is told why he does not fire'),
+ (F, "return shot_check(cb, q, 1) == HCB_HOLD_NONE ? 2 : 3;", "return 2;", 'guard: cease fire in the same frame'),
+ (F, "gunner = is_gunner(sh->role) && !as_guard;", "gunner = is_gunner(sh->role);", 'guard: a man on foot is judged as one, whatever his role'),
 ]
 only = sys.argv[1:]
 missed = 0

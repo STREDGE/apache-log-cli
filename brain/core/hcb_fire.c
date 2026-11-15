@@ -263,7 +263,10 @@ HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                line clears he fires without a new reaction time */
             if (bj < 0 || sh->target != cs[bj].t->last.id) { sh->target = 0; sh->fire_from = 0; }
             sh->burst_until = 0; sh->pause_until = 0;
-            if (bj >= 0) { o->hold = why[i][bj] == SOFT_LOS ? HCB_HOLD_NO_LOS : why[i][bj]; o->target = cs[bj].t->last.id; o->aim = cs[bj].t->last.pos; o->ready = 1; }
+            if (bj >= 0) {
+                o->hold = why[i][bj] == SOFT_LOS ? HCB_HOLD_NO_LOS : why[i][bj] == HCB_HOLD_NONE ? HCB_HOLD_ENOUGH : why[i][bj];
+                o->target = cs[bj].t->last.id; o->aim = cs[bj].t->last.pos; o->ready = 1;
+            }
             else if (cover >= 0) { o->hold = HCB_HOLD_COVERING; o->target = cs[cover].t->last.id; o->aim = cs[cover].t->last.pos; o->ready = 1; }
             else { o->hold = s->roe == HCB_ROE_HOLD && n ? HCB_HOLD_ROE : HCB_HOLD_NO_TARGET; o->ready = (u8)(b->alert >= HCB_ALERT_THREAT); }
             sh->hold = o->hold; sh->aim = o->target; sh->ready = o->ready;
@@ -280,7 +283,10 @@ HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
 /* One round, now. The order must still stand (same man, firing, given on a recent tick), and the hard rules are run
    again on the positions of this frame: CJ, our own people, and - from what the last tick knew - allies, bystanders
    and the vehicle the man sits in. */
-API int hcb_shot_check(const hcb_brain *cb, const hcb_shot *q) {
+static int shot_check(const hcb_brain *cb, const hcb_shot *q, int as_guard);
+API int hcb_shot_check(const hcb_brain *cb, const hcb_shot *q) { return shot_check(cb, q, 0); }
+/* as_guard: the question comes from a man on foot who fires the game's own weapon - his rounds fly on, whatever his role says */
+static int shot_check(const hcb_brain *cb, const hcb_shot *q, int as_guard) {
     hcb_brain *b = (hcb_brain *)cb;
     const hcb_cfg *c = &b->cfg;
     const shooter *sh = 0;
@@ -291,7 +297,7 @@ API int hcb_shot_check(const hcb_brain *cb, const hcb_shot *q) {
     if (!sh || !q->target || sh->target != q->target || sh->hold != HCB_HOLD_NONE || q->time - b->time > 300) return HCB_HOLD_NO_TARGET;
     t = hcb_find(b, q->target);
     if (!t || t->friendly) return HCB_HOLD_NO_TARGET;
-    gunner = is_gunner(sh->role);
+    gunner = is_gunner(sh->role) && !as_guard;
     skip = gunner ? f_max(0.3f, v_dist(q->from, q->muzzle)) : 0.3f;
     past = gunner ? c->round_past_m : c->backstop_m;
     /* the line given is the line the round takes: for a gunner there is no scatter left to allow for */
@@ -374,8 +380,7 @@ API void hcb_gunner_blocked(hcb_brain *b, u32 who, u32 time) {
 API int hcb_squad_state(const hcb_brain *cb, const hcb_shot *q) {
     const shooter *sh = shooter_find((hcb_brain *)cb, q->who);
     if (!sh || !sh->aim) return 0;
-    if (sh->hold != HCB_HOLD_NONE || sh->aim != sh->target)
-        return sh->hold == HCB_HOLD_CJ_IN_LINE || sh->hold == HCB_HOLD_CJ_BEHIND || sh->hold == HCB_HOLD_FRIEND || sh->hold == HCB_HOLD_BYSTANDER
-               || sh->hold == HCB_HOLD_CAR_NEAR || sh->hold == HCB_HOLD_ROE ? 3 : sh->ready ? 1 : 0;
-    return hcb_shot_check(cb, q) == HCB_HOLD_NONE ? 2 : 3;
+    if (sh->hold == HCB_HOLD_COVERING) return sh->ready ? 1 : 0;
+    if (sh->hold != HCB_HOLD_NONE || sh->aim != sh->target) return 3;
+    return shot_check(cb, q, 1) == HCB_HOLD_NONE ? 2 : 3;
 }

@@ -124,6 +124,7 @@
 #define HCB_HOLD_REACTING 10   /* target taken, weapon coming up: a human reaction time */
 #define HCB_HOLD_PAUSE 11      /* between two bursts */
 #define HCB_HOLD_COVERING 12   /* weapon on a suspect, finger off the trigger */
+#define HCB_HOLD_ENOUGH 13     /* a man to fire at, but three of ours are on him already: weapon on him, no fire */
 
 typedef struct hcb_vec {
     float x;
@@ -414,8 +415,9 @@ void hcb_box_head_fill(hcb_box_head *h, const hcb_rec *r, const hcb_brain *b, ui
  *   ignored. Returns 0 when no round is due yet; else fills *r - the line of this round (scattered: nobody is a
  *   laser) and the verdict of the hard rules for exactly that line - and sets the time of the next try. The adapter
  *   then runs its ray muzzle -> to; if the ray is blocked it says so with hcb_gunner_blocked.
- * hcb_squad_state: a guard on foot (he fires the game's own weapon). 0 nothing, 1 cover the man, 2 fire,
- *   3 cease fire now. q->from = q->muzzle = where he stands, q->to = where the man stands. */
+ * hcb_squad_state: a guard on foot (he fires the game's own weapon). 0 nothing; 1 a suspect to keep a weapon on (not a
+ *   man to leave his place for); 2 fire; 3 his man, but no fire now (CJ or one of ours in the line, a wall, enough
+ *   rifles on him, the weapon still coming up). q->from = q->muzzle = where he stands, q->to = where the man stands. */
 int hcb_order_get(const hcb_brain *b, uint32_t who, hcb_order *o);
 int hcb_gunner_round(hcb_brain *b, const hcb_shot *q, float heli_speed, int near_heli, hcb_round *r);
 void hcb_gunner_blocked(hcb_brain *b, uint32_t who, uint32_t time);

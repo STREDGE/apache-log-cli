@@ -434,9 +434,8 @@ seen = []
 for _ in range(8):
     sc.step(1)
     seen.append(state(me, g))
-assert seen[-1] == 2 and set(seen) <= {1, 2} and seen.index(2) >= 1, seen
+assert seen[-1] == 2 and set(seen) <= {3, 2} and seen.index(2) >= 1, ('his man at once, the first round after the reaction time', seen)
 assert state(me, g, cj=[12., 4.5, 1.]) == 3, 'CJ in his line in this frame: cease fire'
-assert state(me, sus) == 3 or state(me, sus) == 0, 'the man he is not ordered on'
 sc.roe = HCB_ROE_HOLD
 sc.step(1)
 assert state(me, g) == 0 and not sc.orders[me].fire, 'hold fire: he has no man at all'
@@ -445,7 +444,20 @@ sc.peds[g]['flags'] |= HCB_PF_DEAD
 sc.peds.pop(sus)
 sc.step(2)
 assert b.order(me).target == 0 and state(me, g) == 0
-passed('A guard on foot (he fires the game\'s own weapon) is told: cover a suspect, fire, and cease fire - in the very frame CJ comes into his line, and when the player says hold fire')
+sc = Scene()
+team = squad(sc)
+g = sc.ped(25, 0, pedtype=GANG, weapon=AK)
+sc.shot(g, (0., 0., 1.), dst=1)
+run(sc, 10)
+states = sorted(sc.brain.squad(w_, g, sc.time, sc.peds[w_]['pos'], sc.peds[g]['pos'], sc.cj['pos'], [sc.peds[o_]['pos'] for o_ in team if o_ != w_]) for w_ in team)
+assert states == [2, 2, 2, 3] and sorted(HOLD[o.hold] for o in sc.orders.values()) == ['ENOUGH', 'NONE', 'NONE', 'NONE'], (states, holds(sc))
+sc, front, rear = heli_scene(cj_at=(40., 41.8), z=2.)  # a crewman by the landed helicopter, firing the game's own weapon: CJ 10 m behind his man
+g = sc.ped(30, 41, pedtype=GANG, weapon=AK)
+sc.shot(g, (40., 41.8, 1.), dst=1)
+run(sc, 8)
+assert sc.orders[front].fire, 'as a door gunner (his rounds end at the man) he may fire'
+assert sc.brain.squad(front, g, sc.time, sc.peds[front]['pos'], sc.peds[g]['pos'], sc.cj['pos'], []) == 3, 'asked as a guard on foot: his rounds fly on to CJ - no'
+passed('A guard on foot (he fires the game\'s own weapon) is told: a suspect to keep a weapon on, fire, or "your man, but no fire" - in the very frame CJ comes into his line, while his weapon is coming up, and when three rifles are on the man already; hold fire leaves him no man at all')
 
 # ------------------------------------------------------------------ the car CJ is shooting at
 sc = rule(HCB_ROE_FOLLOW)

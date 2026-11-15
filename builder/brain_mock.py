@@ -34,6 +34,7 @@ class BrainSim:
         self.cj_shot, self.heli_shot = None, None
         self.snap = None
         self.rounds = []            # every hcb_round the scripts were given (fired or refused): for the tests
+        self.said = []              # (time, guard, state): what each guard on foot was told, frame by frame
         self.looks = 0
 
     # ------------------------------------------------------------ the world as a snapshot
@@ -59,7 +60,9 @@ class BrainSim:
         for k in range(10):
             v = w.shared[b.PUB + 2 + k] if k < 5 else w.shared[b.GROUND_PUB + k - 5]
             if v > 1 and v in w.exists and v not in w.cars and all(v != o for o, _ in out):
-                out.append((v, h.HCB_ROLE_PILOT if k == 0 else h.HCB_ROLE_GUNNER + k - 1 if k < 5 else h.HCB_ROLE_SQUAD + min(k - 5, 3)))
+                # (the crew are door gunners while mounted; after a landing - PHASE 1 - they are guards on foot like the ground team)
+                crew = h.HCB_ROLE_SQUAD if w.shared[b.PHASE] == 1 else h.HCB_ROLE_GUNNER
+                out.append((v, h.HCB_ROLE_PILOT if k == 0 else crew + k - 1 if k < 5 else h.HCB_ROLE_SQUAD + min(k - 5, 3)))
         return out
 
     def fill(self, w, o, who, cj=False):
@@ -243,6 +246,7 @@ class BrainSim:
             return
         v[f + 2] = o.target
         v[f + 1] = self.brain.squad(who, o.target, w.now & 0xffffffff, w.coords(who), w.coords(o.target), w.coords(1), self.friends(w, who))
+        self.said.append((w.now, who, v[f + 1], o.target))
 
     def status(self, w, v, f, count):
         o = self.out

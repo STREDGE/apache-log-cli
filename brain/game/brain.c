@@ -78,6 +78,7 @@ extern void *memset(void *d, int c, u64 n);
 #define HC_STATE 0x48456A00U
 #define HC_FIRE (HC_STATE + 7)
 #define HC_PUB (HC_STATE + 20)              /* +0 CJ, +1 helicopter, +2 pilot, +3..6 gunners */
+#define HC_PHASE (HC_STATE + 27)            /* 1 = the crew has left the helicopter after a landing and are guards on foot; else they are in its doors */
 #define HC_GROUND (HC_STATE + 71)           /* +0..4 ground team */
 #define HC_HELLO (HC_STATE + 440)           /* the scripts create it with 0; the brain answers with HELLO_MAGIC */
 #define HC_POLICE (HC_STATE + 441)          /* 0 answer policemen who fire, 1 never fire at the police */
@@ -423,7 +424,7 @@ static int build_snapshot(hcb_snapshot *s, const hcb_out *prev) {
     struct pool pp, vp;
     const u8 *cj = player_ped(), *wanted, *e;
     const float *cjp;
-    u32 cj_h, i, n, k, v, flag, los_left = 24;                   /* rays per look: up to 24 here + one per question of the core */
+    u32 cj_h, i, n, k, v, flag, mounted, los_left = 24;                   /* rays per look: up to 24 here + one per question of the core */
     float best[HCB_MAX_PEDS], d;
     u32 idx[HCB_MAX_PEDS];
 
@@ -446,11 +447,16 @@ static int build_snapshot(hcb_snapshot *s, const hcb_out *prev) {
 
     /* ours: what the scripts have published (a handle that no longer names a live ped is dropped) */
     if (shared_get(HC_PUB + 1, &v) && obj_of(&vp, v, VEH_STRIDE)) s->heli = VID(v);
+    /* (the four of the crew are door gunners - their rounds are made by the script along a checked line - only while they are mounted;
+       on foot they fire the game's own weapon like the ground team, and are judged like it) */
+    mounted = !(shared_get(HC_PHASE, &v) && v == 1);
     for (k = 0; k < 10 && s->n_ours < HCB_MAX_OURS; k++) {
-        u32 key = k < 5 ? HC_PUB + 2 + k : HC_GROUND + (k - 5);
+        u32 key = k < 5 ? HC_PUB + 2 + k : HC_GROUND + (k - 5), n;
         if (!shared_get(key, &v) || !obj_of(&pp, v, PED_STRIDE) || v == cj_h) continue;
+        for (n = 0; n < s->n_ours && s->ours[n] != v; n++) {}
+        if (n < s->n_ours) continue;                    /* the same man published twice */
         s->ours[s->n_ours] = v;
-        s->our_role[s->n_ours] = (u8)(k == 0 ? HCB_ROLE_PILOT : k < 5 ? HCB_ROLE_GUNNER + (k - 1) : HCB_ROLE_SQUAD + (k - 5 < 4 ? k - 5 : 3));
+        s->our_role[s->n_ours] = (u8)(k == 0 ? HCB_ROLE_PILOT : k < 5 ? (mounted ? HCB_ROLE_GUNNER : HCB_ROLE_SQUAD) + (k - 1) : HCB_ROLE_SQUAD + (k - 5 < 4 ? k - 5 : 3));
         s->n_ours++;
     }
 
