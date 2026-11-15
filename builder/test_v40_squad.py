@@ -20,7 +20,7 @@ def escort_world(tactics=0,fire=3):
  w.health[1]=100;w.shared[b.TACTICS]=tactics;w.shared[b.FIRE]=fire;w.step(c,ground,sq,n=3)
  w.shared[b.CMD]=16;w.step(c,ground,sq,n=6)
  assert w.shared[b.STATE]==19 and w.shared[b.ESCORT_PENDING]==1,(w.shared[b.STATE],w.messages)
- w.car=[c.v[26],c.v[27],c.v[28]+18.];w.speed=0.;w.step(c,ground,sq,n=14)
+ w.car=[c.v[26],c.v[27],c.v[28]+18.];w.speed=0.;w.step(c,ground,sq,n=40)   # 1.2: eased glide (~2.3 s from 18 m)
  team=[w.shared[b.GROUND_PUB+i] for i in range(4)]
  return w,c,ground,sq,team
 def steps(w,vms,n):w.step(*vms,n=n)
@@ -51,7 +51,7 @@ w.calls.clear();steps(w,V,20)
 assert all(len(orders(w,0x5d3,t))<=4 for t in team),[len(orders(w,0x5d3,t)) for t in team]
 passed('Move orders are refreshed every 0.7 s at most, not every tick')
 for k,t in enumerate(team):w.pos[t]=[BG[k][0],BG[k][1],0.]
-w.calls.clear();steps(w,V,3)
+w.calls.clear();w.now+=1500;steps(w,V,3)   # 1.2: the mock walks the guards to their slots, so the order timer must expire first
 for k,t in enumerate(team):
  o=last(w,0x667,t);assert (round(o[1],2),round(o[2],2))==sqb.BG_AIM[k] and abs(o[3]-.8)<.01,(k,o)
 assert not any(orders(w,0x5d3,t) for t in team)
@@ -121,20 +121,21 @@ w.calls.clear();steps(w,V,3);assert not any(orders(w,0x5ca,t) for t in team)
 w.incar.pop(1);w.car_speeds={}
 passed('A car driving away is not chased; the guards hold and regroup when CJ stops')
 # ------------------------------------------------------------------ catch-up / stuck / casualty
-w.pos[team[0]]=[0.,-120.,0.];w.offscreen={team[0]};w.calls.clear();steps(w,V,2)
-o=last(w,0xa1,team[0]);assert abs(o[1]-BG[0][0])<.01 and abs(o[2]-BG[0][1])<.01,o
+w.pos[team[0]]=[0.,-120.,0.];w.offscreen={team[0]};w.calls.clear();w.teleports.clear();steps(w,V,2)
+o=last(w,0x5f5,team[0]);assert o[4]==7 and not orders(w,0xa1,team[0]),o
 w.pos[team[1]]=[0.,-120.,0.];w.offscreen=set();w.calls.clear();steps(w,V,2)
 assert orders(w,0x5f5,team[1]) and not orders(w,0xa1,team[1])
-passed('Far behind: teleport only out of sight, otherwise run on the path network')
-w.pos[team[2]]=[12.,0.,0.];w.calls.clear();steps(w,V,6);w.now+=3000;steps(w,V,2);w.offscreen={team[2]};w.now+=3000;steps(w,V,3)
-assert orders(w,0xa1,team[2]),'stuck guard not recovered'
-w.offscreen=set()
-passed('A stuck guard (moving, far, not progressing) is recovered out of sight')
+passed('Far behind (out of sight or not): the guards sprint along the path network, nobody is teleported')
+w.pos[team[2]]=[12.,0.,0.];w.blocked={team[2]};w.calls.clear();steps(w,V,6);w.now+=3000;steps(w,V,2);w.offscreen={team[2]};w.now+=3000;steps(w,V,3)
+assert orders(w,0x5f5,team[2]) and not orders(w,0xa1,team[2]) and not w.teleports,'stuck guard re-paths, never teleports'
+w.offscreen=set();w.blocked=set()
+passed('A stuck guard (moving, far, not progressing) is sent along the path network again, never teleported')
 w.dead.add(team[1]);w.messages.clear();steps(w,V,4);assert w.messages.count('SQDOWN')==1
 steps(w,V,10);assert w.messages.count('SQDOWN')==1
 passed('MAN DOWN is called once when a guard dies')
 # ------------------------------------------------------------------ recall
-w.dead.discard(team[1]);w.car=[0.,-40.,28.];w.shared[b.CMD]=17;steps(w,V,6)
+for k,t_ in enumerate(team):w.pos[t_]=[BG[k][0],BG[k][1],0.]
+w.walk.clear();w.dead.discard(team[1]);w.car=[0.,-40.,28.];w.shared[b.CMD]=17;steps(w,V,6)
 assert w.shared[b.STATE]==19 and w.shared[b.ESCORT_PENDING]==2,(w.shared[b.STATE],w.messages)
 w.car=[c.v[26],c.v[27],c.v[28]+18.];w.speed=0.;steps(w,V,14)
 assert w.shared[b.ESCORT_ON]==3 and w.shared[b.SQ_ROPE]==0,(w.shared[b.ESCORT_ON],w.messages)
@@ -145,15 +146,19 @@ passed('RECALL TEAM: hover, the team ropes back up, then FOLLOW resumes')
 # ------------------------------------------------------------------ withdrawal, loss, pickup with cover
 w,c,ground,sq,team=escort_world();V=(c,ground,sq)
 w.incar[1]=c.v[5];w.offscreen=set(team);steps(w,V,12)
-assert all(t not in w.exists for t in team) and w.shared[b.ESCORT_ON]==0 and 'SQBACK' in w.messages
-passed('CJ boards the helicopter another way: the team withdraws and boards')
+assert all(t not in w.exists for t in team) and w.shared[b.ESCORT_ON]==0 and 'SQSTAY' in w.messages and 'SQBACK' not in w.messages
+passed('CJ boards the helicopter another way: the team stays on the ground (deleted out of sight, nobody warped aboard)')
+w,c,ground,sq,team=escort_world();V=(c,ground,sq);w.teleports.clear()
+w.incar[1]=c.v[5];w.offscreen=set();w.onscreen=True;steps(w,V,12)
+assert all(t in w.exists and t in w.released for t in team) and w.shared[b.ESCORT_ON]==0 and not w.teleports,(w.messages,w.teleports)
+passed('The same in view: the team is handed back to the game, nobody vanishes on screen')
 w,c,ground,sq,team=escort_world();V=(c,ground,sq)
 for t in team:w.dead.add(t)
 steps(w,V,12);assert 'SQLOST' in w.messages and w.shared[b.ESCORT_ON]==0 and 'SQBACK' not in w.messages
 passed('Losing the whole team is reported and cleaned up')
 w,c,ground,sq,team=escort_world();V=(c,ground,sq);spawned=len(calls(w,0x503))
 w.car=[0.,-40.,28.];w.shared[b.CMD]=10;steps(w,V,6);assert w.shared[b.STATE]==19
-w.car=[c.v[26],c.v[27],c.v[28]+18.];w.speed=0.;steps(w,V,14)
+w.car=[c.v[26],c.v[27],c.v[28]+18.];w.speed=0.;steps(w,V,40)
 assert 'SQCOVER' in w.messages and len(calls(w,0x503))<=spawned+1 and all(t in w.exists for t in team) and w.shared[b.SQ_ROPE]==1,(w.messages,len(calls(w,0x503)))
 passed('Rope pickup with the team on the ground: the same team covers CJ (only the CJ rope is added)')
 # ------------------------------------------------------------------ assault tactics
@@ -175,8 +180,8 @@ passed('Bounding overwatch: every 3 s the pair swaps who moves and who covers')
 w.pos[team[2]]=[29.,-8.,0.];w.calls.clear();steps(w,V,3);assert last(w,0x7a5,team[2])[1]==hostile
 passed('A flanker who reached his flank point attacks from there')
 w.pos[team[0]]=[0.,60.,0.];w.calls.clear();steps(w,V,3)
-o=last(w,0x5d3,team[0]);assert o[4]==7 and abs(o[2]-sqb.AS_FORM[0][1])<.01,o
-passed('Assault leash: nobody pushes more than 40 m away from CJ')
+o=last(w,0x5f5,team[0]);assert o[4]==7 and abs(o[2]-sqb.AS_FORM[0][1])<.01 and not orders(w,0xa1,team[0]),o   # 1.2: beyond 40 m he runs back on the path network
+passed('Assault leash: nobody pushes more than 40 m away from CJ; beyond it he sprints back (no teleport)')
 w.dead.add(hostile);w.now+=5000
 for k,t in enumerate(team):w.pos[t]=list(sqb.AS_FORM[k])+[0.]
 w.calls.clear();steps(w,V,8)
@@ -265,7 +270,7 @@ w,c,_=setup();summon(w,c);w.shared[b.CMD]=17;w.step(c,n=5);assert 'SQNONE' in w.
 car=777;w.exists.add(car);w.cars[car]={'pos':[0.,0.,0.],'heading':0.};w.model[car]=400;w.incar[1]=car;w.shared[b.CMD]=16;w.step(c,n=5);assert 'SQFOOT' in w.messages
 passed('TEAM ON FOOT refuses politely: CJ aboard, team already down, nothing to recall, CJ in a car')
 # ------------------------------------------------------------------ overwatch flight
-w,c,_=setup();summon(w,c);w.car=[0.,-40.,28.];w.step(c,n=3)
+w,c,_=setup();summon(w,c);w.car=[0.,-40.,28.];w.speed=15.;w.step(c,n=3)   # an orbiting helicopter is moving (not 'wedged')
 pts=[]
 for _ in range(90):
  n=len(calls(w,0x4a2));w.step(c)
@@ -273,7 +278,7 @@ for _ in range(90):
 assert pts and all(abs(math.dist(m[1:3],[0.,0.])-30.)<.05 and abs(m[3]-24.)<.01 for m in pts),pts[:3]
 assert len({(round(m[1]),round(m[2])) for m in pts})>=3
 passed('Overwatch: the helicopter circles CJ at 30 m, 24 m above him, instead of hovering on top')
-w,c,_=setup();summon(w,c);w.car=[0.,-40.,28.];w.los_fn=lambda a,z:a[0]<=.01;n0=len(calls(w,0x4a2));w.step(c,n=40)
+w,c,_=setup();summon(w,c);w.car=[0.,-40.,28.];w.speed=15.;w.los_fn=lambda a,z:a[0]<=.01;n0=len(calls(w,0x4a2));w.step(c,n=40)
 pts=[x[2] for x in calls(w,0x4a2)[n0:]];assert pts and all(m[1]<=.01 for m in pts),pts[:4]
 passed('Overwatch skips stations from which a building hides CJ')
 w,c,_=setup();summon(w,c);w.car=[0.,-40.,28.];w.step(c,n=25);w.health[c.v[5]]=850;w.messages.clear();w.step(c,n=25)
@@ -426,6 +431,40 @@ for i in range(90):
  w.ped_bullet([-.9,1.,1.],[-30.,2.,1.]);w.step(c,f)
 ends=fired_at(w,0);assert ends and all(e[0]>10. for e in ends),ends[:6]
 passed('FOLLOW MY SHOTS: with a guard firing the other way next to him, the gunners still follow CJ\'s own line')
+# ------------------------------------------------------------------ 1.2 helicopter lifecycle
+def spawn_world(visible):
+ w,c,_=setup();w.visible_fn=visible;command=g['command'];command(w,c,1,ticks=8)
+ car=c.v[5];return w,c,car,w.cars[car]['pos']
+front=lambda p:p[1]>3 and abs(p[0])<2.*p[1] and math.dist(p[:2],[0.,0.])<400.      # the camera looks along +y
+w,c,car,pos=spawn_world(front)
+assert 140.<math.dist(pos[:2],[0.,0.])<200. and pos[2]>=50. and not w.visible(car),(pos,w.visible(car))
+assert w.shared[b.STATE]==2
+passed('CALL HELICOPTER: it is created 160 m out, 50 m up and behind CJ, out of the camera\'s view, and flies in')
+w,c,car,pos=spawn_world(lambda p:p[1]<-3 and abs(p[0])<2.*(-p[1]))              # the camera looks along -y: behind is in view
+assert abs(pos[0]+160.)<2. and abs(pos[1])<2. and not w.visible(car),pos
+passed('When the first bearing is in view it is moved, in the same tick, to the next bearing where it is not')
+w,c,car,pos=spawn_world(lambda p:True)
+assert abs(pos[0])<2. and abs(pos[1]-160.)<2.,pos
+passed('When every bearing is in view (e.g. a tall tower) the last one is used instead of looping')
+w,c,car,pos=spawn_world(front);made=[x for x in calls(w,0xa5)][-1][0]
+assert all(x['time']==made or not x['visible'] for x in w.teleports if x['who']==car),w.teleports
+passed('The relocation to a hidden bearing happens in the creation tick: no visible teleport')
+w,c,_=setup();w.ground_fn=lambda x,y,z:80.;w.visible_fn=front;g['command'](w,c,1,ticks=8);pos=w.cars[c.v[5]]['pos']
+assert pos[2]>=105.,pos
+passed('Spawn altitude clears the highest surface by 25 m')
+w,c,car,pos=spawn_world(front)
+crew=[x[2] for x in calls(w,0x9a)];assert crew and all(math.dist(x[2:5],pos)<3. for x in crew[:4]),(pos,crew[:4])
+passed('The gunners are created at the helicopter (not at CJ) and attached at once')
+w,c,_=setup();summon(w,c);w.car=[30.,40.,28.];g['command'](w,c,4,ticks=3);m=calls(w,0x4a2)[-1][2]
+assert abs(m[1]-900.)<3. and abs(m[2]-1200.)<3. and calls(w,0xad)[-1][2][1]==40.,(m,calls(w,0xad)[-1])
+passed('DISMISS: the helicopter flies off AWAY from CJ (through its own position), at cruise speed 40')
+w,c,_=setup();summon(w,c);w.visible_fn=lambda p:False;g['command'](w,c,4,ticks=3);old=c.v[5]
+w.car=[0.,-120.,60.];w.now+=4000;w.step(c,n=3);assert old in w.exists,'out of sight but only 120 m away: not removed yet'
+w.car=[0.,-260.,60.];w.now+=500;w.step(c,n=3);assert old not in w.exists and w.shared[b.STATE]==0,(w.shared[b.STATE],)
+passed('DISMISS: removed only when out of sight AND at least 200 m away')
+w,c,_=setup();summon(w,c);pilot=c.v[4];w.playing=False;w.step(c,n=4)
+assert not [x for x in calls(w,0x792) if x[2][0]==pilot],'a living pilot is not thrown out of his helicopter by the clean-up'
+passed('Clean-up (CJ dead or arrested) does not eject a living pilot from his helicopter')
 # ------------------------------------------------------------------ v41 pilot
 w,c,f=gunner_world([]);w.messages.clear()
 for _ in range(6):w.ped_bullet([70.,0.,0.],list(w.car));w.ped_bullet([70.,5.,0.],[w.car[0]+2,w.car[1],w.car[2]]);w.step(c,f)

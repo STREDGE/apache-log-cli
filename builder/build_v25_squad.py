@@ -72,6 +72,11 @@ s.label('GROUP_SET');s.get(19,b.SQ_GROUP);s.check(0x803b,[V(17),V(19)],'GROUP_SA
 a(0xddc,I(b.SQ_GROUP),V(17));reset_slots();reset_threats()
 s.label('GROUP_SAME');s.eq(17,0,'GROUP_ACTIVE');s.go('LOOP')
 s.label('GROUP_ACTIVE');a(0x00a0,V(0),V(9),V(10),V(11));a(6,V(6),I(-1));s.check(0x00df,[V(0)],'CJ_ON_FOOT');a(0x03c0,V(0),V(6));s.label('CJ_ON_FOOT')
+# 1.2: CJ drives when every passenger seat of his car is free at the moment he gets in (decided once per car, before a guard sits down)
+s.get(19,b.SQ_CARH);s.check(0x803b,[V(6),V(19)],'DRV_DONE');a(0xddc,I(b.SQ_CARH),V(6));s.set(b.SQ_DRIVES,0);s.check(0x8039,[V(6),I(-1)],'DRV_DONE');s.set(b.SQ_DRIVES,1);a(0x01ea,V(6),V(26))
+for seat in range(4):
+ skip='DRV_SEAT_%d'%seat;s.check(0x0019,[V(26),I(seat)],skip);s.check(0x0431,[V(6),I(seat)],'DRV_PASSENGER');s.label(skip)
+s.go('DRV_DONE');s.label('DRV_PASSENGER');s.set(b.SQ_DRIVES,0);s.label('DRV_DONE')
 s.get(7,b.TACTICS);s.get(8,b.FIRE)
 # CJ inside an interior: the team waits outside (no teleport into interior coordinates)
 a(0x077e,V(19));s.eq(19,0,'LOOP')
@@ -236,9 +241,6 @@ def shoot_move(k,G,every=1200):
  """Run to 26-28 while firing at 25@ (TASK 12); re-issued for a new target or after `every` ms."""
  issue=uid('SHOOTMOVE_ISSUE');same_order(k,12,25,issue);s.label(issue);a(0x04eb,V(G),I(0))
  a(0x0637,V(G),V(26),V(27),V(28),I(6),F(.5),F(1.0),V(25));setk(k,'TX',26);setk(k,'TY',27);order(k,12,25,every)
-def teleport_to_point(k,G):
- """Put the guard on the ground at 26/27 (only used when he is off screen)."""
- a(0x0087,V(31),V(11));a(0x000b,V(31),F(3));a(0x02ce,V(26),V(27),V(31),V(28));a(0x000b,V(28),F(.7));a(0x00a1,V(G),V(26),V(27),V(28));setk_lit(k,'TASK',0);setk(k,'LX',26);setk(k,'LY',27);setk(k,'LT',12);s.ret()
 def same_order(k,task,target_var,issue):
  """Return from the guard routine while the guard already runs `task` on target_var and the order
  has not expired; otherwise continue at `issue` (placed right after this call)."""
@@ -312,28 +314,28 @@ def guard(k):
  # ---- CJ in a vehicle: ride along when there is a free seat, never chase a car that drives away
  s.eq(6,-1,P+'VEH');s.go(P+'FOOT')
  s.label(P+'VEH');s.check(0x803b,[V(6),V(1)],R);s.check(0x80db,[V(G),V(6)],P+'RIDING')
+ s.get(25,b.SQ_DRIVES);s.eq(25,1,R)   # 1.2: only a car CJ drives himself (a taxi / bus / somebody else's car is not boarded)
  a(0x02e3,V(6),V(25));s.check(0x0021,[V(25),F(6)],P+'VEH_SLOW');s.check(0x0021,[V(24),F(10)],P+'VEH_SLOW');s.ret()
  s.label(P+'VEH_SLOW');s.get(25,fk(k,'TASK'));s.eq(25,4,P+'VEH_ISSUE');s.get(25,fk(k,'NEXT'));s.check(0x001d,[V(12),V(25)],R)
  s.label(P+'VEH_ISSUE');a(0x01ea,V(6),V(26))
- for seat in [k%3,(k+1)%3,(k+2)%3]:
-  nxt=uid(P+'SEAT');s.check(0x0019,[V(26),I(seat)],nxt);s.check(0x0431,[V(6),I(seat)],nxt);a(0x05ca,V(G),V(6),I(8000),I(seat));setk_lit(k,'TASK',4);later(k,3000)
-  if k==0:msg('SQCAR')
-  s.ret();s.label(nxt)
+ # 1.2: guard k takes passenger seat k (the old rotation sent guards 0 and 3 to the same seat); no seat, no ride
+ nxt=uid(P+'SEAT');s.check(0x0019,[V(26),I(k)],nxt);s.check(0x0431,[V(6),I(k)],nxt);a(0x05ca,V(G),V(6),I(8000),I(k));setk_lit(k,'TASK',4);later(k,3000)
+ if k==0:msg('SQCAR')
+ s.ret();s.label(nxt)
  s.ret()
  s.label(P+'RIDING');setk_lit(k,'TASK',5);s.ret()
  # ---- CJ on foot: get out of any car first
  s.label(P+'FOOT');s.check(0x00df,[V(G)],P+'ON_FOOT');s.get(25,fk(k,'TASK'));s.eq(25,6,P+'LEAVE');s.get(25,fk(k,'NEXT'));s.check(0x001d,[V(12),V(25)],R)
  s.label(P+'LEAVE');a(0x0633,V(G));setk_lit(k,'TASK',6);later(k,2500);s.ret()
- # ---- far behind: catch up out of sight, or run there on the path network
- s.label(P+'ON_FOOT');s.check(0x0021,[V(24),F(70)],P+'NEAR');form_point(k);s.check(0x82cb,[V(G)],P+'FAR_SEEN');teleport_to_point(k,G)
- s.label(P+'FAR_SEEN');s.get(25,fk(k,'TASK'));s.eq(25,7,P+'FAR_PATH');s.get(25,fk(k,'NEXT'));s.check(0x001d,[V(12),V(25)],R)
- s.label(P+'FAR_PATH');a(0x05f5,V(G),V(9),V(10),V(11),I(7),I(20000));setk_lit(k,'TASK',7);later(k,3000);s.ret()
+ # ---- 1.2: far behind (40 m+): run to the slot on the path network. Never a teleport: a guard who cannot catch up
+ # lags, and the ground worker stands the team down after 60 s (SQ_LAG).
+ s.label(P+'ON_FOOT');s.check(0x0021,[V(24),F(40)],P+'NEAR');form_point(k);s.get(25,fk(k,'TASK'));s.eq(25,7,P+'FAR_PATH');s.get(25,fk(k,'NEXT'));s.check(0x001d,[V(12),V(25)],R)
+ s.label(P+'FAR_PATH');a(0x05f5,V(G),V(26),V(27),V(28),I(7),I(20000));setk_lit(k,'TASK',7);later(k,3000);s.ret()
  # ---- stuck check every 2.5 s: moving, far, and barely moved
  s.label(P+'NEAR');s.get(25,fk(k,'LT'));a(0x0085,V(26),V(12));a(0x0062,V(26),V(25));s.check(0x0019,[V(26),I(2500)],P+'STUCK_DONE')
  s.get(26,fk(k,'LX'));s.get(27,fk(k,'LY'));a(0x0509,V(21),V(22),V(26),V(27),V(28));setk(k,'LX',21);setk(k,'LY',22);setk(k,'LT',12)
  s.check(0x0021,[V(24),F(9)],P+'STUCK_DONE');s.check(0x0023,[F(.7),V(28)],P+'STUCK_DONE');s.get(25,fk(k,'TASK'));s.eq(25,1,P+'STUCK_T12');s.go(P+'STUCK_YES');s.label(P+'STUCK_T12');s.eq(25,12,P+'STUCK_DONE');s.label(P+'STUCK_YES')
- form_point(k);s.check(0x82cb,[V(G)],P+'STUCK_SEEN');teleport_to_point(k,G)
- s.label(P+'STUCK_SEEN');a(0x05f5,V(G),V(26),V(27),V(28),I(6),I(15000));setk_lit(k,'TASK',7);later(k,3000);s.ret()
+ form_point(k);a(0x05f5,V(G),V(26),V(27),V(28),I(6),I(15000));setk_lit(k,'TASK',7);later(k,3000);s.ret()   # 1.2: re-path, no teleport
  s.label(P+'STUCK_DONE');s.get(25,fk(k,'TASK'));s.eq(25,7,P+'NOT_PATHING');s.get(25,fk(k,'NEXT'));s.check(0x001d,[V(12),V(25)],R)
  s.label(P+'NOT_PATHING');s.get(25,fk(k,'TASK'));s.eq(25,11,P+'NOT_CLIMBING');s.get(25,fk(k,'NEXT'));s.check(0x001d,[V(12),V(25)],R)
  s.label(P+'NOT_CLIMBING');s.get(25,fk(k,'TASK'));s.eq(25,1,P+'VAULT_T12');s.go(P+'VAULT_PROBE');s.label(P+'VAULT_T12');s.eq(25,12,P+'VAULT_DONE')

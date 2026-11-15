@@ -62,6 +62,7 @@ from threat_v41 import CJ_SHOT_T,CJ_AIM_X,CJ_AIM_Y,CJ_AIM_Z,CJ_AIM_PX,CJ_AIM_PY,
 import threat_v41 as _tv;assert _tv.STATE==STATE and _tv.GROUND_PUB==GROUND_PUB
 TS_SAVE=STATE+380   # 4 slots: registers the trace scan borrows
 PREV_HP=STATE+356;PREV_HP_T=STATE+360;GT_YIELD=STATE+364;LS_X=STATE+340;LS_Y=STATE+344;LS_Z=STATE+348;LS_T=STATE+352  # gunner hit tracking / guard last-seen
+BLOCK_T=STATE+390;SQ_CARH=STATE+391;SQ_DRIVES=STATE+392;ESC_LAGGED=STATE+393;ROPE_T0=STATE+394;SQ_LAG=STATE+395   # SQ_LAG..+3: per guard, time since he fell 70 m behind CJ
 NOTICE_SKIP=STATE+335;HELLO_AT=STATE+336;KILL_NEXT=STATE+337
 GS_H=STATE+256;GS_S=STATE+264            # 8 handles / scores, best first
 SUP_X=STATE+272;SUP_Y=STATE+276;SUP_Z=STATE+280;SUP_T=STATE+284;GT_SUPP=STATE+288  # per gunner
@@ -153,6 +154,7 @@ MESSAGES={'HCLOAD': '~b~PILOT:~w~ inbound to your position.',
  'SQNONE': '~y~SQUAD:~w~ no team on the ground.',
  'SQFOOT': '~y~SQUAD:~w~ CJ must be on foot to receive the team.',
  'SQCREW': '~y~SQUAD:~w~ wait until the crew is back aboard.',
+ 'HCBUSY':'~y~PILOT:~w~ emergency landing - cannot comply.',
  'HCFOCUS': '~r~SHOOTER ON CJ!~w~ Gunners focusing fire.',
  'HCEVADE': '~r~TAKING HITS!~w~ Pilot breaking away.',
  'HCSHOT': '~r~TAKING FIRE!~w~ Pilot breaking away.',
@@ -201,10 +203,21 @@ for v in [0,1,2,3]:a(0x0248,V(v))
 for weapon_model in [353,355,356,358]:a(0x0248,I(weapon_model))
 a(0x4d,L('MODEL_FAIL'));c.check(0x0256,[I(0)],'MODEL_FAIL')
 for v in [4,5,12,13,14,15,16,31]:a(6,V(v),I(-1))
-a(6,V(24),I(0));a(6,V(22),I(0));a(0x04c4,V(18),F(0),F(-45),F(28),V(9),V(10),V(11))
-# v28: in downtown CJ+28 m is inside tall buildings; spawn at least 20 m above the highest surface.
-a(0x02ce,V(9),V(10),F(1000),V(17));a(0x000b,V(17),F(20));c.check(0x0025,[V(17),V(11)],'SPAWN_Z_OK');a(0x0087,V(11),V(17));c.label('SPAWN_Z_OK')
-a(0x00a5,V(0),V(9),V(10),V(11),V(5));a(0x00a0,V(18),V(9),V(10),V(11));a(0x039f,V(5),V(9),V(10));a(0x0129,V(5),I(8),V(1),V(4));a(0x01c5,V(4));a(0x08af,V(4),I(200));a(0x0223,V(4),I(200));a(0x054a,V(4),I(1));a(0x0446,V(4),I(1));a(0x077a,V(4),I(0),I(0))
+a(6,V(24),I(0));a(6,V(22),I(0))
+# 1.2: the helicopter flies in from far away instead of popping up 45 m from CJ. It is created on a ring 160 m
+# out (first behind CJ, then seven more bearings) and, in the same tick, moved to the next bearing while it is
+# still on screen, so the player never sees it appear. Altitude: at least 25 m above the highest surface there
+# (02CE only knows it where the collision is loaded) and at least 50 m above CJ.
+SPAWN_RING=[(0,-160),(-113,-113),(113,-113),(-160,0),(160,0),(-113,113),(113,113),(0,160)]
+for k,(ox,oy) in enumerate(SPAWN_RING):
+ c.label('SPAWN_TRY_%d'%k)
+ if k:c.check(0x02ca,[V(5)],'SPAWN_PLACED')
+ a(0x04c4,V(18),F(ox),F(oy),F(0),V(9),V(10),V(11));a(0x04e4,V(9),V(10));a(0x00a0,V(18),V(26),V(27),V(28));a(0x000b,V(28),F(50))
+ a(0x02ce,V(9),V(10),F(1000),V(17));a(0x000b,V(17),F(25));a(0x0087,V(11),V(28));c.check(0x0025,[V(17),V(28)],'SPAWN_Z_%d'%k);a(0x0087,V(11),V(17));c.label('SPAWN_Z_%d'%k)
+ if k==0:a(0x00a5,V(0),V(9),V(10),V(11),V(5))
+ else:a(0x00ab,V(5),V(9),V(10),V(11))
+c.label('SPAWN_PLACED')
+a(0x00a0,V(18),V(26),V(27),V(28));a(0x039f,V(5),V(26),V(27));a(0x04ba,V(5),F(25));a(0x00aa,V(5),V(9),V(10),V(11));a(0x0129,V(5),I(8),V(1),V(4));a(0x01c5,V(4));a(0x08af,V(4),I(200));a(0x0223,V(4),I(200));a(0x054a,V(4),I(1));a(0x0446,V(4),I(1));a(0x077a,V(4),I(0),I(0))
 a(0x0186,V(5),V(12));a(0x0168,V(12),I(2));a(0x0165,V(12),I(2));a(0x07e0,V(12),I(1));a(0x0957,V(5),I(1))
 for v,skin in [(13,2),(14,3),(15,2),(16,3)]:
  # Four guards are retained for all models, including four external Hunter positions.
@@ -231,8 +244,19 @@ c.label('UPDATE_FIRE');c.call('APPLY_FIRE')
 c.label('HEALTH');c.eq(7,15,'HEALTH_LANDED_CHECK');c.go('DISPATCH')
 c.label('HEALTH_LANDED_CHECK');c.eq(7,12,'CHECK_HEALTH');c.go('DISPATCH')
 c.label('CHECK_HEALTH');c.check(0x0019,[V(6),I(350)],'LOW_HEALTH');c.go('DISPATCH')
-c.label('LOW_HEALTH');c.check(0x80db,[V(18),V(5)],'EMERGENCY');c.eq(24,0,'EMERGENCY');a(6,V(25),I(13));c.go('DEPART')
+c.label('LOW_HEALTH');c.check(0x80db,[V(18),V(5)],'EMERGENCY');a(6,V(25),I(13));c.go('DEPART')   # 1.2: CJ aboard -> emergency landing, CJ on foot -> retreat (not decided by the crew phase)
 c.label('DISPATCH');c.get(8,CMD);c.set(CMD,0)
+# 1.2: state 18 (landing blocked / no route / climb failed) used to last forever: with CJ on foot the pilot goes back to
+# following him after 15 s; in an emergency landing (15) FOLLOW / HOLD / DEPART / PATROL are refused (the health
+# check would have flipped the state back the next tick)
+c.eq(7,18,'BLOCK_WATCH_CLEAR');c.get(19,BLOCK_T);c.eq(19,0,'BLOCK_WATCH_RUN');a(0xddc,I(BLOCK_T),V(20));c.go('BLOCK_WATCH_DONE')
+c.label('BLOCK_WATCH_RUN');a(0x0085,V(17),V(20));a(0x0062,V(17),V(19));c.check(0x0019,[V(17),I(15000)],'BLOCK_WATCH_DONE');c.check(0x80db,[V(18),V(5)],'BLOCK_WATCH_DONE');c.eq(8,0,'BLOCK_WATCH_DONE');c.set(BLOCK_T,0);a(6,V(8),I(2));c.go('BLOCK_WATCH_DONE')   # CJ on foot for 15 s: back to FOLLOW
+c.label('BLOCK_WATCH_CLEAR');c.set(BLOCK_T,0)
+c.label('BLOCK_WATCH_DONE')
+c.eq(7,15,'DISPATCH_NORMAL')
+for cmd in [2,3,4,14]:
+ nxt='EMERGENCY_REFUSE_'+str(cmd);c.eq(8,cmd,nxt);msg(c,'HCBUSY');c.go('TICK');c.label(nxt)
+c.label('DISPATCH_NORMAL')
 for command,label in [(15,'REQUEST_EXIT'),(2,'REQUEST_FOLLOW'),(3,'REQUEST_HOLD'),(4,'REQUEST_DEPART'),(5,'EVAC'),(6,'BOARD_CJ'),(7,'REQUEST_GROVE'),(8,'LEAVE_CJ'),(9,'REQUEST_TAKEOFF'),(10,'REQUEST_ROPE'),(11,'REQUEST_MAP'),(12,'REQUEST_DEST_LAND'),(13,'REQUEST_DEST_ROPE'),(14,'REQUEST_PATROL'),(16,'REQUEST_TEAM_DEPLOY'),(17,'REQUEST_TEAM_RECALL')]:
  nxt='CMD_NEXT_'+str(command);c.eq(8,command,nxt);c.go(label);c.label(nxt)
 # Per-state continuous work.
@@ -254,7 +278,7 @@ c.label('FOLLOW_TICK');c.check(0x80db,[V(18),V(5)],'TICK');c.get(19,TRACKED_TARG
 c.get(29,FIRE_TARGET);alive(c,29,'FOLLOW_NO_THREAT');a(0x00a0,V(18),V(9),V(10),V(11));a(0x00a0,V(29),V(17),V(19),V(31));a(0x050a,V(9),V(10),V(11),V(17),V(19),V(31),V(30));c.check(0x0023,[F(65),V(30)],'FOLLOW_NO_THREAT');c.go('TICK')
 c.label('FOLLOW_NO_THREAT')
 a(0x00a0,V(18),V(9),V(10),V(11));a(0x00aa,V(5),V(26),V(27),V(28));a(0x0509,V(9),V(10),V(26),V(27),V(31));c.check(0x0021,[V(31),F(60)],'FOLLOW_NEAR')
-c.get(19,FOLLOW_NEXT);c.check(0x001d,[V(20),V(19)],'TICK');a(0x0085,V(19),V(20));a(0x000a,V(19),I(4000));a(0xddc,I(FOLLOW_NEXT),V(19));a(0x07bb,V(5),I(6));a(0x0726,V(5),V(18),I(-1),F(15));c.go('TICK')
+c.get(19,FOLLOW_NEXT);c.check(0x001d,[V(20),V(19)],'TICK');a(0x0085,V(19),V(20));a(0x000a,V(19),I(4000));a(0xddc,I(FOLLOW_NEXT),V(19));a(0x07bb,V(5),I(6));a(0x0726,V(5),V(18),I(-1),F(15));a(0x00ad,V(5),F(40));c.go('TICK')
 c.label('FOLLOW_NEAR');c.check(0x00df,[V(18)],'FOLLOW_STATION');a(0x03c0,V(18),V(17));a(0x02e3,V(17),V(19));c.check(0x0021,[V(19),F(12)],'FOLLOW_STATION')
 c.get(19,FOLLOW_NEXT);c.check(0x001d,[V(20),V(19)],'TICK');a(0x0085,V(19),V(20));a(0x000a,V(19),I(3000));a(0xddc,I(FOLLOW_NEXT),V(19));c.call('RESTORE_FLIGHT');a(0x0726,V(5),V(18),I(-1),F(20));c.go('TICK')
 c.label('FOLLOW_STATION');c.get(19,FOLLOW_NEXT);c.check(0x001d,[V(20),V(19)],'TICK');a(0x0085,V(19),V(20));a(0x000a,V(19),I(1500));a(0xddc,I(FOLLOW_NEXT),V(19))
@@ -324,12 +348,16 @@ c.label('ROPE_APPROACH_TICK');a(0x00aa,V(5),V(9),V(10),V(11));c.get(19,FROZEN);c
 c.label('ROPE_FAR');a(0x0509,V(9),V(10),V(26),V(27),V(31));c.check(0x0023,[F(45),V(31)],'ROPE_APPROACH_TIMEOUT')
 a(0x0087,V(19),V(28));a(0x000b,V(19),F(15));c.check(0x06bd,[V(9),V(10),V(11),V(26),V(27),V(19),I(1),I(0),I(0),I(1),I(0)],'ROPE_APPROACH_TIMEOUT')
 # SET_CAR_COORDINATES adds the model's base offset to z; measure it once so the glide does not climb.
-a(0x0574,V(5),I(1));c.set(FROZEN,1);a(0x00ab,V(5),V(9),V(10),V(11));a(0xddc,I(CR_CMDZ),V(11));a(0x00aa,V(5),V(17),V(19),V(31));a(0x0063,V(31),V(11));a(0xddc,I(GLIDE_C),V(31))
+a(0x0574,V(5),I(1));c.set(FROZEN,1);a(0x00ab,V(5),V(9),V(10),V(11));a(0xddc,I(CR_CMDZ),V(11));a(0x00aa,V(5),V(17),V(19),V(31));a(0x0063,V(31),V(11));a(0xddc,I(GLIDE_C),V(31));a(0xddc,I(CRUISE_T),V(20))   # 1.2: the glide clock starts now (a stale one made the first step 3x too long)
 a(0x0407,V(5),F(0),F(ROPE_PICKUP_AHEAD),F(0),V(17),V(19),V(31));a(0x0063,V(17),V(9));a(0x0063,V(19),V(10));a(0x00a0,V(18),V(26),V(27),V(31));a(0x005b,V(26),V(17));a(0x005b,V(27),V(19))
-c.label('ROPE_GLIDE');a(0x00aa,V(5),V(9),V(10),V(11))
+c.label('ROPE_GLIDE');c.call('CR_TIME');a(0x00aa,V(5),V(9),V(10),V(11))
 a(0x0087,V(17),V(26));a(0x0063,V(17),V(9));a(0x0087,V(29),V(27));a(0x0063,V(29),V(10));a(0x0087,V(30),V(28));a(0x000b,V(30),F(15));a(0x0063,V(30),V(11))
-a(0x050a,F(0),F(0),F(0),V(17),V(29),V(30),V(31));c.check(0x0021,[V(31),F(.8)],'ROPE_ARRIVE')
-a(0x0007,V(19),F(.8));a(0x0073,V(19),V(31));a(0x006b,V(17),V(19));a(0x006b,V(29),V(19));a(0x006b,V(30),V(19))
+a(0x050a,F(0),F(0),F(0),V(17),V(29),V(30),V(31));c.check(0x0021,[V(31),F(.4)],'ROPE_ARRIVE')
+# 1.2: time-based with easing (it was a fixed 0.8 m per frame: 24 m/s at 30 fps, 48 m/s at 60 fps, and a hard stop):
+# speed = 1.2 * distance + 1 m/s, at most 25 m/s, step = speed * frame time
+a(0x0087,V(19),V(31));a(0x0013,V(19),F(1.2));a(0x000b,V(19),F(1.0));c.check(0x0021,[V(19),F(25)],'GL_SP_OK');a(0x0007,V(19),F(25));c.label('GL_SP_OK')
+c.get(8,CR_DT);a(0x006b,V(19),V(8));a(0x0073,V(19),V(31));c.check(0x0021,[V(19),F(1.0)],'GL_SC_OK');a(0x0007,V(19),F(1.0));c.label('GL_SC_OK')
+a(0x006b,V(17),V(19));a(0x006b,V(29),V(19));a(0x006b,V(30),V(19))
 a(0x005b,V(9),V(17));a(0x005b,V(10),V(29));c.get(11,CR_CMDZ);a(0x005b,V(11),V(30));a(0xddc,I(CR_CMDZ),V(11));a(0x00ab,V(5),V(9),V(10),V(11));c.go('TICK')
 c.label('ROPE_ARRIVE');a(0x0087,V(19),V(28));a(0x000b,V(19),F(15));a(0x0063,V(19),V(11));c.get(11,CR_CMDZ);a(0x005b,V(11),V(19));a(0xddc,I(CR_CMDZ),V(11));a(0x00ab,V(5),V(26),V(27),V(11))
 c.call('BLOCK_HOVER');a(0x0574,V(5),I(1));c.set(FROZEN,1);c.set(NOTICE_SKIP,3);state(c,3);c.get(19,ESCORT_PENDING);c.eq(19,0,'ARRIVE_ESCORT');c.set(ROPE_COMMAND,1);c.go('TICK')
@@ -354,7 +382,13 @@ a(0x00a0,V(18),V(9),V(10),V(11));a(0x000b,V(11),F(20));a(0x02ce,V(9),V(10),V(11)
 c.call('CHECK_SITE');c.eq(17,1,'BAD_SITE');state(c,7);c.go('ISSUE_LANDING')
 c.label('NO_SEATS');msg(c,'HCNOSEA');c.go('TICK')
 c.label('BAD_SITE');msg(c,'HCNOSIT');c.go('TICK')
-c.label('EMERGENCY');a(0x00aa,V(5),V(26),V(27),V(28));a(0x000b,V(28),F(100));a(0x02ce,V(26),V(27),V(28),V(28));state(c,15)
+c.label('EMERGENCY')
+# 1.2: look for a flat, clear spot (CHECK_SITE) first below the helicopter, then 25 m around; the first one that fits wins
+for k,(ox,oy) in enumerate([(0,0),(25,0),(-25,0),(0,25),(0,-25)]):
+ a(0x00aa,V(5),V(9),V(10),V(11));a(0x0087,V(26),V(9));a(0x000b,V(26),F(ox));a(0x0087,V(27),V(10));a(0x000b,V(27),F(oy));a(0x0087,V(28),V(11));a(0x000b,V(28),F(100));a(0x02ce,V(26),V(27),V(28),V(28))
+ c.call('CHECK_SITE');c.eq(17,1,'EMERGENCY_NEXT_%d'%k);c.go('EMERGENCY_GO');c.label('EMERGENCY_NEXT_%d'%k)
+a(0x00aa,V(5),V(26),V(27),V(28));a(0x000b,V(28),F(100));a(0x02ce,V(26),V(27),V(28),V(28))
+c.label('EMERGENCY_GO');state(c,15)
 c.label('ISSUE_LANDING');c.set(LAND_STABLE,0);c.set(LAND_SLOW,0);c.set(LAND_FINAL,0);c.call('SET_LANDING_MISSION');a(0x01bd,V(21));c.go('TICK')
 c.label('LANDING_TICK');a(0x00aa,V(5),V(9),V(10),V(11));a(0x0509,V(9),V(10),V(26),V(27),V(31));c.get(19,LAND_SLOW);c.eq(19,0,'LAND_CHECK_FINAL');c.check(0x0023,[F(45),V(31)],'LAND_CHECK_FINAL');c.set(LAND_SLOW,1);a(0x00ad,V(5),F(8))
 c.label('LAND_CHECK_FINAL');c.get(19,LAND_FINAL);c.eq(19,0,'LAND_VERIFY_TOUCHDOWN');c.check(0x0023,[F(10),V(31)],'LAND_VERIFY_TOUCHDOWN');a(0x02e3,V(5),V(19));c.check(0x0023,[F(4),V(19)],'LAND_VERIFY_TOUCHDOWN');c.set(LAND_FINAL,1);c.call('SET_FINAL_LANDING')
@@ -418,12 +452,12 @@ for var,x,y,seat in [(13,-4,2,1),(14,4,2,2),(15,-4,-2,-1),(16,4,-2,-1)]:
  skip='MUSTER_DONE_'+str(var);alive(c,var,skip)
  c.check(0x8a32,[V(var)],skip)
  a(0x00a0,V(var),V(9),V(10),V(11));a(0x00aa,V(5),V(17),V(19),V(31));a(0x050a,V(9),V(10),V(11),V(17),V(19),V(31),V(29))
- c.check(0x0023,[F(9),V(29)],'MUSTER_WALK_'+str(var));c.go('MUSTER_BOARD_'+str(var))
- c.label('MUSTER_WALK_'+str(var));a(0x0085,V(17),V(20));a(0x0062,V(17),V(21));c.check(0x0019,[V(17),I(8000)],'MUSTER_WALK_TASK_'+str(var));c.check(0x0023,[F(25),V(29)],'MUSTER_FAR_'+str(var));c.go('MUSTER_RECOVER_'+str(var))
- c.label('MUSTER_FAR_'+str(var));c.check(0x0019,[V(17),I(30000)],'MUSTER_OFFSCREEN_'+str(var));c.go('MUSTER_RECOVER_'+str(var))
+ c.check(0x0023,[F(3),V(29)],'MUSTER_WALK_'+str(var));c.go('MUSTER_BOARD_'+str(var))   # 1.2: attach only within 3 m (was 9 m: a visible snap)
+ c.label('MUSTER_WALK_'+str(var));a(0x0085,V(17),V(20));a(0x0062,V(17),V(21));c.check(0x0019,[V(17),I(8000)],'MUSTER_WALK_TASK_'+str(var));c.check(0x0023,[F(25),V(29)],'MUSTER_FAR_'+str(var));c.check(0x82cb,[V(var)],'MUSTER_WALK_TASK_'+str(var));c.go('MUSTER_RECOVER_'+str(var))   # 1.2: warp only out of sight
+ c.label('MUSTER_FAR_'+str(var));c.check(0x0019,[V(17),I(30000)],'MUSTER_OFFSCREEN_'+str(var));c.check(0x82cb,[V(var)],'MUSTER_WALK_TASK_'+str(var));c.go('MUSTER_RECOVER_'+str(var))
  c.label('MUSTER_OFFSCREEN_'+str(var));c.check(0x0019,[V(17),I(15000)],'MUSTER_WALK_TASK_'+str(var));c.check(0x82cb,[V(var)],'MUSTER_WALK_TASK_'+str(var))
  c.label('MUSTER_RECOVER_'+str(var));a(0x0407,V(5),F(x),F(y),F(5),V(9),V(10),V(11));a(0x02ce,V(9),V(10),V(11),V(11));a(0x000b,V(11),F(.7));a(0x0362,V(var),V(9),V(10),V(11));c.go('MUSTER_BOARD_'+str(var))
- c.label('MUSTER_WALK_TASK_'+str(var));a(6,V(30),I(0));a(0x0407,V(5),F(x),F(y),F(0),V(9),V(10),V(11));a(0x05d3,V(var),V(9),V(10),V(11),I(4),I(1000));c.go(skip)
+ c.label('MUSTER_WALK_TASK_'+str(var));a(6,V(30),I(0));a(0x0407,V(5),F(x),F(y),F(0),V(9),V(10),V(11));a(0x05d3,V(var),V(9),V(10),V(11),I(6),I(1000));c.go(skip)
  c.label('MUSTER_BOARD_'+str(var));a(0x0792,V(var));a(0x04eb,V(var),I(0))
  c.call('ATTACH_'+str(var))
  c.label(skip)
@@ -473,21 +507,36 @@ c.get(17,GROVE_WAIT);a(0x0085,V(31),V(20));a(0x0062,V(31),V(17));c.check(0x0019,
 
 c.label('DEPART');c.eq(25,13,'NORMAL_DEPART');state(c,13);c.go('DEPART_START')
 c.label('NORMAL_DEPART');state(c,4)
-c.label('DEPART_START');c.call('UNFREEZE');c.call('RESTORE_FLIGHT');a(0x0918,V(5),I(1));a(0x0825,V(5));a(0x04df,V(5),I(0));a(0x0407,V(5),F(0),F(1500),F(60),V(9),V(10),V(11));a(0x04a2,V(5),V(9),V(10),V(11),F(30),F(120));a(0x01bd,V(21))
+c.label('DEPART_START');c.call('UNFREEZE');c.call('RESTORE_FLIGHT');a(0x0918,V(5),I(1));a(0x0825,V(5));a(0x04df,V(5),I(0))
+# 1.2: it flies off AWAY from CJ (the old target was 1500 m along its own heading, which could lead over his head),
+# fast, and is only removed once it is out of sight and 200 m away
+a(0x00aa,V(5),V(26),V(27),V(28));a(0x00a0,V(18),V(9),V(10),V(11));a(0x0509,V(9),V(10),V(26),V(27),V(31));c.check(0x0021,[V(31),F(3)],'DEPART_AHEAD')
+a(0x0087,V(29),V(26));a(0x0063,V(29),V(9));a(0x0073,V(29),V(31));a(0x0013,V(29),F(1500));a(0x0087,V(30),V(27));a(0x0063,V(30),V(10));a(0x0073,V(30),V(31));a(0x0013,V(30),F(1500));a(0x005b,V(9),V(29));a(0x005b,V(10),V(30));a(0x0087,V(11),V(28));a(0x000b,V(11),F(40));c.go('DEPART_FLY')
+c.label('DEPART_AHEAD');a(0x0407,V(5),F(0),F(1500),F(60),V(9),V(10),V(11))
+c.label('DEPART_FLY');a(0x04a2,V(5),V(9),V(10),V(11),F(30),F(120));a(0x00ad,V(5),F(40));a(0x01bd,V(21))
 c.label('DEPART_TICK');a(1,I(100));a(0x01bd,V(20));a(0xddc,I(HEART),V(20));c.set(CMD,0);healthcheck(c,'CLEANUP');c.call('CHANGE_MODEL');c.call('CHANGE_CREW');c.call('PUBLISH');a(0x0227,V(5),V(6));a(0xddc,I(HP),V(6));c.get(19,FIRE);c.check(0x003b,[V(19),V(23)],'DEPART_FIRE_CHANGE');c.go('DEPART_HEALTH_DONE')
 c.label('DEPART_FIRE_CHANGE');c.call('APPLY_FIRE')
-c.label('DEPART_HEALTH_DONE');a(0x0085,V(17),V(20));a(0x0062,V(17),V(21));c.check(0x0019,[V(17),I(45000)],'DEPART_DISTANCE');c.go('CLEANUP')
+c.label('DEPART_HEALTH_DONE');a(0x0085,V(17),V(20));a(0x0062,V(17),V(21));c.check(0x0019,[V(17),I(60000)],'DEPART_DISTANCE');c.go('DEPART_RELEASE')
 c.label('DEPART_DISTANCE');c.check(0x0019,[V(17),I(3000)],'DEPART_TICK');c.check(0x80db,[V(18),V(5)],'DEPART_TICK')
-# v28: a stuck or slow departing helicopter is removed after 12 s even if it is still on screen.
-c.check(0x0019,[V(17),I(12000)],'DEPART_VISIBLE');c.go('DEPART_DELETE')
-c.label('DEPART_VISIBLE');c.check(0x82ca,[V(5)],'DEPART_TICK');a(0x00a0,V(18),V(9),V(10),V(11));a(0x00aa,V(5),V(26),V(27),V(28));a(0x050a,V(9),V(10),V(11),V(26),V(27),V(28),V(19));c.check(0x0021,[V(19),F(250)],'DEPART_TICK')
+# 1.2: never removed in view (v28 deleted it after 12 s even on screen): only out of sight AND 200 m away;
+# a helicopter that cannot get away in 60 s is released instead of deleted
+c.check(0x82ca,[V(5)],'DEPART_TICK');a(0x00a0,V(18),V(9),V(10),V(11));a(0x00aa,V(5),V(26),V(27),V(28));a(0x050a,V(9),V(10),V(11),V(26),V(27),V(28),V(19));c.check(0x0021,[V(19),F(200)],'DEPART_TICK')
 c.label('DEPART_DELETE');a(0x0164,V(12))
 for var in [13,14,15,16,4]:
  skip='DELETE_SKIP_'+str(var);c.check(0x056d,[V(var)],skip);a(0x009b,V(var));c.label(skip)
 a(0x00a6,V(5));c.go('RESET')
+c.label('DEPART_RELEASE');c.call('UNFREEZE');a(0x0164,V(12))
+for var in [4,13,14,15,16]:
+ skip='DEPART_RELEASE_SKIP_'+str(var);c.check(0x056d,[V(var)],skip);a(0x01c2,V(var));c.label(skip)
+c.check(0x056e,[V(5)],'RESET');a(0x01c3,V(5));c.go('RESET')
 c.label('CLEANUP');c.call('UNFREEZE');a(0x0164,V(12))
 for var in [4,13,14,15,16]:
- skip='RELEASE_SKIP_'+str(var);c.check(0x056d,[V(var)],skip);a(0x0792,V(var));a(0x048f,V(var));a(0x01c2,V(var));c.label(skip)
+ skip='RELEASE_SKIP_'+str(var);c.check(0x056d,[V(var)],skip)
+ # 1.2: a living pilot who is still in his helicopter is not thrown out of it (that dropped a pilotless helicopter)
+ if var==4:c.check(0x056e,[V(5)],'CLEANUP_EJECT');c.check(0x00db,[V(4),V(5)],'CLEANUP_EJECT');c.go('CLEANUP_KEEP');c.label('CLEANUP_EJECT')
+ a(0x0792,V(var))
+ if var==4:c.label('CLEANUP_KEEP')
+ a(0x048f,V(var));a(0x01c2,V(var));c.label(skip)
 c.check(0x056e,[V(5)],'RESET');a(0x01c3,V(5))
 c.label('RESET');c.set(FROZEN,0);c.set(LSTAGE,0);c.set(BUSY,0);state(c,0)
 for weapon_model in [353,355,356,358]:a(0x0249,I(weapon_model))
@@ -520,7 +569,7 @@ for dx,dy in [(0,0),(4,0),(-4,0),(0,4),(0,-4)]:
  a(0x0087,V(11),V(28));a(0x000b,V(11),F(4));a(0x0087,V(29),V(28));a(0x000b,V(29),F(22));c.check(0x06bd,[V(9),V(10),V(11),V(9),V(10),V(29),I(1),I(0),I(0),I(1),I(0)],'SITE_END')
 a(6,V(17),I(1));c.label('SITE_END');c.ret()
 c.label('DEPLOY');c.set(BUSY,1);a(6,V(24),I(1))
-for var,x,y in [(13,-3.5,2),(14,3.5,2),(15,-3.5,-2),(16,3.5,-2)]:
+for var,x,y in [(13,3.5,2),(14,-3.5,2),(15,3.5,-2),(16,-3.5,-2)]:   # 1.2: the side they are mounted on (was mirrored: ~5 m through the fuselage)
  skip='DEPLOY_SKIP_'+str(var);alive(c,var,skip);a(0x0792,V(var));a(0x0465,V(var));a(0x0407,V(5),F(x),F(y),F(6),V(9),V(10),V(11));a(0x02ce,V(9),V(10),V(11),V(11));a(0x000b,V(11),F(1));a(0x0362,V(var),V(9),V(10),V(11));a(0x0619,V(var),I(1));a(0x083c,V(var),F(0),F(0),F(-.5));a(0x04eb,V(var),I(1));c.label(skip)
 c.call('PUBLISH');c.set(BUSY,0);c.ret()
 c.label('GUARD_TEAM')
@@ -650,7 +699,9 @@ c.go('UNSTICK_RESET')
 c.label('UNSTICK_SPEED');a(0x02e3,V(5),V(19));c.check(0x0023,[F(1),V(19)],'UNSTICK_RESET');c.get(19,STUCK_SINCE);c.eq(19,0,'UNSTICK_TIMER');a(0xddc,I(STUCK_SINCE),V(20));c.ret()
 c.label('UNSTICK_TIMER');a(0x0085,V(29),V(20));a(0x0062,V(29),V(19));c.check(0x0019,[V(29),I(5000)],'UNSTICK_WAIT')
 a(0x00aa,V(5),V(9),V(10),V(11));a(0x02ce,V(9),V(10),F(1000),V(17));a(0x000b,V(17),F(20));a(0x000b,V(11),F(10));c.check(0x0025,[V(17),V(11)],'UNSTICK_Z_OK');a(0x0087,V(11),V(17));c.label('UNSTICK_Z_OK')
-a(0x00ab,V(5),V(9),V(10),V(11));c.set(STUCK_SINCE,0);c.call('RESUME_FLIGHT');c.ret()
+# 1.2: the native pilot climbs out (the old code teleported the helicopter 10-20 m up); the follow / patrol / orbit
+# orders wait 6 s so they do not override the climb
+a(0x04df,V(5),I(0));a(0x04a2,V(5),V(9),V(10),V(11),F(15),V(11));a(0x00ad,V(5),F(20));a(0x0085,V(19),V(20));a(0x000a,V(19),I(6000));a(0xddc,I(FOLLOW_NEXT),V(19));a(0xddc,I(ORBIT_NEXT),V(19));a(0xddc,I(PATROL_NEXT),V(19));c.set(STUCK_SINCE,0);c.ret()
 c.label('UNSTICK_RESET');c.set(STUCK_SINCE,0)
 c.label('UNSTICK_WAIT');c.ret()
 # v32 scripted cruise toward (26@,27@). The helicopter is frozen and moved every frame by
@@ -658,7 +709,7 @@ c.label('UNSTICK_WAIT');c.ret()
 # most CRUISE_TURN deg/s (slow while turning > 45 deg), altitude eases toward CRUISE_CLEAR m above
 # the highest surface below and 30/70/120 m ahead (stop and climb if > 8 m too low or blocked).
 # Returns 19@ = remaining 2D distance.
-c.label('GLIDE_BEGIN');a(0x00aa,V(5),V(9),V(10),V(11));a(0x0574,V(5),I(1));c.set(FROZEN,1);a(0x00ab,V(5),V(9),V(10),V(11));a(0xddc,I(CR_CMDZ),V(11));a(0x00aa,V(5),V(17),V(29),V(31));a(0x0063,V(31),V(11));a(0xddc,I(GLIDE_C),V(31));a(0xddc,I(CRUISE_T),V(20));a(0x0007,V(31),F(0));a(0xddc,I(CR_V),V(31));c.ret()
+c.label('GLIDE_BEGIN');a(0x00aa,V(5),V(9),V(10),V(11));a(0x02e3,V(5),V(30));a(0x0574,V(5),I(1));c.set(FROZEN,1);a(0x00ab,V(5),V(9),V(10),V(11));a(0xddc,I(CR_CMDZ),V(11));a(0x00aa,V(5),V(17),V(29),V(31));a(0x0063,V(31),V(11));a(0xddc,I(GLIDE_C),V(31));a(0xddc,I(CRUISE_T),V(20));c.check(0x0021,[V(30),F(CRUISE_SPEED)],'GB_SPEED_OK');a(0x0007,V(30),F(CRUISE_SPEED));c.label('GB_SPEED_OK');a(0xddc,I(CR_V),V(30));c.ret()   # 1.2: continues at the real speed (was restarted from 0 = a dead stop)
 c.label('CR_TIME');c.get(29,CRUISE_T);a(0x0085,V(30),V(20));a(0x0062,V(30),V(29));a(0xddc,I(CRUISE_T),V(20))
 c.check(0x0019,[V(30),I(100)],'CRT_HI');a(6,V(30),I(100));c.label('CRT_HI');c.check(0x0019,[V(30),I(0)],'CRT_LOW');c.go('CRT_OK');c.label('CRT_LOW');a(6,V(30),I(16));c.label('CRT_OK')
 a(0x0093,V(31),V(30));a(0x0013,V(31),F(.001));a(0xddc,I(CR_DT),V(31));c.ret()
@@ -733,11 +784,18 @@ for st in [1,4,7,11,13,15,16,17]:
 # v39.2 ROPE mode: freeze right where the helicopter is and drop immediately (retries with a
 # small shift only if the shaft is blocked or the height is outside 4-60 m).
 c.get(19,EXIT_MODE);c.eq(19,1,'EXIT_NOT_ROPE_NOW')
-c.label('EXIT_ROPE_NOW');a(0x00aa,V(5),V(9),V(10),V(11));a(0x0574,V(5),I(1));c.set(FROZEN,1);a(0x04ba,V(5),F(0));a(0x02ce,V(9),V(10),V(11),V(28))
+c.label('EXIT_ROPE_NOW');a(0x02e3,V(5),V(19));c.get(17,FROZEN);c.eq(17,1,'EXR_SPD');c.get(17,CR_V);c.check(0x8025,[V(19),V(17)],'EXR_SPD');a(0x0087,V(19),V(17));c.label('EXR_SPD')
+c.check(0x0021,[V(19),F(8)],'EXIT_ROPE_SLOW');c.go('EXIT_HERE')   # 1.2: faster than 8 m/s: slow down along the way first (no dead stop), the rope follows on arrival
+c.label('EXIT_ROPE_SLOW');a(0x00aa,V(5),V(9),V(10),V(11));a(0x0574,V(5),I(1));c.set(FROZEN,1);a(0x04ba,V(5),F(0));a(0x02ce,V(9),V(10),V(11),V(28))
 a(0xddc,I(DEST_X),V(9));a(0xddc,I(DEST_Y),V(10));a(0xddc,I(DEST_Z),V(28));c.set(AUTO_EXIT,0);c.set(DEST_NATIVE,0);state(c,23);a(6,V(7),I(23));c.go('REQUEST_DEST_ROPE')
 c.label('EXIT_NOT_ROPE_NOW')
 c.eq(7,22,'EXIT_HERE');c.set(AUTO_EXIT,1);msg(c,'HCXARR');c.go('TICK')
-c.label('EXIT_HERE');a(0x00aa,V(5),V(9),V(10),V(11));a(0x02ce,V(9),V(10),F(1000),V(28));a(0xddc,I(DEST_X),V(9));a(0xddc,I(DEST_Y),V(10));a(0xddc,I(DEST_Z),V(28));c.set(GROVE_WAIT,0);c.set(GROVE_NEXT_SCAN,0);c.set(AVOID_STAGE,0);c.set(AUTO_EXIT,1);c.call('UNFREEZE');a(0x01bd,V(21));state(c,21);msg(c,'HCXHERE');c.go('TICK')
+c.label('EXIT_HERE');a(0x00aa,V(5),V(9),V(10),V(11))
+# 1.2: a moving helicopter is not stopped dead on the spot: its destination is a point ahead (speed + 10 m, at most 100 m) where the
+# scripted cruise slows it down smoothly; the exit follows on arrival (AUTO_EXIT). A frozen, script-flown helicopter reports no speed, so CR_V counts.
+a(0x02e3,V(5),V(19));c.get(17,FROZEN);c.eq(17,1,'EXH_SPD');c.get(17,CR_V);c.check(0x8025,[V(19),V(17)],'EXH_SPD');a(0x0087,V(19),V(17));c.label('EXH_SPD')
+c.check(0x0021,[V(19),F(8)],'EXH_AT');a(0x000b,V(19),F(10));c.check(0x0021,[V(19),F(100)],'EXH_D');a(0x0007,V(19),F(100));c.label('EXH_D');a(0x0407,V(5),F(0),V(19),F(0),V(9),V(10),V(17))
+c.label('EXH_AT');a(0x02ce,V(9),V(10),F(1000),V(28));a(0xddc,I(DEST_X),V(9));a(0xddc,I(DEST_Y),V(10));a(0xddc,I(DEST_Z),V(28));c.set(GROVE_WAIT,0);c.set(GROVE_NEXT_SCAN,0);c.set(AVOID_STAGE,0);c.set(AUTO_EXIT,1);c.call('UNFREEZE');a(0x01bd,V(21));state(c,21);msg(c,'HCXHERE');c.go('TICK')
 # v39b: while hovering over the destination, a failed rope drop (slope, height window, shaft)
 # moves the helicopter 6-8 m to another spot, re-hovers 16 m above the ground there and retries
 # after 3.5 s - up to 5 times - before reporting RPDFAIL.

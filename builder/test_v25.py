@@ -12,7 +12,7 @@ class World:
   self.incar={};self.attach={};self.pos={};self.model={};self.skin={};self.health=defaultdict(lambda:1000)
   self.weapons=defaultdict(int);self.velocity={};self.speed=0;self.altitude=25;self.siteclear=True;self.auto_board=True;self.ground_fn=lambda x,y,z: 13.35 if 2400<x<2600 and -1750<y< -1600 else 0.;self.clear_fn=lambda x,y: True
   self.random_char=-1;self.civilians=[];self.traffic=[];self.seats={};self.damage=set();self.messages=[];self.cars={};self.current_car=None;self.fallback_car=self.car.copy();self.heading=72.;self.attached_reports_incar=True;self.shooting=False;self.targeting=-1;self.camera=[0.,-5.,2.];self.lookat=[100.,-5.,2.];self.ray_block_distance=None;self.pedtype={};self.armor=defaultdict(int);self.wanted=0;self.shooting_chars=set();self.actor_heading=defaultdict(float);self.frozen={};self.accuracy={};self.attack_rate={};self.create_calls=0;self.fail_create_after=None
-  self.teleports=[];self.russian=False;self.visible_fn=None;self.rng=random.Random(7)
+  self.walk={};self.released=set();self.teleports=[];self.russian=False;self.visible_fn=None;self.rng=random.Random(7)
  @property
  def car(self):
   return self.cars[self.current_car]['pos'] if getattr(self,'current_car',None) in getattr(self,'cars',{}) else getattr(self,'fallback_car',[0.,-45.,28.])
@@ -28,6 +28,13 @@ class World:
     if actor in self.incar:continue
     if actor==1:self.player=[self.player[i]+velocity[i]*delta/1000. for i in range(3)]
     elif actor in self.pos:self.pos[actor]=[self.pos[actor][i]+velocity[i]*delta/1000. for i in range(3)]
+   for ped,order in list(self.walk.items()):
+    # 1.2: TASK_GO_* orders move the ped at the pace of the move state (4 walk, 5 jog, 6 run, 7 sprint); no teleport
+    if ped not in self.pos and ped!=1:self.walk.pop(ped);continue
+    cur=self.coords(ped);to=order['to'];dd=math.dist(cur[:2],to[:2])
+    if dd<=.4 or self.now>=order['until']:self.walk.pop(ped);continue
+    if ped in getattr(self,'blocked',()):continue   # wedged against something: the order runs, the ped does not move
+    step=min(dd,order['speed']*delta/1000.);self.pos[ped]=[cur[0]+(to[0]-cur[0])*step/dd,cur[1]+(to[1]-cur[1])*step/dd,cur[2]]
    for vm in vms:vm.run()
  @staticmethod
  def seg_dist(a,b2,p):
@@ -144,6 +151,8 @@ class VM:
    elif op==0x1f5:put(1,1)
    elif op==0x1b4:w.control=bool(vals[1])
    elif op==0x83c:w.velocity[vals[0]]=vals[1:4]
+   elif op==0x1c2:w.released.add(vals[0])   # MARK_CHAR_AS_NO_LONGER_NEEDED: the game removes him later, out of sight
+   elif op in [0x5d3,0x5f5]:w.walk[vals[0]]={'to':list(vals[1:4]),'speed':{4:1.6,5:3.,6:4.6,7:6.5}.get(int(vals[4]),1.6),'until':w.now+int(vals[5])}
    elif op==0xa1:
     w.velocity.pop(vals[0],None);w.note_teleport(0xa1,vals[0],w.coords(vals[0]),vals[1:4])
     if vals[0]==1:w.player=vals[1:4].copy()
@@ -194,7 +203,7 @@ class VM:
     for i,v in enumerate([-2.,-5.,-1.,2.,5.,2.]):put(i+1,v)
    elif op==0x574:w.frozen[vals[0]]=bool(vals[1])
    elif op==0x88c:w.note_teleport(0x88c,vals[0],w.cars[vals[0]]['pos'],vals[1:4]);w.cars[vals[0]]['pos']=vals[1:4].copy()
-   elif op==0x1ea:put(1,0 if w.model.get(vals[0])==425 else 3)
+   elif op==0x1ea:put(1,0 if w.model.get(vals[0])==425 else getattr(w,'seats_count',3))
    elif op==0x73f:put(7,w.random_char)
    elif op==0x503:
     w.next+=1;new=w.next;put(5,new);w.exists.add(new);w.pos[new]=[vals[2],vals[3],w.ground_fn(vals[2],vals[3],vals[4])];w.skin[new]=vals[1];w.pedtype[new]=vals[0]
@@ -252,7 +261,10 @@ class VM:
 def setup(panel=False):
  w=World();c=VM('Helicover_Core',w);p=VM('Helicover_Panel',w) if panel else None;v=[c]+([p] if p else []);w.step(*v,n=3);return w,c,p
 def command(w,c,n,extra=None,ticks=5):w.shared[b.CMD]=n;w.step(c,*([extra] if extra else []),n=ticks)
-def summon(w,c):command(w,c,1,ticks=8);assert w.shared[b.STATE]==2
+def summon(w,c):
+ command(w,c,1,ticks=8);assert w.shared[b.STATE]==2
+ w.car=[0.,-45.,28.];w.shared[b.FOLLOW_NEXT]=0;w.speed=12.  # 1.2: it is created far away and flies in; the mock has no flight AI, so it 'arrives' here (a following helicopter is moving)
+
 results=[]
 def passed(t):results.append('PASS: '+t)
 def calls(w,op):return [x for x in w.calls if x[1]==op]
@@ -354,7 +366,7 @@ assert w.shared[b.STATE]==18 and calls(w,0x4a2)[-1][2][0]==c.v[5]
 passed('Stalled approach reports blocked without restarting the mission or teleporting')
 
 w,c,_=setup();summon(w,c);command(w,c,5,ticks=8)
-w.car=[c.v[26]+8,c.v[27],15.];w.now+=26000;w.step(c,n=4)
+w.car=[c.v[26]+8,c.v[27],15.];w.speed=0.;w.now+=26000;w.step(c,n=4)
 assert len(calls(w,0x743))==2 and calls(w,0x743)[-1][2][4:]==[0.,0.]
 w.step(c,n=15);assert len(calls(w,0x743))==2
 passed('Final descent is ordered once after coming close and slow')
@@ -467,8 +479,15 @@ hostile=target(w,typ=7,skin=21);w.damage.add((1,hostile));w.step(c,p,fire,ground
 assert any(x[2][0] in squad and x[2][1]==hostile for x in calls(w,0x74d)), (w.shared[b.FIRE_TARGET], squad)
 passed('Ground team attacks the hostile selected by Protect CJ in the mock')
 command(w,c,2,ticks=5);w.step(c,p,fire,ground,n=5)
+# 1.2: nobody is deleted in view: the game gets the guards back (01C2) and removes them once they are out of sight
+assert all(x in w.exists and x in w.released for x in squad) and all(w.shared[b.GROUND_PUB+i]==-1 for i in range(4))
+passed('Leaving hold hands the ground squad back to the game in view (no deletion on screen) and clears friendly handles')
+w,c,p=setup(True);summon(w,c);command(w,c,3,ticks=5);w.car=[0.,0.,18.];w.speed=0
+fire=VM('Helicover_Fire',w);ground=VM('Helicover_Ground',w);w.step(c,p,fire,ground,n=5)
+w.shared[b.ROPE_COMMAND]=1;w.step(c,p,fire,ground,n=6);squad=[w.shared[b.GROUND_PUB+i] for i in range(4)]
+w.onscreen=False;command(w,c,2,ticks=5);w.step(c,p,fire,ground,n=5)
 assert all(x not in w.exists for x in squad) and all(w.shared[b.GROUND_PUB+i]==-1 for i in range(4))
-passed('Leaving hold removes the temporary ground squad and clears friendly handles')
+passed('Out of sight the ground squad is deleted when the helicopter leaves hold')
 w,c,_=setup();summon(w,c);ground=VM('Helicover_Ground',w);w.step(c,ground,n=3);w.shared[b.ROPE_COMMAND]=1;w.step(c,ground,n=5)
 assert not calls(w,0x503) and 'RGHOLD' in w.messages
 passed('Insertion is rejected unless helicopter is holding')
@@ -512,7 +531,7 @@ passed('Fire worker omits passenger getter implicated by the AML crash log')
 w,c,p=setup(True);summon(w,c);ground=VM('Helicover_Ground',w);w.step(c,p,ground,n=3)
 w.shared[b.CMD]=10;w.step(c,p,ground,n=6);assert w.shared[b.STATE]==19 and calls(w,0x4a2)
 assert not calls(w,0x503)
-w.car=[c.v[26],c.v[27],c.v[28]+18.];w.speed=0.;w.step(c,p,ground,n=12)
+w.car=[c.v[26],c.v[27],c.v[28]+18.];w.speed=0.;w.step(c,p,ground,n=40)   # 1.2: the glide eases out (about 2.3 s from 18 m), no hard stop
 assert w.shared[b.STATE]==3 and len(calls(w,0x503))>=4, (w.shared[b.STATE],w.messages)
 passed('Rope command approaches a clear site, then starts deployment when hovering')
 # v38: without active support, evacuation commands ask for CALL SUPPORT instead of summoning.
@@ -537,7 +556,7 @@ passed('Rope approach rejects blocked sites without spawning the team')
 w,c,_=setup();w.player=[0.,0.,30.];w.ground_fn=lambda x,y,z:30.;summon(w,c);ground=VM('Helicover_Ground',w);w.step(c,ground,n=3)
 w.shared[b.CMD]=10;w.step(c,ground,n=6);mission=calls(w,0x4a2)[-1][2]
 assert mission[3:]==[45.,12.,45.],mission
-w.car=[c.v[26]+4.,c.v[27],45.];w.speed=0.;w.step(c,ground,n=12)
+w.car=[c.v[26]+4.,c.v[27],45.];w.speed=0.;w.step(c,ground,n=40)
 assert w.shared[b.STATE]==3 and len(calls(w,0x503))>=4, (w.shared[b.STATE],w.messages)
 passed('At elevated terrain, hovering 4m from pickup starts deployment at safe height')
 assert len(calls(w,0x503))>=5 and w.shared[b.GROUND_PUB+4] in w.exists and w.now<ground.v[27]
@@ -567,16 +586,20 @@ w,c,_=setup();w.ground_fn=lambda x,y,z:(120. if z>500 else 0.);summon(w,c)
 spawn=calls(w,0xa5)[-1][2];assert spawn[3]>=140.,spawn
 passed('Spawn height clears tall buildings')
 # v28: a following helicopter that stops far from CJ for 5 s is lifted above the roofs.
-w,c,_=setup();summon(w,c);w.car=[0.,-80.,20.];w.speed=0.;w.step(c,n=3);assert not calls(w,0xab)
-w.now+=5200;w.step(c,n=3);assert calls(w,0xab) and w.car[2]>=30.,(w.car,calls(w,0xab))
-passed('A wedged helicopter is lifted out and resumes its order')
-w,c,_=setup();summon(w,c);w.car=[0.,-10.,20.];w.speed=0.;w.step(c,n=3);w.now+=8000;w.step(c,n=3);assert not calls(w,0xab)
+w,c,_=setup();summon(w,c);w.calls.clear();w.teleports.clear();w.car=[0.,-80.,20.];w.speed=0.;w.step(c,n=3);assert not calls(w,0xab)
+w.now+=5200;w.step(c,n=3)
+climb=calls(w,0x4a2)[-1][2];assert not calls(w,0xab) and not w.teleports,(calls(w,0xab),w.teleports)   # 1.2: no teleport
+assert climb[1:3]==[0.,-80.] and climb[3]>=30. and w.shared[b.FOLLOW_NEXT]>=w.now+5000,(climb,w.shared[b.FOLLOW_NEXT],w.now)
+n_orders=len(calls(w,0x4a2));w.now+=6500;w.step(c,n=3);assert len(calls(w,0x4a2))>n_orders,'follow resumes after the climb'
+passed('A wedged helicopter climbs out under its own power (no teleport) and resumes its order')
+w,c,_=setup();summon(w,c);w.calls.clear();w.car=[0.,-10.,20.];w.speed=0.;w.step(c,n=3);w.now+=8000;w.step(c,n=3);assert not calls(w,0xab)
 passed('A slow hover close to CJ is not mistaken for being stuck')
-# v28: dismissal removes a visible, stuck helicopter after 12 s so support can be called again.
+# 1.2: a dismissed helicopter is never deleted in view; one that cannot get away in 60 s is released and support can be called again.
 w,c,_=setup();summon(w,c);w.onscreen=True;w.speed=0.;command(w,c,4,ticks=3);assert w.shared[b.STATE]==4
-w.now+=12500;w.step(c,n=5);assert w.shared[b.STATE]==0 and c.v[5] not in w.exists,(w.shared[b.STATE],)
+old=c.v[5];w.now+=30000;w.step(c,n=5);assert w.shared[b.STATE]==4 and old in w.exists,'on screen: not deleted (v28 removed it after 12 s in view)'
+w.now+=31000;w.step(c,n=5);assert w.shared[b.STATE]==0 and old in w.exists and not calls(w,0xa6),(w.shared[b.STATE],)
 command(w,c,1,ticks=8);assert w.shared[b.STATE]==2
-passed('Dismiss deletes a stuck on-screen helicopter and a new call works')
+passed('Dismiss: a helicopter that stays in view is never deleted; after 60 s it is released and a new call works')
 # v28: rope descent starts 3 m below the helicopter centre (outside the hull) and still lands CJ.
 w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.shared[b.STATE]=23;w.car=[0.,0.,18.]
 ground=VM('Helicover_Ground',w);w.step(c,ground,n=4);w.shared[b.DROP_COMMAND]=1;w.step(c,ground,n=40)
@@ -658,7 +681,7 @@ assert not any(x[2][0] in squad[1:] for x in calls(w,0x5d3))
 passed('Only guards who reach the ground receive running formation tasks')
 
 # v31: the scripted cruise climbs in place until it clears tall roofs ahead.
-w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.ground_fn=lambda x,y,z:(200. if z>500 else 0.);command(w,c,7,ticks=2)
+w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.speed=0.;w.ground_fn=lambda x,y,z:(200. if z>500 else 0.);command(w,c,7,ticks=2)   # from a hover (1.2: a moving helicopter would carry on ~2 m while braking)
 x0,y0,z0=w.car;w.step(c,n=5);x1,y1,z1=w.car
 assert w.shared[b.STATE]==10 and (x1,y1)==(x0,y0) and z1>z0,(w.car,x0,y0,z0)
 passed('Cruise climbs in place before passing tall buildings')
@@ -708,7 +731,7 @@ if b.MAP_MARKER:
  assert all(x[2][3]==1 for x in calls(w,0xdd8))
  passed('Map marker is read from libGTASA memory with 0DD8, never 0AB6')
  # v33: repeated FLY TO MAP MARKER with a one-frame teleport delay must not make the helicopter climb away.
- w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.marker=[2000.,150.,0.];w.teleport_delay=True
+ w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.speed=0.;w.marker=[2000.,150.,0.];w.teleport_delay=True   # from a hover
  for _ in range(3):command(w,c,11,ticks=40)
  heights=[]
  for _ in range(200):w.step(c);heights.append(w.car[2])
@@ -762,7 +785,7 @@ passed('Patrol changes position around CJ and can return to follow')
 w,c,_=setup();w.shared[b.CMD]=14;w.step(c,n=15);assert w.shared[b.STATE]==24
 passed('Patrol summons a helicopter if none is active')
 # When follow falls behind, the script reissues the native follow order.
-w,c,_=setup();summon(w,c);w.car=[200.,0.,25.];before=len(calls(w,0x726));w.now+=5000;w.step(c,n=8)
+w,c,_=setup();summon(w,c);w.car=[200.,0.,25.];w.speed=20.;before=len(calls(w,0x726));w.now+=5000;w.step(c,n=8)   # moving: not 'wedged'
 assert len(calls(w,0x726))>before
 passed('Follow reissues its order if the helicopter is far from CJ')
 
@@ -857,13 +880,17 @@ w.shared[b.EXIT_MODE]=0;w.widget_released=b.EXIT_WIDGET;w.step(c,n=4);assert w.s
 w.car=[w.shared[b.DEST_X],w.shared[b.DEST_Y],w.shared[b.DEST_Z]+1.5];w.altitude=1.5;w.step(c,n=20)
 assert w.shared[b.STATE]==12 and calls(w,0x5cd) and calls(w,0x5cd)[-1][2][:2]==[1,c.v[5]] and w.locks[c.v[5]]==1,(w.shared[b.STATE],w.messages)
 passed('Exit button over the destination in LAND mode lands and then lets CJ out')
-# v39.2: exit button in flight, ROPE mode -> freeze on the spot and abseil at once
+# v39.2 / 1.2: exit button in flight, ROPE mode -> the helicopter slows down on the way (a point ahead, no dead stop), then freezes and CJ abseils
 w,c,_=setup();summon(w,c);ground=VM('Helicover_Ground',w);w.incar[1]=c.v[5];w.marker=[1500.,150.,0.];command(w,c,11,ticks=8)
-w.step(c,ground,n=20);here=w.car.copy();w.shared[b.EXIT_MODE]=1;w.widget_released=b.EXIT_WIDGET;w.step(c,ground,n=3)
-assert w.frozen.get(c.v[5]) and w.shared[b.STATE]==23 and 'HCXHERE' not in w.messages
-drop=[x for x in calls(w,0x362) if x[2][0]==1];assert drop and math.dist(drop[0][2][1:3],here[:2])<4.,(drop,here)
+w.step(c,ground,n=20);start=w.car.copy();cruise=w.shared[b.CR_V];assert cruise>8.,cruise
+w.shared[b.EXIT_MODE]=1;w.widget_released=b.EXIT_WIDGET;w.step(c,ground,n=3)
+assert w.shared[b.STATE] in (21,22) and 'HCXHERE' in w.messages and not [x for x in calls(w,0x362) if x[2][0]==1],(w.shared[b.STATE],w.messages)
+fly_until(w,23,c,ground,limit=900);here=w.car.copy()
+assert 8.<math.dist(here[:2],start[:2])<130.,(here,start)
+w.step(c,ground,n=3)
+drop=[x for x in calls(w,0x362) if x[2][0]==1];assert w.frozen.get(c.v[5]) and drop and math.dist(drop[0][2][1:3],here[:2])<4.,(drop,here)
 w.step(c,ground,n=80);assert 1 not in w.incar and w.control and w.shared[b.ROPE_PENDING]==0,(w.messages,)
-passed('Exit button in flight (ROPE): the helicopter stops dead and CJ abseils at once')
+passed('Exit button in flight (ROPE): the helicopter slows down on the way, stops, and CJ abseils')
 # the abseil time scales with the height: ~6 m/s, 2-6 s
 motion=[x for x in calls(w,0x83c) if x[2][0]==1 and x[2][3]<0];span=motion[-1][0]-motion[0][0]
 height=here[2]-3.-.7;expected=min(6000.,max(2000.,height*1000./6.))
@@ -872,9 +899,9 @@ passed('Abseil duration scales with the height (2-6 s)')
 # exit button in flight, LAND mode -> find a spot below, land, CJ leaves
 w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.marker=[1500.,150.,0.];command(w,c,11,ticks=8)
 w.step(c,n=20);here=w.car[:2];w.shared[b.EXIT_MODE]=0;w.widget_released=b.EXIT_WIDGET;w.step(c,n=2)
-assert w.shared[b.AUTO_EXIT]==1 and 'HCXHERE' in w.messages and math.dist([w.shared[b.DEST_X],w.shared[b.DEST_Y]],here)<20.
+assert w.shared[b.AUTO_EXIT]==1 and 'HCXHERE' in w.messages and 5.<math.dist([w.shared[b.DEST_X],w.shared[b.DEST_Y]],here)<=105.   # 1.2: a spot ahead where the cruise slows down
 fly_until(w,11,c);assert w.shared[b.STATE]==11
-passed('Exit button in flight (LAND): finds a spot below and starts the landing')
+passed('Exit button in flight (LAND): finds a spot ahead (the cruise slows down on the way) and starts the landing')
 # exit button on the ground -> CJ simply leaves
 w,c,_=setup();summon(w,c);to_destination(w,c);command(w,c,12,ticks=6)
 w.car=[w.shared[b.DEST_X],w.shared[b.DEST_Y],w.shared[b.DEST_Z]+1.5];w.altitude=1.5;w.step(c,n=20);assert w.shared[b.STATE]==12
@@ -979,7 +1006,7 @@ for wanted,start,age,why in [(2,(60.,40.,45.),0,'only at 3+ stars'),(4,(60.,40.,
  assert 'HCAIR' not in w.messages,why
 passed('Air threat ignores low wanted levels, ground shooters, our own gunners and stale rounds')
 # combat orbit around the threat at 28 m, 25 m above it, moving between points
-w,c,f=fire_world();npc=target(w,typ=7,skin=20);w.damage.add((1,npc));w.step(c,f,n=10)
+w,c,f=fire_world();w.speed=18.;npc=target(w,typ=7,skin=20);w.damage.add((1,npc));w.step(c,f,n=10)   # an orbiting helicopter is moving (not 'wedged')
 pts=set()
 for _ in range(80):
  w.step(c,f);m=calls(w,0x4a2)[-1][2];pts.add((round(m[1],1),round(m[2],1)))
