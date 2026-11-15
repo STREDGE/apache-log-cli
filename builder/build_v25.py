@@ -63,6 +63,8 @@ import threat_v41 as _tv;assert _tv.STATE==STATE and _tv.GROUND_PUB==GROUND_PUB
 TS_SAVE=STATE+380   # 4 slots: registers the trace scan borrows
 PREV_HP=STATE+356;PREV_HP_T=STATE+360;GT_YIELD=STATE+364;LS_X=STATE+340;LS_Y=STATE+344;LS_Z=STATE+348;LS_T=STATE+352  # gunner hit tracking / guard last-seen
 BLOCK_T=STATE+390;SQ_CARH=STATE+391;SQ_DRIVES=STATE+392;ESC_LAGGED=STATE+393;ROPE_T0=STATE+394;SQ_LAG=STATE+395   # SQ_LAG..+3: per guard, time since he fell 70 m behind CJ
+ROPE_BUSY=STATE+406;SWAP_MSG=STATE+407;TEAM_CREW=STATE+408   # 1.2 decor: a rope motion is under way / swap message shown / crew setting the ground team wears
+FORM_UX=STATE+399;FORM_UY=STATE+400;FORM_PX=STATE+401;FORM_PY=STATE+402;FORM_T=STATE+403;FORM_CT=STATE+404;FORM_OK=STATE+405   # formation anchor (unit travel direction)
 NOTICE_SKIP=STATE+335;HELLO_AT=STATE+336;KILL_NEXT=STATE+337
 GS_H=STATE+256;GS_S=STATE+264            # 8 handles / scores, best first
 SUP_X=STATE+272;SUP_Y=STATE+276;SUP_Z=STATE+280;SUP_T=STATE+284;GT_SUPP=STATE+288  # per gunner
@@ -155,6 +157,7 @@ MESSAGES={'HCLOAD': '~b~PILOT:~w~ inbound to your position.',
  'SQFOOT': '~y~SQUAD:~w~ CJ must be on foot to receive the team.',
  'SQCREW': '~y~SQUAD:~w~ wait until the crew is back aboard.',
  'HCBUSY':'~y~PILOT:~w~ emergency landing - cannot comply.',
+ 'HCSLATE':'~y~PILOT:~w~ I swap the helicopter right after the rope.',
  'HCFOCUS': '~r~SHOOTER ON CJ!~w~ Gunners focusing fire.',
  'HCEVADE': '~r~TAKING HITS!~w~ Pilot breaking away.',
  'HCSHOT': '~r~TAKING FIRE!~w~ Pilot breaking away.',
@@ -177,7 +180,7 @@ c.set(GAME_OK,1);c.label('GAME_SIG_BAD');c.set(NOTICE_SKIP,-1);c.set(HELLO_AT,0)
 for key in range(PUB,PUB+7):c.set(key,-1)
 for key in range(GROUND_PUB,GROUND_PUB+5):c.set(key,-1)
 c.set(ROPE_COMMAND,0)
-for key,val in [(STATE,0),(CMD,0),(OPEN,0),(MODEL,487),(CREW,2),(FIRE,3),(TOUCH,0),(HUD,2),(HP,0),(WEAPON_SETTING,0),(EXIT_MODE,0),(AUTO_EXIT,0),(LOCK_HOLD,0),(ROPE_PENDING,0),(DROP_RESULT,0),(ROPE_TRIES,0),(RETRY_AT,0),(FORCE_ROPE,0),(EXIT_PRESSED,0),(EXIT_LAST,0),(AIR_SEEN,0),(AIR_CALL_NEXT,0),(KILLS,0),(LAST_TGT,-1),(ENGAGED,0),(CLEAR_AT,0),(ORBIT_I,0),(ORBIT_NEXT,0),(TACTICS,0),(ESCORT_PENDING,0),(ST_I,0),(ST_NEXT,0),(HP_PREV,0),(HP_T,0),(EVADE_UNTIL,0),(HELI_SHOT_T,-100000)]:c.set(key,val)
+for key,val in [(ROPE_BUSY,0),(SWAP_MSG,0),(TEAM_CREW,0),(STATE,0),(CMD,0),(OPEN,0),(MODEL,487),(CREW,2),(FIRE,3),(TOUCH,0),(HUD,2),(HP,0),(WEAPON_SETTING,0),(EXIT_MODE,0),(AUTO_EXIT,0),(LOCK_HOLD,0),(ROPE_PENDING,0),(DROP_RESULT,0),(ROPE_TRIES,0),(RETRY_AT,0),(FORCE_ROPE,0),(EXIT_PRESSED,0),(EXIT_LAST,0),(AIR_SEEN,0),(AIR_CALL_NEXT,0),(KILLS,0),(LAST_TGT,-1),(ENGAGED,0),(CLEAR_AT,0),(ORBIT_I,0),(ORBIT_NEXT,0),(TACTICS,0),(ESCORT_PENDING,0),(ST_I,0),(ST_NEXT,0),(HP_PREV,0),(HP_T,0),(EVADE_UNTIL,0),(HELI_SHOT_T,-100000)]:c.set(key,val)
 c.label('IDLE');a(1,I(100));a(0x01bd,V(20));a(0xddc,I(HEART),V(20));c.get(19,HELLO_AT);c.eq(19,-1,'HELLO_CHECK');c.go('HELLO_DONE')
 c.label('HELLO_CHECK');c.eq(19,0,'HELLO_DUE');a(0x0085,V(19),V(20));a(0x000a,V(19),I(5000));a(0xddc,I(HELLO_AT),V(19));c.go('HELLO_DONE')
 c.label('HELLO_DUE');c.check(0x001d,[V(20),V(19)],'HELLO_DONE');c.check(0x0256,[I(0)],'HELLO_DONE');c.set(HELLO_AT,-1);c.get(19,GAME_OK);c.eq(19,1,'HELLO_OLD');msg(c,'HCHELLO');c.go('HELLO_DONE')
@@ -224,7 +227,7 @@ for v,skin in [(13,2),(14,3),(15,2),(16,3)]:
  a(0x009a,I(8),V(skin),V(9),V(10),V(11),V(v));a(0x01c5,V(v));a(0x08af,V(v),I(150));a(0x0223,V(v),I(150));a(0x035f,V(v),I(50));a(0x054a,V(v),I(1));a(0x0446,V(v),I(1));a(0x02e2,V(v),I(100))
  for typ in range(32):a(0x077a,V(v),I(2),I(typ))
  a(0x077a,V(v),I(0),I(0));a(0x077a,V(v),I(0),I(8))
-c.label('TEAM_READY');c.call('PUBLISH');a(0x0825,V(5));a(0x07bb,V(5),I(6));a(6,V(23),I(-1));c.call('REATTACH_TEAM');c.call('APPLY_FIRE')
+c.label('TEAM_READY');c.call('PUBLISH');c.call('ARM_CREW');a(0x0825,V(5));a(0x07bb,V(5),I(6));a(6,V(23),I(-1));c.call('REATTACH_TEAM');c.call('APPLY_FIRE')
 for v in [0,1,2,3]:a(0x0249,V(v))
 c.eq(25,5,'TEAM_CHECK_ROPE');c.go('EVAC')
 c.label('TEAM_CHECK_ROPE');c.eq(25,11,'TEAM_CHECK_PATROL');c.go('ROPE_PREP')
@@ -361,7 +364,11 @@ a(0x006b,V(17),V(19));a(0x006b,V(29),V(19));a(0x006b,V(30),V(19))
 a(0x005b,V(9),V(17));a(0x005b,V(10),V(29));c.get(11,CR_CMDZ);a(0x005b,V(11),V(30));a(0xddc,I(CR_CMDZ),V(11));a(0x00ab,V(5),V(9),V(10),V(11));c.go('TICK')
 c.label('ROPE_ARRIVE');a(0x0087,V(19),V(28));a(0x000b,V(19),F(15));a(0x0063,V(19),V(11));c.get(11,CR_CMDZ);a(0x005b,V(11),V(19));a(0xddc,I(CR_CMDZ),V(11));a(0x00ab,V(5),V(26),V(27),V(11))
 c.call('BLOCK_HOVER');a(0x0574,V(5),I(1));c.set(FROZEN,1);c.set(NOTICE_SKIP,3);state(c,3);c.get(19,ESCORT_PENDING);c.eq(19,0,'ARRIVE_ESCORT');c.set(ROPE_COMMAND,1);c.go('TICK')
-c.label('ARRIVE_ESCORT');a(0xddc,I(ESCORT_CMD),V(19));c.set(ESCORT_PENDING,0);c.go('TICK')
+c.label('ARRIVE_ESCORT')
+# 1.2: a recall for a team that died or was stood down on the way is dropped (the helicopter must not hover frozen waiting for it)
+c.eq(19,2,'ARRIVE_GO');c.get(17,ESCORT_ON);c.eq(17,1,'ARRIVE_TEAM_GONE')
+c.label('ARRIVE_GO');a(0xddc,I(ESCORT_CMD),V(19));c.set(ESCORT_PENDING,0);c.go('TICK')
+c.label('ARRIVE_TEAM_GONE');c.set(ESCORT_PENDING,0);c.set(CMD,2);c.go('TICK')
 # v40 TEAM ON FOOT: deploy the four-man escort by rope next to CJ, or recall it the same way.
 c.label('REQUEST_TEAM_DEPLOY');c.get(19,ESCORT_ON);c.eq(19,0,'TEAM_BUSY');c.check(0x80db,[V(18),V(5)],'ROPE_CJ_ABOARD');c.check(0x80df,[V(18)],'TEAM_CJ_IN_CAR');c.eq(24,1,'TEAM_DEPLOY_CREW');msg(c,'SQCREW');c.go('TICK')
 c.label('TEAM_DEPLOY_CREW');c.set(ESCORT_PENDING,1);c.eq(24,0,'TEAM_MUSTER');c.go('ROPE_HOVER')
@@ -550,6 +557,11 @@ state(c,5);c.go('IDLE')
 
 # No mission/global relationships are changed: only the created NPCs are configured.
 c.label('APPLY_FIRE');c.get(23,FIRE);c.ret()
+# 1.2: every gunner holds the chosen weapon the moment he exists (it used to be the next Fire pass, 0.15-0.9 s of unarmed gunners)
+c.label('ARM_CREW');c.get(19,WPN);c.check(0x0019,[V(19),I(0)],'ARM_CREW_RET')
+for var in [13,14,15,16]:
+ skip='ARM_CREW_SKIP_'+str(var);alive(c,var,skip);a(0x0470,V(var),V(17));c.check(0x803b,[V(17),V(19)],skip);a(0x01b2,V(var),V(19),I(30000));a(0x01b9,V(var),V(19));a(0x02e2,V(var),I(100));a(0x07dd,V(var),I(100));c.label(skip)
+c.label('ARM_CREW_RET');c.ret()
 c.label('REATTACH_TEAM')
 for var,x,y,direction in [(13,1.4,1.3,3),(14,-1.4,1.3,1),(15,1.4,-.8,3),(16,-1.4,-.8,1)]:
  skip='ATTACH_SKIP_'+str(var);alive(c,var,skip)
@@ -652,6 +664,8 @@ c.label('PUBLISH_CREW_ARMY');a(6,V(19),I(1));c.eq(1,287,'PUBLISH_CREW_SWAT');c.g
 c.label('PUBLISH_CREW_SWAT');a(6,V(19),I(2))
 c.label('PUBLISH_CREW_DONE');a(0xddc,I(ACREW),V(19));c.ret()
 c.label('CHANGE_MODEL');c.get(29,MODEL);c.check(0x803b,[V(29),V(0)],'SWAP_RETURN')
+# 1.2: the model is a decor choice and changes at once; the only wait is a rope motion in progress (the swap would drop CJ)
+c.get(17,ROPE_BUSY);c.eq(17,0,'SWAP_DEFER');c.set(SWAP_MSG,0)
 # Validate the supported set before loading anything.
 for model in [487,497,425]:
  nxt='SWAP_VALIDATE_'+str(model);c.eq(29,model,nxt);c.go('SWAP_VALID');c.label(nxt)
@@ -670,6 +684,7 @@ for var,seat in [(13,1),(14,2),(15,-1),(16,-1)]:
  else:a(0x00aa,V(5),V(9),V(10),V(11));a(0x0362,V(var),V(9),V(10),V(11));c.call('ATTACH_'+str(var))
  c.label(skip)
 a(0x0164,V(12));a(0x00a6,V(30));a(0x0186,V(5),V(12));a(0x0168,V(12),I(2));a(0x0165,V(12),I(1));a(0x07e0,V(12),I(1));a(0x099a,V(5),I(1));a(0x04ba,V(5),V(22));a(0x0249,V(29));a(0xddc,I(STATE),V(7));c.call('PUBLISH');c.call('RESUME_FLIGHT');c.set(BUSY,0);msg(c,'HCSWAP');c.ret()
+c.label('SWAP_DEFER');c.get(17,SWAP_MSG);c.eq(17,0,'SWAP_RETURN');c.set(SWAP_MSG,1);msg(c,'HCSLATE');c.ret()
 c.label('SWAP_NO_PASSENGER');msg(c,'HCSNO');c.go('SWAP_REJECT')
 c.label('SWAP_FAILED');a(0x0249,V(29));a(0xddc,I(STATE),V(7));c.set(BUSY,0);msg(c,'HCSFAIL')
 c.label('SWAP_REJECT');a(0xddc,I(MODEL),V(0))
@@ -681,7 +696,8 @@ a(0x04df,V(5),I(1));c.get(19,FROZEN);c.eq(19,1,'RESUME_GROUND_DONE');a(0x0574,V(
 c.label('RESUME_GROUND_DONE');c.ret()
 c.label('RESUME_PATROL');c.set(PATROL_NEXT,0);c.call('UNFREEZE');c.ret()
 c.label('RESUME_FOLLOW');c.call('UNFREEZE');c.set(TRACKED_TARGET,-1);c.call('RESTORE_FLIGHT');a(0x0726,V(5),V(18),I(-1),F(15));c.ret()
-c.label('RESUME_HOLD');c.call('BLOCK_HOVER');c.ret()
+c.label('RESUME_HOLD');c.get(19,FROZEN);c.eq(19,1,'RESUME_HOLD_FREE');a(0x0574,V(5),I(1));c.ret()   # 1.2: ropes out: the new helicopter hangs frozen on the old one's spot
+c.label('RESUME_HOLD_FREE');c.call('BLOCK_HOVER');c.ret()
 c.label('RESUME_LAND');c.set(LAND_STABLE,0);c.call('SET_LANDING_MISSION');c.ret()
 c.label('RESUME_GROVE_CLIMB');c.call('UNFREEZE');c.call('RESTORE_FLIGHT');a(0x00aa,V(5),V(9),V(10),V(11));a(0x000b,V(11),F(55));a(0x04a2,V(5),V(9),V(10),V(11),F(45),V(11));c.ret()
 c.label('RESUME_GROVE');c.call('UNFREEZE');c.set(GROVE_STREAM,0);c.call('RESTORE_FLIGHT');a(0x04a2,V(5),F(GROVE_X),F(GROVE_Y),F(75),F(30),F(90));c.ret()
@@ -853,7 +869,7 @@ for index,var,seat in [(0,4,-2),(1,13,1),(2,14,2),(3,15,-1),(4,16,-1)]:
   c.go(skip);c.label('CREW_COMMIT_FOOT_'+str(var));a(0x04eb,V(var),I(1))
  c.label(skip)
 for var in [1,2,3]:a(0x0249,V(var))
-a(0xddc,I(STATE),V(7));c.call('PUBLISH');c.get(19,CREWGEN);a(0x000a,V(19),I(1));a(0xddc,I(CREWGEN),V(19));c.call('RESUME_FLIGHT');c.set(BUSY,0);msg(c,'HCCREW');c.ret()
+a(0xddc,I(STATE),V(7));c.call('PUBLISH');c.call('ARM_CREW');c.get(19,CREWGEN);a(0x000a,V(19),I(1));a(0xddc,I(CREWGEN),V(19));c.call('RESUME_FLIGHT');c.set(BUSY,0);msg(c,'HCCREW');c.ret()
 c.label('CREW_ROLLBACK')
 for index in range(5):
  skip='CREW_ROLLBACK_SKIP_'+str(index);c.get(29,CREWNEW+index);c.check(0x056d,[V(29)],skip);a(0x009b,V(29));c.label(skip)
@@ -1151,6 +1167,10 @@ for var in [3,4,5,6]:
  if var in (3,5):a(0x0407,V(22),F(0),F(1.8),F(.3),V(11),V(12),V(13))
  f.label('PRECISE_ENGINE_DONE_'+str(var));f.get(30,GT_SUPP+var-3);f.eq(30,1,'PRECISE_MODE_DONE_'+str(var));f.get(11,SUP_X+var-3);f.get(12,SUP_Y+var-3);f.get(13,SUP_Z+var-3);f.label('PRECISE_MODE_DONE_'+str(var))
  alive(f,var,skip);a(0x00a0,V(var),V(8),V(9),V(10));a(0x000b,V(10),F(.25));a(0x050a,V(8),V(9),V(10),V(11),V(12),V(13),V(17));f.check(0x0023,[F(150),V(17)],skip)
+ # 1.2 dispersion: the aim point is scattered by +-(0.1 m + 1 % of the distance + 2 cm per m/s of helicopter speed) on every axis, before the
+ # line checks, so a gunner is no longer a laser (and the friendly-fire checks look at the line he really fires along)
+ a(0x0087,V(30),V(17));a(0x0013,V(30),F(.01));a(0x000b,V(30),F(.1));a(0x02e3,V(1),V(21));a(0x0013,V(21),F(.02));a(0x005b,V(30),V(21))
+ for aim_reg in (11,12,13):a(0x0208,F(-1),F(1),V(21));a(0x006b,V(21),V(30));a(0x005b,V(aim_reg),V(21))
  a(0x0007,V(31),F(.8));f.check(0x00db,[V(var),V(1)],onfoot);a(0x0007,V(31),F(5.5));f.go(origin)
  f.label(onfoot);f.check(0x0a32,[V(var)],'PRECISE_FOOT_'+str(var));a(0x0007,V(31),F(5.5));f.go(origin)
  f.label('PRECISE_FOOT_'+str(var));squad_owns(f,skip,30,21);f.label(origin)

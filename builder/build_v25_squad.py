@@ -58,8 +58,10 @@ s.label('INIT');a(0)
 s.set(b.SQ_GROUP,0);s.set(b.SQ_SCAN_NEXT,0);s.set(b.SQ_MSG_NEXT,0);s.set(b.SQ_MEDIC_NEXT,0);reset_threats();reset_slots()
 s.label('LOOP');a(1,I(100));a(0x01bd,V(12));a(0xddc,I(b.SQ_HEART),V(12))
 s.check(0x0256,[I(0)],'RELEASE');s.get(19,b.STATE)
-for st in [0,1,4,5,6,13,16]:
+for st in [0,1,4,5,6,13]:
  nxt='STATE_OK_'+str(st);s.eq(19,st,nxt);s.go('RELEASE');s.label(nxt)
+# 1.2: a model swap (state 16) only takes the helicopter's own crew away from the squad; the rope / escort team on the ground carries on
+s.eq(19,16,'STATE_OK_16');s.get(19,b.SQ_ROPE);s.eq(19,1,'RELEASE');s.label('STATE_OK_16')
 s.get(0,b.PUB);alive(0,'RELEASE');s.get(1,b.PUB+1)
 s.get(19,b.SQ_ROPE);s.eq(19,1,'GROUP_NOT_ROPE');a(6,V(17),I(2))
 for i in range(4):s.get(2+i,b.GROUND_PUB+i)
@@ -69,7 +71,7 @@ for i in range(4):s.get(2+i,b.PUB+3+i)
 s.go('GROUP_SET')
 s.label('RELEASE');a(6,V(17),I(0))
 s.label('GROUP_SET');s.get(19,b.SQ_GROUP);s.check(0x803b,[V(17),V(19)],'GROUP_SAME')
-a(0xddc,I(b.SQ_GROUP),V(17));reset_slots();reset_threats()
+a(0xddc,I(b.SQ_GROUP),V(17));reset_slots();reset_threats();s.set(b.FORM_OK,0)
 s.label('GROUP_SAME');s.eq(17,0,'GROUP_ACTIVE');s.go('LOOP')
 s.label('GROUP_ACTIVE');a(0x00a0,V(0),V(9),V(10),V(11));a(6,V(6),I(-1));s.check(0x00df,[V(0)],'CJ_ON_FOOT');a(0x03c0,V(0),V(6));s.label('CJ_ON_FOOT')
 # 1.2: CJ drives when every passenger seat of his car is free at the moment he gets in (decided once per car, before a guard sits down)
@@ -80,11 +82,34 @@ s.go('DRV_DONE');s.label('DRV_PASSENGER');s.set(b.SQ_DRIVES,0);s.label('DRV_DONE
 s.get(7,b.TACTICS);s.get(8,b.FIRE)
 # CJ inside an interior: the team waits outside (no teleport into interior coordinates)
 a(0x077e,V(19));s.eq(19,0,'LOOP')
-s.call('PERCEIVE')
+s.call('ANCHOR');s.call('PERCEIVE')
 for i in range(4):s.get(13+i,b.SQ_T+i)
 a(0x06ac,V(0),V(18))
 for k in range(4):s.call('GUARD_%d'%k)
 s.go('LOOP')
+
+# ---------------------------------------------------------------- formation anchor (1.2)
+# The formation used to be CJ-relative (04C4 follows his heading), so a guard ran round him every time CJ turned on the spot (aiming,
+# looking around). Now it hangs on the unit vector of the direction he is TRAVELLING in (right = (uy, -ux), no trigonometry):
+# it starts as his heading, follows his movement only after he has walked more than 60 degrees off it for 1.5 s, and holds while
+# he stands or rides.
+s.label('ANCHOR');s.get(29,b.FORM_OK);s.eq(29,0,'AN_HAVE')
+a(0x04c4,V(0),F(0),F(1),F(0),V(29),V(30),V(31));a(0x0087,V(26),V(29));a(0x0063,V(26),V(9));a(0x0087,V(27),V(30));a(0x0063,V(27),V(10))
+a(0xddc,I(b.FORM_UX),V(26));a(0xddc,I(b.FORM_UY),V(27));a(0xddc,I(b.FORM_PX),V(9));a(0xddc,I(b.FORM_PY),V(10));a(0xddc,I(b.FORM_T),V(12));s.set(b.FORM_CT,0);s.set(b.FORM_OK,1);s.ret()
+s.label('AN_HAVE');s.get(29,b.FORM_PX);s.get(30,b.FORM_PY);s.get(31,b.FORM_T)
+a(0xddc,I(b.FORM_PX),V(9));a(0xddc,I(b.FORM_PY),V(10));a(0xddc,I(b.FORM_T),V(12))
+s.eq(6,-1,'AN_RET')
+a(0x0087,V(26),V(9));a(0x0063,V(26),V(29));a(0x0087,V(27),V(10));a(0x0063,V(27),V(30));a(0x0509,F(0),F(0),V(26),V(27),V(28))
+a(0x0085,V(29),V(12));a(0x0062,V(29),V(31));s.check(0x0019,[V(29),I(400)],'AN_DT_OK');s.ret()
+s.label('AN_DT_OK');a(0x0093,V(30),V(29));a(0x0013,V(30),F(.0012));s.check(0x0025,[V(28),V(30)],'AN_IDLE');s.check(0x0023,[F(3),V(28)],'AN_IDLE')
+a(0x0073,V(26),V(28));a(0x0073,V(27),V(28));s.get(29,b.FORM_UX);s.get(30,b.FORM_UY)
+a(0x0087,V(31),V(26));a(0x006b,V(31),V(29));a(0x0087,V(28),V(27));a(0x006b,V(28),V(30));a(0x005b,V(31),V(28))
+s.check(0x0021,[V(31),F(.5)],'AN_OFF');s.set(b.FORM_CT,0);s.ret()
+s.label('AN_OFF');s.get(29,b.FORM_CT);s.eq(29,0,'AN_RUN');a(0xddc,I(b.FORM_CT),V(12));s.ret()
+s.label('AN_RUN');a(0x0085,V(30),V(12));a(0x0062,V(30),V(29));s.check(0x0019,[V(30),I(1500)],'AN_RET')
+a(0xddc,I(b.FORM_UX),V(26));a(0xddc,I(b.FORM_UY),V(27));s.set(b.FORM_CT,0);s.ret()
+s.label('AN_IDLE');s.set(b.FORM_CT,0)
+s.label('AN_RET');s.ret()
 
 # ---------------------------------------------------------------- perception
 # v40.1: the work is spread over four ticks (phase in SQ_SCAN_NEXT) so no single frame carries
@@ -219,13 +244,37 @@ s.label('CL_RET');s.ret()
 
 # ---------------------------------------------------------------- one guard
 def formation(k,table,lead=True):
- """26-28 = CJ-relative point (x right, y ahead of CJ); y is pushed ahead while CJ moves."""
- ox,oy=table[k]
- a(0x0007,V(30),F(0))
- if lead:
-  a(0x0087,V(30),V(18));a(0x0013,V(30),F(.9))
-  cap=uid('LEAD_CAP');s.check(0x0021,[V(30),F(6)],cap);a(0x0007,V(30),F(6));s.label(cap)
- a(0x0007,V(29),F(ox));a(0x000b,V(30),F(oy));a(0x04c4,V(0),V(29),V(30),F(0),V(26),V(27),V(28))
+  """26-28 = point `ox` to the right and `oy` ahead of CJ in the formation frame (unit travel direction u = FORM_UX/UY, right = (uy, -ux));
+  `oy` is pushed ahead while CJ moves. Slots (lead=True) step out of CJ's line of fire while he shoots."""
+  ox,oy=table[k]
+  a(0x0007,V(31),F(oy))
+  if lead:
+   a(0x0087,V(30),V(18));a(0x0013,V(30),F(.9))
+   cap=uid('LEAD_CAP');s.check(0x0021,[V(30),F(6)],cap);a(0x0007,V(30),F(6));s.label(cap)
+   a(0x005b,V(31),V(30))
+  s.get(29,b.FORM_UX);s.get(30,b.FORM_UY)
+  a(0x0087,V(26),V(30));a(0x0013,V(26),F(ox));a(0x0087,V(27),V(29));a(0x0013,V(27),F(-ox))
+  a(0x0087,V(28),V(29));a(0x006b,V(28),V(31));a(0x006b,V(30),V(31))
+  a(0x005b,V(26),V(28));a(0x005b,V(27),V(30));a(0x005b,V(26),V(9));a(0x005b,V(27),V(10));a(0x0087,V(28),V(11))
+  if lead:fire_line_clear()
+def fire_line_clear():s.call('FIRE_LINE')
+def emit_fire_line():
+  """Subroutine: V26/V27 = slot. While CJ shoots (aim line younger than 1.2 s) a slot within 2 m of his line of fire, ahead of him,
+  is pushed sideways (right = (dy, -dx) of the unit aim direction); returns V28 = CJ z."""
+  skip='FL_SKIP';left='FL_LEFT';go='FL_GO'
+  s.label('FIRE_LINE')
+  s.get(29,b.CJ_AIM_T);a(0x0085,V(30),V(12));a(0x0062,V(30),V(29));s.check(0x8019,[V(30),I(1200)],skip)
+  s.get(29,b.CJ_AIM_X);s.get(30,b.CJ_AIM_Y);a(0x0509,F(0),F(0),V(29),V(30),V(31));s.check(0x0021,[V(31),F(.2)],skip)
+  a(0x0073,V(29),V(31));a(0x0073,V(30),V(31))
+  a(0x0087,V(31),V(26));a(0x0063,V(31),V(9));a(0x0087,V(28),V(27));a(0x0063,V(28),V(10))
+  a(0x0087,V(19),V(31));a(0x006b,V(19),V(29));a(0x0087,V(20),V(28));a(0x006b,V(20),V(30));a(0x005b,V(19),V(20));s.check(0x0021,[V(19),F(.5)],skip)
+  a(0x006b,V(31),V(30));a(0x006b,V(28),V(29));a(0x0063,V(31),V(28))
+  a(0x0087,V(19),V(31));s.check(0x0021,[V(19),F(0)],left);a(0x0007,V(20),F(1));s.go(go)
+  s.label(left);a(0x0013,V(19),F(-1));a(0x0007,V(20),F(-1));s.label(go)
+  s.check(0x0023,[F(2),V(19)],skip);a(0x0087,V(31),V(19));a(0x0013,V(31),F(-1));a(0x000b,V(31),F(2))
+  a(0x006b,V(31),V(20));a(0x0087,V(28),V(30));a(0x006b,V(28),V(31));a(0x005b,V(26),V(28))
+  a(0x0087,V(28),V(29));a(0x006b,V(28),V(31));a(0x0063,V(27),V(28))
+  s.label(skip);a(0x0087,V(28),V(11));s.ret()
 def form_point(k):
  """26-28 = this guard's formation point for the current tactics."""
  bg=uid('FP_BG');done=uid('FP_DONE');s.eq(7,1,bg);formation(k,AS_FORM);s.go(done);s.label(bg);formation(k,BG_FORM);s.label(done)
@@ -349,8 +398,13 @@ def guard(k):
  a(0x0087,V(28),V(23));a(0x000b,V(28),F(2));a(0x02ce,V(26),V(27),V(28),V(28));a(0x0087,V(31),V(23));a(0x000b,V(31),F(-.4));s.check(0x8025,[V(28),V(31)],P+'VAULT_DONE')
  a(0x0604,V(29),V(30),V(31));a(0x0173,V(G),V(31));a(0x04eb,V(G),I(0));a(0x078f,V(G),I(1));setk_lit(k,'TASK',11);later(k,1800);s.ret()
  s.label(P+'VAULT_DONE')
- # ---- combat: own threat (spread over the list), else the first one
- a(0x0085,V(25),V(13+k));alive(25,P+'T0');s.go(P+'COMBAT')
+ # ---- combat: 1.2: a guard stays on the target he is already engaging while it lives and is still a threat (no flipping at every
+ # perception pass); guard 0 always takes the top threat, so the team never ignores a new danger. Otherwise: own threat (spread
+ # over the list), else the first one
+ if k>0:
+  s.get(25,fk(k,'TGT'));alive(25,P+'PICK')
+  for j in range(4):s.check(0x803b,[V(25),V(13+j)],P+'COMBAT')
+ s.label(P+'PICK');a(0x0085,V(25),V(13+k));alive(25,P+'T0');s.go(P+'COMBAT')
  s.label(P+'T0');a(0x0085,V(25),V(13));alive(25,P+'PEACE')
  s.label(P+'COMBAT');a(0x00a0,V(25),V(26),V(27),V(28));a(0x0087,V(29),V(26));a(0x0063,V(29),V(9));a(0x0087,V(30),V(27));a(0x0063,V(30),V(10))
  a(0x0509,V(9),V(10),V(26),V(27),V(31));s.check(0x0023,[F(.5),V(31)],P+'D_OK');a(0x0007,V(31),F(.5));s.label(P+'D_OK');a(0x0073,V(29),V(31));a(0x0073,V(30),V(31))
@@ -363,20 +417,22 @@ def guard(k):
  s.label(P+'RELOAD_ISSUE');a(0x05c5,V(G),I(1500));setk_lit(k,'TASK',15);later(k,1500);msg('SQRLD');s.ret()
  s.label(P+'NO_RELOAD')
  s.eq(7,1,P+'BODYGUARD')
- # ASSAULT: pair 0/1 advances crouched (leash 40 m), pair 2/3 flanks 9 m to the side of the threat
- if k in (0,1):
+ # ASSAULT: pair 0/1 advances crouched, guard 2 flanks 9 m to the side of the threat, never further than 25 m from CJ (1.2: was 40 m);
+ # guard 3 is the medic and never leaves CJ (he fights from his place like in BODYGUARD)
+ if k==3:s.go(P+'BODYGUARD')
+ elif k in (0,1):
   # bounding overwatch: every 3 s the pair swaps roles - one runs up to 6 m closer while firing
   # (never closer than 8 m), the other covers him crouched
-  leash(k,G,40,7);cover=uid(P+'BOUND_COVER');step_ok=uid(P+'BOUND_STEP')
+  leash(k,G,25,7);cover=uid(P+'BOUND_COVER');step_ok=uid(P+'BOUND_STEP')
   a(0x0509,V(21),V(22),V(26),V(27),V(31));s.check(0x0021,[V(31),F(10)],cover)
   a(0x0085,V(19),V(12));a(0x0016,V(19),I(3000));a(0x0085,V(20),V(19));a(0x0016,V(20),I(2));a(0x0012,V(20),I(2));a(0x0062,V(19),V(20));s.eq(19,k,cover)
   a(0x0087,V(28),V(31));a(0x000b,V(28),F(-8));s.check(0x0021,[V(28),F(6)],step_ok);a(0x0007,V(28),F(6));s.label(step_ok)
   a(0x0087,V(29),V(26));a(0x0063,V(29),V(21));a(0x0073,V(29),V(31));a(0x006b,V(29),V(28));a(0x005b,V(29),V(21))
   a(0x0087,V(30),V(27));a(0x0063,V(30),V(22));a(0x0073,V(30),V(31));a(0x006b,V(30),V(28));a(0x005b,V(30),V(22))
   a(0x0087,V(26),V(29));a(0x0087,V(27),V(30));a(0x0087,V(28),V(23));shoot_move(k,G,2500)
-  s.label(cover);engage_duck(k,G,40)
+  s.label(cover);engage_duck(k,G,25)
  else:
-  side=-1 if k==2 else 1;leash(k,G,40,7)
+  side=-1;leash(k,G,25,7)
   a(0x0509,V(21),V(22),V(26),V(27),V(31));close=uid(P+'FLANK_CLOSE');s.check(0x0021,[V(31),F(10)],close)
   a(0x0087,V(31),V(30));a(0x0013,V(31),F(-9*side));a(0x005b,V(26),V(31));a(0x0087,V(31),V(29));a(0x0013,V(31),F(9*side));a(0x005b,V(27),V(31))
   a(0x0509,V(21),V(22),V(26),V(27),V(31));s.check(0x0021,[V(31),F(3)],close);shoot_move(k,G,1500)
@@ -433,6 +489,7 @@ def guard(k):
  s.label(P+'DEAD');s.get(25,fk(k,'DEAD'));s.eq(25,0,R);s.get(25,fk(k,'TASK'));s.eq(25,-1,P+'DEAD_NEW');s.ret()
  s.label(P+'DEAD_NEW');setk_lit(k,'DEAD',1);msg('SQDOWN',False)
  s.label(R);s.ret()
+emit_fire_line()
 for k in range(4):guard(k)
 
 TEXTS={'SQXF': '~r~SHOTS AT CJ - FRONT!~w~ Covering him.',

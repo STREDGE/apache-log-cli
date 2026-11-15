@@ -15,10 +15,13 @@ def last(w,op,who):
  o=orders(w,op,who);assert o,(hex(op),who);return o[-1]
 def steps(w,vms,n):w.step(*vms,n=n)
 
-def escort_world(tactics=0,fire=3):
+def escort_world(tactics=0,fire=3,crew=None):
  """Support following CJ, then TEAM ON FOOT: rope hover, four guards down, back to FOLLOW."""
  w,c,_=setup();summon(w,c);ground=VM('Helicover_Ground',w);sq=VM('Helicover_Squad',w)
- w.health[1]=100;w.shared[b.TACTICS]=tactics;w.shared[b.FIRE]=fire;w.step(c,ground,sq,n=3)
+
+ w.health[1]=100;w.shared[b.TACTICS]=tactics;w.shared[b.FIRE]=fire
+ if crew is not None:w.shared[b.CREW]=crew
+ w.step(c,ground,sq,n=3)
  w.shared[b.CMD]=16;w.step(c,ground,sq,n=6)
  assert w.shared[b.STATE]==19 and w.shared[b.ESCORT_PENDING]==1,(w.shared[b.STATE],w.messages)
  w.car=[c.v[26],c.v[27],c.v[28]+18.];w.speed=0.;w.step(c,ground,sq,n=40)
@@ -159,6 +162,163 @@ w,c,_=setup();summon(w,c);command(w,c,3,ticks=5);ground=VM('Helicover_Ground',w)
 w.shared[b.ESCORT_ON]=2;w.shared[b.ESCORT_CMD]=1;w.playing=False;w.step(ground,n=4)
 assert w.shared[b.ESCORT_ON]==0,w.shared[b.ESCORT_ON]
 passed('CJ dies / is arrested while a team deployment starts: ESCORT_ON is reset, support is not stuck on a team that never came')
+
+# a recall for a team that is gone by the time the helicopter arrives does not leave it hovering frozen
+w,c,ground,sq,team=escort_world();V=(c,ground,sq)
+w.car=[0.,-40.,28.];w.shared[b.CMD]=17;steps(w,V,6);assert w.shared[b.STATE]==19 and w.shared[b.ESCORT_PENDING]==2
+for t_ in team:w.dead.add(t_)
+steps(w,V,12);w.car=[c.v[26],c.v[27],c.v[28]+18.];w.speed=0.;steps(w,V,60)
+assert w.shared[b.ESCORT_ON]==0 and w.shared[b.STATE]==2 and not w.frozen.get(c.v[5]),(w.shared[b.ESCORT_ON],w.shared[b.STATE],w.messages)
+passed('Recall for a team that no longer exists: the pilot does not hang frozen, he goes back to FOLLOW')
+
+# =================================================================== E3: squad tactics
+def anchor_scene():
+ w,c,ground,sq,team=escort_world();V=(c,ground,sq)
+ for k,t_ in enumerate(team):w.pos[t_]=[BG[k][0],BG[k][1],0.]
+ w.walk.clear();w.calls.clear();w.now+=1000;steps(w,V,3);return w,c,V,team
+# the formation hangs on the direction CJ travels in, not on the way he faces
+w,c,V,team=anchor_scene()
+assert (round(w.shared[b.FORM_UX],2),round(w.shared[b.FORM_UY],2))==(0.,1.),(w.shared[b.FORM_UX],w.shared[b.FORM_UY])
+w.velocity[1]=[3.,0.,0.];w.char_speed={1:3.};steps(w,V,8)
+assert w.shared[b.FORM_UY]>.99,'a sidestep of 0.8 s does not turn the formation'
+steps(w,V,10);assert w.shared[b.FORM_UX]>.99 and abs(w.shared[b.FORM_UY])<.05,(w.shared[b.FORM_UX],w.shared[b.FORM_UY])
+passed('Formation anchor: walking 60+ degrees off the old direction for 1.5 s re-anchors it, a short sidestep does not')
+w.velocity.pop(1);w.char_speed={};ux,uy=w.shared[b.FORM_UX],w.shared[b.FORM_UY];w.now+=5000;steps(w,V,20)
+assert (w.shared[b.FORM_UX],w.shared[b.FORM_UY])==(ux,uy)
+passed('Standing still (turning, aiming) never rotates the formation: the guards do not run round CJ')
+# the point guard ahead of CJ is the one at (0, 3.2) east of CJ once the anchor points east
+w.pos[1]=w.player=[0.,0.,0.]
+for k,t_ in enumerate(team):w.pos[t_]=[0.,0.,0.]
+w.calls.clear();w.now+=1500;steps(w,V,4)
+o=last(w,0x5d3,team[0]);assert abs(o[1]-BG[0][1])<.01 and abs(o[2]+BG[0][0])<.01,o     # ahead (y of the table) is now +x, right is -y
+o=last(w,0x5d3,team[1]);assert abs(o[1]-BG[1][1])<.01 and abs(o[2]+BG[1][0])<.01,o     # left rear guard of the diamond
+passed('Slots are placed in the anchored frame: ahead = travel direction, right = (uy, -ux)')
+# CJ shooting ahead: nobody stands in his line of fire
+w,c,V,team=anchor_scene()
+def aim_north(w):
+ for key,val in ((b.CJ_AIM_X,0.),(b.CJ_AIM_Y,1.),(b.CJ_AIM_Z,0.),(b.CJ_AIM_PX,0.),(b.CJ_AIM_PY,0.),(b.CJ_AIM_PZ,1.)):w.shared[key]=val
+ w.shared[b.CJ_AIM_T]=w.now;w.shared[b.CJ_SHOT_T]=w.now
+aim_north(w);w.calls.clear();w.now+=1500;aim_north(w);steps(w,V,3)
+o=last(w,0x5d3,team[0]);assert abs(o[1])>=1.9,('the point guard stepped out of the line',o)
+for k in (1,2):
+ o=last(w,0x5d3,team[k]) if orders(w,0x5d3,team[k]) else None
+ assert o is None or abs(math.dist(o[1:3],[0.,0.])-math.dist(BG[k],[0.,0.]))<.05,(k,o)    # slots beside the line stay where they are
+passed('CJ shooting ahead: the guard in front of him steps 2 m out of his line of fire, the others stay in place')
+w.calls.clear();w.now+=3000;steps(w,V,3)
+o=last(w,0x5d3,team[0]) if orders(w,0x5d3,team[0]) else None
+assert o is None or abs(o[1])<.05,('after the shooting stops (aim line older than 1.2 s) he returns to his slot',o)
+passed('When CJ stops shooting the guard returns to his slot')
+# assault leash is 25 m, the medic stays
+w,c,ground,sq,team=escort_world(tactics=1);V=(c,ground,sq)
+AS=sqb.AS_FORM
+for k,t_ in enumerate(team):w.pos[t_]=list(AS[k])+[0.]
+hostile=950;w.exists.add(hostile);w.pos[hostile]=[40.,0.,0.];w.pedtype[hostile]=7;w.weapons[hostile]=30;w.civilians=[hostile];w.damage.add((1,hostile))
+w.pos[team[0]]=[0.,27.,0.];w.calls.clear();w.now+=3000;steps(w,V,6)
+o=last(w,0x5d3,team[0]);assert abs(o[2]-AS[0][1])<.5 and not orders(w,0x637,team[0]),o
+passed('Assault: a guard 27 m from CJ turns back to his slot (25 m cap, was 40 m)')
+assert not orders(w,0x637,team[3]),'the medic never joins the advance'
+passed('Assault: the medic stays with CJ')
+# a guard keeps his target while it is alive and still a threat
+def two_hostiles():
+ w,c,ground,sq,team=escort_world();V=(c,ground,sq)
+ for k,t_ in enumerate(team):w.pos[t_]=[BG[k][0],BG[k][1],0.]
+ hs=[]
+ for i,(x,y) in enumerate([(14.,6.),(16.,-6.),(12.,0.)]):
+  h=960+i;w.exists.add(h);w.pos[h]=[x,y,0.];w.pedtype[h]=7;w.weapons[h]=30;w.shooting_chars.add(h);hs.append(h)
+ w.civilians=list(hs);w.damage.add((1,hs[0]));return w,c,V,team,hs
+w,c,V,team,hs=two_hostiles();w.now+=3000;steps(w,V,12)
+mine=last(w,0x634,team[3])[1];assert mine in hs,mine
+D=963;w.exists.add(D);w.pos[D]=[7.,3.,0.];w.pedtype[D]=7;w.weapons[D]=30;w.shooting_chars.add(D);w.civilians.append(D);w.damage.add((1,D))
+w.calls.clear();w.now+=1000;steps(w,V,10)
+lst=[w.shared[b.SQ_T+i] for i in range(4)];assert lst[0]==D,('a closer attacker takes the top of the list',lst)
+o3=orders(w,0x634,team[3]);assert not o3 or all(o[1]==mine for o in o3),(mine,o3,lst)
+o0=orders(w,0x634,team[0]);assert o0 and o0[-1][1]==D,('guard 0 always takes the top threat',o0)
+passed('Guards keep the target they are on while it lives (no flipping when the threat list is reshuffled)')
+
+# =================================================================== E4: gunners are not lasers
+fire_world,target=g['fire_world'],g['target']
+def bullet_ends(jitter,dist=40.):
+ w,c,f=fire_world();w.jitter=jitter;npc=target(w);w.pos[npc]=[dist,0.,0.];w.damage.add((1,npc));w.speed=0.;w.step(c,f,n=40)
+ return [x[2][3:6] for x in calls(w,0x6bc)],w,npc
+ends,w,npc=bullet_ends(False)
+assert len(ends)>=10 and max(math.dist(e,ends[0]) for e in ends)<.05,('no jitter in the mock: every bullet lands on the same point',len(ends))
+ends,w,npc=bullet_ends(True)
+cx=[sum(e[i] for e in ends)/len(ends) for i in range(3)];spread=[math.dist(e,cx) for e in ends]
+assert len(ends)>=10 and max(spread)>.15,('the bullets scatter',max(spread))
+r=.1+.01*40.+.02*0.;assert max(spread)<=2*r*math.sqrt(3)+.7,('but stay near the target (+-%.2f m per axis at 40 m)'%r,max(spread))
+passed('Door gunners scatter their bullets (about +-0.5 m at 40 m) instead of putting every round on one point')
+near,_,_=bullet_ends(True,dist=8.);far,_,_=bullet_ends(True,dist=70.)
+def sd(e):
+ m=[sum(x[i] for x in e)/len(e) for i in range(3)];return math.sqrt(sum(math.dist(x,m)**2 for x in e)/len(e))
+assert sd(near)<sd(far),(sd(near),sd(far))
+passed('The scatter grows with the distance to the target (%.2f m at 8 m, %.2f m at 70 m)'%(sd(near),sd(far)))
+
+# =================================================================== E5: decor (model, clothes, weapon) changes at once
+for crew,expect in ((0,[106,107,106,107]),(1,[287]*4),(2,[285]*4)):
+ w,c,ground,sq,team=escort_world(crew=crew)
+ assert [w.skin[t_] for t_ in team]==expect,(crew,[w.skin[t_] for t_ in team])
+passed('The team that ropes down wears the crew setting: Grove 106/107, Army 287, SWAT 285 (it was always SWAT)')
+w,c,ground,sq,team=escort_world();V=(c,ground,sq)
+for k,t_ in enumerate(team):w.pos[t_]=[BG[k][0],BG[k][1],0.];w.health[t_]=130;w.armor[t_]=40;w.actor_heading[t_]=33.
+w.teleports.clear();old=list(team);w.shared[b.CREW]=1;steps(w,V,12)
+new=[w.shared[b.GROUND_PUB+i] for i in range(4)]
+assert all(n_ not in old and w.skin[n_]==287 for n_ in new) and all(o_ not in w.exists for o_ in old),(old,new,[w.skin.get(n_) for n_ in new])
+assert all(w.pos[n_][:2]==[BG[i][0],BG[i][1]] and w.health[n_]==130 and w.armor[n_]==40 and w.actor_heading[n_]==33. for i,n_ in enumerate(new)),[(w.pos[n_],w.health[n_],w.armor[n_]) for n_ in new]
+assert w.shared[b.TEAM_CREW]==1 and w.shared[b.ESCORT_ON]==1 and not w.teleports,(w.shared[b.TEAM_CREW],w.shared[b.ESCORT_ON],w.teleports)
+passed('Changing the crew on the menu re-dresses the team on the ground at once: same spot, heading, health and armour, nobody teleports')
+w.shared[b.CREW]=0;steps(w,V,12);new2=[w.shared[b.GROUND_PUB+i] for i in range(4)]
+assert [w.skin[n_] for n_ in new2]==[106,107,106,107] and w.shared[b.TEAM_CREW]==0
+passed('Grove clothes alternate between the two Families skins')
+# a guard riding in a car is re-dressed as soon as he gets out
+w,c,ground,sq,team=escort_world();V=(c,ground,sq)
+car=777;w.exists.add(car);w.cars[car]={'pos':[0.,0.,0.],'heading':0.};w.model[car]=400;w.incar[1]=car;w.incar[team[1]]=car;w.shared[b.CREW]=1;steps(w,V,10)   # CJ drives, one guard rides with him
+assert w.skin[team[1]]==285 and team[1] in w.exists and w.shared[b.TEAM_CREW]==2,'the passenger keeps his clothes while he rides'
+hs=[w.shared[b.GROUND_PUB+i] for i in range(4)];riders=[h for h in hs if h in w.incar];walkers=[h for h in hs if h not in w.incar]
+assert team[1] in riders and walkers and all(w.skin[h]==285 for h in riders) and all(w.skin[h]==287 for h in walkers),(hs,riders,[w.skin[h] for h in hs])
+w.incar.pop(1);[w.incar.pop(h,None) for h in riders];steps(w,V,8);assert all(w.skin[w.shared[b.GROUND_PUB+i]]==287 for i in range(4)) and w.shared[b.TEAM_CREW]==1,[w.skin[w.shared[b.GROUND_PUB+i]] for i in range(4)]
+passed('A guard in a car keeps the old clothes until he steps out, then changes in place')
+# the weapon is live as well
+w,c,ground,sq,team=escort_world();V=(c,ground,sq);w.calls.clear();w.shared[b.WEAPON_SETTING]=29;steps(w,V,8)
+assert all(any(x[1]==0x1b2 and x[2][0]==t_ and x[2][1]==29 for x in w.calls) for t_ in team),'every guard gets the new weapon at once'
+passed('Changing the crew weapon arms the team on the ground at once')
+# new heli crew members are armed the moment they are created (not at the next Fire pass)
+w,c,_=setup();summon(w,c);w.calls.clear();w.shared[b.CREW]=1;w.step(c,n=10)
+fresh=[c.v[v] for v in (13,14,15,16)]
+assert all(any(x[1]==0x1b2 and x[2][0]==g_ for x in w.calls) for g_ in fresh),'gunners hold a weapon right after the swap'
+passed('Door gunners created by a crew change are armed immediately')
+# the model swap waits only for a rope motion
+w,c,_=setup();summon(w,c);old=c.v[5];w.shared[b.ROPE_BUSY]=1;w.shared[b.MODEL]=497;w.messages.clear();w.step(c,n=6)
+assert c.v[5]==old and 'HCSLATE' in w.messages and w.messages.count('HCSLATE')==1,(c.v[5],old,w.messages)
+w.shared[b.ROPE_BUSY]=0;w.step(c,n=6);assert c.v[5]!=old and w.model[c.v[5]]==497 and 'HCSWAP' in w.messages,(c.v[5],w.messages)
+passed('Model swap: instant, except while somebody hangs on a rope (then right after it ends, one message)')
+# swapping the helicopter while the ropes hang out and CJ has not climbed yet: the rope worker follows, the new one stays frozen
+w,c,_=setup();summon(w,c);command(w,c,3,ticks=5);w.car=[0.,0.,18.];w.speed=0.;ground=VM('Helicover_Ground',w);w.step(c,ground,n=3)
+w.shared[b.ROPE_COMMAND]=1;w.step(c,ground,n=10);w.now+=8000;w.step(c,ground,n=10)
+assert w.shared[b.GROUND_PUB]!=-1 and w.shared[b.ROPE_BUSY]==0,(w.shared[b.GROUND_PUB],w.shared[b.ROPE_BUSY])
+old=c.v[5];ropes=[w.shared[b.GROUND_PUB+i] for i in range(4)];w.shared[b.MODEL]=497;w.step(c,ground,n=12)
+assert c.v[5]!=old and w.frozen.get(c.v[5]) and all(r_ in w.exists for r_ in ropes) and w.shared[b.GROUND_PUB]==ropes[0],('rope session survives the swap',c.v[5],old,w.shared[b.GROUND_PUB],ropes)
+passed('Helicopter swapped while the ropes are out: the rope session carries on with the new helicopter, still frozen on the spot')
+
+# the same swap with a team on the ground, and a crew change while the ropes are out
+w,c,ground,sq,team=escort_world();V=(c,ground,sq);old=c.v[5];w.shared[b.MODEL]=497;steps(w,V,14)
+assert c.v[5]!=old and w.shared[b.ESCORT_ON]==1 and all(t_ in w.exists for t_ in team) and w.shared[b.GROUND_PUB]==team[0],(w.shared[b.ESCORT_ON],w.messages)
+passed('Helicopter model changed while the escort team is on the ground: the team is not recalled or lost')
+w,c,_=setup();summon(w,c);command(w,c,3,ticks=5);w.car=[0.,0.,18.];w.speed=0.;ground=VM('Helicover_Ground',w);w.step(c,ground,n=3)
+w.shared[b.ROPE_COMMAND]=1;w.step(c,ground,n=10);w.now+=8000;w.step(c,ground,n=10);ropes=[w.shared[b.GROUND_PUB+i] for i in range(4)]
+w.shared[b.CREW]=1;w.step(c,ground,n=14)
+assert w.shared[b.GROUND_PUB]==ropes[0] or all(r_ in w.exists or w.skin.get(w.shared[b.GROUND_PUB+i])==287 for i,r_ in enumerate(ropes)),(ropes,)
+assert w.shared[b.GROUND_PUB]!=-1 and w.frozen.get(c.v[5]) and w.shared[b.ACREW]==1,(w.shared[b.GROUND_PUB],w.shared[b.ACREW])
+passed('Crew changed while the ropes are out: the rope session carries on, the helicopter stays frozen on its spot')
+# a swap asked for during CJ\'s climb waits until the rope work is over, then CJ is moved into the new helicopter
+w,c,_=setup();summon(w,c);command(w,c,3,ticks=5);w.car=[0.,0.,18.];w.speed=0.;ground=VM('Helicover_Ground',w);w.step(c,ground,n=3)
+w.shared[b.ROPE_COMMAND]=1;w.step(c,ground,n=5);rope=[w.shared[b.GROUND_PUB+i] for i in range(4)]
+for ch,(x,y) in zip(rope,[(-1.5,1.2),(1.5,1.2),(-1.5,-1.2),(1.5,-1.2)]):w.pos[ch]=[x,y,.7]
+w.now+=8000;w.player=[0.,-3.,.7];w.step(c,ground,n=8);assert w.control is False
+old=c.v[5];w.shared[b.MODEL]=497;w.messages.clear();w.step(c,ground,n=4)
+assert c.v[5]==old and w.control is False and 'HCSLATE' in w.messages,(c.v[5],old,w.messages)
+w.step(c,ground,n=400)
+assert c.v[5]!=old and w.model[c.v[5]]==497 and w.incar.get(1)==c.v[5] and w.control is True and not w.frozen.get(old),(c.v[5],old,w.incar.get(1),w.control)
+passed('Model swap asked for during the climb waits for the end of the rope work, then CJ sits in the new helicopter')
 
 text='\n'.join(results)+'\nMocked script execution only: real flight, pathing and animations are not simulated.\n'
 (b.OUT/'realism_tests.txt').write_text(text);print(text)

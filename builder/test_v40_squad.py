@@ -164,20 +164,20 @@ passed('Rope pickup with the team on the ground: the same team covers CJ (only t
 # ------------------------------------------------------------------ assault tactics
 w,c,ground,sq,team=escort_world(tactics=1);V=(c,ground,sq)
 for k,t in enumerate(team):w.pos[t]=list(sqb.AS_FORM[k])+[0.]
-hostile=950;w.exists.add(hostile);w.pos[hostile]=[30.,0.,0.];w.pedtype[hostile]=7;w.weapons[hostile]=30;w.civilians=[hostile];w.damage.add((1,hostile))
+hostile=950;w.exists.add(hostile);w.pos[hostile]=[20.,0.,0.];w.pedtype[hostile]=7;w.weapons[hostile]=30;w.civilians=[hostile];w.damage.add((1,hostile))
 w.now=(w.now//3000+1)*3000+100;w.calls.clear();w.messages.clear();steps(w,V,6)
 mover,cover=(team[0],team[1]) if (w.now//3000)%2==0 else (team[1],team[0])
-o=last(w,0x637,mover);g0=w.pos[mover];step=min(math.dist(g0[:2],[30.,0.])-8.,6.)
-assert o[7]==hostile and abs(math.dist(o[1:3],g0[:2])-step)<.05 and math.dist(o[1:3],[30.,0.])<math.dist(g0[:2],[30.,0.]),o
+o=last(w,0x637,mover);g0=w.pos[mover];step=min(math.dist(g0[:2],[20.,0.])-8.,6.)
+assert o[7]==hostile and abs(math.dist(o[1:3],g0[:2])-step)<.05 and math.dist(o[1:3],[20.,0.])<math.dist(g0[:2],[20.,0.]),o
 assert last(w,0x634,cover)[1]==hostile and not orders(w,0x637,cover)
 assert 'SQAR' in w.messages,w.messages
-o=last(w,0x637,team[2]);assert abs(o[1]-30.)<.01 and abs(o[2]+9.)<.01 and o[4]==6 and o[7]==hostile,o
-o=last(w,0x637,team[3]);assert abs(o[1]-30.)<.01 and abs(o[2]-9.)<.01 and o[7]==hostile,o
-passed('Assault contact: one man bounds forward firing while his partner covers crouched; flankers move out firing')
+o=last(w,0x637,team[2]);assert abs(o[1]-20.)<.01 and abs(o[2]+9.)<.01 and o[4]==6 and o[7]==hostile,o
+assert not orders(w,0x637,team[3]),'the medic never leaves CJ to flank'
+passed('Assault contact: one man bounds forward firing while his partner covers crouched; the flanker moves out firing; the medic stays with CJ')
 w.now+=3000;w.calls.clear();steps(w,V,4)
 assert orders(w,0x637,cover) and last(w,0x634,mover)[1]==hostile
 passed('Bounding overwatch: every 3 s the pair swaps who moves and who covers')
-w.pos[team[2]]=[29.,-8.,0.];w.calls.clear();steps(w,V,3);assert last(w,0x7a5,team[2])[1]==hostile
+w.pos[team[2]]=[19.,-8.,0.];w.calls.clear();steps(w,V,3);assert last(w,0x7a5,team[2])[1]==hostile
 passed('A flanker who reached his flank point attacks from there')
 w.pos[team[0]]=[0.,60.,0.];w.calls.clear();steps(w,V,3)
 o=last(w,0x5f5,team[0]);assert o[4]==7 and abs(o[2]-sqb.AS_FORM[0][1])<.01 and not orders(w,0xa1,team[0]),o   # 1.2: beyond 40 m he runs back on the path network

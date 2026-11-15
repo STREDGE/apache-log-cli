@@ -151,6 +151,7 @@ class VM:
    elif op==0x1f5:put(1,1)
    elif op==0x1b4:w.control=bool(vals[1])
    elif op==0x83c:w.velocity[vals[0]]=vals[1:4]
+   elif op==0x208:put(2,w.rng.uniform(vals[0],vals[1]) if getattr(w,'jitter',False) else (vals[0]+vals[1])/2.)   # GENERATE_RANDOM_FLOAT_IN_RANGE (centre unless a test enables the jitter)
    elif op==0x1c2:w.released.add(vals[0])   # MARK_CHAR_AS_NO_LONGER_NEEDED: the game removes him later, out of sight
    elif op in [0x5d3,0x5f5]:w.walk[vals[0]]={'to':list(vals[1:4]),'speed':{4:1.6,5:3.,6:4.6,7:6.5}.get(int(vals[4]),1.6),'until':w.now+int(vals[5])}
    elif op==0xa1:
