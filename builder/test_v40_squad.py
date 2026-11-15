@@ -451,8 +451,10 @@ def squad_scene(npcs):
 w,V,team=squad_scene([(980,20.,0.,30,True),(981,-40.,0.,22,False)]);w.weapons[981]=30;V=V+(VM('Helicover_Fire',w),);w.messages.clear();steps(w,V,8)
 assert w.shared[b.SQ_T]==980 and 981 not in [w.shared[b.SQ_T+i] for i in range(4)] and 'SQXR' in w.messages,([w.shared[b.SQ_T+i] for i in range(4)],w.messages)
 w.shot_at={981:[1.5,-1.,.5]};w.shooting_chars={981};w.calls.clear();steps(w,V,45);w.shooting_chars=set()
-men=[w.shared[b.SQ_T+i] for i in range(4)];assert {980,981}<=set(men) and any(fights(w,t,981) for t in team) and any(fights(w,t,980) for t in team) and not invariants(w),(men,w.messages,invariants(w))
-passed('Squad: a second man opens fire on CJ from 40 m on the other side - the brain puts a guard on him as well, and both men are fought')
+men=[w.shared[b.SQ_T+i] for i in range(4)];on=w.brain.orders()
+assert set(men)=={980} and any(fights(w,t,980) for t in team),('the guards who are firing keep their man',men)
+assert [k for k,o in on.items() if o[0]==981 and o[1]] and 981 in {x[1] for x in getattr(w,'hits',[])} and not invariants(w),('the second man is taken by the door gunners who have him in their arc',on,invariants(w))
+passed('A second man opens fire on CJ from 40 m on the other side: the brain gives him to the door gunners who can reach him, the guards keep the man they are firing at - both are fought, nobody flips')
 w,V,team=squad_scene([(982,0.,-25.,34,True)]);w.messages.clear();steps(w,V,8)
 assert 'SQSB' in w.messages,w.messages
 w,V,team=squad_scene([(983,22.,0.,30,True)]);w.pos[983][2]=9.;w.messages.clear();steps(w,V,8)

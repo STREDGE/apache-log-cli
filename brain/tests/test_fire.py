@@ -459,6 +459,20 @@ g2 = sc.ped(-20, 8, pedtype=GANG, weapon=AK)
 sc.shot(g2, (0., 0., 1.), dst=1)
 run(sc, 10)
 assert on()[free] == g2 and sc.orders[free].fire and all(on()[w_] == g for w_ in team if w_ != free), (free, before, on(), holds(sc))
+# ...but when the free man cannot fire at the new attacker (CJ stands in his line), one of the firing men goes over at once
+sc = Scene()
+team = squad(sc)
+g = sc.ped(25, 0, pedtype=GANG, weapon=AK)
+sc.shot(g, (0., 0., 1.), dst=1)
+run(sc, 10)
+free = [w_ for w_ in team if HOLD[sc.orders[w_].hold] == 'ENOUGH'][0]
+fx, fy = sc.peds[free]['pos'][:2]
+fl = math.hypot(fx, fy)
+g2 = sc.ped(-fx / fl * 25, -fy / fl * 25, pedtype=GANG, weapon=PISTOL)    # straight behind CJ as the free man sees it
+sc.shot(g2, (0., 0., 1.), dst=1)
+run(sc, 10)
+took = [w_ for w_ in team if sc.orders[w_].target == g2 and sc.orders[w_].fire]
+assert took and free not in took, ('nobody who fires at CJ is left alone', free, holds(sc))
 # ...and with nobody free the least needed rifle goes over: nobody who fires at CJ is left alone
 sc = Scene()
 team = squad(sc)[:3]

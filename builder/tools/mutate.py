@@ -1,5 +1,5 @@
 """Mutation check: break one rule at a time in a scratch copy of builder/ and make sure the tests notice.
-   python3 tools/mutate.py            all mutants      python3 tools/mutate.py --new     only the 1.2 ones      --b4  only the beta 4 ones      --b5  only the beta 5 ones      --b6  only the beta 6 ones      (names as arguments pick single mutants)
+   python3 tools/mutate.py            all mutants      python3 tools/mutate.py --new     only the 1.2 ones      --b4  only the beta 4 ones      --b5  only the beta 5 ones      --b6  only the beta 6 ones      --b7  only the 1.3 (brain) ones      (names as arguments pick single mutants)
    A line 'MISSED ... <<<<<<' means a rule has no test that guards it."""
 import shutil,subprocess,sys,os,tempfile
 from pathlib import Path
@@ -261,8 +261,46 @@ M16=[   # beta 6: threats only, fire discipline, CJ's safety, notifications as a
  (B,"a(0xddc,I(POSE_DONE),V(19));c.call('REATTACH_TEAM')","c.call('REATTACH_TEAM')",'16 pose: re-mounted once'),
  (B,"f.check(0x0a32,[V(var)],P);a(0x04eb,V(var),I(1));f.label(P)","f.label(P)",'16 pose: back on one knee after a fight'),
 ]
+# ---- 1.3: the brain gives the orders (B = build_v25.py, Q = build_v25_squad.py)
+M17=[
+ (B,"c.label('LOAD');c.get(19,BRAIN_HELLO);c.check(0x0039,[V(19),I(BRAIN_MAGIC)],'NO_BRAIN');c.go('LOAD_GO')","c.label('LOAD');c.go('LOAD_GO')",'17 no brain: the helicopter is not called'),
+ (B,"c.label('NO_BRAIN');msg(c,'HCNOBR');c.go('IDLE')","c.label('NO_BRAIN');c.go('IDLE')",'17 no brain: the player is told why'),
+ (B,"f.label('BRAIN');f.get(30,BRAIN_HELLO);f.check(0x0039,[V(30),I(BRAIN_MAGIC)],'NO_BRAIN')","f.label('BRAIN')",'17 fire: no opcode before the handshake'),
+ (Q,"s.label('BF_GO');s.get(26,b.BRAIN_HELLO);s.check(0x0039,[V(26),I(b.BRAIN_MAGIC)],'BF_NONE')","s.label('BF_GO')",'17 squad frame: no opcode before the handshake'),
+ (Q,"s.label('PERCEIVE');s.get(19,b.BRAIN_HELLO);s.check(0x0039,[V(19),I(b.BRAIN_MAGIC)],'PV_NONE')","s.label('PERCEIVE')",'17 squad picture: no opcode before the handshake'),
+ (B,"f.eq(9,2,nofire);a(0x06bc,V(11),V(12),V(13),V(14),V(15),V(16),I(ROUND_DAMAGE));f.label(nofire)","a(0x06bc,V(11),V(12),V(13),V(14),V(15),V(16),I(ROUND_DAMAGE));f.label(nofire)",'17 gunner: a round only on the brain\'s word'),
+ (B,"f.eq(9,2,nofire);a(0x06bc,V(11),V(12),V(13),V(14),V(15),V(16),I(ROUND_DAMAGE));f.label(nofire)","f.label(nofire)",'17 gunner: the round is fired'),
+ (B,"a(0x06bc,V(11),V(12),V(13),V(14),V(15),V(16),I(ROUND_DAMAGE))","a(0x06bc,V(11),V(12),V(13),V(14),V(15),V(13),I(ROUND_DAMAGE))",'17 gunner: the round flies the checked line'),
+ (B,"alive(f,var,skip);f.check(0x0a32,[V(var)],skip);a(0x0085,V(8),V(var));a(0x0e48,V(8),I(9),I(1))","alive(f,var,skip);a(0x0085,V(8),V(var));a(0x0e48,V(8),I(9),I(1))",'17 gunner: a crewman on foot makes no rounds'),
+ (B,"a(0x0667,V(var),V(17),V(18),V(19),I(1500));a(0xddc,I(G_AIM+g),V(10))","a(0x074d,V(var),V(10));a(0xddc,I(G_AIM+g),V(10))",'17 gunner: he aims, the game\'s weapon never fires'),
+ (B,"a(0x0667,V(var),V(17),V(18),V(19),I(1500));a(0xddc,I(G_AIM+g),V(10))","a(0xddc,I(G_AIM+g),V(10))",'17 gunner: weapon on the man'),
+ (B,"a(0x000a,V(31),I(700));a(0xddc,I(G_AIM_T+g),V(31))","a(0x000a,V(31),I(700000));a(0xddc,I(G_AIM_T+g),V(31))",'17 gunner: the aim follows a moving man'),
+ (B,"rest(var,'REST2_'+str(var));f.set(G_AIM+g,-1)","f.set(G_AIM+g,-1)",'17 gunner: weapon down when the brain says rest'),
+ (B,"for typ in range(32):a(0x077a,V(var),I(2),I(typ))","for typ in range(0):a(0x077a,V(var),I(2),I(typ))",'17 gunner: hates nobody'),
+ (B,"a(0xddc,I(BR_KILLS),V(11));f.get(31,KILLS);a(0x000a,V(31),I(1));a(0xddc,I(KILLS),V(31))","a(0xddc,I(BR_KILLS),V(11));f.get(31,KILLS)",'17 kills are counted from the brain'),
+ (B,"f.eq(30,-1,'KILL_KNOWN');a(0xddc,I(BR_KILLS),V(11));f.go('KILL_DONE')","f.eq(30,-1,'KILL_KNOWN');a(0xddc,I(BR_KILLS),I(0));f.go('KILL_DONE')",'17 kills: the brain\'s old count is not a new kill'),
+ (B,"a(0x01bd,V(31));a(0x0062,V(31),V(16));a(0xddc,I(HELI_SHOT_T),V(31));f.label('HELI_SHOT_DONE')","f.label('HELI_SHOT_DONE')",'17 fire at the helicopter reaches the pilot'),
+ (B,"f.check(0x8019,[V(16),I(600)],'HELI_SHOT_DONE');","",'17 fire at the helicopter: only fresh'),
+ (B,"f.check(0x0019,[V(12),I(0)],'TOP_SET');a(0x0085,V(30),V(12))","f.check(0x0019,[V(12),I(0)],'TOP_SET')",'17 the pilot is told the most dangerous man'),
+ (B,"a(6,V(30),I(-1));f.eq(25,0,'TOP_FIRE_ALLOWED');f.go('TOP_SET');f.label('TOP_FIRE_ALLOWED')","a(6,V(30),I(-1))",'17 hold fire: no fight for the pilot either'),
+ (B,"f.set(ENGAGED,1);f.get(30,SQ_GROUP);f.eq(30,0,'CONTACT_DONE');msg(f,'HCCONT')","f.set(ENGAGED,1);f.get(30,SQ_GROUP);f.eq(30,0,'CONTACT_DONE')",'17 contact is called'),
+ (B,"f.set(ENGAGED,0);f.set(CLEAR_AT,0);f.get(30,SQ_GROUP);f.eq(30,0,'CONTACT_DONE');msg(f,'HCCLEAR')","f.set(ENGAGED,0);f.set(CLEAR_AT,0);f.get(30,SQ_GROUP);f.eq(30,0,'CONTACT_DONE')",'17 area clear is called'),
+ (B,"f.eq(30,0,'CLEAR_TIMED');a(0x000a,V(31),I(3000));a(0xddc,I(CLEAR_AT),V(31))","f.eq(30,0,'CLEAR_TIMED');a(0x000a,V(31),I(0));a(0xddc,I(CLEAR_AT),V(31))",'17 area clear: after 3 s of quiet'),
+ (B,"f.label('CONTACT_NO');f.check(0x8019,[V(9),I(0)],'CONTACT_DONE');","f.label('CONTACT_NO');",'17 area clear: not while a threat is left'),
+ (B,"for m in (0,2,3,4):\n nxt='MODE_REPORT_NOT_'+str(m)","for m in ():\n nxt='MODE_REPORT_NOT_'+str(m)",'17 the fire rule is confirmed'),
+ (Q,"a(0x0085,V(26),V(G));a(0x0e48,V(26),I(3),I(2));a(0xddc,I(b.SQ_BR_ST+k),V(27));a(0xddc,I(b.SQ_BR_TG+k),V(28))","a(0x0085,V(26),V(G));a(0x0e48,V(26),I(3),I(2));a(0xddc,I(b.SQ_BR_ST+k),I(2));a(0xddc,I(b.SQ_BR_TG+k),V(28))",'17 squad: fire only on the brain\'s word'),
+ (Q,"s.eq(27,3,nxt);s.get(29,fk(k,'TASK'))","s.go(nxt);s.get(29,fk(k,'TASK'))",'17 squad: cease fire in the same frame'),
+ (Q,"s.get(31,b.SQ_BR_ST+k);s.check(0x0039,[V(31),I(2)],no)","s.get(31,b.SQ_BR_ST+k)",'17 squad: no firing task without leave'),
+ (Q,"a(0x0085,V(19),V(12));a(0x0062,V(19),V(29));a(0xddc,I(b.CJ_AIM_T),V(19))","a(0x0085,V(19),V(12));a(0x0062,V(19),V(29))",'17 squad: CJ\'s line of fire from the brain'),
+ (Q,"s.check(0x0019,[V(19),I(1)],nx);s.get(13+k,b.SQ_BR_TG+k)","s.check(0x0019,[V(19),I(1)],nx)",'17 squad: each guard has the man the brain gave him'),
+ (Q,"s.check(0x0019,[V(19),I(1)],nx);s.get(13+k,b.SQ_BR_TG+k)","s.check(0x0019,[V(19),I(0)],nx);s.get(13+k,b.SQ_BR_TG+k)",'17 squad: a covered suspect is not a man to fight'),
+ (Q,"s.check(0x801d,[V(19),V(12)],'LOOP')","s.check(0x001d,[V(12),V(19)],'LOOP')",'17 squad: the full pass ten times a second'),
+ ('brain_mock.py',"if len(out) == h.HCB_MAX_OURS:","if len(out) == 10:",'17 let-go guards are ours for the brain'),
+]
 if sys.argv[1:2]==['--new']:
- M=M12+M14+M15+M16;sys.argv.pop(1)
+ M=M12+M14+M15+M16+M17;sys.argv.pop(1)
+elif sys.argv[1:2]==['--b7']:
+ M=M17;sys.argv.pop(1)
 elif sys.argv[1:2]==['--b6']:
  M=M16;sys.argv.pop(1)
 elif sys.argv[1:2]==['--b5']:
@@ -273,12 +311,15 @@ elif sys.argv[1:2]==['--12']:
  M=M12;sys.argv.pop(1)
 elif sys.argv[1:2]==['--old']:
  sys.argv.pop(1)
-else:M=M+M12+M14+M15+M16
+else:M=M+M12+M14+M15+M16+M17
+if os.environ.get('HC_MUT_SHARD'):   # 'i/n': every n-th mutant starting with the i-th (several runs side by side, each with its own HC_MUT_ROOT)
+ i_,n_=map(int,os.environ['HC_MUT_SHARD'].split('/'));M=M[i_::n_]
 only=sys.argv[1:]
 for fname,old,new,name in M:
  if only and name not in only:continue
  if ROOT.exists():shutil.rmtree(ROOT)
  (ROOT/'install').mkdir(parents=True);(ROOT/'sources').mkdir();shutil.copytree(SRC,ROOT/'builder',ignore=shutil.ignore_patterns('__pycache__'))
+ os.symlink(SRC.parent/'brain',ROOT/'brain')   # the scripts are tested against the real core (brain_mock.py)
  p=ROOT/'builder'/fname;t=p.read_text()
  if t.count(old)<1:print('GONE    '+name+'  (the code this mutant broke no longer exists)',flush=True);continue
  p.write_text(t.replace(old,new))

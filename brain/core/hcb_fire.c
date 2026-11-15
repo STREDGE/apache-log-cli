@@ -17,6 +17,7 @@ typedef struct cand {
     float value;        /* expected damage per second he does to CJ (a floor for those CJ points at) */
     u8 fire;            /* the fire rule allows shooting him; 0 = cover only */
     u8 taken;           /* shooters already on him */
+    u8 free;            /* a man who is not firing at anybody could take him */
 } cand;
 
 static losent *los_find(hcb_brain *b, u32 from, u32 to) {
@@ -138,7 +139,7 @@ HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
     const hcb_cfg *c = &b->cfg;
     cand cs[MAX_CAND];
     const hcb_ped *me[HCB_MAX_OURS];
-    u8 why[HCB_MAX_OURS][MAX_CAND], aim_at[HCB_MAX_OURS][MAX_CAND], done[HCB_MAX_OURS];
+    u8 why[HCB_MAX_OURS][MAX_CAND], aim_at[HCB_MAX_OURS][MAX_CAND], done[HCB_MAX_OURS], busy[HCB_MAX_OURS];
     int choice[HCB_MAX_OURS];
     hcb_vec dummy;
     u32 now = s->time;
@@ -190,16 +191,24 @@ HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
 
     /* (3) hand the targets out: always the pair that takes most danger off CJ; each further shooter on the same man
        counts for less, so fire spreads, but the worst threat still gets two */
+    /* who is firing at a man he may still fire at */
+    for (i = 0; i < n_ours; i++) {
+        shooter *sh = me[i] ? shooter_of(b, me[i]->id) : 0;
+        busy[i] = 0;
+        if (sh && sh->target && (sh->hold == HCB_HOLD_NONE || sh->hold == HCB_HOLD_PAUSE || sh->hold == HCB_HOLD_REACTING))
+            for (j = 0; j < n; j++) if (cs[j].t->last.id == sh->target && (why[i][j] == HCB_HOLD_NONE || why[i][j] == SOFT_LOS)) busy[i] = 1;
+    }
+    for (j = 0; j < n; j++) {                /* can a man with free hands take this one? */
+        cs[j].free = 0;
+        for (i = 0; i < n_ours; i++) if (!done[i] && !busy[i] && (why[i][j] == HCB_HOLD_NONE || why[i][j] == SOFT_LOS)) cs[j].free = 1;
+    }
     for (round = 0; round < n_ours; round++) {
         float best = 0;
         int bi = -1, bj = -1;
         for (i = 0; i < n_ours; i++) {
             shooter *sh;
-            int busy = 0;                    /* he is firing at a man he may still fire at */
             if (done[i]) continue;
             sh = shooter_of(b, me[i]->id);
-            if (sh && sh->target && (sh->hold == HCB_HOLD_NONE || sh->hold == HCB_HOLD_PAUSE || sh->hold == HCB_HOLD_REACTING))
-                for (j = 0; j < n; j++) if (cs[j].t->last.id == sh->target && (why[i][j] == HCB_HOLD_NONE || why[i][j] == SOFT_LOS)) busy = 1;
             for (j = 0; j < n; j++) {
                 static const float share[4] = {1.0f, 0.55f, 0.3f, 0.15f};
                 float v;
@@ -207,14 +216,28 @@ HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                 v = cs[j].value * share[cs[j].taken];
                 if (why[i][j] == SOFT_LOS) v *= 0.9f;                         /* a man he is known to see comes first */
                 if (sh && sh->target == cs[j].t->last.id) v *= 1.3f;         /* stay on your man */
-                /* a man who is firing does not drop his target for a new one while somebody with free hands can take it */
-                else if (busy) v *= 0.6f;
+                /* a man who is firing does not drop his target for another one that is looked after: somebody is on it already,
+                   or a man with free hands can take it. An attacker nobody is on gets a rifle whatever it costs. */
+                else if (busy[i] && (cs[j].free || cs[j].taken)) v *= 0.6f;
                 v *= 1.0f / (1.0f + 0.01f * v_dist(me[i]->pos, cs[j].t->last.pos));  /* the nearer shooter, other things equal */
                 if (v > best) { best = v; bi = i; bj = j; }
             }
         }
         if (bi < 0) break;
         choice[bi] = bj; done[bi] = 1; cs[bj].taken++;
+    }
+    /* nobody we may fire at is left without a rifle while another man has more than he needs: a third rifle goes over to
+       anybody, the second one to a man who is attacking */
+    for (j = 0; j < n; j++) {
+        int need, from = -1;
+        if (!cs[j].fire || cs[j].taken) continue;
+        need = cs[j].t->cls == HCB_CLS_ATTACKER ? 2 : 3;
+        for (i = 0; i < n_ours; i++) {
+            if (!me[i] || choice[i] < 0 || cs[choice[i]].taken < need || (why[i][j] != HCB_HOLD_NONE && why[i][j] != SOFT_LOS)) continue;
+            if (from < 0 || cs[choice[i]].taken > cs[choice[from]].taken ||
+                (cs[choice[i]].taken == cs[choice[from]].taken && v_dist(me[i]->pos, cs[j].t->last.pos) < v_dist(me[from]->pos, cs[j].t->last.pos))) from = i;
+        }
+        if (from >= 0) { cs[choice[from]].taken--; choice[from] = j; cs[j].taken++; }
     }
 
     /* (4) orders with human timing; whoever is left covers a suspect or reports why he cannot fire */
