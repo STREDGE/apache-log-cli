@@ -61,7 +61,9 @@ LIB.hcb_weapon_dps.restype = ctypes.c_float
 LIB.hcb_weapon_range.restype = ctypes.c_float
 LIB.hcb_gunner_round.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_float, ctypes.c_int, ctypes.c_void_p]
 LIB.hcb_gunner_blocked.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32]
-for _i, _n in enumerate(['hcb_ped', 'hcb_veh', 'hcb_event', 'hcb_snapshot', 'hcb_out', 'hcb_cfg', 'hcb_mark', 'hcb_track_info', 'hcb_rec', 'hcb_box_head', 'hcb_los', 'hcb_order', 'hcb_shot', 'hcb_round']):
+LIB.hcb_pilot_reset.argtypes = [ctypes.c_void_p, hcb_vec, hcb_vec, hcb_vec]
+LIB.hcb_pilot_step.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+for _i, _n in enumerate(['hcb_ped', 'hcb_veh', 'hcb_event', 'hcb_snapshot', 'hcb_out', 'hcb_cfg', 'hcb_mark', 'hcb_track_info', 'hcb_rec', 'hcb_box_head', 'hcb_los', 'hcb_order', 'hcb_shot', 'hcb_round', 'hcb_pilot', 'hcb_pilot_in', 'hcb_pilot_out']):
     assert LIB.hcb_struct_size(_i) == ctypes.sizeof(STRUCTS[_n]), ('layout differs between C and Python', _n, LIB.hcb_struct_size(_i), ctypes.sizeof(STRUCTS[_n]))
     assert ctypes.sizeof(STRUCTS[_n]) % 4 == 0, _n
 

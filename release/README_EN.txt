@@ -1,12 +1,45 @@
-HELICOVER 1.3 BETA 1 - support helicopter with a smart crew
-GTA San Andreas (Android, 64-bit), a CLEO mod + the Helicover Brain 0.2 mod. They only work together.
+HELICOVER 1.4 BETA 1 - support helicopter with a smart crew
+GTA San Andreas (Android, 64-bit), a CLEO mod + the Helicover Brain 0.3 mod. They only work together.
 
 WHAT IT IS
 Call a support helicopter: it flies in from far away, follows CJ and covers him with four door
 gunners. Drop a four-man team on foot, get picked up by rope, fly to the map marker or Grove
 Street and get out there by landing or by rope.
 
-FIXED IN BRAIN 0.2.1 (the scripts are the same)
+NEW IN 1.4 BETA 1 (brain 0.3)
+Door gunners
+- They fire their own weapons (like a drive-by from a car window): the fire visibly comes from them, not "from the
+  sky". Who fires at whom and when is still the brain's call; "stop" works in the same frame.
+- They sit on the skids with their legs hanging and fire seated. SETTINGS > GUNNERS: SITTING / KNEELING / STANDING.
+- No fire at a place the man has just ducked away from.
+The team on the ground - a close-protection detail
+- Roles: commander "Alpha", the bodyguard, the point man and the rear man. In peace a diamond round CJ, turned the way
+  he goes, each man watching his own sector; men who fell behind run, men close by walk.
+- An armed suspect nearby: the bodyguard steps between him and CJ, the others keep their weapons on him.
+- Under fire: the commander finds CJ cover (a wall, a car - never towards the shooter, and only where there is ground)
+  and tells him where: "CJ, cover - on your left! Go to the mark" (a green mark on the ground). With CJ in cover the
+  bodyguard crouches beside him, the commander takes the next cover, the fire team fights from the shooter's side
+  and bounds: one runs while the other covers him, crouched.
+- No cover near: "stay by your guard", and the bodyguard covers CJ with his body.
+- CJ badly hurt under fire: a tight ring round him and "we pull out - call the rope pickup".
+- The commander falls: the next man says "I have command".
+- When CJ shoots nobody stands in front of his gun.
+- When it is over: "clear - regroup on CJ".
+The pilot
+- Flights to the map marker and to Grove Street are flown by the brain like a person would: nose down to speed up,
+  banked into turns, slower for a sharp turn, 35 m over the roofs ahead (it looks 250 m ahead), slows down and
+  climbs early for a tall building, brakes with the nose up without overshooting and hovers 25 m over the point.
+  Up to 245 km/h. Smooth at any frame rate.
+- The descent to the landing spot and the landing are still the old ones (the next step).
+
+HONESTLY
+- Everything was checked on a computer (a model of the game, an emulator with your libGTASA.so and CLEO), not in the
+  game yet.
+- The seated pose will be tuned from your screenshot. The brain writes the helicopter's tilt straight into its
+  position: should it shake or spin in the game, send a video/screenshots and mods/hcbrain_log.txt.
+- Should the game hang, close it and send mods/hcbrain_log.txt and the newest mods/hcbrain_report_NN.bin.
+
+FIXED IN BRAIN 0.2.1 (scripts 1.3 beta 1)
 - The game hung when the helicopter came in to Grove Street / the map marker: the brain spent almost half of every
   frame on line-of-sight checks, and in a busy street with shooting the game all but stopped. The checks now have a
   hard budget (at most 2.5 ms a frame, the brain at most a quarter of the time), and coordinates that are not a

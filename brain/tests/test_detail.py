@@ -67,6 +67,21 @@ assert j['point'].at.x - sc.cj['pos'][0] > 3.5 and abs(j['point'].at.y - sc.cj['
 assert all(p.move in (2, 3) for p in j.values() if d2(at(p), sc.peds[p.who]['pos']) > 5), 'far behind a moving CJ: they run'
 passed('The formation turns with the way CJ goes (after 1.5 s on a new course, not on a sidestep), and whoever has fallen back runs to his slot')
 
+# CJ fires straight ahead (north): the point man 4.5 m in front of him steps out of the line, the others stay where they are
+sc = Scene()
+team = detail(sc)
+sc.step(3)
+before = {p.who: at(p) for p in by_job(sc).values()}
+sc.shot(1, (0., 30., 1.))
+sc.step(1)
+j = by_job(sc)
+assert abs(j['point'].at.x) >= 1.99 and j['point'].move in (1, 2, 3), ('the point man is out of CJ\'s line', at(j['point']))
+assert all(d2(at(p), before[p.who]) < .05 for k, p in j.items() if k != 'point'), 'nobody else had to move'
+sc.step(15)
+j = by_job(sc)
+assert d2(at(j['point']), before[j['point'].who]) < .05, 'CJ stopped shooting 1.2 s ago: back to his slot'
+passed('CJ shooting: nobody stands in front of his gun - a man within 2 m of his line steps out sideways (the bodyguard 1.2 m), and goes back once CJ has stopped for 1.2 s')
+
 # ------------------------------------------------------------------ a suspect: weapons up, the bodyguard between him and CJ
 sc = Scene()
 team = detail(sc)
@@ -158,6 +173,11 @@ sc, team, g = contact(walls=[(-3., -2.5, -3., 2.5)], holes=[(-4., 0., 3.)])
 sc.step(20)
 o = sc.last_out
 assert not o.cover_ok or math.dist((o.cover_at.x, o.cover_at.y), (-4, 0)) >= 3, ('no ground there (water, a drop): not a place for CJ', o.cover_at.x, o.cover_at.y)
+sc, team, g = contact(walls=[(6., -1.0, 6., 1.0)], holes=[(-5., 0., 4.5)])     # the only shade with ground under it is on the shooter's side
+sc.step(20)
+o = sc.last_out
+r_ = math.hypot(o.cover_at.x, o.cover_at.y)
+assert not o.cover_ok or o.cover_at.x <= 0.5 * r_ + 0.01, ('not even when it is the only shade there is', o.cover_at.x, o.cover_at.y)
 passed('CJ is never sent towards the shooter for cover, nor to a hidden spot with no ground under it (water, a drop)')
 
 # ------------------------------------------------------------------ bounding overwatch: one runs, the other covers him

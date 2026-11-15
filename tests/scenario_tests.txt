@@ -9,7 +9,7 @@ PASS: Stalled approach reports blocked without restarting the mission or telepor
 PASS: Final descent is ordered once after coming close and slow
 PASS: Changing helicopter or crew resumes the same native landing
 PASS: Main menu updates the status in its title while it is open
-PASS: The fire worker asks the brain: a passer-by is left alone; the man who hurts CJ gets the gunners' weapons on him and their rounds (30 damage each, each one let go by the brain); no gunner is ever given a task that fires the game's own weapon
+PASS: The fire worker asks the brain: a passer-by is left alone; the man who hurts CJ gets the gunners' weapons on him and then their own fire (the drive-by task, at him only, only with the brain's leave); no other kind of firing task, never at a place
 PASS: Friends come from the game, not from a list of models: an armed Grove man looking at CJ is left alone, an armed Balla looking at CJ is engaged
 PASS: HOLD FIRE: no weapon comes up and no round goes, even at a man who has hurt CJ; with PROTECT ME they open fire, and HOLD FIRE stops them within 0.3 s
 PASS: The brain mod gone: the fire worker never runs its opcode (an unregistered opcode would have its parameters executed as code) and nobody fires
@@ -61,7 +61,7 @@ PASS: Assembler rejects both inverted literal/local comparison forms
 PASS: CJ ascent advances smoothly over about 1.5 seconds at two frame rates
 PASS: Only guards who reach the ground receive running formation tasks
 PASS: Cruise climbs in place before passing tall buildings
-PASS: Cruise accelerates smoothly to about 3x speed at a fixed clearance
+PASS: Cruise (the brain's pilot): a smooth start, nose down while speeding up, 245 km/h at the top, 35 m over the roofs
 PASS: Guards keep selected weapons in cease fire and without CJ shooting
 PASS: Map marker -> hover -> selected rope descent restores CJ control and preserves onboard team
 PASS: Map flight rejects an absent marker
@@ -72,7 +72,7 @@ PASS: Map marker is read from libGTASA memory with 0DD8, never 0AB6
 PASS: Repeated map flight with delayed teleports keeps a steady cruise height
 PASS: Off-map or NaN marker coordinates are rejected
 PASS: Release build shows no DBG breadcrumbs
-PASS: Four attackers, two on each side of the helicopter: each of the four gunners has a man of his own and hits him
+PASS: Four attackers, two on each side of the helicopter: each of the four gunners has a man of his own and fires his own weapon at him
 PASS: Map destination searches a nearby clear landing footprint
 PASS: Blocked descent shaft leaves CJ aboard with control enabled
 PASS: Patrol changes position around CJ and can return to follow
@@ -104,8 +104,8 @@ PASS: Rope evacuation lifts CJ only after he walks to the rope (6 m away)
 PASS: GUNNER FIRE page: four rules - PROTECT ME (default), ARMED ONLY, WHERE I SHOOT, HOLD FIRE (the old FIRE AT ALL is gone) - and two switches: POLICE fire back / never fire, MISSIONS defend only / as usual; BACK returns to the main page
 PASS: DISMISS HELICOPTER asks for confirmation; NO keeps it, YES sends it away
 PASS: ARMED ONLY: an armed gang member is engaged even with his back to CJ (PROTECT ME only covers him); unarmed gang members and armed civilians are not targets
-PASS: From a stranger's first round at CJ to the gunners' first round at 30 fps: 165-264 ms for a man they already had a weapon on, 165-264 ms for a man who was nobody until he fired
-PASS: A car driven straight at CJ at 72 km/h: the gunners fire at the driver from 35 m on (2 s before it would hit), 11 rounds before it is close; a car driving past is left alone
+PASS: From a stranger's first round at CJ to the gunners' first round at 30 fps: 198-297 ms for a man they already had a weapon on, 198-297 ms for a man who was nobody until he fired
+PASS: A car driven straight at CJ at 72 km/h: the gunners fire at the driver from 35 m on (2 s before it would hit), 10 rounds before it is close; a car driving past is left alone
 PASS: Door gunners are given no hatred of anybody: they fire only the rounds the brain lets go
 PASS: HOLD FIRE: no rounds, weapons down, and the pilot is told of no fight; back on PROTECT ME the most dangerous man is his business again
 PASS: No helicopter any more in the middle of a fight: the gunners' fight is over at once (no stale "engaged" flag or pilot target for the next call)

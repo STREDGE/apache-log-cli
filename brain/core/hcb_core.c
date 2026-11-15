@@ -61,6 +61,9 @@ API u32 hcb_struct_size(int which) {
     case 11: return sizeof(hcb_order);
     case 12: return sizeof(hcb_shot);
     case 13: return sizeof(hcb_round);
+    case 14: return sizeof(hcb_pilot);
+    case 15: return sizeof(hcb_pilot_in);
+    case 16: return sizeof(hcb_pilot_out);
     }
     return 0;
 }
@@ -213,6 +216,11 @@ static void on_event(hcb_brain *b, const hcb_snapshot *s, const hcb_event *e) {
     int i;
     if (e->type == HCB_EV_SHOT) {
         if (e->src && e->src == s->player.id) {      /* CJ's own fire points at people: the man he hit, or anybody his round passed close by */
+            float dx = e->b.x - e->a.x, dy = e->b.y - e->a.y, l2 = dx * dx + dy * dy;
+            if (l2 > 0.04f && l2 == l2) {
+                float l = f_sqrt(l2);
+                b->dt.cj_shot_t = e->time ? e->time : 1; b->dt.cj_shot_dir.x = dx / l; b->dt.cj_shot_dir.y = dy / l; b->dt.cj_shot_dir.z = 0;
+            }
             if (e->dst && !hcb_is_ours(s, e->dst)) { t = hcb_find(b, e->dst); if (t) t->cj_marked = e->time; }
             for (i = 0; i < HCB_MAX_TRACKS; i++) {
                 t = &b->tr[i];

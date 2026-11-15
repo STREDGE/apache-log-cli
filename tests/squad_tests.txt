@@ -1,18 +1,17 @@
 PASS: TEAM ON FOOT: four armed guards rope down next to CJ, then the helicopter resumes FOLLOW
-PASS: Bodyguard diamond: each guard takes his own slot, sprinting from afar, running, walking when close
-PASS: Move orders are refreshed every 0.7 s at most, not every tick
-PASS: Standing with CJ: weapons up, each guard covering his own sector
-PASS: Moving with CJ: the formation leads him (capped at 6 m) and matches walking or running
-PASS: Contact right: on the first look every guard turns his weapon on the man, 0.2-0.4 s later the brain lets three of them fire - the two who fight crouched and the shield already in place; the guard with CJ in his line runs to his shield point without firing
-PASS: Shields fire from their spot; the guard who now has a mate in his line keeps his weapon on the man and holds his fire; orders are not restarted every tick
-PASS: Bodyguard leash: an engager more than 14 m from CJ returns to his slot instead of chasing
-PASS: CJ badly hurt: the whole team closes a ring around him; one COVER CJ call
-PASS: AREA SECURE is called 3.5 s after the last threat is gone
-PASS: Medic: the rear guard runs to a wounded CJ, kneels and patches him (+35 HP), then cools down
-PASS: Medic also treats a wounded teammate (+60 HP, max 150)
+PASS: Peace: each guard goes to the post the brain gives him - the commander behind CJ on the left, the bodyguard a pace behind on his right, the point man ahead, the rear man behind - sprinting from afar
+PASS: Running to a post 6 m away, walking to one 2 m away (the pace comes with the post)
+PASS: Move orders are renewed at most every 1.5 s, or when the post moves more than a metre - not every tick
+PASS: At his post in peace each guard stands at ease: no needless orders, no weapon raised at nobody
+PASS: Contact, no cover near: the bodyguard puts himself between CJ and the shooter, the team fights, the commander tells CJ to stay by his guard; the contact call names the side
+PASS: Contact with a pillar 3 m away: the commander tells CJ which way to go ("into cover - left!") and the spot is marked; there: "CJ is in cover, we hold", the bodyguard crouches beside him, the team fights crouched from cover
+PASS: CJ badly hurt under fire: a tight ring round him and "too hot - call ROPE PICKUP", once (not again for 20 s)
+PASS: The shooter down and quiet: "area secure, regrouping on CJ", once
+PASS: No medic for now (the user's decision): nobody patches CJ up
 PASS: Mount up: the guards take CJ's passenger seats
 PASS: CJ gets out: the guards get out of the car too
 PASS: A car driving away is not chased; the guards hold and regroup when CJ stops
+PASS: The commander's words are said once each, when new; a word from before the scripts started is not said
 PASS: Far behind (out of sight or not): the guards sprint along the path network, nobody is teleported
 PASS: A stuck guard (moving, far, not progressing) is sent along the path network again, never teleported
 PASS: MAN DOWN is called once when a guard dies
@@ -22,11 +21,8 @@ PASS: The same in view: nobody vanishes on screen and nobody is handed to the ga
 PASS: ...and they are removed once out of sight
 PASS: Losing the whole team is reported and cleaned up
 PASS: Rope pickup with the team on the ground: the same team covers CJ (only the CJ rope is added)
-PASS: Assault contact: one man bounds forward while his partner covers crouched, the flanker moves out, the medic stays with CJ - and of the four only those the brain lets (three rifles on one man at most) fire as they go
-PASS: Bounding overwatch: every 3 s the pair swaps who moves and who covers
-PASS: A flanker who reached his flank point fights from there
-PASS: Assault leash: nobody pushes more than 40 m away from CJ; beyond it he sprints back (no teleport)
-PASS: Assault holding: each man faces his sector, then takes a knee
+PASS: ASSAULT: the fire team pushes towards the shooter (spots 9 m out, not 5), one man bounding while his partner holds and covers; the bodyguard and the commander stay with CJ
+PASS: Leash: a guard more than 40 m from CJ sprints back along the path network (no teleport)
 PASS: HOLD FIRE: nobody of the squad fires, not even at a man who is shooting at CJ or has hurt him
 PASS: PROTECT ME: whoever fires at CJ or has hurt him, and an armed gang member within 40 m who is turned to him; not one looking away, unarmed, or far off
 PASS: Grove Street members are not engaged, armed and looking at CJ or not
@@ -34,7 +30,7 @@ PASS: Police: nobody without stars; with stars only a policeman who has fired (P
 PASS: WHERE I SHOOT: the squad engages the man CJ is firing at, and nobody else - not even somebody shooting at him
 PASS: ARMED ONLY: an armed gang member even with his back to CJ; never an armed civilian, never an unarmed man
 PASS: Teammates, the crew and the pilot are never threats
-PASS: The brain mod gone in mid-game: the squad never runs the opcode and never fires; it keeps its formation round CJ
+PASS: The brain mod gone in mid-game: the squad never runs the opcode and never fires (no "dumb" fallback: the posts are the brain's)
 PASS: Rope evacuation guards are led by the squad while CJ walks to the rope
 PASS: After a crouched fight the guard stands up before moving on
 PASS: CJ inside an interior: the team waits outside instead of teleporting after him
@@ -49,11 +45,11 @@ PASS: Taking heavy fire: evasive manoeuvre widens the circle to 50 m and climbs 
 PASS: CJ driving fast: the helicopter switches to the native chase
 PASS: Combat orbit: a point without a view of the threat is flown 15 m higher and the next one is tried
 PASS: Combat orbit with no clear view moves on at most every 1.2 s instead of thrashing every tick
-PASS: Door gunners take a man on their own side - right door right, left door left - and never fire across the cabin
+PASS: Door gunners take a man on their own side - right door right, left door left - and never fire across the cabin (1.4: his own weapon; the second man of a door holds while his mate is in his line)
 PASS: A gunner without a clear line from his seat does not fire; the other gunner in that door does
 PASS: Three attackers and two gunners who can see them: each gunner stays on a man of his own (no hopping from man to man, no doubling up while there is a man nobody is on)
 PASS: A gunner finishes the man he started on instead of hopping to a newer one
-PASS: Attackers at arm's length of CJ are not fired at from the helicopter (no round may pass within 2 m of him): weapons on them only; 3.5 m from him only the rounds whose line keeps the 2 m go; clear of CJ the man is engaged fully (22 rounds in 3 s at 3.5 m, every one checked by the world itself)
+PASS: Attackers at arm's length of CJ are not fired at from the helicopter (no round may pass within 2 m of him): weapons on them only; 3.5 m from him only the rounds whose line keeps the 2 m go; clear of CJ the man is engaged fully (11 rounds in 3 s at 3.5 m, every one checked by the world itself)
 PASS: CJ walks into the line of fire: the gunners stop with the very next round, and go on when he is clear again
 PASS: WHERE I SHOOT: single shots of CJ keep the gunners on the man he is firing at (free aim, no lock-on needed), without long gaps; the man who hurt CJ is left to him
 PASS: WHERE I SHOOT: about three seconds after CJ's last shot the gunners stop too
@@ -76,12 +72,7 @@ PASS: A shooter on a roof is circled 15 m higher
 PASS: CJ steps into a guard's line of fire: in that very frame (not on the squad's next look) his firing task is replaced by an aiming one
 PASS: A second man opens fire on CJ from 40 m on the other side: the brain gives him to the door gunners who can reach him, the guards keep the man they are firing at - both are fought, nobody flips
 PASS: Squad call-outs name the kind of threat and where: "Sniper - rear!", "Shooter on the roof - right!"
-PASS: Under fire an engager moves to low cover (blocks the chest, not the head) and fights crouched from there
-PASS: Without cover nearby the engager fights crouched where he stands
-PASS: Reload drill: after 10 s of fighting guards crouch 1.5 s to reload, staggered so the others keep firing
-PASS: CJ badly hurt with three or more threats: shields up, then "EVAC recommended"
-PASS: After 20 s of quiet the team lowers its weapons; the first threat puts them back on alert
-PASS: A man in a car: every round is aimed at him (scattered by up to a metre at 60 m from a moving helicopter), never at the engine or the tank - the gunners do not blow cars up
+PASS: A man in a car: the gunners' fire is at him (the drive-by task names the man, never the car), never at the engine or the tank - the gunners do not blow cars up
 PASS: A car below 700 health within 18 m of CJ is not fired at (it burns below 250): no rounds, weapons on the man only - he is engaged again once he is out of it; far from CJ the same car may be fired at
 PASS: PROTECT ME engages threats only: whoever hurt CJ, or an armed gang member on foot within 40 m and turned to CJ (40 degrees either way) - not passers-by, not armed civilians, not cars driving past, not policemen who have not fired
 PASS: No fire mode makes the gunners hate a ped type any more: the game's own AI cannot open fire on a car by itself, every target comes from the rules
@@ -90,14 +81,13 @@ PASS: WHERE I SHOOT: CJ shooting up an empty car gets no help - the gunners neve
 PASS: A burning car within 12 m of CJ is called out ("CAR ON FIRE! Get away from it."), whoever set it on fire; repeated every 4 s, not for wrecks
 PASS: Threat 40 m from CJ: the orbit centre moves 30% towards CJ so the gunners cover both
 PASS: A man who slips out of sight: within 0.2 s nobody fires at him or at the place he was (nobody checks a line to a place) - weapons stay up - and the fight goes on when he shows himself
-PASS: A wounded guard (below 50 HP) stays closer to CJ: 10 m leash instead of 14 m
 PASS: Welcome message once, a few seconds after the game starts
 PASS: Team drop notices say what really happens: "moving in to drop the team", "on the ground" - no false "rope pickup" / "holding"
-PASS: A 12 s fight with four shooters gives 2 clear radio calls, not a stream (SQXR, SQRLD)
-PASS: An alarm on screen: nothing lesser for 1.2 s, then a tactical call may take its place but never chatter; chatter comes back once the line is free
+PASS: A 12 s fight with four shooters gives 2 clear radio calls, not a stream (SQEVAC, SQXR)
+PASS: An alarm on screen: nothing lesser for 1.2 s, then a tactical call or an order of the commander may take its place but never chatter
 PASS: MESSAGES: IMPORTANT keeps danger and tactical calls, drops the chatter
 PASS: MESSAGES: OFF is silent in a fight but still explains why a command was refused
 PASS: With the team on the ground only the squad calls the contact (no double "CONTACT!")
 PASS: SETTINGS: one row cycles MESSAGES: ALL / IMPORTANT / OFF
-PASS: Frame cost in a busy fight at 30 fps (8 attackers, 10 s): fire worker peak 362 / average 241 script instructions a frame (it was up to 3600 when it searched for targets itself), squad worker peak 1034 / average 209
+PASS: Frame cost in a busy fight at 30 fps (8 attackers, 10 s): fire worker peak 372 / average 247 script instructions a frame (it was up to 3600 when it searched for targets itself), squad worker peak 850 / average 180
 Mocked script execution only: real pathing, cover and gunfire are not tested.

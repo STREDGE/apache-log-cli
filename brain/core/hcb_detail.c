@@ -198,7 +198,7 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
     }
     duty = b->alert >= HCB_ALERT_EVACUATE && threat ? HCB_DUTY_RING : threat ? HCB_DUTY_COVER : suspect ? HCB_DUTY_WATCH : HCB_DUTY_CALM;
     if (duty >= HCB_DUTY_COVER && dt->duty < HCB_DUTY_COVER) { dt->contact_since = now; dt->cover_said = 0; dt->safe_said = 0; dt->mover = 0; }
-    if (duty < HCB_DUTY_COVER && dt->duty >= HCB_DUTY_COVER && now - dt->clear_said > 10000 && say == HCB_SAY_NONE) { say = HCB_SAY_CLEAR; dt->clear_said = now; }
+    if (duty < HCB_DUTY_COVER && dt->duty >= HCB_DUTY_COVER && (!dt->clear_said || now - dt->clear_said > 10000) && say == HCB_SAY_NONE) { say = HCB_SAY_CLEAR; dt->clear_said = now ? now : 1; }
     if (duty < HCB_DUTY_COVER) dt->cj_cover_ok = 0;
     dt->duty = duty; out->duty = duty;
 
@@ -250,7 +250,7 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
             at = job == 1 ? v_add(base, v_mul(u, 1.3f)) : job == 0 ? v_add(base, v_mul(pr, -1.5f)) : job == 2 ? v_add(base, v_mul(pr, 1.5f)) : v_add(base, v_mul(u, -1.5f));
             POST(i, at, pace(dist2d(at, men[i]->pos), cj_speed > 2.2f ? cj_speed : 3.0f), 0, HCB_DUTY_RING, job + 1, look);
         }
-        if (now - dt->evac_said >= SAY_EVAC_MS && say == HCB_SAY_NONE) { say = HCB_SAY_EVAC; dt->evac_said = now; }
+        if ((!dt->evac_said || now - dt->evac_said >= SAY_EVAC_MS) && say == HCB_SAY_NONE) { say = HCB_SAY_EVAC; dt->evac_said = now ? now : 1; }
     } else {
         /* a fight */
         hcb_vec at;
@@ -296,14 +296,29 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         }
         /* what the commander tells CJ */
         if (say == HCB_SAY_NONE) {
-            if (dt->cj_cover_ok && !cj_in && (!dt->cover_said || now - dt->cover_said >= SAY_COVER_MS)) { say = HCB_SAY_TAKE_COVER; say_dir = rel_dir(cj, dt->cj_cover); dt->cover_said = now; }
+            if (dt->cj_cover_ok && !cj_in && (!dt->cover_said || now - dt->cover_said >= SAY_COVER_MS)) { say = HCB_SAY_TAKE_COVER; say_dir = rel_dir(cj, dt->cj_cover); dt->cover_said = now ? now : 1; }
             else if (cj_in && !dt->safe_said) { say = HCB_SAY_IN_COVER; dt->safe_said = 1; }
             else if (!dt->cj_cover_ok && now - dt->contact_since >= 1500 && (!dt->cover_said || now - dt->cover_said >= 8000)) {
-                say = HCB_SAY_FOLLOW_ME; say_dir = rel_dir(cj, v_sub(cjp, v_mul(u, 5.0f))); dt->cover_said = now;
+                say = HCB_SAY_FOLLOW_ME; say_dir = rel_dir(cj, v_sub(cjp, v_mul(u, 5.0f))); dt->cover_said = now ? now : 1;
             }
         }
     }
 #undef POST
+    /* CJ is shooting (a round in the last 1.2 s): nobody stands in front of his gun - a post within 2 m of his line, up to
+       40 m ahead, steps out sideways (the bodyguard only 1.2 m, he stays half in front of CJ) */
+    if (dt->cj_shot_t && now - dt->cj_shot_t < 1200) {
+        hcb_vec d = dt->cj_shot_dir, side;
+        side.x = -d.y; side.y = d.x; side.z = 0;
+        for (i = 0; i < out->n_posts; i++) {
+            hcb_post *p = &out->posts[i];
+            hcb_vec rel = flat(v_sub(p->at, cjp));
+            float along = rel.x * d.x + rel.y * d.y, lat = rel.x * side.x + rel.y * side.y;
+            float need = p->duty == HCB_DUTY_SHIELD ? 1.2f : 2.0f;
+            if (p->move < 0 || along < 0.3f || along > 40.0f || f_abs(lat) >= need) continue;
+            p->at = v_add(p->at, v_mul(side, (lat < 0 ? -need : need) - lat));
+            if (p->move == 0) p->move = 2;
+        }
+    }
     out->cover_ok = (u8)(duty >= HCB_DUTY_COVER && dt->cj_cover_ok && !cj_in);
     out->cover_at = dt->cj_cover;
     if (say != HCB_SAY_NONE) { dt->say_seq++; dt->last_say = say; dt->say_dir = say_dir; }

@@ -1,0 +1,17 @@
+PASS: Peace: a diamond round CJ - the bodyguard a pace behind on his right, the commander behind on the left, the point man 4.5 m ahead, the rear man 5 m behind; each watches his own sector outwards, standing
+PASS: The formation turns with the way CJ goes (after 1.5 s on a new course, not on a sidestep), and whoever has fallen back runs to his slot
+PASS: CJ shooting: nobody stands in front of his gun - a man within 2 m of his line steps out sideways (the bodyguard 1.2 m), and goes back once CJ has stopped for 1.2 s
+PASS: A suspect (armed and near, has done nothing yet): the bodyguard steps between him and CJ, the others put their eyes on him, the rear man keeps watching the rear
+PASS: Contact with a wall 3 m away on the side away from the shooter: within a second the commander tells CJ where to go ("into cover - on your left"), the bodyguard puts himself between CJ and the shooter
+PASS: CJ goes to the spot: "CJ is in cover, we hold", the mark goes away; the bodyguard crouches at his side, the commander takes cover next to him, the fire team fights from the shooter's side, within 12 m of CJ
+PASS: No cover within 8 m: the commander tells CJ to stay with the bodyguard, who keeps his body between CJ and the shooter
+PASS: CJ is never sent towards the shooter for cover, nor to a hidden spot with no ground under it (water, a drop)
+PASS: Bounding overwatch: when both men of the fire team have to move, one runs to his spot while the other holds where he is, crouched, covering him; then they change
+PASS: The commander falls: the next man takes command and says so; the three left share the roles (bodyguard and fire team)
+PASS: Too hot (CJ badly hurt under fire): a tight ring round him, nobody further than 2 m, the bodyguard towards the shooter; "we pull out - call the pickup", not repeated for 20 s
+PASS: The shooter is down and it stays quiet: "clear - regroup on CJ", once, and the detail is back in its formation
+PASS: Cover questions: at most 8 a look (two rays each in the game), and a spot already answered is not asked about again while the answer is fresh
+PASS: CJ in a vehicle: the detail gives no posts on foot (the scripts take the free seats or follow)
+PASS: SQUAD TACTICS: GUARD keeps the fire team within 12 m of CJ (6 m here), ASSAULT pushes it towards the shooter (10 m, never beyond 18 m)
+PASS: The same fight twice gives the same posts, the same words and the same questions (a recorded fight replays exactly)
+The core only. Nothing here has run in the game.

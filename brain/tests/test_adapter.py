@@ -53,7 +53,7 @@ HC_HELLO, HC_POLICE, HC_MISSION, HELLO_MAGIC = HC_STATE + 440, HC_STATE + 441, H
 CLEO_IMAGE = 0x88000
 I_DISPATCH, I_REGISTER, I_MAP, I_VERSION, I_SHARED = 0x37904, 0x38a58, 0x27d988, 0x1bc30, 0x7d1f8
 I_G_COLLECT, I_G_VARPTR, I_G_PARAMS, I_G_BASE = 0x7d248, 0x7d240, 0x7d220, 0x7d1a0
-CMD_GUNNER, CMD_SQUAD, CMD_STATUS = 1, 2, 3
+CMD_GUNNER, CMD_SQUAD, CMD_STATUS, CMD_POST, CMD_DETAIL, CMD_PILOT = 1, 2, 3, 4, 5, 6
 CI = CLEO + CLEO_IMAGE
 
 
@@ -753,6 +753,44 @@ assert e.opcode(20, 9, CMD_STATUS)[1][8] >= 200, 'our own rounds and rounds at C
 e.gunshot(e.cj, (30., 40., 1.)); e.frame(ms=50, hud=False)
 v = e.opcode(20, 8, CMD_STATUS)[1]
 assert 0 <= v[5] <= 100 and abs(f32(v[6]) - 0.6) < .01 and abs(f32(v[7]) - 0.8) < .01, (v[5], f32(v[6]), f32(v[7]))
+# 1.4: the protective detail through the same opcode - a post for each guard on foot (10 variables), the commander's words (9)
+n_rays = len(e.los_calls); e.frame(ms=50, n=4, hud=False)
+handled, v, used = e.opcode(10, 10, CMD_POST, handle=H_(s1))
+assert handled == 1 and used == 7 and v[0] == H_(s1) and v[1] in (0, 1, 2, 3), v
+spot = [f32(x) for x in v[2:5]]; look = [f32(x) for x in v[6:9]]
+assert all(abs(x) < 4000 for x in spot + look) and math.dist(spot[:2], (0., 0.)) < 20 and v[5] in (0, 1) and v[9] >= h.HCB_DUTY_WATCH, (spot, look, v)
+assert e.opcode(10, 10, CMD_POST, handle=H_(gang))[1][1] == -1 and e.opcode(10, 10, CMD_POST, handle=0x7fffff01)[1][1] == -1, 'no post for a stranger or a handle that names nobody'
+handled, v, used = e.opcode(20, 9, CMD_DETAIL)
+assert handled == 1 and used == 7 and v[3] >= h.HCB_DUTY_WATCH and v[4] in (0, 1) and v[8] == H_(s1), ('the only guard on foot commands', v)
+probes = [c for c in e.los_calls if abs(c[0][0] - c[1][0]) < 1e-4 and abs(c[0][1] - c[1][1]) < 1e-4 and abs((c[0][2] - c[1][2]) - 2.4) < .01]
+assert probes, 'cover questions are answered with a ray straight down (is there ground under the spot)'
+passed('1.4 protective detail through 0E48: a post for a guard on foot (move, spot, crouch, where to look, duty; none for strangers), the commander\'s words, his duty and who commands; the cover questions are answered with the game\'s own rays (hidden from the threat, ground under the spot)')
+
+# 1.4: the pilot (command 6, 6 variables): the script gives the point and the roofs, the brain gives where to be now; the
+# turn (pitch, bank, heading) is written into the helicopter's matrix after the scripts have run
+hh = e.handle(heli) & 0x7fffffff
+mat = e.r64(heli + 0x18)
+def pilot_ask(tx, ty, ground=0., flags=1, handle=hh):
+    e.uc.mem_write(e.script + 0x6c + 4 * 27, struct.pack('<3fi', tx, ty, ground, flags))
+    return e.opcode(26, 6, CMD_PILOT, handle=handle)
+def rows():
+    return [struct.unpack('<3f', bytes(e.uc.mem_read(mat + o, 12))) for o in (0, 0x10, 0x20)]
+assert pilot_ask(400., 8., handle=H_(police_heli) & 0x7fffffff)[1][5] == -1, 'only Helicover\'s own helicopter is flown'
+assert pilot_ask(float('nan'), 8.)[1][5] == -1 and pilot_ask(9000., 8.)[1][5] == -1, 'never towards a point that is not on the map'
+speeds, fz = [], []
+for k in range(40):
+    handled, v, used = pilot_ask(400., 8.)
+    assert handled == 1 and used == 7 and v[5] != -1, v
+    x, y, z, left, sp = (f32(q) for q in v[1:6])
+    speeds.append(sp)
+    e.wf(mat + 0x30, x, y, z)                                          # what SET_CAR_COORDINATES does
+    e.frame(ms=50, hud=False)
+    r_, f_, u_ = rows(); fz.append(f_[2])
+    assert all(abs(math.hypot(*q) - 1) < 1e-3 for q in (r_, f_, u_)) and abs(sum(a * b for a, b in zip(r_, f_))) < 1e-3, (r_, f_, u_)
+assert all(b - a < .5 for a, b in zip(speeds, speeds[1:])) and speeds[-1] > 5 and min(fz) < -.2 and f_[0] > .5, (speeds[-5:], min(fz), f_)
+assert abs(left - math.hypot(400 - x, 8 - y)) < .5 and 0 < x < 100 and 25 < z < 36, (x, y, z, left)   # (it climbs to 35 m over the roofs for a 400 m trip)
+passed('1.4 pilot through 0E48 (6 variables): only for Helicover\'s helicopter and a point on the map; it turns towards the point and speeds up smoothly with the nose down; its turn goes into the helicopter\'s matrix after the scripts (rows of length 1, square to each other)')
+
 until_round()
 e.w32(gang + 0x54c, 55)                                              # he is dead
 e.frame(ms=50, n=2, hud=False)
@@ -763,9 +801,9 @@ passed('A guard on foot asks with 3 variables: cover, fire, and "cease fire" in 
 # what a script must not be able to do through the opcode
 sentinel = [0x51515151] * 32
 e.uc.mem_write(e.script + 0x6c, struct.pack('<32i', *sentinel))
-for first, count in ((28, 9), (5, 40), (5, 0), (5, -3)):
-    handled, v, used = e.opcode(first, count, CMD_GUNNER)
-    assert handled == 1 and used == 7 and e.locals() == sentinel, (first, count)
+for cmd, first, count in ((CMD_GUNNER, 28, 9), (CMD_GUNNER, 5, 40), (CMD_GUNNER, 5, 0), (CMD_GUNNER, 5, -3), (CMD_POST, 25, 10), (CMD_DETAIL, 26, 9), (CMD_POST, 5, 9), (CMD_DETAIL, 5, 8)):
+    handled, v, used = e.opcode(first, count, cmd)
+    assert handled == 1 and used == 7 and e.locals() == sentinel, (cmd, first, count)
 space_before = bytes(e.uc.mem_read(GTA + SCRIPT_SPACE, 0x100))
 handled, v, used = e.opcode(0, 9, CMD_GUNNER, var=b'\x02\x10\x00')    # a global variable instead of a local one
 assert handled == 1 and used == 7 and e.locals() == sentinel and bytes(e.uc.mem_read(GTA + SCRIPT_SPACE, 0x100)) == space_before

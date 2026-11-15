@@ -367,7 +367,7 @@ def probe_vm(name,w):
  keep=b.OUT;b.OUT=PROBE_DIR
  try:return VM(name,w)
  finally:b.OUT=keep
-PROBE={4:'HCBUSY',3:'HCBURN',2:'HCCLEAR',1:'SQRLD',5:'HCFOLL'}   # an answer to a refused order, an alarm, a routine call, chatter; 5 = the acknowledgement of an order
+PROBE={4:'HCBUSY',3:'HCBURN',2:'HCCLEAR',1:'SQCAR',5:'HCFOLL'}   # an answer to a refused order, an alarm, a routine call, chatter; 5 = the acknowledgement of an order
 assert [mv.PRIO[PROBE[k_]] for k_ in (4,3,2,1,5)]==[4,3,2,1,2] and PROBE[5] in mv.ORDER_ACK and PROBE[2] not in mv.ORDER_ACK
 for new in PROBE:
  sc=asm.Script();a_=sc.add;a_(0);mv.say(sc,PROBE[new]);sc.label('END');a_(1,asm.I(100000));sc.go('END');_keep=asm.OUT;asm.OUT=PROBE_DIR;sc.build('SayProbe%d'%new,'csa');asm.OUT=_keep   # scratch scripts, built outside build/ so that nothing can ship them

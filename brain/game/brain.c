@@ -54,7 +54,7 @@ extern void *memset(void *d, int c, u64 n);
 
 #define HIDDEN __attribute__((visibility("hidden")))
 #define EXPORT __attribute__((visibility("default")))
-#define VERSION "0.2.1 (stage 2: fire control)"
+#define VERSION "0.3 (stage 3: protective detail and pilot)"
 #define GAME_DIR "/storage/emulated/0/Android_unprotected/data/com.rockstargames.gtasa/"
 
 /* ---------- the game (offsets from libGTASA base; see brain/research/game_facts.md) ---------- */
@@ -96,6 +96,7 @@ extern void *memset(void *d, int c, u64 n);
 #define CMD_SQUAD 2                         /* 3 variables: in handle; out state (0 nothing, 1 cover, 2 fire, 3 cease fire now), target */
 #define CMD_POST 4                          /* 10 variables: in handle; out move (-1 no post, 0 stay, 1 walk, 2 run, 3 sprint), x y z, crouch, look x y z, duty */
 #define CMD_DETAIL 5                        /* 9 variables: out what the commander said last (seq, HCB_SAY_*, direction), duty, cover for CJ (ok, x y z), commander */
+#define CMD_PILOT 6                         /* 6 variables: in helicopter, point x y, roofs z, flags (1 stop, 2 the last step was refused); out x y z, metres left, speed (-1 = no pilot) */
 #define CMD_STATUS 3                        /* 5 variables: out alert, threats, attackers, kills, the most dangerous man; 8: + ms since CJ fired, direction x, y; 9: + ms since a stranger fired at our helicopter */
 #define IGNORE_ENTITY 0xbdcaf8UL            /* CWorld::pIgnoreEntity */
 #define GOT_IGNORE 0x84b180UL               /* the GOT entry the line-of-sight code reads its address from */
@@ -799,6 +800,66 @@ static void cmd_detail(int *v) {
     v[0] = g_say_seq; v[1] = g_say; v[2] = g_say_dir; v[3] = g_out.duty; v[4] = g_out.cover_ok;
     put_f(v + 5, g_out.cover_at.x); put_f(v + 6, g_out.cover_at.y); put_f(v + 7, g_out.cover_at.z); v[8] = (int)g_out.lead;
 }
+/* 1.4: the pilot (core/hcb_pilot.c). It keeps its own state for Helicover's helicopter; the position on the ground plane is
+   read back every frame (whatever moved it), the height is its own (SET_CAR_COORDINATES puts a helicopter a little higher
+   than asked: read back, it would creep up). The turn it wants is written into the helicopter's matrix after the scripts
+   have run (pilot_turn), so nothing the script does in the same frame can undo it. */
+static hcb_pilot g_pilot;
+static u32 g_pilot_heli;
+static struct { u32 heli; hcb_vec right, fwd, up; u8 on; } g_turn;
+static float get_f(const int *v) { float f; memcpy(&f, v, 4); return f; }
+static void zero_mem(void *d, u32 n) { u8 *q = d; while (n--) *q++ = 0; }
+static int unit_ok(hcb_vec a) { float l = a.x * a.x + a.y * a.y + a.z * a.z; return l > 0.9f && l < 1.1f; }
+static void cmd_pilot(int *v) {
+    struct pool vp;
+    u32 heli = (u32)v[0], now = RD(u32, G + TIME_MS), mine;
+    const u8 *e, *m;
+    const float *mp;
+    float t[3];
+    hcb_vec pos, vel, fwd;
+    hcb_pilot_in in;
+    hcb_pilot_out o;
+    v[5] = -1;
+    if (!shared_get(HC_PUB + 1, &mine) || mine != heli || !get_pool(VEH_POOL, &vp)) return;   /* only Helicover's own helicopter */
+    e = obj_of(&vp, heli, VEH_STRIDE);
+    m = e ? RD(const u8 *, e + 0x18) : 0;
+    if (!m) return;
+    mp = (const float *)(m + 0x30);
+    t[0] = get_f(v + 1); t[1] = get_f(v + 2); t[2] = get_f(v + 3);
+    if (!sane(mp) || !sane(t)) return;
+    pos.x = mp[0]; pos.y = mp[1]; pos.z = mp[2];
+    fwd.x = RD(float, m + 0x10); fwd.y = RD(float, m + 0x14); fwd.z = 0;
+    vel.x = RD(float, e + 0x68) * 50.0f; vel.y = RD(float, e + 0x6c) * 50.0f; vel.z = RD(float, e + 0x70) * 50.0f;
+    if (!g_pilot.used || g_pilot_heli != heli || now - g_pilot.last > 500) {
+        hcb_pilot_reset(&g_pilot, pos, vel, fwd);
+        g_pilot.last = now - 16; g_pilot_heli = heli;
+    }
+    g_pilot.pos.x = pos.x; g_pilot.pos.y = pos.y;
+    if (!(g_pilot.pos.z - pos.z < 8.0f && pos.z - g_pilot.pos.z < 8.0f)) g_pilot.pos.z = pos.z;
+    zero_mem(&in, sizeof in);
+    in.target.x = t[0]; in.target.y = t[1]; in.ground = t[2];
+    in.dt = (float)(now - g_pilot.last) * 0.001f;
+    in.stop = (u8)(v[4] & 1); in.blocked = (u8)((v[4] >> 1) & 1);
+    hcb_pilot_step(&g_pilot, &in, &o);
+    g_pilot.last = now;
+    put_f(v + 1, o.pos.x); put_f(v + 2, o.pos.y); put_f(v + 3, o.pos.z); put_f(v + 4, o.dist); put_f(v + 5, o.speed);
+    g_turn.heli = heli; g_turn.right = o.right; g_turn.fwd = o.fwd; g_turn.up = o.up; g_turn.on = 1;
+}
+static void pilot_turn(void) {
+    struct pool vp;
+    u8 *e, *m;
+    u32 mine;
+    if (!g_turn.on) return;
+    g_turn.on = 0;
+    if (!unit_ok(g_turn.right) || !unit_ok(g_turn.fwd) || !unit_ok(g_turn.up)) return;
+    if (!shared_get(HC_PUB + 1, &mine) || mine != g_turn.heli || !get_pool(VEH_POOL, &vp)) return;
+    e = obj_of(&vp, g_turn.heli, VEH_STRIDE);
+    m = e ? RD(u8 *, e + 0x18) : 0;
+    if (!m) return;
+    RD(float, m + 0x00) = g_turn.right.x; RD(float, m + 0x04) = g_turn.right.y; RD(float, m + 0x08) = g_turn.right.z;
+    RD(float, m + 0x10) = g_turn.fwd.x; RD(float, m + 0x14) = g_turn.fwd.y; RD(float, m + 0x18) = g_turn.fwd.z;
+    RD(float, m + 0x20) = g_turn.up.x; RD(float, m + 0x24) = g_turn.up.y; RD(float, m + 0x28) = g_turn.up.z;
+}
 /* v[5] = ms since CJ last fired (-1 = long ago), v[6], v[7] = the direction of that shot (unit vector, floats): the
    squad steps out of his line of fire */
 static void cmd_status(int *v, int count) {
@@ -834,6 +895,7 @@ HIDDEN void brain_opcode(void *script, u8 **ip, u16 opcode, const char *name) {
     else if (cmd == CMD_STATUS && count >= 5) cmd_status(vars, count);
     else if (cmd == CMD_POST && count >= 10) cmd_post(vars);
     else if (cmd == CMD_DETAIL && count >= 9) cmd_detail(vars);
+    else if (cmd == CMD_PILOT && count >= 6) cmd_pilot(vars);
     g_busy = 0; g_where = 0;
 }
 /* Is this the CLEO the bridge was studied on, and has it found the same game? 0 = yes, else what is wrong. */
@@ -894,6 +956,7 @@ HIDDEN void brain_scripts(void) {
     if (g_ready && !g_busy) { g_busy = 1; g_where = 1; bridge(); think(); g_where = 0; g_busy = 0; watch_frames(t, now_us() - t); }
     g_frame_at_us = t;
     g_scripts_orig();
+    if (g_ready && !g_busy) { g_busy = 1; g_where = 2; pilot_turn(); g_where = 0; g_busy = 0; }
 }
 
 typedef void (*poly_fn)(float x1, float y1, float x2, float y2, float x3, float y3, float x4, float y4, const u8 *rgba);
@@ -1182,7 +1245,7 @@ static void *watchdog(void *arg) {
 }
 
 struct ModInfo { char guid[48]; char name[48]; char version[24]; char author[48]; u16 ver[4]; u8 reserved[336]; };
-static struct ModInfo g_info __attribute__((aligned(16))) = {"net.helicover.brain", "Helicover Brain", "0.2.1", "Helicover", {0, 2, 1, 0}, {0}};
+static struct ModInfo g_info __attribute__((aligned(16))) = {"net.helicover.brain", "Helicover Brain", "0.3", "Helicover", {0, 3, 0, 0}, {0}};
 static int g_done;
 EXPORT struct ModInfo *__GetModInfo(void) { return &g_info; }
 EXPORT void OnModPreLoad(void) {}

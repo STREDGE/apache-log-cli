@@ -741,6 +741,56 @@ for seed in range(12):
 assert delays == [100] * 12, delays
 passed('CJ crosses the line of fire: the guard holds with his weapon still on the man, and fires on the very next look when the line is clear - no second reaction time')
 
+sc = Scene()
+me = sc.our(0, 4, HCB_ROLE_SQUAD, weapon=M4)
+sc.cj['pos'] = [0., -6., 1.]
+g = sc.ped(25, 4, pedtype=GANG, weapon=AK)
+sc.shot(g, (0., -6., 1.), dst=1)
+run(sc, 8)
+assert firing(sc, g)
+sc.cj['pos'] = [12., 4.5, 1.]                          # CJ steps into the line ...
+run(sc, 2)
+sc.los_fn = lambda a, b: False                         # ... and meanwhile the man ducks behind a wall
+run(sc, 3)
+sc.cj['pos'] = [0., -6., 1.]                           # the line is clear again: nobody fires at the wall
+for k in range(10):
+    sc.step(1)
+    assert not firing(sc), k
+passed('A man who ducks out of sight while CJ is in the line is not fired at when the line clears: his sight is asked all the time the rule holds, an old "clear" is never used')
+
+sc = Scene()
+me = sc.our(0, 4, HCB_ROLE_SQUAD, weapon=M4)
+sc.cj['pos'] = [0., -6., 1.]
+g = sc.ped(25, 4, pedtype=GANG, weapon=AK)
+sc.shot(g, (0., -6., 1.), dst=1)
+run(sc, 8)
+assert firing(sc, g)
+sc.roe = HCB_ROE_HOLD                                  # the player says "hold fire" for a moment ...
+run(sc, 2)
+sc.los_fn = lambda a, b: False                         # ... the man ducks behind a wall meanwhile ...
+sc.roe = HCB_ROE_DEFEND                                # ... and the rule is lifted again: no round at the wall
+for k in range(10):
+    sc.step(1)
+    assert not firing(sc), k
+passed('A pair that was not asked about for a while (hold fire, out of range) needs a fresh answer before anybody fires: a "clear" from before the break is never used')
+
+sc = Scene()
+me = sc.our(0, 4, HCB_ROLE_SQUAD, weapon=M4)
+sc.cj['pos'] = [0., -6., 1.]
+a_ = sc.ped(25, 4, pedtype=GANG, weapon=AK)
+b_ = sc.ped(-20, 10, pedtype=GANG, weapon=AK)
+sc.shot(a_, (0., -6., 1.), dst=1)
+sc.shot(b_, (0., -6., 1.), dst=1)
+run(sc, 8)
+first = sc.orders[me].target
+assert firing(sc, first)
+sc.peds[first]['flags'] |= HCB_PF_DEAD                  # his man falls after a while: the other one is fought at once
+run(sc, 20)
+other = b_ if first == a_ else a_
+run(sc, 6)
+assert firing(sc, other), 'the sight of every man in range is asked again on every look, not only that of his own man'
+passed('His man falls: he takes the other attacker at once (the sight of everybody in range is asked again on every look)')
+
 # ------------------------------------------------------------------ the hard rules hold in any mess: random fights, an independent check
 def check_orders(sc, s):
     """Every fire order of this tick against the rules, computed here from the snapshot (not by the core)."""

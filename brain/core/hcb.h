@@ -487,6 +487,44 @@ int hcb_gunner_round(hcb_brain *b, const hcb_shot *q, float heli_speed, int near
 void hcb_gunner_blocked(hcb_brain *b, uint32_t who, uint32_t time);
 int hcb_squad_state(const hcb_brain *b, const hcb_shot *q);
 
+/* ------------------------------------------------------------------ the pilot (1.4)
+ * hcb_pilot_step flies the helicopter to a point the way a person would: it speeds up with the nose down, banks into
+ * turns (and slows down for a sharp one), keeps its height over the roofs ahead, brakes in good time with the nose up
+ * and stops over the point. One step per frame. The adapter puts the helicopter's real position into `pos` before each
+ * step (whatever moved it meanwhile), the script moves it to out->pos and the adapter turns it to out->right/fwd/up. */
+typedef struct hcb_pilot {
+    hcb_vec pos;                /* metres */
+    hcb_vec vel;                /* metres a second */
+    hcb_vec head;               /* where the nose points: a flat unit vector */
+    float pitch;                /* radians, nose up + */
+    float roll;                 /* radians, right side down + */
+    float yaw_rate;             /* radians a second, + = turning left (counter-clockwise from above) */
+    uint32_t used;              /* the adapter's: a pilot in use */
+    uint32_t last;              /* the adapter's: the game time of the last step */
+} hcb_pilot;
+typedef struct hcb_pilot_in {
+    hcb_vec target;             /* where to go (its height is the pilot's to choose) */
+    float ground;               /* the highest ground or roof under the helicopter and ahead of it (the script measures it) */
+    float dt;                   /* seconds since the last step */
+    float cruise;               /* top speed, m/s (0 = 68) */
+    float hover;                /* height over the ground to stop at (0 = 25 m) */
+    uint8_t stop;               /* 1 = stop over the target; 0 = fly on through it */
+    uint8_t blocked;            /* the last step was refused (something solid in the way): stop and climb */
+    uint8_t pad[2];
+} hcb_pilot_in;
+typedef struct hcb_pilot_out {
+    hcb_vec pos;                /* where the helicopter is to be now */
+    hcb_vec right;              /* how it is to be turned: the rows of the game's matrix */
+    hcb_vec fwd;
+    hcb_vec up;
+    float dist;                 /* metres left (flat) */
+    float speed;                /* metres a second (flat) */
+    uint8_t arrived;            /* stopped over the target */
+    uint8_t pad[3];
+} hcb_pilot_out;
+void hcb_pilot_reset(hcb_pilot *p, hcb_vec pos, hcb_vec vel, hcb_vec fwd);
+void hcb_pilot_step(hcb_pilot *p, const hcb_pilot_in *in, hcb_pilot_out *out);
+
 /* Weapon knowledge shared with the adapter and the tests. */
 #define HCB_WC_NONE 0
 #define HCB_WC_MELEE 1

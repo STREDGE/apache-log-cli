@@ -87,12 +87,18 @@ static int check(hcb_brain *b, const hcb_snapshot *s, const hcb_ped *me, int rol
     float dist = v_dist(from, to), range = hcb_weapon_range(me->weapon) * 1.2f;
     vtrack *car = veh_of(b, t->last.vehicle), *heli = veh_of(b, s->heli);
     losent *l;
-    int i, r, door = is_gunner(role), gunner = door && c->gunner_weapon < 0.5f;     /* gunner: his rounds are made by the script */
+    int i, r, mine = 0, door = is_gunner(role), gunner = door && c->gunner_weapon < 0.5f;     /* gunner: his rounds are made by the script */
     float skip = gunner ? (heli && v_dist(from, heli->last.pos) < 6 ? c->muzzle_m : 0.8f) : door ? 0.8f : 0.3f;
     float cj_skip = door && b->cj_in_heli && heli && v_dist(from, heli->last.pos) < 6 ? c->cabin_skip_m : 0.3f;
 
     *aim_at = HCB_AIM_BODY; *aim = to;
     if (!hcb_is_firearm(me->weapon) || dist > range) return HCB_HOLD_RANGE;
+    /* the sight of his own man is asked even while a rule holds the fire (CJ or a mate in the line): the answer is fresh
+       the moment the line clears, and an old "clear" is never used for a man who may have hidden meanwhile */
+    l = los_find(b, me->id, t->last.id);
+    for (i = 0; i < HCB_MAX_OURS; i++)
+        if (b->sh[i].used && b->sh[i].id == me->id) { mine = b->sh[i].target == t->last.id || b->sh[i].aim == t->last.id; break; }
+    if (mine) ask(out, me->id, t->last.id);
     /* a door gunner does not fire across his own cabin */
     if (heli && door && me->vehicle == 0 && dist > 0.5f) {
         hcb_vec right, d = v_sub(to, from);
@@ -129,8 +135,7 @@ static int check(hcb_brain *b, const hcb_snapshot *s, const hcb_ped *me, int rol
     }
     /* the line of sight is the adapter's to answer, and it is asked on every tick for every pair that passed the rules
        above: known and blocked = no; not known yet = he may take the man and bring his weapon round, not fire */
-    l = los_find(b, me->id, t->last.id);
-    ask(out, me->id, t->last.id);
+    if (!mine) ask(out, me->id, t->last.id);
     if (!l || s->time - l->time > 600) return SOFT_LOS;
     if (!l->clear) return HCB_HOLD_NO_LOS;
     return HCB_HOLD_NONE;

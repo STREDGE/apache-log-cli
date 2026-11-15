@@ -66,7 +66,8 @@ G_AIM=STATE+443;G_AIM_T=STATE+447        # per gunner: the man his weapon is on 
 BR_ALERT=STATE+451;BR_TOP=STATE+452;BR_KILLS=STATE+453;BR_THREATS=STATE+454;BR_ATTACKERS=STATE+455
 SQ_BR_ST=STATE+456;SQ_BR_TG=STATE+460    # per guard of the squad: the brain's state (0 nothing, 1 cover, 2 fire, 3 cease fire) and man
 SQ_TICK=STATE+464
-G_FIRE=STATE+465;G_FIRE_T=STATE+469   # 1.4, per gunner: the man his own weapon is firing at (-1 = not firing), when the firing order is renewed
+SQ_PACE=STATE+230   # 1.4, per guard: the pace of his last move order (a new pace renews the order)
+G_FIRE=STATE+465;G_FIRE_T=STATE+469;SQ_SAY_SEQ=STATE+473   # SQ_SAY_SEQ: the number of the commander's last words the squad has said (-1 = take the next number without saying it)   # 1.4, per gunner: the man his own weapon is firing at (-1 = not firing), when the firing order is renewed
 BURN_NEXT=STATE+433;BURN_SAID=STATE+434;POSE=STATE+435;POSE_DONE=STATE+436   # beta 6: burning-car watch; gunners sit on the skid (2, 1.4) / kneel (1) / stand (0)
 # A burning car (health below BURN_HP) within BURN_WARN_M of CJ is called out. Which cars may be fired at is the brain's business (1.3).
 BURN_HP=250;BURN_WARN_M=12.0
@@ -82,7 +83,7 @@ ST_I=STATE+215;ST_NEXT=STATE+216;HP_PREV=STATE+217;HP_T=STATE+218;EVADE_UNTIL=ST
 EXIT_WIDGET=0  # CTouchInterface widget of the on-screen enter/exit vehicle button (CPad::ExitVehicleJustDown)
 CRUISE_T=STATE+118;CR_UP=STATE+119;CR_DN=STATE+120
 CR_CMDZ=STATE+128  # v33: commanded z, integrated by steps (never rebuilt from the actual z)
-CR_DT=STATE+121;CR_V=STATE+122;CR_VT=STATE+123;CR_SLOW=STATE+124;CR_DX=STATE+125;CR_DY=STATE+126;CR_DZ=STATE+127
+CR_DT=STATE+121;CR_V=STATE+122;CR_VT=STATE+123;CR_SLOW=STATE+124;CR_BLK=CR_SLOW;CR_DX=STATE+125;CR_DY=STATE+126;CR_DZ=STATE+127
 # v32 scripted cruise for map/Grove flights: per-frame, time-based, with acceleration,
 # braking, rate-limited turning and smooth altitude changes (no jerks, no circling).
 SEAT_DROP=0.45;SEAT_OUT=0.15   # 1.4: a seated gunner sits this much lower and further out than a kneeling one
@@ -175,8 +176,8 @@ MESSAGES={'HCLOAD': '~b~PILOT:~w~ inbound to your position.',
  'HCBURN': '~r~CAR ON FIRE!~w~ Get away from it.',
  'HCEVADE': '~r~TAKING HITS!~w~ Pilot breaking away.',
  'HCSHOT': '~r~TAKING FIRE!~w~ Pilot breaking away.',
- 'HCHELLO': '~b~HELICOVER 1.3 BETA~w~ ready. CLEO menu > Helicover.',
- 'HCHELLV': '~b~HELICOVER 1.3 BETA~w~ ready. Map marker is off here.'}
+ 'HCHELLO': '~b~HELICOVER 1.4 BETA~w~ ready. CLEO menu > Helicover.',
+ 'HCHELLV': '~b~HELICOVER 1.4 BETA~w~ ready. Map marker is off here.'}
 # Generate state updates; panel prints messages when the state changes.
 # beta 6: our people do not cower. CREATE_CHAR gives a mission ped the built-in "normal" decision maker (m_norm.ped): punched, shot at or
 # aimed at, it picks "duck and cover" / "flee" like any passer-by. 65542 is the game's built-in EMPTY decision maker (slot 6 | 1<<16, loaded
@@ -201,7 +202,7 @@ c.set(GAME_OK,1);c.label('GAME_SIG_BAD');c.set(NOTICE_SKIP,-1);c.set(HELLO_AT,0)
 for key in range(PUB,PUB+7):c.set(key,-1)
 for key in range(GROUND_PUB,GROUND_PUB+5):c.set(key,-1)
 c.set(ROPE_COMMAND,0)
-for key,val in [(BRAIN_HELLO,0),(POLICE,0),(MISSIONS,0),(BR_ALERT,0),(BR_TOP,-1),(BR_THREATS,0),(BR_ATTACKERS,0),(POSE,2),(POSE_DONE,2),(LANG,0),(ROPE_WAIT,0),(LEAVE_N,0),(AFTER_ROPE,0),(DISMISS_NEXT,0),(LEAVE_ROT,0),(ROPE_BUSY,0),(SWAP_MSG,0),(TEAM_CREW,0),(STATE,0),(CMD,0),(OPEN,0),(MODEL,487),(CREW,2),(FIRE,3),(TOUCH,0),(HUD,2),(HP,0),(WEAPON_SETTING,0),(EXIT_MODE,0),(AUTO_EXIT,0),(LOCK_HOLD,0),(ROPE_PENDING,0),(DROP_RESULT,0),(ROPE_TRIES,0),(RETRY_AT,0),(FORCE_ROPE,0),(EXIT_PRESSED,0),(EXIT_LAST,0),(AIR_SEEN,0),(AIR_CALL_NEXT,0),(KILLS,0),(LAST_TGT,-1),(ENGAGED,0),(CLEAR_AT,0),(ORBIT_I,0),(ORBIT_NEXT,0),(TACTICS,0),(ESCORT_PENDING,0),(ST_I,0),(ST_NEXT,0),(HP_PREV,0),(HP_T,0),(EVADE_UNTIL,0),(HELI_SHOT_T,-100000)]:c.set(key,val)
+for key,val in [(SQ_SAY_SEQ,-1),(BRAIN_HELLO,0),(POLICE,0),(MISSIONS,0),(BR_ALERT,0),(BR_TOP,-1),(BR_THREATS,0),(BR_ATTACKERS,0),(POSE,2),(POSE_DONE,2),(LANG,0),(ROPE_WAIT,0),(LEAVE_N,0),(AFTER_ROPE,0),(DISMISS_NEXT,0),(LEAVE_ROT,0),(ROPE_BUSY,0),(SWAP_MSG,0),(TEAM_CREW,0),(STATE,0),(CMD,0),(OPEN,0),(MODEL,487),(CREW,2),(FIRE,3),(TOUCH,0),(HUD,2),(HP,0),(WEAPON_SETTING,0),(EXIT_MODE,0),(AUTO_EXIT,0),(LOCK_HOLD,0),(ROPE_PENDING,0),(DROP_RESULT,0),(ROPE_TRIES,0),(RETRY_AT,0),(FORCE_ROPE,0),(EXIT_PRESSED,0),(EXIT_LAST,0),(AIR_SEEN,0),(AIR_CALL_NEXT,0),(KILLS,0),(LAST_TGT,-1),(ENGAGED,0),(CLEAR_AT,0),(ORBIT_I,0),(ORBIT_NEXT,0),(TACTICS,0),(ESCORT_PENDING,0),(ST_I,0),(ST_NEXT,0),(HP_PREV,0),(HP_T,0),(EVADE_UNTIL,0),(HELI_SHOT_T,-100000)]:c.set(key,val)
 c.label('IDLE');c.call('NAP');c.call('RESOLVE_LANG');a(0x01bd,V(20));a(0xddc,I(HEART),V(20));c.get(19,HELLO_AT);c.eq(19,-1,'HELLO_CHECK');c.go('HELLO_DONE')
 c.label('HELLO_CHECK');c.eq(19,0,'HELLO_DUE');a(0x0085,V(19),V(20));a(0x000a,V(19),I(5000));a(0xddc,I(HELLO_AT),V(19));c.go('HELLO_DONE')
 c.label('HELLO_DUE');c.check(0x001d,[V(20),V(19)],'HELLO_DONE');c.check(0x0256,[I(0)],'HELLO_DONE');c.set(HELLO_AT,-1);c.get(19,GAME_OK);c.eq(19,1,'HELLO_OLD');msg(c,'HCHELLO');c.go('HELLO_DONE')
@@ -812,61 +813,39 @@ a(0x00aa,V(5),V(9),V(10),V(11));a(0x02ce,V(9),V(10),F(1000),V(17));a(0x000b,V(17
 a(0x04df,V(5),I(0));a(0x04a2,V(5),V(9),V(10),V(11),F(15),V(11));a(0x00ad,V(5),F(20));a(0x0085,V(19),V(20));a(0x000a,V(19),I(6000));a(0xddc,I(FOLLOW_NEXT),V(19));a(0xddc,I(ORBIT_NEXT),V(19));a(0xddc,I(PATROL_NEXT),V(19));c.set(STUCK_SINCE,0);c.ret()
 c.label('UNSTICK_RESET');c.set(STUCK_SINCE,0)
 c.label('UNSTICK_WAIT');c.ret()
-# v32 scripted cruise toward (26@,27@). The helicopter is frozen and moved every frame by
-# SET_CAR_COORDINATES. Speed ramps up/down (target = 0.6*distance+3, capped), heading turns at
-# most CRUISE_TURN deg/s (slow while turning > 45 deg), altitude eases toward CRUISE_CLEAR m above
-# the highest surface below and 30/70/120 m ahead (stop and climb if > 8 m too low or blocked).
-# Returns 19@ = remaining 2D distance.
-c.label('GLIDE_BEGIN');a(0x00aa,V(5),V(9),V(10),V(11));a(0x02e3,V(5),V(30));a(0x0574,V(5),I(1));c.set(FROZEN,1);a(0x00ab,V(5),V(9),V(10),V(11));a(0xddc,I(CR_CMDZ),V(11));a(0x00aa,V(5),V(17),V(29),V(31));a(0x0063,V(31),V(11));a(0xddc,I(GLIDE_C),V(31));a(0xddc,I(CRUISE_T),V(20));c.check(0x0021,[V(30),F(CRUISE_SPEED)],'GB_SPEED_OK');a(0x0007,V(30),F(CRUISE_SPEED));c.label('GB_SPEED_OK');a(0xddc,I(CR_V),V(30));c.ret()   # 1.2: continues at the real speed (was restarted from 0 = a dead stop)
+# 1.4: the brain's pilot flies the helicopter to (26@,27@) (command 6 of 0E48, brain/core/hcb_pilot.c): nose down to speed up,
+# banked into turns, a safe height over the roofs ahead, braking in good time with the nose up, stopping over the point.
+# The script measures the roofs (02CE) under the helicopter and 30/80/150/250 m on the way, moves it to the point the
+# pilot gives (00AB, never through anything solid: a blocked step is refused and the pilot stops and climbs) and the
+# brain turns it (pitch, bank and heading, written after the scripts have run). Returns 19@ = metres left (flat);
+# 26@/27@ are kept.
+c.label('GLIDE_BEGIN');a(0x00aa,V(5),V(9),V(10),V(11));a(0x02e3,V(5),V(30));a(0x0574,V(5),I(1));c.set(FROZEN,1);a(0x00ab,V(5),V(9),V(10),V(11));a(0xddc,I(CR_CMDZ),V(11));a(0x00aa,V(5),V(17),V(29),V(31));a(0x0063,V(31),V(11));a(0xddc,I(GLIDE_C),V(31));a(0xddc,I(CRUISE_T),V(20));c.check(0x0021,[V(30),F(CRUISE_SPEED)],'GB_SPEED_OK');a(0x0007,V(30),F(CRUISE_SPEED));c.label('GB_SPEED_OK');c.set(CR_BLK,0);a(0xddc,I(CR_V),V(30));c.ret()   # 1.2: continues at the real speed (was restarted from 0 = a dead stop)
 c.label('CR_TIME');c.get(29,CRUISE_T);a(0x0085,V(30),V(20));a(0x0062,V(30),V(29));a(0xddc,I(CRUISE_T),V(20))
 c.check(0x0019,[V(30),I(100)],'CRT_HI');a(6,V(30),I(100));c.label('CRT_HI');c.check(0x0019,[V(30),I(0)],'CRT_LOW');c.go('CRT_OK');c.label('CRT_LOW');a(6,V(30),I(16));c.label('CRT_OK')
 a(0x0093,V(31),V(30));a(0x0013,V(31),F(.001));a(0xddc,I(CR_DT),V(31));c.ret()
 c.label('CRUISE_STEP');c.get(19,FROZEN);c.eq(19,1,'CR_BEGIN');c.go('CR_RUN');c.label('CR_BEGIN');c.call('GLIDE_BEGIN')
-c.label('CR_RUN');c.set(DBG_CODE,1);c.call('CR_TIME');a(0x00aa,V(5),V(9),V(10),V(11))
-a(0x0087,V(17),V(26));a(0x0063,V(17),V(9));a(0x0087,V(29),V(27));a(0x0063,V(29),V(10));a(0x0509,F(0),F(0),V(17),V(29),V(19))
-a(0xddc,I(CR_DX),V(17));a(0xddc,I(CR_DY),V(29));c.set(CR_SLOW,0)
-c.check(0x0021,[V(19),F(2)],'CR_HEAD_DONE')
-a(0x0604,V(17),V(29),V(30));a(0x0174,V(5),V(31));a(0x0063,V(30),V(31))
-c.check(0x0021,[V(30),F(180)],'CR_W1');a(0x000b,V(30),F(-360));c.label('CR_W1')
-c.check(0x0023,[F(-180),V(30)],'CR_W2');a(0x000b,V(30),F(360));c.label('CR_W2')
-c.check(0x0021,[V(30),F(45)],'CR_T1');c.set(CR_SLOW,1);c.label('CR_T1')
-c.check(0x0023,[F(-45),V(30)],'CR_T2');c.set(CR_SLOW,1);c.label('CR_T2')
-c.get(17,CR_DT);a(0x0013,V(17),F(CRUISE_TURN))
-c.check(0x0025,[V(30),V(17)],'CR_T3');a(0x0087,V(30),V(17));c.label('CR_T3')
-a(0x0013,V(17),F(-1));c.check(0x0025,[V(17),V(30)],'CR_T4');a(0x0087,V(30),V(17));c.label('CR_T4')
-a(0x005b,V(31),V(30));a(0x0175,V(5),V(31))
-c.label('CR_HEAD_DONE')
-a(0x0087,V(30),V(19));a(0x0013,V(30),F(.6));a(0x000b,V(30),F(3));c.check(0x0021,[V(30),F(CRUISE_SPEED)],'CR_VT1');a(0x0007,V(30),F(CRUISE_SPEED));c.label('CR_VT1')
-c.get(17,CR_SLOW);c.eq(17,1,'CR_VT2');c.check(0x0021,[V(30),F(8)],'CR_VT2');a(0x0007,V(30),F(8));c.label('CR_VT2')
-a(0xddc,I(CR_VT),V(30))
-a(0x02ce,V(9),V(10),F(1000),V(31))
-for ahead in [30,70,120]:
- nxt='CR_ROOF_'+str(ahead);a(0x0407,V(5),F(0),F(ahead),F(0),V(17),V(29),V(30));a(0x02ce,V(17),V(29),F(1000),V(30));c.check(0x0025,[V(30),V(31)],nxt);a(0x0087,V(31),V(30));c.label(nxt)
-a(0x000b,V(31),F(CRUISE_CLEAR));a(0x0063,V(31),V(11))
-c.check(0x0021,[V(31),F(8)],'CR_LOW_OK');a(0x0007,V(30),F(0));a(0xddc,I(CR_VT),V(30));c.label('CR_LOW_OK')
-# v33: no sinking during the long leg (it caused bobbing over uneven roofs); only within 200 m
-c.check(0x0021,[V(19),F(200)],'CR_MAY_SINK');c.check(0x0023,[F(0),V(31)],'CR_MAY_SINK');a(0x0007,V(31),F(0));c.label('CR_MAY_SINK')
-a(0x0013,V(31),F(1.5))
-c.check(0x0021,[V(31),F(CRUISE_CLIMB)],'CR_Z1');a(0x0007,V(31),F(CRUISE_CLIMB));c.label('CR_Z1')
-c.check(0x0023,[F(-CRUISE_SINK),V(31)],'CR_Z2');a(0x0007,V(31),F(-CRUISE_SINK));c.label('CR_Z2')
-c.get(30,CR_DT);a(0x006b,V(31),V(30));a(0xddc,I(CR_DZ),V(31))
-c.get(17,CR_V);c.get(29,CR_VT)
-c.check(0x0025,[V(29),V(17)],'CR_DECEL')
-a(0x0087,V(31),V(30));a(0x0013,V(31),F(CRUISE_ACCEL));a(0x005b,V(17),V(31));c.check(0x0025,[V(17),V(29)],'CR_V_OK');a(0x0087,V(17),V(29));c.go('CR_V_OK')
-c.label('CR_DECEL');a(0x0087,V(31),V(30));a(0x0013,V(31),F(CRUISE_BRAKE));a(0x0063,V(17),V(31));c.check(0x0025,[V(29),V(17)],'CR_V_OK');a(0x0087,V(17),V(29))
-c.label('CR_V_OK');a(0xddc,I(CR_V),V(17))
-a(0x006b,V(17),V(30));c.check(0x0025,[V(17),V(19)],'CR_S1');a(0x0087,V(17),V(19));c.label('CR_S1')
-c.get(30,CR_DX);c.get(29,CR_DY)
-c.check(0x0021,[V(19),F(.01)],'CR_NODIR');a(0x0073,V(17),V(19));a(0x006b,V(30),V(17));a(0x006b,V(29),V(17));c.go('CR_DIR')
-c.label('CR_NODIR');a(0x0007,V(30),F(0));a(0x0007,V(29),F(0));c.label('CR_DIR')
-a(0x0087,V(17),V(9));a(0x005b,V(17),V(30));a(0x005b,V(29),V(10))
-c.get(30,CR_DZ);a(0x0087,V(31),V(11));a(0x005b,V(31),V(30))
-c.check(0x06bd,[V(9),V(10),V(11),V(17),V(29),V(31),I(1),I(0),I(0),I(1),I(0)],'CR_BLOCKED');c.go('CR_MOVE')
-c.label('CR_BLOCKED');a(0x0087,V(17),V(9));a(0x0087,V(29),V(10));a(0x0007,V(30),F(0));a(0xddc,I(CR_V),V(30));c.get(30,CR_DT);a(0x0013,V(30),F(CRUISE_CLIMB));a(0x0087,V(31),V(11));a(0x005b,V(31),V(30))
-c.label('CR_MOVE');c.set(DBG_CODE,2);a(0x0063,V(31),V(11));c.get(30,CR_CMDZ);a(0x005b,V(31),V(30))
-for v,lo,hi in [(17,-3500,3500),(29,-3500,3500),(31,-200,2000)]:c.check(0x0021,[V(v),F(lo)],'CR_BAD_POS');c.check(0x0023,[F(hi),V(v)],'CR_BAD_POS')
-a(0xddc,I(CR_CMDZ),V(31));a(0x00ab,V(5),V(17),V(29),V(31));c.ret()
-c.label('CR_BAD_POS');c.set(DBG_CODE,99);c.ret()
+c.label('CR_RUN');c.set(DBG_CODE,1);a(0x00aa,V(5),V(9),V(10),V(11));a(0xddc,I(CR_DX),V(26));a(0xddc,I(CR_DY),V(27))
+# the roofs: the highest surface under the helicopter and on the way to the point (29@)
+a(0x02ce,V(9),V(10),F(1000),V(29));a(0x0087,V(17),V(26));a(0x0063,V(17),V(9));a(0x0087,V(30),V(27));a(0x0063,V(30),V(10));a(0x0509,F(0),F(0),V(17),V(30),V(19))
+c.check(0x0021,[V(19),F(1)],'CR_ROOFS_DONE');a(0x0073,V(17),V(19));a(0x0073,V(30),V(19))
+for ahead in [30,80,150,250]:
+ nxt='CR_ROOF_'+str(ahead);a(0x0087,V(28),V(17));a(0x0013,V(28),F(ahead));a(0x005b,V(28),V(9));a(0x0087,V(31),V(30));a(0x0013,V(31),F(ahead));a(0x005b,V(31),V(10))
+ a(0x02ce,V(28),V(31),F(1000),V(28));c.check(0x0025,[V(28),V(29)],nxt);a(0x0087,V(29),V(28));c.label(nxt)
+c.label('CR_ROOFS_DONE')
+# ask the pilot: 26@ helicopter, 27/28@ the point, 29@ the roofs, 30@ 1 = stop there (+2: the last step was refused) ->
+# 27-29@ where to be now, 30@ metres left, 31@ speed (-1: the brain has no pilot for this helicopter)
+a(0x0087,V(28),V(27));a(0x0087,V(27),V(26));a(0x0085,V(26),V(5));c.get(30,CR_BLK);a(0x0012,V(30),I(2));a(0x000a,V(30),I(1))
+c.get(31,BRAIN_HELLO);c.check(0x0039,[V(31),I(BRAIN_MAGIC)],'CR_NO_PILOT');a(6,V(31),I(-1));a(0x0e48,V(26),I(6),I(6))   # (31@ stays -1 when the brain does not answer)
+c.check(0x0039,[V(31),I(-1)],'CR_FLY')
+c.label('CR_NO_PILOT');c.get(26,CR_DX);c.get(27,CR_DY);a(0x0509,V(9),V(10),V(26),V(27),V(19));c.ret()   # (no brain: the helicopter hangs where it is)
+c.label('CR_FLY');a(0xddc,I(CR_V),V(31));a(0x0087,V(19),V(30))
+c.check(0x06bd,[V(9),V(10),V(11),V(27),V(28),V(29),I(1),I(0),I(0),I(1),I(0)],'CR_BLOCKED');c.go('CR_MOVE')
+c.label('CR_BLOCKED');c.set(CR_BLK,1);c.get(17,CR_CMDZ);c.check(0x0025,[V(17),V(29)],'CR_UP');a(0x0087,V(29),V(17));c.label('CR_UP')   # only straight up (the pilot climbs from the next frame on)
+c.check(0x0023,[F(2000),V(29)],'CR_BAD_POS');a(0xddc,I(CR_CMDZ),V(29));a(0x00ab,V(5),V(9),V(10),V(29));c.get(26,CR_DX);c.get(27,CR_DY);c.ret()
+c.label('CR_MOVE');c.set(CR_BLK,0);c.set(DBG_CODE,2)
+for v,lo,hi in [(27,-3500,3500),(28,-3500,3500),(29,-200,2000)]:c.check(0x0021,[V(v),F(lo)],'CR_BAD_POS');c.check(0x0023,[F(hi),V(v)],'CR_BAD_POS')
+a(0xddc,I(CR_CMDZ),V(29));a(0x00ab,V(5),V(27),V(28),V(29));c.get(26,CR_DX);c.get(27,CR_DY);c.ret()
+c.label('CR_BAD_POS');c.set(DBG_CODE,99);c.get(26,CR_DX);c.get(27,CR_DY);c.ret()
 # v39: while CJ sits in the helicopter the doors are locked against the player (020A 4), so the
 # on-screen exit button no longer makes CJ jump out; the script reads that button (0A52 0) and
 # runs the selected exit method instead (command 15). Doors unlock when CJ is outside, and for
@@ -1199,10 +1178,10 @@ p.label('CORE_MISSING');a(0xdd0,V(4),L('OFFLINE_MENU'));a(0xdf2,V(4),I(1))
 p.label('OFFLINE_POLL');a(1,I(50));a(0x01bd,V(20));a(0xddc,I(PANELHEART),V(20));p.check(0x0256,[I(0)],'CLOSE');a(0xdf4,V(1),I(250));p.eq(1,-1,'CLOSE');p.go('OFFLINE_POLL')
 p.label('CLOSE');p.call('UNLOAD');a(0xdf3);p.set(OPEN,0);p.set(0,0);a(6,V(10),I(0));p.go('WATCH')
 # All menus fit on one page (<=8 rows); metadata is appended beyond terminating branches.
-VERSION='1.3'
+VERSION='1.4'
 for st,sit,x in MAIN_VARIANTS:
  for prof,suf in zip(PROFILES,SUFFIX):
-  title=(i18n.encode('HELICOVER 1.3 BETA','en') if prof=='en' else i18n.menu_text('TITLE_READY',prof)) if st==0 else i18n.state_title(st,STATES[st],prof)
+  title=(i18n.encode('HELICOVER 1.4 BETA','en') if prof=='en' else i18n.menu_text('TITLE_READY',prof)) if st==0 else i18n.state_title(st,STATES[st],prof)
   p.blob('MAIN_%d_%d_%d'%(st,sit,x)+suf,title,main_rows(st,sit,x,prof))
 for prof,suf in zip(PROFILES,SUFFIX):
  if prof=='en':p.blob('OFFLINE_MENU',i18n.menu_text('OFFLINE_TITLE',prof),[i18n.menu_text('OFFLINE_ROW',prof)])   # the core is missing, so the language is unknown: English only

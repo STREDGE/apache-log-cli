@@ -202,6 +202,7 @@ class VM:
    elif op==0x337:
     if not vals[1]:w.invisible.add(vals[0])
    elif op in [0x5d3,0x5f5]:w.walk[vals[0]]={'to':list(vals[1:4]),'speed':{4:1.6,5:3.,6:4.6,7:6.5}.get(int(vals[4]),1.6),'until':w.now+int(vals[5])}
+   elif op==0x637:w.walk[vals[0]]={'to':list(vals[1:4]),'speed':{4:1.6,5:3.,6:4.6,7:6.5}.get(int(vals[4]),4.6),'until':w.now+20000}   # 1.4: run while firing also moves him
    elif op==0xa1:
     w.velocity.pop(vals[0],None);w.note_teleport(0xa1,vals[0],w.coords(vals[0]),vals[1:4])
     if vals[0]==1:w.player=vals[1:4].copy()
@@ -802,14 +803,14 @@ assert w.shared[b.STATE]==10 and (x1,y1)==(x0,y0) and z1>z0,(w.car,x0,y0,z0)
 passed('Cruise climbs in place before passing tall buildings')
 # v31: open-sky cruise covers ~70 m/s and keeps 35 m above the highest surface.
 w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];command(w,c,7,ticks=2)
-speeds=[]
-for _ in range(60):
- p0=w.car.copy();w.step(c);speeds.append(math.dist(p0[:2],w.car[:2])/.1)
-# v32: smooth start (no jump to full speed), monotonic acceleration while heading settles
-assert speeds[1]<15. and max(abs(speeds[i+1]-speeds[i]) for i in range(len(speeds)-1))<4.,speeds[:20]
-start=w.car.copy();w.step(c,n=10);moved=math.dist(start[:2],w.car[:2])
-assert 60.<moved<75. and abs(w.car[2]-35.)<1.,(moved,w.car)
-passed('Cruise accelerates smoothly to about 3x speed at a fixed clearance')
+speeds=[];pitch=[]
+for _ in range(400):
+ p0=w.car.copy();w.step(c);speeds.append(math.dist(p0[:2],w.car[:2])/.1);pitch.append(w.cars[c.v[5]].get('pitch',0.))
+# 1.4: the brain's pilot - a smooth start (no jump), at most 5 m/s^2 like a real helicopter, nose down while it speeds up
+assert abs(speeds[0]-w.speed)<1.5 and max(abs(speeds[i+1]-speeds[i]) for i in range(len(speeds)-1))<1.,(w.speed,speeds[:20])   # it carries on at the speed it had
+assert max(speeds)>60. and min(pitch[5:60])<-10.,(max(speeds),min(pitch[5:60]))
+assert abs(w.car[2]-35.)<1.5,w.car
+passed('Cruise (the brain\'s pilot): a smooth start, nose down while speeding up, %.0f km/h at the top, 35 m over the roofs'%(max(speeds)*3.6))
 
 # Weapons remain selected during cease fire and while CJ is not shooting.
 w,c,_=setup();summon(w,c);f=VM('Helicover_Fire',w);w.shared[b.FIRE]=0;w.step(c,f,n=15)

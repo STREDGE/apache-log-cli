@@ -2,7 +2,7 @@ PASS: Rope glide from 40 m eases out in about 3-4 s, never above 25 m/s, and tak
 PASS: Exit by rope at 20 m/s: the destination is 30 m ahead (speed + 10 m), so the helicopter slows down on the way
 PASS: A script-flown helicopter (frozen, no real speed) is slowed by its cruise speed: 40 m/s means a point 50 m ahead
 PASS: Exit by rope at walking pace: freeze right here and drop
-PASS: Scripted cruise starts at the real speed (0.3 m in the first 16 ms frame, then 1.6 m per 100 ms), not from a standstill
+PASS: Scripted cruise starts at the real speed (0.3 m in the first 16 ms frame, then 1.9 m per 100 ms), not from a standstill
 PASS: Blocked-landing state ends by itself: back to FOLLOW after 15 s with CJ on foot, kept while CJ is aboard
 PASS: Emergency landing (CJ aboard, hull below 350): lands below at once and refuses FOLLOW while it is down
 PASS: Emergency landing skips a blocked spot and takes the first clear one 25 m around
@@ -22,18 +22,12 @@ PASS: A guard in a car gets out first (task) and then runs to his rope; no telep
 PASS: Rope pickup nobody takes: after 90 s the cover team climbs back aboard (it used to be let go on the spot), the ropes go up and the helicopter follows again
 PASS: CJ dies / is arrested while a team deployment starts: ESCORT_ON is reset, support is not stuck on a team that never came
 PASS: Recall for a team that no longer exists: the pilot does not hang frozen, he goes back to FOLLOW
-PASS: Formation anchor: walking 60+ degrees off the old direction for 1.5 s re-anchors it, a short sidestep does not
-PASS: Standing still (turning, aiming) never rotates the formation: the guards do not run round CJ
-PASS: Slots are placed in the anchored frame: ahead = travel direction, right = (uy, -ux)
-PASS: CJ shooting ahead: the guard in front of him steps 2 m out of his line of fire, the others stay in place
-PASS: When CJ stops shooting the guard returns to his slot
-PASS: Assault: a guard 27 m from CJ turns back to his slot (25 m cap, was 40 m)
-PASS: Assault: the medic stays with CJ
+PASS: The formation turns with the way CJ goes (the brain's anchor) and every guard is sent to the post the brain gives him
+PASS: CJ shooting ahead: no post in his line of fire - the brain moves the man in front of him aside, the script sends him there
 PASS: Guards keep the man they are firing at while he lives; a new attacker is taken by the guard whose hands are free (no flipping)
 PASS: The squad takes a shooter the brain names, even 45 m away
-PASS: CJ's line of fire comes from the brain: there in the frame of his shot, never from somebody else's rounds; the scripts read no bullet traces
-PASS: Door gunners scatter their bullets (+-0.7 m at 61 m) instead of putting every round on one point; the scatter is the brain's and every round is still a checked one
-PASS: The scatter grows with the distance to the target (0.64 m at 10 m, 0.97 m at 70 m)
+PASS: No script reads bullet traces: CJ's line of fire and everybody else's shots are the brain's
+PASS: Door gunners fire their own weapon in bursts with a breath between them (5 bursts in 6.6 s for each gunner on the man, 4-9 rounds each), not a steady stream like a minigun
 PASS: The team that ropes down wears the crew setting: Grove 106/107, Army 287, SWAT 285 (it was always SWAT)
 PASS: Changing the crew on the menu re-dresses the team on the ground at once: same spot, heading, health and armour, nobody teleports
 PASS: Grove clothes alternate between the two Families skins

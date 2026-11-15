@@ -89,6 +89,8 @@ typedef struct detail {
     hcb_vec cj_cover;       /* where CJ should be: a spot hidden from the threat */
     hcb_vec threat;         /* the threat the detail fights now */
     u32 threat_id, contact_since, cover_said, evac_said, safe_said, lead, mover, clear_said;
+    u32 cj_shot_t;          /* when CJ last fired, and which way (unit, flat): nobody of ours stands in his line of fire */
+    hcb_vec cj_shot_dir;
     u16 say_seq;
     u8 cj_cover_ok, duty, last_say, say_dir;
 } detail;
