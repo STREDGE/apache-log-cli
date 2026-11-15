@@ -438,12 +438,14 @@ w,c,f=follow_world([]);w.shared[b.GROUND_PUB]=941;w.exists.add(941);w.pos[941]=[
 for i in range(60):w.ped_bullet([1.6,1.2,1.],[30.,5.,1.]);w.step(c,f)
 assert w.shared[b.FIRE_ACTIVE]==0 and not calls(w,0x6bc),'a guard shooting next to CJ is not CJ shooting'
 passed('FOLLOW MY SHOTS: a guard firing next to CJ (CJ not shooting) does not start the gunners')
-w,c,f=follow_world([(940,24.,0.)]);w.blockers=[((24.,0.,1.),.6)];w.shared[b.GROUND_PUB]=941;w.exists.add(941);w.pos[941]=[-.8,1.,0.]
+w,c,f=follow_world([(940,24.,0.)]);w.blockers=[((24.,0.,1.),.6)];w.shared[b.GROUND_PUB]=941;w.exists.add(941);w.pos[941]=[-.8,1.,0.];ok=[]
 for i in range(90):
  w.shooting=i%6==0
  if w.shooting:w.ped_bullet([.5,0.,.7],[24.,0.,1.])
  w.ped_bullet([-.9,1.,1.],[-30.,2.,1.]);w.step(c,f)
+ if i>=12:ok.append(940 in gtargets(w) and w.shared[b.FIRE_ACTIVE]==1)
 ends=fired_at(w,0);assert ends and all(e[0]>10. for e in ends),ends[:6]
+assert sum(ok)>=.9*len(ok) and len(ends)>=40,('the gunners stay on his target all the time (a guard\'s line must not take the aim away)',sum(ok),len(ok),len(ends))
 passed('FOLLOW MY SHOTS: with a guard firing the other way next to him, the gunners still follow CJ\'s own line')
 # another game build: the bullet traces are not read, but his shooting must still start FOLLOW MY SHOTS (the stamp comes before the build gate)
 w,c,f=follow_world([(940,24.,0.)]);w.now+=5000;w.targeting=940;w.blockers=[((24.,0.,1.),.6)];ok=[];w.shared[b.GAME_OK]=0;w.calls.clear()
