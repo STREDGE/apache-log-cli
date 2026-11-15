@@ -418,6 +418,18 @@ w.los_fn=lambda a,z:not((a[0]<15.<=z[0]) or (z[0]<15.<=a[0]))
 cj_fire(w,c,f,60,target=(14.9,0.,.9));ends=fired_at(w,0)
 assert ends and all(13.5<e[0]<16.5 and abs(e[1])<1.5 for e in ends),ends[:5]
 passed('FOLLOW MY SHOTS, free aim at a wall: the gunners fire at the point where his line meets the wall')
+# a drive-by: CJ fires from a car. A line of sight that starts inside his own car is blocked by the car itself, so the ray must start beyond it
+def drive_by(camera_only=False):
+ w,c,f=follow_world([]);w.los_fn=lambda a,z:not((a[0]<15.<=z[0]) or (z[0]<15.<=a[0]))
+ own=778;w.exists.add(own);w.cars[own]={'pos':[0.,0.,0.],'heading':0.};w.model[own]=400;w.incar[1]=own;w.car_body=2.2
+ if camera_only:
+  w.shared[b.GAME_OK]=0;w.camera=[-6.,0.,.6];w.lookat=[100.,0.,.6]         # no traces on this build: the camera ray (low, through the car) is the source
+  for i in range(60):w.shared[b.GAME_OK]=0;w.shooting=i%6==0;w.step(c,f)
+ else:cj_fire(w,c,f,60,target=(14.9,0.,.9),muzzle=(1.2,.9,.9))
+ return fired_at(w,0)
+ends=drive_by();assert ends and all(13.5<e[0]<16.5 and abs(e[1])<2. for e in ends),('from a car the gunners still find the wall he shoots at',ends[:4])
+ends=drive_by(camera_only=True);assert ends and all(13.5<e[0]<16.5 and abs(e[1])<2. for e in ends),('the camera ray clears his own car too',ends[:4])
+passed('FOLLOW MY SHOTS from a car (drive-by): the aim ray starts beyond his own car, so the gunners fire where he fires, not at his car')
 # the four gunners share one aim point in coordinate mode: the scatter must not add up from gunner to gunner
 import collections,statistics
 w,c,f=follow_world([]);w.jitter=True;w.los_fn=lambda a,z:not((a[0]<15.<=z[0]) or (z[0]<15.<=a[0]))
@@ -447,6 +459,17 @@ for i in range(90):
 ends=fired_at(w,0);assert ends and all(e[0]>10. for e in ends),ends[:6]
 assert sum(ok)>=.9*len(ok) and len(ends)>=40,('the gunners stay on his target all the time (a guard\'s line must not take the aim away)',sum(ok),len(ok),len(ends))
 passed('FOLLOW MY SHOTS: with a guard firing the other way next to him, the gunners still follow CJ\'s own line')
+# the rule itself: CJ fires something that leaves no trace (or his trace is gone) while the guard beside him fires along a line that
+# passes CJ too and points the way CJ faces. The line is nearer to the guard than to CJ: it is the guard's shot, not CJ's aim
+w,c,f=follow_world([]);w.shared[b.GROUND_PUB]=941;w.exists.add(941);w.pos[941]=[-.8,1.,0.];w.actor_heading[1]=90.;t0=w.shared[b.CJ_AIM_T]
+for i in range(30):
+ w.shooting=i%6==0;w.ped_bullet([-.9,1.,1.],[-30.,2.,1.]);w.step(c,f)
+assert w.shared[b.CJ_AIM_T]==t0,'the line of the guard beside him is the guard\'s own shot (it passes closer to the guard), not CJ\'s aim line'
+w.exists.discard(941);w.shared[b.GROUND_PUB]=-1                      # control: without the guard the very same line would count as CJ's
+for i in range(12):
+ w.shooting=i%6==0;w.ped_bullet([-.9,1.,1.],[-30.,2.,1.]);w.step(c,f)
+assert w.shared[b.CJ_AIM_T]!=t0,'control: the same line with nobody beside him is taken for his own'
+passed('A round fired by the guard beside CJ is credited to the guard (his line passes nearer to him), never taken for CJ\'s aim line')
 # another game build: the bullet traces are not read, but his shooting must still start FOLLOW MY SHOTS (the stamp comes before the build gate)
 w,c,f=follow_world([(940,24.,0.)]);w.now+=5000;w.targeting=940;w.blockers=[((24.,0.,1.),.6)];ok=[];w.shared[b.GAME_OK]=0;w.calls.clear()
 for i in range(60):
@@ -665,6 +688,27 @@ def squad_run():
 speak=peak_of(V[2],squad_run)
 assert fpeak<=3600 and speak<=2000,(fpeak,speak)
 passed('Frame cost in a busy fight (8 threats, rounds at CJ): fire worker peak %d, squad worker peak %d script instructions'%(fpeak,speak))
+# the same budget in FOLLOW MY SHOTS at 30 fps: CJ fires a burst (a shot every 3rd frame), rounds come in, 8 armed men around;
+# free aim (the 59 scan cells find no lock-on, his line and the ray do the work) and lock-on
+def follow_cost(lock):
+ w,c,f=follow_world([(900+i,x,y) for i,(x,y) in enumerate([(24,0),(-20,0),(0,20),(0,-20),(12,4),(-12,4),(4,12),(4,-12)])])
+ w.blockers=[((24.,0.,1.),.6)];w.actor_heading[1]=270.;f.budget=100000;costs=[]
+ for n in range(900,908):w.damage.add((1,n))
+ if lock:w.targeting=900
+ orig=f.run
+ def run():
+  n0=len(w.calls);orig();costs.append(len(w.calls)-n0)
+ f.run=run
+ for i in range(300):
+  w.shooting=i%3==0
+  if w.shooting:w.ped_bullet([.5,0.,.7],[24.,0.,1.])
+  w.ped_bullet([-20.,0.,1.],w.player.copy());w.step(c,f)
+ f.run=orig;assert len(calls(w,0x6bc))>=150,'the gunners do fire in this scene'
+ return max(costs),sum(costs)//len(costs)
+(pk_free,avg_free),(pk_lock,avg_lock)=follow_cost(False),follow_cost(True)
+assert pk_free<=3600 and pk_lock<=3600,('fire worker peak in FOLLOW MY SHOTS',pk_free,pk_lock)
+assert avg_free<=1300 and avg_lock<=1300,('fire worker average per frame in FOLLOW MY SHOTS',avg_free,avg_lock)
+passed('Frame cost in FOLLOW MY SHOTS under fire at 30 fps: free aim peak %d / average %d, lock-on peak %d / average %d script instructions (it was 5063 / 2300: the whole trace table was read every frame of a burst)'%(pk_free,avg_free,pk_lock,avg_lock))
 
 text='\n'.join(results)+'\nMocked script execution only: real pathing, cover and gunfire are not tested.\n'
 (b.OUT/'squad_tests.txt').write_text(text);print(text)

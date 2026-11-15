@@ -68,11 +68,13 @@ PASS: A gunman who is shooting AND turned towards CJ outranks one shooting the o
 PASS: FOLLOW MY SHOTS: single shots (one-frame IS_CHAR_SHOOTING pulses) keep the gunners on his target without flicker
 PASS: FOLLOW MY SHOTS: about a second after CJ stops, the gunners stop too
 PASS: FOLLOW MY SHOTS, free aim at a wall: the gunners fire at the point where his line meets the wall
+PASS: FOLLOW MY SHOTS from a car (drive-by): the aim ray starts beyond his own car, so the gunners fire where he fires, not at his car
 PASS: Dispersion in coordinate mode is the same for every gunner (it used to add up: the 4th scattered twice as much)
 PASS: FOLLOW MY SHOTS: nothing on his line within 170 m (the sky) - no rounds wasted
 PASS: FOLLOW MY SHOTS without any bullet trace (grenade, flamethrower): the game's lock-on target still draws fire
 PASS: FOLLOW MY SHOTS: a guard firing next to CJ (CJ not shooting) does not start the gunners
 PASS: FOLLOW MY SHOTS: with a guard firing the other way next to him, the gunners still follow CJ's own line
+PASS: A round fired by the guard beside CJ is credited to the guard (his line passes nearer to him), never taken for CJ's aim line
 PASS: FOLLOW MY SHOTS on another game build: no traces are read, but his shooting still starts the gunners on his lock-on target
 PASS: FOLLOW MY SHOTS: the game's live lock-on target beats his last aim line (he turned to another man; the old line was still fresh)
 PASS: CALL HELICOPTER: it is created 160 m out, 50 m up and behind CJ, out of the camera's view, and flies in
@@ -110,5 +112,6 @@ PASS: MESSAGES: IMPORTANT keeps danger and tactical calls, drops the chatter
 PASS: MESSAGES: OFF is silent in a fight but still explains why a command was refused
 PASS: With the team on the ground only the squad calls the contact (no double "CONTACT!")
 PASS: SETTINGS: one row cycles MESSAGES: ALL / IMPORTANT / OFF
-PASS: Frame cost in a busy fight (8 threats, rounds at CJ): fire worker peak 3082, squad worker peak 1508 script instructions
+PASS: Frame cost in a busy fight (8 threats, rounds at CJ): fire worker peak 3087, squad worker peak 1510 script instructions
+PASS: Frame cost in FOLLOW MY SHOTS under fire at 30 fps: free aim peak 2971 / average 1092, lock-on peak 1957 / average 910 script instructions (it was 5063 / 2300: the whole trace table was read every frame of a burst)
 Mocked script execution only: real pathing, cover and gunfire are not tested.

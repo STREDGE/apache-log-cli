@@ -25,6 +25,7 @@ EXIT_MODE=STATE+134;AUTO_EXIT=STATE+135;LOCK_HOLD=STATE+136
 # combat-orbit point index and next switch time.
 KILLS=STATE+137;LAST_TGT=STATE+138;ENGAGED=STATE+139;CLEAR_AT=STATE+140;ORBIT_I=STATE+141;ORBIT_NEXT=STATE+142
 OVERWATCH_DAMAGE=75;OVERWATCH_CADENCE=900;ORBIT_RADIUS=28.0
+OWN_CAR_CLEAR=3.5   # FOLLOW MY SHOTS from a vehicle: extra metres before the aim ray starts, to clear CJ's own car
 # v39b robust exit: rope drop retries with repositioning, and a rope fallback when there is
 # nowhere to land. DROP_RESULT -1 running / 0 done / 1 failed (set by the ground worker).
 ROPE_PENDING=STATE+143;DROP_RESULT=STATE+144;ROPE_TRIES=STATE+145;RETRY_AT=STATE+146;FORCE_ROPE=STATE+147
@@ -1113,7 +1114,11 @@ for var in [3,4,5,6]:
  for typ in range(7,17):
   if typ!=8:a(0x077a,V(var),I(4),I(typ))
  f.label('MODE_RESPECT_'+str(var));a(0x077a,V(var),I(0),I(0));a(0x077a,V(var),I(0),I(8));f.label(skip)
-f.label('MODE_READY');f.call('KILL_CHECK');f.call('CJ_POLL');f.call('TRACE_TICK');f.label('ARM_GUARDS');f.get(30,FIRENEXT);a(0x01bd,V(31));f.check(0x001d,[V(31),V(30)],'WAIT');f.eq(25,4,'ARM_FAST');a(0x000a,V(31),I(OVERWATCH_CADENCE));f.go('ARM_NEXT_SET');f.label('ARM_FAST');a(0x000a,V(31),I(150));f.label('ARM_NEXT_SET');a(0xddc,I(FIRENEXT),V(31))
+f.label('MODE_READY');f.call('KILL_CHECK');f.call('CJ_POLL');f.call('TRACE_TICK');f.label('ARM_GUARDS');f.get(30,FIRENEXT);a(0x01bd,V(31));f.check(0x001d,[V(31),V(30)],'WAIT')
+# the two heavy jobs do not share a frame: when the bullet traces were read in this very frame, the fire pass waits for the next one
+# (only while it is less than 50 ms overdue, so it can never starve)
+a(0x0062,V(31),V(30));f.check(0x8019,[V(31),I(49)],'ARM_TICK');f.get(30,TRACE_SCAN_T);a(0x01bd,V(31));f.check(0x003b,[V(30),V(31)],'ARM_TICK');f.go('WAIT')
+f.label('ARM_TICK');a(0x01bd,V(31));f.eq(25,4,'ARM_FAST');a(0x000a,V(31),I(OVERWATCH_CADENCE));f.go('ARM_NEXT_SET');f.label('ARM_FAST');a(0x000a,V(31),I(150));f.label('ARM_NEXT_SET');a(0xddc,I(FIRENEXT),V(31))
 for var in [3,4,5,6]:
  skip='ARM_SKIP_'+str(var);alive(f,var,skip);a(0x0470,V(var),V(30));f.check(0x803b,[V(30),V(7)],skip);a(0x01b2,V(var),V(7),I(30000));a(0x01b9,V(var),V(7));a(0x02e2,V(var),I(100));a(0x07dd,V(var),I(100));f.label(skip)
 f.eq(25,0,'ACTIVE_MODE');f.go('WAIT')
@@ -1139,6 +1144,9 @@ f.label('AIM_LINE');f.get(14,CJ_AIM_X);f.get(15,CJ_AIM_Y);f.get(16,CJ_AIM_Z);f.g
 # t = (CJ - P1).u ; origin = P1 + u*(t + 1): the point of his line nearest to him, one metre ahead
 a(0x0087,V(18),V(22));a(0x0063,V(18),V(8));a(0x006b,V(18),V(14));a(0x0087,V(19),V(23));a(0x0063,V(19),V(9));a(0x006b,V(19),V(15));a(0x005b,V(18),V(19))
 a(0x0087,V(19),V(24));a(0x0063,V(19),V(10));a(0x006b,V(19),V(16));a(0x005b,V(18),V(19));a(0x000b,V(18),F(1.0))
+# in a vehicle (drive-by) the ray starts beyond his own car: a line of sight that begins inside its body is blocked at once,
+# the "impact" would be the car itself and the gunners would stay silent
+f.check(0x00df,[V(0)],'AIM_LINE_FOOT');a(0x000b,V(18),F(OWN_CAR_CLEAR));f.label('AIM_LINE_FOOT')
 for origin,direction in [(8,14),(9,15),(10,16)]:a(0x0087,V(21),V(direction));a(0x006b,V(21),V(18));a(0x005b,V(origin),V(21))
 f.go('RAY_INIT')
 f.label('AIM_RAY');a(0x068d,V(8),V(9),V(10));a(0x068e,V(11),V(12),V(13))
@@ -1147,6 +1155,7 @@ a(0x050a,V(8),V(9),V(10),V(11),V(12),V(13),V(17));f.check(0x0021,[V(17),F(.01)],
 for var in [14,15,16]:a(0x0073,V(var),V(17))
 # Start the ray just ahead of CJ so a third-person camera does not hit CJ's back.
 a(0x00a0,V(0),V(22),V(23),V(24));a(0x050a,V(8),V(9),V(10),V(22),V(23),V(24),V(18));a(0x000b,V(18),F(1.5))
+f.check(0x00df,[V(0)],'AIM_RAY_FOOT');a(0x000b,V(18),F(OWN_CAR_CLEAR));f.label('AIM_RAY_FOOT')   # in a vehicle: beyond his own car (see AIM_LINE)
 for origin,direction in [(8,14),(9,15),(10,16)]:a(0x0087,V(21),V(direction));a(0x006b,V(21),V(18));a(0x005b,V(origin),V(21))
 f.label('RAY_INIT');a(0x0007,V(18),F(0));a(0x0007,V(19),F(180));a(6,V(20),I(0))
 f.label('RAY_STEP');a(0x0087,V(21),V(18));a(0x005b,V(21),V(19));a(0x0013,V(21),F(.5))
@@ -1317,6 +1326,10 @@ f.label('TRACE_TICK_RET');f.ret()
 # (a trace lives 75-300 ms). Only the reading of the traces waits for the build check.
 f.label('CJ_POLL');f.check(0x02e0,[V(0)],'CJ_POLL_IDLE');a(0x01bd,V(31));a(0xddc,I(CJ_SHOT_T),V(31))
 f.label('CJ_POLL_IDLE');f.get(30,GAME_OK);f.eq(30,1,'CJ_POLL_RET');f.get(30,CJ_SHOT_T);a(0x01bd,V(31));a(0x0062,V(31),V(30));f.check(0x8019,[V(31),I(250)],'CJ_POLL_RET')
+# ... but only until the line of that shot has been found (CJ_AIM_T is stamped when a newer line of his is accepted). The engine adds the
+# trace in the same update that raises the shooting flag (CWeapon::Fire), so normally one scan per shot does it; reading the whole table
+# every frame of a burst cost about 1,700 script instructions per frame for nothing.
+f.get(31,CJ_AIM_T);f.check(0x001d,[V(30),V(31)],'CJ_POLL_RET')
 f.get(30,TRACE_SCAN_T);a(0x01bd,V(31));a(0x0062,V(31),V(30));f.check(0x0019,[V(31),I(20)],'CJ_POLL_RET');f.call('TRACE_RUN')
 f.label('CJ_POLL_RET');f.ret()
 # 29@ handle, 30@ score: insert into the sorted list (higher first); uses 31@
@@ -1500,7 +1513,7 @@ f.label('PROTECT_INCOMING_LOS');a(0x000b,V(10),F(.7));a(0x000b,V(13),F(.7));f.ch
 f.label('PROTECT_ACCEPT');a(6,V(30),I(1));f.ret()
 f.label('PROTECT_REJECT');a(6,V(30),I(0));f.ret()
 
-f.label('CHECK_CJ_AIMED');f.call('NOT_FRIEND');f.eq(30,1,'CJ_AIM_NO');f.check(0x0457,[I(0),V(29)],'CJ_AIM_NO');a(6,V(30),I(1));f.ret()
+f.label('CHECK_CJ_AIMED');f.check(0x0457,[I(0),V(29)],'CJ_AIM_NO');f.call('NOT_FRIEND');f.ret()   # the cheap question first: this runs for every ped of 59 scan cells
 f.label('CJ_AIM_NO');a(6,V(30),I(0));f.ret()
 f.label('FIND_CJ_AIMED');alive(f,29,'CJ_AIM_SCAN');f.call('CHECK_CJ_AIMED');f.eq(30,1,'CJ_AIM_SCAN');f.ret()
 f.label('CJ_AIM_SCAN')

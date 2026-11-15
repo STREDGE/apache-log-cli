@@ -74,11 +74,12 @@ s.label('GROUP_SET');s.get(19,b.SQ_GROUP);s.check(0x803b,[V(17),V(19)],'GROUP_SA
 a(0xddc,I(b.SQ_GROUP),V(17));reset_slots();reset_threats();s.set(b.FORM_OK,0)
 s.label('GROUP_SAME');s.eq(17,0,'GROUP_ACTIVE');s.go('LOOP')
 s.label('GROUP_ACTIVE');a(0x00a0,V(0),V(9),V(10),V(11));a(6,V(6),I(-1));s.check(0x00df,[V(0)],'CJ_ON_FOOT');a(0x03c0,V(0),V(6));s.label('CJ_ON_FOOT')
-# 1.2: CJ drives when every passenger seat of his car is free at the moment he gets in (decided once per car, before a guard sits down)
-s.get(19,b.SQ_CARH);s.check(0x803b,[V(6),V(19)],'DRV_DONE');a(0xddc,I(b.SQ_CARH),V(6));s.set(b.SQ_DRIVES,0);s.check(0x8039,[V(6),I(-1)],'DRV_DONE');s.set(b.SQ_DRIVES,1);a(0x01ea,V(6),V(26))
-for seat in range(4):
- skip='DRV_SEAT_%d'%seat;s.check(0x0019,[V(26),I(seat)],skip);s.check(0x0431,[V(6),I(seat)],'DRV_PASSENGER');s.label(skip)
-s.go('DRV_DONE');s.label('DRV_PASSENGER');s.set(b.SQ_DRIVES,0);s.label('DRV_DONE')
+# 1.2: CJ drives when the driver of his car (046C: the vehicle's driver pointer as a ped handle, the player included) is CJ himself.
+# Asked every pass. (The first 1.2 beta guessed it from "every passenger seat is free when he gets in", which was wrong for a car
+# that keeps a passenger: a jacked car, a mission companion.)
+a(0xddc,I(b.SQ_CARH),V(6));s.set(b.SQ_DRIVES,0);s.eq(6,-1,'DRV_CHECK');s.go('DRV_DONE')
+s.label('DRV_CHECK');a(0x046c,V(6),V(26));s.check(0x003b,[V(26),V(0)],'DRV_DONE');s.set(b.SQ_DRIVES,1)
+s.label('DRV_DONE')
 s.get(7,b.TACTICS);s.get(8,b.FIRE)
 # CJ inside an interior: the team waits outside (no teleport into interior coordinates)
 a(0x077e,V(19));s.eq(19,0,'LOOP')

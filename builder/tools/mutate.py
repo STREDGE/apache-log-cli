@@ -112,6 +112,15 @@ M12=[
  ('build_v25.py',"p.check(0x0019,[V(21),I(45000)],'DT_RET')","p.check(0x0019,[V(21),I(45000000)],'DT_RET')",'12 dismiss timeout'),
  ('build_v25.py',"for model in [105,106,107,285,287,487,497,425]:a(0x0247,I(model))","pass",'12 model preload'),
  ('build_v25.py',"p.label('DO_EXIT_ROPE');p.set(EXIT_MODE,1)","p.label('DO_EXIT_ROPE');p.set(EXIT_MODE,0)",'12 exit rope row'),
+ # third pass (facts checked against libGTASA): driver from the car, CREATE_CHAR height, drive-by aim ray
+ ('build_v25_squad.py',"s.check(0x003b,[V(26),V(0)],'DRV_DONE');s.set(b.SQ_DRIVES,1)","s.set(b.SQ_DRIVES,1)",'12 driver is CJ'),
+ ('build_v25_squad.py',"a(0x046c,V(6),V(26));s.check(0x003b,[V(26),V(0)],'DRV_DONE')","a(0x01ea,V(6),V(26));s.check(0x0431,[V(6),I(1)],'DRV_DONE')",'12 driver not guessed from seats'),
+ ('build_v25_ground.py'," a(0x000b,V(12),F(-1.0))\n","",'12 re-skin height'),
+ ('build_v25.py',"f.check(0x00df,[V(0)],'AIM_LINE_FOOT');a(0x000b,V(18),F(OWN_CAR_CLEAR))","f.check(0x00df,[V(0)],'AIM_LINE_FOOT')",'12 drive-by line origin'),
+ ('build_v25.py',"f.check(0x00df,[V(0)],'AIM_RAY_FOOT');a(0x000b,V(18),F(OWN_CAR_CLEAR))","f.check(0x00df,[V(0)],'AIM_RAY_FOOT')",'12 drive-by camera origin'),
+ ('build_v25.py',"f.get(31,CJ_AIM_T);f.check(0x001d,[V(30),V(31)],'CJ_POLL_RET')\n","",'12 scan stops when the line is found'),
+ ('build_v25.py',"f.check(0x003b,[V(30),V(31)],'ARM_TICK');f.go('WAIT')","f.go('ARM_TICK')",'12 fire pass waits a frame after a scan'),
+ ('build_v25.py',"f.check(0x8019,[V(31),I(49)],'ARM_TICK')","f.check(0x8019,[V(31),I(4900000)],'ARM_TICK')",'12 fire pass cannot starve'),
  # second independent review: FOLLOW MY SHOTS
  ('threat_v41.py',"jgt(t1,100.0,P+'HELI');jlt(t1,-100.0,P+'HELI')","jgt(t1,1000.0,P+'HELI');jlt(t1,-1000.0,P+'HELI')",'12 aim direction check'),
  ('threat_v41.py',"jgt(t1,100.0,P+'HELI');jlt(t1,-100.0,P+'HELI')","jgt(t1,60.0,P+'HELI');jlt(t1,-60.0,P+'HELI')",'12 aim direction tight'),
