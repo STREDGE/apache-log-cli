@@ -65,7 +65,9 @@ typedef struct vtrack {
 typedef struct shooter {
     u32 id, target, since, fire_from, burst_until, pause_until;
     u32 last_fire;          /* the last tick he was ordered to fire */
-    u8 used, hold, role, reserved;
+    u32 aim;                /* the man his weapon is on (his target, or the suspect he covers); 0 = nobody */
+    u32 next_round, noted, rrng;    /* a gunner between looks: when his next round is due, the last refusal noted, his own dice */
+    u8 used, hold, role, ready;
 } shooter;
 /* what is known about lines of sight (answers of the adapter), and what has been asked */
 #define HCB_LOS_CACHE 160

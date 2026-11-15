@@ -86,7 +86,7 @@ extern void *memset(void *d, int c, u64 n);
 #define BRAIN_OPCODE 0x0E48
 #define CMD_GUNNER 1                        /* 9 variables: in handle; out state (0 rest, 1 aim, 2 fire this round), target, muzzle xyz, end xyz */
 #define CMD_SQUAD 2                         /* 3 variables: in handle; out state (0 nothing, 1 cover, 2 fire, 3 cease fire now), target */
-#define CMD_STATUS 3                        /* 5 variables: out alert, threats, attackers, kills, the most dangerous man */
+#define CMD_STATUS 3                        /* 5 variables: out alert, threats, attackers, kills, the most dangerous man; 8: + ms since CJ fired, direction x, y */
 #define IGNORE_ENTITY 0xbdcaf8UL            /* CWorld::pIgnoreEntity */
 #define GOT_IGNORE 0x84b180UL               /* the GOT entry the line-of-sight code reads its address from */
 /* CLEO (offsets from the start of libSAcleo64.so; the unpacked library is at +0x88000) */
@@ -205,6 +205,8 @@ static u32 g_ticks, g_last_think, g_dumps, g_peds_max, g_tick_us_max, g_events_l
 static u64 g_tick_us_sum;
 static int g_ready, g_dump_request, g_was_alive, g_busy, g_urgent, g_ignore_ok, g_bridge;     /* g_bridge: 0 not yet, 1 opcode registered, -1 cannot */
 static const u8 *g_our_ent[HCB_MAX_OURS + 2];   /* CJ, the helicopter and our people as the gunshot hook sees them */
+static u32 g_cj_shot_t;                         /* when CJ last fired, and in which direction (unit vector in the plane) */
+static float g_cj_shot_dir[2];
 #define BRAIN ((hcb_brain *)g_brain)
 
 /* ---------- reading the game ---------- */
@@ -407,6 +409,13 @@ static int sees(const u8 *a, const u8 *b) {              /* chest to chest, thro
 }
 static int is_dead(const u8 *ped) { u32 st = RD(u32, ped + 0x54c); return st == 54 || st == 55; }
 
+static float f_sqrt(float x) {
+    union { float f; u32 i; } u; float y;
+    if (x <= 0) return 0;
+    u.f = x; u.i = 0x1fbd1df5u + (u.i >> 1); y = u.f;
+    y = 0.5f * (y + x / y); y = 0.5f * (y + x / y); y = 0.5f * (y + x / y); y = 0.5f * (y + x / y);
+    return y;
+}
 static float dist2(const float *a, const float *b) { float x = a[0] - b[0], y = a[1] - b[1], z = a[2] - b[2]; return x * x + y * y + z * z; }
 
 static int build_snapshot(hcb_snapshot *s, const hcb_out *prev) {
@@ -494,6 +503,10 @@ static int build_snapshot(hcb_snapshot *s, const hcb_out *prev) {
         const u8 *who = obj_of(&pp, src, PED_STRIDE);
         int slot = who ? (signed char)RD(u8, who + 0x8dc) : -1;
         add_event(s, HCB_EV_SHOT, src, 0, 0, slot >= 0 && slot < 13 ? (int)RD(u32, who + 0x730 + (u64)slot * 0x20) : 0, q->o, q->t);
+        if (src == cj_h) {
+            float dx = q->t[0] - q->o[0], dy = q->t[1] - q->o[1], len2 = dx * dx + dy * dy;
+            if (len2 > 0.04f) { float len = f_sqrt(len2); g_cj_shot_t = q->time; g_cj_shot_dir[0] = dx / len; g_cj_shot_dir[1] = dy / len; }
+        }
         g_shot_tail++;
     }
     /* damage: CJ, ours, the helicopter */
@@ -591,129 +604,92 @@ static void think(void) {
 typedef void *(*script_fn)(void *script);
 typedef int (*register_fn)(u16 opcode, void *handler);
 static script_fn g_read_param, g_var_ptr;
-static u32 g_bridge_try, g_bridge_note, g_rng = 0x2545f491u;
-struct gun { u32 id, next, noted; };
-static struct gun g_gun[HCB_MAX_OURS];
+static u32 g_bridge_try, g_bridge_note;
 
-static float f_sqrt(float x) {
-    union { float f; u32 i; } u; float y;
-    if (x <= 0) return 0;
-    u.f = x; u.i = 0x1fbd1df5u + (u.i >> 1); y = u.f;
-    y = 0.5f * (y + x / y); y = 0.5f * (y + x / y); y = 0.5f * (y + x / y); y = 0.5f * (y + x / y);
-    return y;
-}
-static float frand(void) { g_rng ^= g_rng << 13; g_rng ^= g_rng >> 17; g_rng ^= g_rng << 5; return (float)(g_rng & 0xffff) / 32767.5f - 1.0f; }    /* -1..1 */
-static const hcb_order *order_of(u32 who) {
-    u32 i;
-    for (i = 0; i < g_out.n_orders && i < HCB_MAX_OURS; i++) if (g_out.orders[i].who == who) return &g_out.orders[i];
-    return 0;
-}
 static void put_f(int *v, float f) { memcpy(v, &f, 4); }
-/* the positions of this frame for one question about one round */
-static void fill_shot(hcb_shot *q, u32 who, u32 target, const struct pool *pp, const u8 *cj) {
+/* the positions of this frame for one question about one of ours and his man */
+static void fill_shot(hcb_shot *q, u32 who, u32 target, const struct pool *pp, const u8 *cj, const u8 *me, const u8 *him, float up_me, float up_him) {
     u32 k;
     memset(q, 0, sizeof *q);
     q->who = who; q->target = target; q->time = RD(u32, G + TIME_MS);
     set_vec(&q->cj, pos_of(cj), 1.0f);
+    set_vec(&q->from, pos_of(me), 1.0f); q->from.z += up_me; q->muzzle = q->from;
+    set_vec(&q->to, pos_of(him), 1.0f); q->to.z += up_him;
     for (k = 0; k < g_snap.n_ours && q->n_friends < HCB_MAX_OURS; k++) {
         const u8 *e = g_snap.ours[k] != who ? obj_of(pp, g_snap.ours[k], PED_STRIDE) : 0;
         if (e && !is_dead(e)) set_vec(&q->friends[q->n_friends++], pos_of(e), 1.0f);
     }
 }
-static void note_round(const hcb_shot *q, int verdict, int clear) {
-    hcb_round r;
-    if (g_rec[g_cur].end + sizeof r + 64 > BOX_BYTES) return;
-    memset(&r, 0, sizeof r);
-    r.time = q->time; r.who = q->who; r.target = q->target; r.muzzle = q->muzzle; r.to = q->to; r.verdict = (u8)verdict; r.ray = (u8)clear;
-    hcb_rec_push_round(&g_rec[g_cur], g_box[g_cur], &r);
-}
 
 /* A door gunner. His rounds are made by the script (they are not the game's weapon fire), so the brain paces them and
-   gives each one its line: from just outside the helicopter to a point scattered round the man, ending 0.6 m past it.
-   The line is checked against the hard rules with the positions of this very frame, then by a ray. */
+   gives each one its line: from just outside the helicopter to a point scattered round the man, ending 0.6 m past it
+   (the core: hcb_gunner_round). The line is checked against the hard rules with the positions of this very frame, then
+   by a ray here. */
 static void cmd_gunner(int *v) {
     struct pool pp, vp;
-    u32 who = (u32)v[0], now = RD(u32, G + TIME_MS), k;
-    const hcb_order *o = order_of(who);
+    u32 who = (u32)v[0];
     const u8 *cj = player_ped(), *me, *him, *heli;
-    const float *p;
-    struct gun *g = 0;
+    hcb_order o;
     hcb_shot q;
-    float from[3], aim[3], d[3], len, out, spread, speed = 0;
-    int verdict, clear = 0, near_heli, i;
+    hcb_round r;
+    float speed = 0;
+    int near_heli;
 
     v[1] = 0; v[2] = 0;
-    if (!o || !o->target || !cj || !get_pool(PED_POOL, &pp) || !get_pool(VEH_POOL, &vp)) return;
-    me = obj_of(&pp, who, PED_STRIDE); him = obj_of(&pp, o->target, PED_STRIDE);
+    if (!hcb_order_get(BRAIN, who, &o) || !o.target || !cj || !get_pool(PED_POOL, &pp) || !get_pool(VEH_POOL, &vp)) return;
+    me = obj_of(&pp, who, PED_STRIDE); him = obj_of(&pp, o.target, PED_STRIDE);
     if (!me || !him || is_dead(him) || is_dead(me)) return;
-    v[2] = (int)o->target; v[1] = o->ready ? 1 : 0;
-    if (!o->fire) return;
-    for (k = 0; k < HCB_MAX_OURS; k++) if (g_gun[k].id == who) g = &g_gun[k];
-    for (k = 0; !g && k < HCB_MAX_OURS; k++) if (!g_gun[k].id || !obj_of(&pp, g_gun[k].id, PED_STRIDE)) { g = &g_gun[k]; g->id = who; g->next = now; g->noted = 0; }
-    if (!g || (int)(now - g->next) < 0) return;
-
-    p = pos_of(me); from[0] = p[0]; from[1] = p[1]; from[2] = p[2] + 0.3f;
-    p = pos_of(him); aim[0] = p[0]; aim[1] = p[1]; aim[2] = p[2] + 0.2f;
+    v[2] = (int)o.target; v[1] = o.ready ? 1 : 0;
+    if (!o.fire) return;
     heli = obj_of(&vp, VHANDLE(g_snap.heli), VEH_STRIDE);
     near_heli = heli && dist2(pos_of(heli), pos_of(me)) < 36.0f;
     if (near_heli) { const float *hv = (const float *)(heli + 0x68); speed = 50.0f * f_sqrt(hv[0] * hv[0] + hv[1] * hv[1] + hv[2] * hv[2]); }
-    for (i = 0; i < 3; i++) d[i] = aim[i] - from[i];
-    len = f_sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
-    out = near_heli ? 5.5f : 0.8f;
-    if (len < out + 1.0f) { g->next = now + 100; return; }
-    /* nobody is a laser: 0.1 m + 1 % of the range + 2 cm per m/s of the helicopter, on every axis */
-    spread = 0.1f + 0.01f * len + 0.02f * speed;
-    for (i = 0; i < 3; i++) { aim[i] += frand() * spread; d[i] = aim[i] - from[i]; }
-    len = f_sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
-    fill_shot(&q, who, o->target, &pp, cj);
-    set_vec(&q.from, from, 1.0f); set_vec(&q.to, aim, 1.0f);
-    q.muzzle.x = from[0] + d[0] / len * out; q.muzzle.y = from[1] + d[1] / len * out; q.muzzle.z = from[2] + d[2] / len * out;
-    verdict = hcb_shot_check(BRAIN, &q);
-    if (verdict == HCB_HOLD_NONE) clear = ray(&q.muzzle.x, aim, vehicle_of(him));
-    if (verdict == HCB_HOLD_NONE && clear) {
-        v[1] = 2;
-        put_f(v + 3, q.muzzle.x); put_f(v + 4, q.muzzle.y); put_f(v + 5, q.muzzle.z);
-        put_f(v + 6, aim[0] + d[0] / len * 0.6f); put_f(v + 7, aim[1] + d[1] / len * 0.6f); put_f(v + 8, aim[2] + d[2] / len * 0.6f);
-        g->next = now + 130 + (g_rng >> 8) % 50;
-        g_rounds++;
-        note_round(&q, verdict, clear);
-    } else {
-        g->next = now + 60;
-        g_rounds_refused++;
-        if (now - g->noted >= 250) { g->noted = now; note_round(&q, verdict, clear); }    /* (not every refusal: four a second say enough) */
+    fill_shot(&q, who, o.target, &pp, cj, me, him, 0.3f, 0.2f);
+    if (!hcb_gunner_round(BRAIN, &q, speed, near_heli, &r)) return;
+    if (r.verdict == HCB_HOLD_NONE) {
+        r.ray = (u8)ray(&r.muzzle.x, &r.to.x, vehicle_of(him));
+        if (!r.ray) hcb_gunner_blocked(BRAIN, who, q.time);
     }
+    if (r.verdict == HCB_HOLD_NONE && r.ray) {
+        v[1] = 2;
+        put_f(v + 3, r.muzzle.x); put_f(v + 4, r.muzzle.y); put_f(v + 5, r.muzzle.z);
+        put_f(v + 6, r.end.x); put_f(v + 7, r.end.y); put_f(v + 8, r.end.z);
+        g_rounds++;
+    } else g_rounds_refused++;
+    if ((r.note || (r.verdict == HCB_HOLD_NONE && !r.ray)) && g_rec[g_cur].end + sizeof r + 64 <= BOX_BYTES) hcb_rec_push_round(&g_rec[g_cur], g_box[g_cur], &r);
 }
 /* A guard on foot fires the game's own weapon: the brain says at whom and whether, and takes the permission back in
    the same frame when CJ or one of ours has come into his line. */
 static void cmd_squad(int *v) {
     struct pool pp;
     u32 who = (u32)v[0];
-    const hcb_order *o = order_of(who);
     const u8 *cj = player_ped(), *me, *him;
+    hcb_order o;
     hcb_shot q;
 
     v[1] = 0; v[2] = 0;
-    if (!o || !o->target || !cj || !get_pool(PED_POOL, &pp)) return;
-    me = obj_of(&pp, who, PED_STRIDE); him = obj_of(&pp, o->target, PED_STRIDE);
+    if (!hcb_order_get(BRAIN, who, &o) || !o.target || !cj || !get_pool(PED_POOL, &pp)) return;
+    me = obj_of(&pp, who, PED_STRIDE); him = obj_of(&pp, o.target, PED_STRIDE);
     if (!me || !him || is_dead(him) || is_dead(me)) return;
-    v[2] = (int)o->target;
-    if (!o->fire) {
-        v[1] = o->hold == HCB_HOLD_CJ_IN_LINE || o->hold == HCB_HOLD_CJ_BEHIND || o->hold == HCB_HOLD_FRIEND || o->hold == HCB_HOLD_BYSTANDER
-               || o->hold == HCB_HOLD_CAR_NEAR || o->hold == HCB_HOLD_ROE ? 3 : o->ready ? 1 : 0;
-        return;
-    }
-    fill_shot(&q, who, o->target, &pp, cj);
-    set_vec(&q.from, pos_of(me), 1.0f); q.muzzle = q.from; set_vec(&q.to, pos_of(him), 1.0f);
-    v[1] = hcb_shot_check(BRAIN, &q) == HCB_HOLD_NONE ? 2 : 3;
+    v[2] = (int)o.target;
+    fill_shot(&q, who, o.target, &pp, cj, me, him, 0, 0);
+    v[1] = hcb_squad_state(BRAIN, &q);
 }
-static void cmd_status(int *v) {
+/* v[5] = ms since CJ last fired (-1 = long ago), v[6], v[7] = the direction of that shot (unit vector, floats): the
+   squad steps out of his line of fire */
+static void cmd_status(int *v, int count) {
     struct pool pp;
-    u32 i;
+    u32 i, now = RD(u32, G + TIME_MS);
     v[0] = g_out.alert; v[1] = g_out.n_threats; v[2] = g_out.n_attackers; v[3] = g_out.kills; v[4] = 0;
+    if (count >= 8) {
+        v[5] = g_cj_shot_t && now - g_cj_shot_t < 60000 ? (int)(now - g_cj_shot_t) : -1;
+        put_f(v + 6, g_cj_shot_dir[0]); put_f(v + 7, g_cj_shot_dir[1]);
+    }
     if (!get_pool(PED_POOL, &pp)) return;
     for (i = 0; i < g_out.n_marks; i++) {
         const hcb_mark *m = &g_out.marks[i];
-        if (m->kind == HCB_KIND_PED && m->cls >= HCB_CLS_THREAT && obj_of(&pp, m->id, PED_STRIDE)) { v[4] = (int)m->id; return; }
+        const u8 *e = m->kind == HCB_KIND_PED && m->cls >= HCB_CLS_THREAT ? obj_of(&pp, m->id, PED_STRIDE) : 0;
+        if (e && !is_dead(e)) { v[4] = (int)m->id; return; }
     }
 }
 /* 0E48 first_variable count command. Called by CLEO inside the script's turn (game thread). All three parameters are
@@ -730,7 +706,7 @@ HIDDEN void brain_opcode(void *script, u8 **ip, u16 opcode, const char *name) {
     g_busy = 1;
     if (cmd == CMD_GUNNER && count >= 9) cmd_gunner(vars);
     else if (cmd == CMD_SQUAD && count >= 3) cmd_squad(vars);
-    else if (cmd == CMD_STATUS && count >= 5) cmd_status(vars);
+    else if (cmd == CMD_STATUS && count >= 5) cmd_status(vars, count);
     g_busy = 0;
 }
 /* Is this the CLEO the bridge was studied on, and has it found the same game? 0 = yes, else what is wrong. */

@@ -102,6 +102,11 @@ API void hcb_init(hcb_brain *b, u32 seed) {
     b->cfg.hit_hold_ms = 10000;
     b->cfg.muzzle_m = 5.5f;
     b->cfg.round_past_m = 0.6f;
+    b->cfg.round_min_ms = 130;
+    b->cfg.round_max_ms = 180;
+    b->cfg.scatter_m = 0.1f;
+    b->cfg.scatter_per_m = 0.01f;
+    b->cfg.scatter_per_ms = 0.02f;
 }
 
 HID track *hcb_find(hcb_brain *b, u32 id) {

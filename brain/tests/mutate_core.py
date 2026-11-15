@@ -140,6 +140,25 @@ M += [
  (C, "if (car && car->cj_marked > t->cj_marked) t->cj_marked = car->cj_marked;", "", 'follow: the men in that car'),
  (C, "if (round) copy(round, buf + at + 8, sizeof(hcb_round));", "", 'black box: rounds are given back'),
 ]
+M += [
+ (F, "o->fire = (u8)(sh->hold == HCB_HOLD_NONE && sh->aim != 0 && sh->aim == sh->target);", "o->fire = 1;", 'scripts: the order as it stands'),
+ (F, "if (sh->next_round && (int)(in->time - sh->next_round) < 0 && sh->next_round - in->time < 2000) return 0;", "", 'rounds: not before the next one is due'),
+ (F, "float gap = c->round_min_ms + (c->round_max_ms - c->round_min_ms) * (dice(sh) * 0.5f + 0.5f);", "float gap = 10;", 'rounds: 130 to 180 ms apart'),
+ (F, "out = near_heli ? c->muzzle_m : 0.8f;", "out = 0.8f;", 'rounds: start outside the helicopter'),
+ (F, "out = near_heli ? c->muzzle_m : 0.8f;", "out = c->muzzle_m;", 'rounds: 0.8 m when dismounted'),
+ (F, "q.to.x += dice(sh) * spread; q.to.y += dice(sh) * spread; q.to.z += dice(sh) * spread;", "", 'rounds: nobody is a laser'),
+ (F, "spread = c->scatter_m + c->scatter_per_m * len + c->scatter_per_ms * (near_heli ? heli_speed : 0);", "spread = c->scatter_m + c->scatter_per_m * len;", 'rounds: a fast helicopter scatters more'),
+ (F, "spread = c->scatter_m + c->scatter_per_m * len + c->scatter_per_ms * (near_heli ? heli_speed : 0);", "spread = 3 * (c->scatter_m + c->scatter_per_m * len);", 'rounds: the scatter has a limit'),
+ (F, "r->end = v_add(q.to, v_mul(d, c->round_past_m / len));", "r->end = v_add(q.to, v_mul(d, 30.0f / len));", 'rounds: end 0.6 m past the aim point'),
+ (F, "r->verdict = (u8)hcb_shot_check(b, &q);", "r->verdict = 0;", 'rounds: the hard rules on the line of the round'),
+ (F, "        sh->next_round = in->time + 60;\n        if (!sh->noted", "        sh->next_round = in->time;\n        if (!sh->noted", 'rounds: a refused round is asked for again 60 ms later'),
+ (F, "if (!sh->noted || in->time - sh->noted >= 250) { sh->noted = in->time; r->note = 1; }", "r->note = 1;", 'rounds: refusals noted four times a second'),
+ (F, "if (sh) sh->next_round = time + 60;", "", 'rounds: a blocked ray is tried again soon'),
+ (F, "if (!sh || sh->hold != HCB_HOLD_NONE || !sh->target || sh->target != in->target) return 0;", "if (!sh) return 0;", 'rounds: only at the man he is ordered to fire at'),
+ (F, "if (len < out + 1.0f) { sh->next_round = in->time + 100; return 0; }", "", 'rounds: not at a man at the muzzle'),
+ (F, "|| sh->hold == HCB_HOLD_CAR_NEAR || sh->hold == HCB_HOLD_ROE ? 3 : sh->ready ? 1 : 0;", "|| sh->hold == HCB_HOLD_CAR_NEAR || sh->hold == HCB_HOLD_ROE ? 3 : 2;", 'guard: cover is not fire'),
+ (F, "return hcb_shot_check(cb, q) == HCB_HOLD_NONE ? 2 : 3;", "return 2;", 'guard: cease fire in the same frame'),
+]
 only = sys.argv[1:]
 missed = 0
 for fname, old, new, name in M:

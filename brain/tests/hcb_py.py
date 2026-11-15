@@ -59,6 +59,8 @@ LIB.hcb_struct_size.restype = ctypes.c_uint32
 LIB.hcb_config.restype = ctypes.POINTER(hcb_cfg)
 LIB.hcb_weapon_dps.restype = ctypes.c_float
 LIB.hcb_weapon_range.restype = ctypes.c_float
+LIB.hcb_gunner_round.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_float, ctypes.c_int, ctypes.c_void_p]
+LIB.hcb_gunner_blocked.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32]
 for _i, _n in enumerate(['hcb_ped', 'hcb_veh', 'hcb_event', 'hcb_snapshot', 'hcb_out', 'hcb_cfg', 'hcb_mark', 'hcb_track_info', 'hcb_rec', 'hcb_box_head', 'hcb_los', 'hcb_order', 'hcb_shot', 'hcb_round']):
     assert LIB.hcb_struct_size(_i) == ctypes.sizeof(STRUCTS[_n]), ('layout differs between C and Python', _n, LIB.hcb_struct_size(_i), ctypes.sizeof(STRUCTS[_n]))
     assert ctypes.sizeof(STRUCTS[_n]) % 4 == 0, _n
@@ -86,15 +88,37 @@ class Brain:
     def marks(self):
         return {m.id: m for m in self.out.marks[:self.out.n_marks]}
 
-    def shot(self, who, target, time, frm, to, cj, friends=(), muzzle=None):
-        """hcb_shot_check: may this round go, with these positions of this frame? Returns HCB_HOLD_*."""
+    @staticmethod
+    def _shot(who, target, time, frm, to, cj, friends=(), muzzle=None):
         q = hcb_shot()
         q.who, q.target, q.time, q.n_friends = who, target, time, len(friends)
         q.muzzle, q.to, q.cj = vec(*(muzzle or frm)), vec(*to), vec(*cj)
         setattr(q, 'from', vec(*frm))
         for i, f in enumerate(friends):
             q.friends[i] = vec(*f)
-        return LIB.hcb_shot_check(self.mem, ctypes.byref(q))
+        return q
+
+    def shot(self, who, target, time, frm, to, cj, friends=(), muzzle=None):
+        """hcb_shot_check: may this round go, with these positions of this frame? Returns HCB_HOLD_*."""
+        return LIB.hcb_shot_check(self.mem, ctypes.byref(self._shot(who, target, time, frm, to, cj, friends, muzzle)))
+
+    def order(self, who):
+        """hcb_order_get: the standing order of one of ours, or None."""
+        o = hcb_order()
+        return o if LIB.hcb_order_get(self.mem, who, ctypes.byref(o)) else None
+
+    def round(self, who, target, time, frm, to, cj, friends=(), heli_speed=0., near_heli=True):
+        """hcb_gunner_round: None while no round is due, else the hcb_round (its line and the verdict of the hard rules)."""
+        r = hcb_round()
+        q = self._shot(who, target, time, frm, to, cj, friends)
+        return r if LIB.hcb_gunner_round(self.mem, ctypes.byref(q), heli_speed, int(near_heli), ctypes.byref(r)) else None
+
+    def blocked(self, who, time):
+        LIB.hcb_gunner_blocked(self.mem, who, time)
+
+    def squad(self, who, target, time, frm, to, cj, friends=()):
+        """hcb_squad_state: 0 nothing, 1 cover, 2 fire, 3 cease fire now."""
+        return LIB.hcb_squad_state(self.mem, ctypes.byref(self._shot(who, target, time, frm, to, cj, friends)))
 
     def cls(self, id):
         m = self.marks().get(id)

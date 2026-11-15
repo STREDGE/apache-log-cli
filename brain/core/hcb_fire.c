@@ -222,7 +222,7 @@ HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         zero(o, sizeof *o);
         o->who = me[i]->id;
         if (!sh) { o->hold = HCB_HOLD_NO_TARGET; continue; }
-        sh->role = s->our_role[i];
+        sh->role = s->our_role[i]; sh->aim = 0; sh->ready = 0;
         if (choice[i] >= 0) {
             track *t = cs[choice[i]].t;
             if (sh->target != t->last.id) {
@@ -248,7 +248,7 @@ HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                     o->hold = HCB_HOLD_PAUSE;
                 }
             }
-            sh->hold = o->hold;
+            sh->hold = o->hold; sh->aim = o->target; sh->ready = o->ready;
             continue;
         }
         /* nothing to fire at: the most dangerous contact he could not take says why; a suspect gets a weapon pointed at him */
@@ -266,7 +266,7 @@ HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
             if (bj >= 0) { o->hold = why[i][bj] == SOFT_LOS ? HCB_HOLD_NO_LOS : why[i][bj]; o->target = cs[bj].t->last.id; o->aim = cs[bj].t->last.pos; o->ready = 1; }
             else if (cover >= 0) { o->hold = HCB_HOLD_COVERING; o->target = cs[cover].t->last.id; o->aim = cs[cover].t->last.pos; o->ready = 1; }
             else { o->hold = s->roe == HCB_ROE_HOLD && n ? HCB_HOLD_ROE : HCB_HOLD_NO_TARGET; o->ready = (u8)(b->alert >= HCB_ALERT_THREAT); }
-            sh->hold = o->hold;
+            sh->hold = o->hold; sh->aim = o->target; sh->ready = o->ready;
         }
     }
     /* shooters who are no longer with us */
@@ -319,4 +319,63 @@ API int hcb_shot_check(const hcb_brain *cb, const hcb_shot *q) {
         }
     }
     return HCB_HOLD_NONE;
+}
+
+static shooter *shooter_find(hcb_brain *b, u32 who) {
+    int i;
+    for (i = 0; i < HCB_MAX_OURS; i++) if (b->sh[i].used && b->sh[i].id == who) return &b->sh[i];
+    return 0;
+}
+API int hcb_order_get(const hcb_brain *cb, u32 who, hcb_order *o) {
+    const shooter *sh = shooter_find((hcb_brain *)cb, who);
+    zero(o, sizeof *o);
+    if (!sh) return 0;
+    o->who = who; o->target = sh->aim; o->hold = sh->hold; o->ready = sh->ready;
+    o->fire = (u8)(sh->hold == HCB_HOLD_NONE && sh->aim != 0 && sh->aim == sh->target);
+    return 1;
+}
+static float dice(shooter *sh) {       /* -1..1, the gunner's own dice: the brain's are for its looks, so a replay does not need the rounds */
+    u32 x = sh->rrng ? sh->rrng : (sh->id * 2654435761u) | 1u;
+    x ^= x << 13; x ^= x >> 17; x ^= x << 5; sh->rrng = x;
+    return (float)(x & 0xffff) / 32767.5f - 1.0f;
+}
+API int hcb_gunner_round(hcb_brain *b, const hcb_shot *in, float heli_speed, int near_heli, hcb_round *r) {
+    const hcb_cfg *c = &b->cfg;
+    shooter *sh = shooter_find(b, in->who);
+    hcb_shot q = *in;
+    hcb_vec d;
+    float len, out, spread;
+    if (!sh || sh->hold != HCB_HOLD_NONE || !sh->target || sh->target != in->target) return 0;
+    if (sh->next_round && (int)(in->time - sh->next_round) < 0 && sh->next_round - in->time < 2000) return 0;
+    out = near_heli ? c->muzzle_m : 0.8f;
+    d = v_sub(q.to, q.from); len = v_len(d);
+    if (len < out + 1.0f) { sh->next_round = in->time + 100; return 0; }
+    spread = c->scatter_m + c->scatter_per_m * len + c->scatter_per_ms * (near_heli ? heli_speed : 0);
+    q.to.x += dice(sh) * spread; q.to.y += dice(sh) * spread; q.to.z += dice(sh) * spread;
+    d = v_sub(q.to, q.from); len = v_len(d);
+    q.muzzle = v_add(q.from, v_mul(d, out / len));
+    zero(r, sizeof *r);
+    r->time = in->time; r->who = in->who; r->target = in->target; r->muzzle = q.muzzle; r->to = q.to;
+    r->end = v_add(q.to, v_mul(d, c->round_past_m / len));
+    r->verdict = (u8)hcb_shot_check(b, &q);
+    if (r->verdict == HCB_HOLD_NONE) {
+        float gap = c->round_min_ms + (c->round_max_ms - c->round_min_ms) * (dice(sh) * 0.5f + 0.5f);
+        sh->next_round = in->time + (u32)gap; r->note = 1;
+    } else {
+        sh->next_round = in->time + 60;
+        if (!sh->noted || in->time - sh->noted >= 250) { sh->noted = in->time; r->note = 1; }
+    }
+    return 1;
+}
+API void hcb_gunner_blocked(hcb_brain *b, u32 who, u32 time) {
+    shooter *sh = shooter_find(b, who);
+    if (sh) sh->next_round = time + 60;
+}
+API int hcb_squad_state(const hcb_brain *cb, const hcb_shot *q) {
+    const shooter *sh = shooter_find((hcb_brain *)cb, q->who);
+    if (!sh || !sh->aim) return 0;
+    if (sh->hold != HCB_HOLD_NONE || sh->aim != sh->target)
+        return sh->hold == HCB_HOLD_CJ_IN_LINE || sh->hold == HCB_HOLD_CJ_BEHIND || sh->hold == HCB_HOLD_FRIEND || sh->hold == HCB_HOLD_BYSTANDER
+               || sh->hold == HCB_HOLD_CAR_NEAR || sh->hold == HCB_HOLD_ROE ? 3 : sh->ready ? 1 : 0;
+    return hcb_shot_check(cb, q) == HCB_HOLD_NONE ? 2 : 3;
 }

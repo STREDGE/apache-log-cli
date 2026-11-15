@@ -298,6 +298,11 @@ typedef struct hcb_cfg {
     /* rounds of the door gunners are created by the script along a line the brain has checked */
     float muzzle_m;         /* ... starting this far from the gunner (outside the helicopter) */
     float round_past_m;     /* ... and ending this far past the aim point */
+    float round_min_ms;     /* time between two rounds of one gunner: at least this ... */
+    float round_max_ms;     /* ... and at most this */
+    float scatter_m;        /* scatter of a round on every axis: this much ... */
+    float scatter_per_m;    /* ... plus this per metre of range ... */
+    float scatter_per_ms;   /* ... plus this per m/s of the helicopter he fires from */
 } hcb_cfg;
 
 /* The brain itself is one opaque block of hcb_brain_size() bytes that the caller provides (no allocation). */
@@ -347,6 +352,7 @@ typedef struct hcb_shot {
 } hcb_shot;
 int hcb_shot_check(const hcb_brain *b, const hcb_shot *q);
 
+
 /* ---- black box: a ring of the latest snapshots in a caller-provided buffer.
  * Besides the snapshots the adapter stores the brain's own memory every few seconds, so a replay can start from
  * the first such record in the file and reproduce every later decision exactly even though older records are gone. */
@@ -357,11 +363,12 @@ typedef struct hcb_round {
     uint32_t time;
     uint32_t who;
     uint32_t target;
-    hcb_vec muzzle;
-    hcb_vec to;
-    uint8_t verdict;        /* HCB_HOLD_*: HCB_HOLD_NONE = fired */
-    uint8_t ray;            /* 1 = the adapter's ray along the line was clear */
-    uint8_t reserved0;
+    hcb_vec muzzle;         /* where the round starts */
+    hcb_vec to;             /* the point it is aimed at (scattered round the man) */
+    hcb_vec end;            /* where it ends: round_past_m beyond `to` */
+    uint8_t verdict;        /* HCB_HOLD_*: HCB_HOLD_NONE = the hard rules let it go */
+    uint8_t ray;            /* 1 = the adapter's ray muzzle -> to was clear (set by the adapter) */
+    uint8_t note;           /* 1 = worth a line in the black box (every round let go; refusals four times a second) */
     uint8_t reserved1;
 } hcb_round;
 typedef struct hcb_rec {
@@ -400,6 +407,19 @@ typedef struct hcb_box_head {
     uint32_t reserved;
 } hcb_box_head;
 void hcb_box_head_fill(hcb_box_head *h, const hcb_rec *r, const hcb_brain *b, uint32_t text_len);
+
+/* ---- what the scripts ask for, frame by frame (the adapter adds the positions of this frame and the ray)
+ * hcb_order_get: the standing order of one of ours as of the last look. Returns 0 when he has none.
+ * hcb_gunner_round: a door gunner whose order is "fire". q->from = his chest, q->to = the man's chest NOW, q->muzzle is
+ *   ignored. Returns 0 when no round is due yet; else fills *r - the line of this round (scattered: nobody is a
+ *   laser) and the verdict of the hard rules for exactly that line - and sets the time of the next try. The adapter
+ *   then runs its ray muzzle -> to; if the ray is blocked it says so with hcb_gunner_blocked.
+ * hcb_squad_state: a guard on foot (he fires the game's own weapon). 0 nothing, 1 cover the man, 2 fire,
+ *   3 cease fire now. q->from = q->muzzle = where he stands, q->to = where the man stands. */
+int hcb_order_get(const hcb_brain *b, uint32_t who, hcb_order *o);
+int hcb_gunner_round(hcb_brain *b, const hcb_shot *q, float heli_speed, int near_heli, hcb_round *r);
+void hcb_gunner_blocked(hcb_brain *b, uint32_t who, uint32_t time);
+int hcb_squad_state(const hcb_brain *b, const hcb_shot *q);
 
 /* Weapon knowledge shared with the adapter and the tests. */
 #define HCB_WC_NONE 0

@@ -713,12 +713,16 @@ assert e.opcode(10, 3, CMD_SQUAD, handle=H_(s1))[1][1] in (0, 3) and e.opcode(3,
 e.share(HC_STATE + 7, 3); e.gunshot(gang, (0., 0.5, 1.)); e.frame(ms=50, n=8, hud=False)
 handled, v, used = e.opcode(20, 5, CMD_STATUS)
 assert v[0] >= h.HCB_ALERT_COMBAT and v[1] >= 1 and v[2] >= 1 and v[3] == 0 and v[4] == H_(gang), v
+assert e.opcode(20, 8, CMD_STATUS)[1][5] == -1, 'CJ has not fired'
+e.gunshot(e.cj, (30., 40., 1.)); e.frame(ms=50, hud=False)
+v = e.opcode(20, 8, CMD_STATUS)[1]
+assert 0 <= v[5] <= 100 and abs(f32(v[6]) - 0.6) < .01 and abs(f32(v[7]) - 0.8) < .01, (v[5], f32(v[6]), f32(v[7]))
 until_round()
 e.w32(gang + 0x54c, 55)                                              # he is dead
 e.frame(ms=50, n=2, hud=False)
 v = e.opcode(20, 5, CMD_STATUS)[1]
 assert v[3] == 1 and v[4] != H_(gang) and e.opcode(3, 9, CMD_GUNNER, handle=H_(g1))[1][1:3] == [0, 0] and e.opcode(10, 3, CMD_SQUAD, handle=H_(s1))[1][1:3] == [0, 0], v
-passed('A guard on foot asks with 3 variables: cover, fire, and "cease fire" in the very frame CJ walks into his line; "hold fire" in the menu stops everybody; the status request gives alert level, threats, attackers, kills and the most dangerous man; a dead man is nobody\'s target and is counted')
+passed('A guard on foot asks with 3 variables: cover, fire, and "cease fire" in the very frame CJ walks into his line; "hold fire" in the menu stops everybody; the status request gives alert level, threats, attackers, kills, the most dangerous man and the direction of CJ\'s own last shot (the squad keeps out of his line of fire); a dead man is nobody\'s target and is counted')
 
 # what a script must not be able to do through the opcode
 sentinel = [0x51515151] * 32

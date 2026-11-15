@@ -330,6 +330,123 @@ assert sc2.orders[f2].target == g2 and not sc2.orders[f2].fire
 assert HOLD[sc2.brain.shot(f2, g2, sc2.time, sc2.peds[f2]['pos'], sc2.peds[g2]['pos'], sc2.cj['pos'], [], None)] == 'NO_TARGET'
 passed('Every round is asked for at the moment it leaves, with the positions of that frame: CJ stepping within 2 m of the line, one of ours in it, a passer-by, a damaged car beside CJ, an order that is stale or was for another man - the round does not go')
 
+# ------------------------------------------------------------------ what the scripts ask for, frame by frame
+sc, front, rear = heli_scene(cj_at=(-30., 0.))
+g = sc.ped(40, 41, pedtype=GANG, weapon=AK)
+watch = sc.ped(40, 70, pedtype=GANG, weapon=AK, face='away')
+b = sc.brain
+assert b.order(front) is None and b.order(0x7777) is None
+sc.shot(g, (-30., 0., 1.), dst=1)
+for _ in range(14):
+    sc.step(1)
+    for who, o in sc.orders.items():
+        got = b.order(who)
+        assert got and (got.target, got.fire, got.hold, got.ready) == (o.target, o.fire, o.hold, o.ready), (who, HOLD[o.hold], HOLD[got.hold])
+mates = [sc.peds[rear]['pos'], sc.peds[[i for i, r in sc.ours.items() if r == HCB_ROLE_PILOT][0]]['pos']]
+chest = lambda p, up: [p[0], p[1], p[2] + up]
+
+
+def burst_of_rounds(sc, who, target, ms, heli_speed=0., near_heli=True, cj=None, step=10):
+    """Ask for a round every `step` ms for `ms` ms, letting the brain look again every 100 ms."""
+    out, t = [], sc.time
+    for k in range(ms // step):
+        t += step
+        if t - sc.time >= 100:
+            sc.shot(target, sc.cj['pos'], dst=1)
+            sc.step(1)
+        r = sc.brain.round(who, target, t, chest(sc.peds[who]['pos'], .3), chest(sc.peds[target]['pos'], .2), cj or sc.cj['pos'], mates, heli_speed, near_heli)
+        if r:
+            out.append(hcb_round.from_buffer_copy(bytes(r)))
+    return out
+
+
+rounds = burst_of_rounds(sc, front, g, 4000)
+ok = [r for r in rounds if r.verdict == HCB_HOLD_NONE]
+assert len(ok) >= 10 and len(ok) == len(rounds) and all(r.note for r in ok), len(rounds)
+gaps = [b_.time - a_.time for a_, b_ in zip(ok, ok[1:])]
+cfg = sc.brain.cfg
+assert min(gaps) >= cfg.round_min_ms and sorted(gaps)[len(gaps) // 2] <= cfg.round_max_ms + 10 and max(gaps) >= 300 and len(set(gaps)) >= 3, sorted(set(gaps))
+me, him = chest(sc.peds[front]['pos'], .3), chest(sc.peds[g]['pos'], .2)
+dist = math.dist(me, him)
+worst = 0.
+for r in ok:
+    mz, to, end = [r.muzzle.x, r.muzzle.y, r.muzzle.z], [r.to.x, r.to.y, r.to.z], [r.end.x, r.end.y, r.end.z]
+    d = [to[i] - me[i] for i in range(3)]
+    n = math.sqrt(sum(x * x for x in d))
+    assert math.dist(mz, [me[i] + d[i] / n * cfg.muzzle_m for i in range(3)]) < .01 and math.dist(end, [to[i] + d[i] / n * cfg.round_past_m for i in range(3)]) < .01
+    off = max(abs(to[i] - him[i]) for i in range(3))
+    worst = max(worst, off)
+    assert off <= cfg.scatter_m + cfg.scatter_per_m * dist + .01, off
+assert worst > 0.5 * (cfg.scatter_m + cfg.scatter_per_m * dist) and len({round(r.to.x, 2) for r in ok}) > len(ok) // 2, worst
+fast = burst_of_rounds(sc, front, g, 1500, heli_speed=25.)
+assert max(max(abs(v_ - h_) for v_, h_ in zip([r.to.x, r.to.y, r.to.z], him)) for r in fast) > cfg.scatter_m + cfg.scatter_per_m * dist + .02, 'a fast helicopter scatters more'
+foot = burst_of_rounds(sc, front, g, 800, near_heli=False)
+assert foot and all(abs(math.dist([r.muzzle.x, r.muzzle.y, r.muzzle.z], me) - 0.8) < .01 for r in foot), 'dismounted: the round starts 0.8 m from him'
+passed('A door gunner\'s rounds (the script asks every frame): never closer together than 130 ms, usually within 180 ms, with the pauses of his bursts; each on its own line - from 5.5 m outside the helicopter (0.8 m when dismounted), scattered round the man by up to 0.1 m + 1 % of the range (more from a fast helicopter), ending 0.6 m past the point aimed at')
+
+mid = [(me[i] + him[i]) / 2 for i in range(3)]
+t = sc.time
+tries, notes = [], []
+for k in range(100):                                   # CJ stands in the line for a second: the script keeps asking every 10 ms
+    t += 10
+    if t - sc.time >= 100:
+        sc.shot(g, sc.cj['pos'], dst=1)
+        sc.step(1)
+        if not sc.orders[front].fire:
+            continue
+    r = b.round(front, g, t, me, him, [mid[0], mid[1] + 1.0, mid[2]], mates)
+    if r:
+        assert r.verdict == HCB_HOLD_CJ_IN_LINE
+        tries.append(t)
+        notes.append(t) if r.note else None
+assert len(tries) >= 6 and min(b_ - a_ for a_, b_ in zip(tries, tries[1:])) >= 60 and 2 <= len(notes) <= 5, (tries, notes)
+for _ in range(15):
+    sc.shot(g, sc.cj['pos'], dst=1)
+    sc.step(1)
+    if sc.orders[front].fire:
+        break
+t = sc.time
+r = None
+while r is None:
+    t += 10
+    r = b.round(front, g, t, me, him, sc.cj['pos'], mates)
+assert r.verdict == HCB_HOLD_NONE
+b.blocked(front, t)                                    # the adapter's ray hit a lorry
+again = [k for k in range(1, 20) if b.round(front, g, t + 10 * k, me, him, sc.cj['pos'], mates)]
+assert again and again[0] == 6, ('tried again 60 ms later, not after a full round interval', again)
+assert b.round(front, watch, t + 400, me, chest(sc.peds[watch]['pos'], .2), sc.cj['pos'], mates) is None, 'no rounds at a man he only covers'
+assert b.round(front, g, t + 400, me, [me[0] + 4., me[1], me[2]], sc.cj['pos'], mates) is None, 'a man 4 m from the muzzle: nothing to aim past the door'
+passed('A round the hard rules refuse is asked for again 60 ms later (and noted in the black box at most four times a second); so is one whose ray was blocked. No rounds at a suspect who is only covered')
+
+sc = Scene()
+sc.cj['pos'] = [0., -6., 1.]
+me = sc.our(0, 4, HCB_ROLE_SQUAD, weapon=M4)
+idle = sc.our(-30, 4, HCB_ROLE_SQUAD + 1, weapon=0)
+sus = sc.ped(0, 40, pedtype=GANG, weapon=AK, face='away')
+b = sc.brain
+state = lambda who, target, cj=None: b.squad(who, target, sc.time, sc.peds[who]['pos'], sc.peds[target]['pos'], cj or sc.cj['pos'], [sc.peds[idle]['pos']] if who == me else [sc.peds[me]['pos']])
+sc.step(3)
+assert sc.orders[me].target == sus and state(me, sus) == 1 and state(idle, sus) == 1, (holds(sc), state(me, sus))
+g = sc.ped(25, 4, pedtype=GANG, weapon=AK, face='away')
+sc.step(1)
+sc.shot(g, (0., -6., 1.), dst=1)
+seen = []
+for _ in range(8):
+    sc.step(1)
+    seen.append(state(me, g))
+assert seen[-1] == 2 and set(seen) <= {1, 2} and seen.index(2) >= 1, seen
+assert state(me, g, cj=[12., 4.5, 1.]) == 3, 'CJ in his line in this frame: cease fire'
+assert state(me, sus) == 3 or state(me, sus) == 0, 'the man he is not ordered on'
+sc.roe = HCB_ROE_HOLD
+sc.step(1)
+assert state(me, g) == 0 and not sc.orders[me].fire, 'hold fire: he has no man at all'
+sc.roe = HCB_ROE_DEFEND
+sc.peds[g]['flags'] |= HCB_PF_DEAD
+sc.peds.pop(sus)
+sc.step(2)
+assert b.order(me).target == 0 and state(me, g) == 0
+passed('A guard on foot (he fires the game\'s own weapon) is told: cover a suspect, fire, and cease fire - in the very frame CJ comes into his line, and when the player says hold fire')
+
 # ------------------------------------------------------------------ the car CJ is shooting at
 sc = rule(HCB_ROE_FOLLOW)
 drv, mate = sc.ped(40, 0, pedtype=GANG, weapon=AK), sc.ped(40, 0, pedtype=GANG, weapon=PISTOL)
