@@ -20,8 +20,9 @@ assert all(0xA0<=g_<=0xFF for g_ in glyphs),'the glyph slots sit in the high hal
 assert i18n.encode('А','cp1251')==b'\xc0' and i18n.encode('А','glyph')==b'\xc1' and i18n.encode('Б','glyph')==b'\xd0' and i18n.encode('я','glyph')==b'\xea'
 assert i18n.encode('Hello ~b~1 2 3!','glyph')==b'Hello ~b~1 2 3!','Latin text, digits and the colour tags are never touched'
 passed('Both layouts cover all 66 Cyrillic letters without collisions; CP1251 А = 0xC0, glyph slot of А = 0xC1 (russian_table of libGTASA)')
-fxt={};raw=(b.OUT/'Helicover.fxt').read_bytes()
-for line in raw.split(b'\n'):
+fxt={};en_raw=(b.OUT/'Helicover.fxt').read_bytes();raw=(b.OUT/'Helicover_RU.fxt').read_bytes()
+assert max(en_raw)<0x80,'the English file stays plain ASCII'
+for line in en_raw.split(b'\n')+raw.split(b'\n'):
  if line.strip():k,v=line.split(b' ',1);assert k.decode() not in fxt,('duplicate key',k);fxt[k.decode()]=v
 en_keys=[k for k in fxt if k[0] not in 'UV'];assert len(en_keys)==len(i18n.RU_MESSAGES)==len([k for k in fxt if k[0]=='U'])==len([k for k in fxt if k[0]=='V'])
 for k in en_keys:
@@ -31,7 +32,7 @@ for k in en_keys:
  assert b'\r' not in fxt[i18n.ukey(k)] and b'\n' not in fxt[i18n.vkey(k)]
  assert re.findall(rb'~.~',fxt[i18n.ukey(k)])==re.findall(rb'~.~',fxt[k].encode() if isinstance(fxt[k],str) else fxt[k]),('colour tags',k)
  assert len(i18n.visible(ru))<=i18n.RU_PLAIN_LIMIT,(k,len(i18n.visible(ru)))
-passed('Helicover.fxt carries every message three times (EN key, U key in CP1251, V key in glyph codes) with the same colour tags')
+passed('Helicover.fxt (ASCII) holds the English messages, Helicover_RU.fxt the same ones with U keys in CP1251 and V keys in glyph codes, same colour tags')
 inv={g_:ch for ch,g_ in zip(letters,glyphs)}
 for k in en_keys:   # the glyph line decodes back to the same Russian text
  back=''.join(inv.get(c_,chr(c_)) if c_>=0x80 else chr(c_) for c_ in fxt[i18n.vkey(k)]);assert back==i18n.RU_MESSAGES[k],k

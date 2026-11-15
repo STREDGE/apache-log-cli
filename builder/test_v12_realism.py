@@ -63,7 +63,7 @@ passed('Exit by rope at walking pace: freeze right here and drop')
 # the scripted cruise carries on with the real speed (it used to restart from 0 = a dead stop)
 w,c,car=exit_scene(20.)
 moves=[x[2] for x in calls(w,0xab)];assert len(moves)>=3,'the cruise moves the helicopter'
-s1=math.dist(moves[1][1:4],moves[0][1:4]);s2=math.dist(moves[2][1:4],moves[1][1:4])
+s1=math.dist(moves[1][1:3],moves[0][1:3]);s2=math.dist(moves[2][1:3],moves[1][1:3])   # horizontal: the vertical easing is separate
 assert .25<=s1<=.45 and s2>=1.5,('cruise steps',s1,s2)
 passed('Scripted cruise starts at the real speed (0.3 m in the first 16 ms frame, then %.1f m per 100 ms), not from a standstill'%s2)
 
@@ -149,6 +149,7 @@ passed('Recall: the pilot waits up to 25 s for the guards; the one who cannot ge
 w,c,ground,sq,team=escort_world();V=(c,ground,sq)
 for k,t in enumerate(team):w.pos[t]=[BG[k][0],BG[k][1],0.]
 car=778;w.exists.add(car);w.cars[car]={'pos':[2.,2.,0.],'heading':0.};w.model[car]=400;w.incar[team[0]]=car;w.teleports.clear();w.calls.clear()
+V=(c,ground)   # the squad worker is left out: it would also tell a rider to leave the car, and this test is about the rope worker
 w.car=[0.,-40.,28.];w.shared[b.CMD]=17;steps(w,V,6);w.car=[c.v[26],c.v[27],c.v[28]+18.];w.speed=0.;steps(w,V,40)
 assert orders(w,0x633,team[0]) and not orders(w,0x362,team[0]),(orders(w,0x633,team[0]),orders(w,0x362,team[0]))
 passed('A guard in a car gets out first (task) and then runs to his rope; no teleport out of the car')
