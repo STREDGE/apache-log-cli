@@ -8,6 +8,10 @@ exec(compile(_src[:_src.index('results=[]')],str(P),'exec'),g)
 for _m in re.finditer(r'^def [a-z_0-9]+\(.*?(?=^\S)',_src,re.S|re.M):exec(compile(_m.group(0),str(P),'exec'),g)
 World,VM,b,setup,summon,calls,invariants,command=g['World'],g['VM'],g['b'],g['setup'],g['summon'],g['calls'],g['invariants'],g['command']
 import build_v25_squad as sqb
+import brain_mock
+_brain=brain_mock.h.Brain();_cfg=_brain.cfg          # the thresholds are the brain's own now (they used to be constants of the fire script)
+class CFG:car_floor=int(_cfg.car_floor);near_m=float(_cfg.near_m);cj_line_m=float(_cfg.cj_line_m);facing_cos=float(_cfg.facing_cos)
+FACING_DEG=round(math.degrees(math.acos(CFG.facing_cos)))
 results=[]
 def passed(t):results.append('PASS: '+t)
 def orders(w,op,who):return [x[2] for x in w.calls if x[1]==op and x[2][0]==who]
@@ -439,6 +443,18 @@ passed('Combat orbit direction keeps the door with more living gunners towards t
 w,c,f=fire_world();npc=target(w,typ=7,skin=20);w.pos[npc][2]=10.;w.damage.add((1,npc));w.step(c,f,n=12)
 m=calls(w,0x4a2)[-1][2];assert abs(m[3]-(10.+25.+15.))<.01,m
 passed('A shooter on a roof is circled 15 m higher')
+# CJ steps into a guard's line of fire between two looks of the squad (it thinks ten times a second): the guard is told in that very frame
+for offset in range(7):
+ w,c,ground,sq,team=escort_world();V=(c,ground,sq);w.frame_ms=16
+ for k,t in enumerate(team):w.pos[t]=[BG[k][0],BG[k][1],0.]
+ foe=960;w.exists.add(foe);w.pos[foe]=[25.,0.,0.];w.pedtype[foe]=7;w.weapons[foe]=30;w.health[foe]=100000;w.civilians=[foe];w.damage.add((1,foe))
+ steps(w,V,80+offset)
+ shooters=[k for k in range(4) if w.shared[b.SQ_BR_ST+k]==2 and firing(w,team[k])];assert shooters,[w.shared[b.SQ_BR_ST+k] for k in range(4)]
+ k=shooters[0];gp=w.coords(team[k]);d=[w.pos[foe][i]-gp[i] for i in range(2)];L=math.hypot(*d)
+ w.player=[gp[0]+d[0]/L*4.,gp[1]+d[1]/L*4.,0.];w.pos[1]=list(w.player);n0=len(w.calls);steps(w,V,1)
+ frame=w.calls[n0:]
+ assert w.shared[b.SQ_BR_ST+k]==3 and [x for x in frame if x[1]==0x667 and x[2][0]==team[k]] and not [x for x in frame if x[1] in FIRING and x[2][0]==team[k]],(offset,k,w.shared[b.SQ_BR_ST+k],[hex(x[1]) for x in frame if x[2] and x[2][0]==team[k]])
+passed('CJ steps into a guard\'s line of fire: in that very frame (not on the squad\'s next look) his firing task is replaced by an aiming one')
 # ------------------------------------------------------------------ v41 threat board: squad
 def squad_scene(npcs):
  w,c,ground,sq,team=escort_world();V=(c,ground,sq)
@@ -500,12 +516,12 @@ aimed=[(r.to.x,r.to.y,r.to.z) for r in w.brain.rounds if r.verdict==0 and r.ray]
 passed('A man in a car: every round is aimed at him (scattered by up to a metre at 60 m from a moving helicopter), never at the engine or the tank - the gunners do not blow cars up')
 # a damaged car within 18 m of CJ is left alone: it could blow up beside him
 w,c,f,car,drv=car_attack(1000,x=12.);assert calls(w,0x6bc)
-w.calls.clear();w.health[car]=b.CAR_HOLD_HP-1;w.step(c,f,n=3);n=len(calls(w,0x6bc));w.step(c,f,n=30)
+w.calls.clear();w.health[car]=CFG.car_floor-1;w.step(c,f,n=3);n=len(calls(w,0x6bc));w.step(c,f,n=30)
 assert len(calls(w,0x6bc))==n and n<=2 and aims(w,drv),'no round within 0.3 s of the car dropping below the floor; the weapons stay on the man'
-w,c,f,car,drv=car_attack(b.CAR_HOLD_HP-1,x=12.);assert not calls(w,0x6bc)
+w,c,f,car,drv=car_attack(CFG.car_floor-1,x=12.);assert not calls(w,0x6bc)
 w.incar.pop(drv);w.pos[drv]=[12.,6.,0.];w.calls.clear();w.step(c,f,n=30);assert calls(w,0x6bc) and hit(w)=={drv},'the same man on foot is a target again'
-w,c,f,car,drv=car_attack(b.CAR_HOLD_HP-1,x=40.);assert calls(w,0x6bc),'40 m from CJ the same damaged car may be stopped by fire'
-passed('A car below %d health within 18 m of CJ is not fired at (it burns below 250): no rounds, weapons on the man only - he is engaged again once he is out of it; far from CJ the same car may be fired at'%b.CAR_HOLD_HP)
+w,c,f,car,drv=car_attack(CFG.car_floor-1,x=40.);assert calls(w,0x6bc),'40 m from CJ the same damaged car may be stopped by fire'
+passed('A car below %d health within 18 m of CJ is not fired at (it burns below 250): no rounds, weapons on the man only - he is engaged again once he is out of it; far from CJ the same car may be fired at'%int(CFG.car_floor))
 # ------------------------------------------------------------------ beta 6: PROTECT CJ is close protection, not a gang war
 def protect(typ=7,weapon=30,x=20.,facing=True,wanted=0,in_car=False,skin=20,hurt=False,frames=30,turn=0.,shoots=False):
  w,c,f=fw();w.civilians=[];npc=900;w.exists.add(npc);w.pos[npc]=[x,0.,0.];w.skin[npc]=skin;w.pedtype[npc]=typ;w.civilians.append(npc);w.wanted=wanted
@@ -520,8 +536,8 @@ assert protect()[0],'control: an armed gang member on foot, 20 m away, turned to
 assert not protect(weapon=0)[0],'a gang member with empty hands is nobody\'s target'
 assert not protect(weapon=5)[0],'nor one with a bat: no firearm, no pre-emptive fire'
 assert not protect(facing=False)[0],'armed but walking away: not a threat yet'
-assert protect(turn=b.THREAT_FACING_DEG-10)[0] and protect(turn=10-b.THREAT_FACING_DEG)[0] and not protect(turn=b.THREAT_FACING_DEG+15)[0] and not protect(turn=-b.THREAT_FACING_DEG-15)[0],'turned to CJ = within 40 degrees either way'
-assert not protect(x=b.THREAT_NEAR_M+15.)[0],'armed and looking this way from 55 m: too far to call it imminent'
+assert protect(turn=FACING_DEG-10)[0] and protect(turn=10-FACING_DEG)[0] and not protect(turn=FACING_DEG+15)[0] and not protect(turn=-FACING_DEG-15)[0],'turned to CJ = within 40 degrees either way'
+assert not protect(x=CFG.near_m+15.)[0],'armed and looking this way from 55 m: too far to call it imminent'
 assert not protect(in_car=True)[0],'gang members driving past are left alone (this is what blew cars up beside CJ)'
 assert protect(in_car=True,hurt=True)[0],'... until they attack'
 assert not protect(typ=4)[0] and not protect(typ=4,wanted=3)[0],'an armed civilian is not a hostile type, wanted level or not'
@@ -531,7 +547,7 @@ assert not protect(typ=6,weapon=22,wanted=1)[0] and protect(typ=6,weapon=22,want
 assert not protect(typ=6,weapon=3,wanted=2)[0],'a policeman with a nightstick is left to CJ (until he hits him)'
 assert not protect(typ=6,weapon=22,wanted=3,in_car=True)[0],'police cars are not fired at just because CJ is wanted'
 assert not protect(typ=8)[0] and not protect(typ=8,skin=105)[0],'Grove never'
-passed('PROTECT ME engages threats only: whoever hurt CJ, or an armed gang member on foot within %d m and turned to CJ (40 degrees either way) - not passers-by, not armed civilians, not cars driving past, not policemen who have not fired'%b.THREAT_NEAR_M)
+passed('PROTECT ME engages threats only: whoever hurt CJ, or an armed gang member on foot within %d m and turned to CJ (40 degrees either way) - not passers-by, not armed civilians, not cars driving past, not policemen who have not fired'%CFG.near_m)
 for mode in (0,2,3,4):
  w,c,f=fw();w.shared[b.FIRE]=mode;w.wanted=3;w.calls.clear();w.step(c,f,n=20)
  assert not [x for x in calls(w,0x77a) if x[2][1]==4],(mode,[x[2] for x in calls(w,0x77a) if x[2][1]==4][:3])
@@ -540,7 +556,7 @@ passed('No fire mode makes the gunners hate a ped type any more: the game\'s own
 w,c,f=fw();w.civilians=[];npc=900;w.exists.add(npc);w.pos[npc]=[0.,1.5,0.];w.skin[npc]=102;w.pedtype[npc]=7;w.health[npc]=100000;w.civilians.append(npc);w.damage.add((1,npc));w.calls.clear();w.step(c,f,n=50)
 assert not calls(w,0x6bc) and aims(w,npc) and not invariants(w),(len(calls(w,0x6bc)),invariants(w))
 w.player=[0.,-25.,0.];w.calls.clear();w.step(c,f,n=40);assert calls(w,0x6bc) and hit(w)=={npc} and not invariants(w),'CJ has stepped away from him: fire'
-passed('An attacker 1.5 m from CJ: no round from the helicopter, the weapons stay on him; they fire once CJ is %.0f m clear of the line'%b.CJ_LINE_CLEAR_M)
+passed('An attacker 1.5 m from CJ: no round from the helicopter, the weapons stay on him; they fire once CJ is %.0f m clear of the line'%CFG.cj_line_m)
 # WHERE I SHOOT at an empty car: there is no man to fire at
 w,c,f=gunner_world([]);w.shared[b.FIRE]=2;car=963;w.exists.add(car);w.cars[car]={'pos':[24.,0.,0.],'heading':90.};w.model[car]=400;w.traffic=[car]
 w.shooting=True;w.cj_aim=[24.,0.,1.];w.step(c,f,n=30);assert not attacks(w)
@@ -582,7 +598,7 @@ def noisy_fight(level,secs=12):
  w,V,team=squad_scene([(980+i,x,y,30,True) for i,(x,y) in enumerate([(20,0),(-20,0),(0,20),(0,-20)])])
  for n in range(980,984):w.shooting_chars.add(n)
  w.shared[b.HUD]=level;w.health[1]=60;w.messages.clear();n0=len(w.messages)
- for _ in range(secs*10):w.ped_bullet([-20.,0.,1.],[1.,1.,.5]);steps(w,V,1)
+ for _ in range(secs*10):steps(w,V,1)
  return w,V,team
 w,V,team=noisy_fight(2)
 assert 2<=len(w.messages)<=6,w.messages

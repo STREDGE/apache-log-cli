@@ -5,23 +5,9 @@ import shutil,subprocess,sys,os,tempfile
 from pathlib import Path
 SRC=Path(__file__).resolve().parent.parent;ROOT=Path(os.environ.get('HC_MUT_ROOT') or Path(tempfile.gettempdir())/'helicover_mut')   # HC_MUT_ROOT: a second run in parallel needs its own scratch copy
 M=[
- ('threat_v41.py',"s.check(0x8019,[V(t2),I(SHOOTER_FRESH_MS)],P+'NOT_SHOOTER');a(0x000a,V(out),I(100))","s.check(0x8019,[V(t2),I(SHOOTER_FRESH_MS)],P+'NOT_SHOOTER');a(0x000a,V(out),I(0))",'shooter +100'),
- ('threat_v41.py',"a(0x000a,V(n),I(1))","a(0x000a,V(n),I(0))",'heli hit count'),
- ('threat_v41.py',"s.check(0x0021,[V(t1),F(-30)],P+'RET');a(0x000a,V(out),I(50))","s.check(0x0021,[V(t1),F(-30)],P+'RET');a(0x000a,V(out),I(0))",'car +50'),
- ('threat_v41.py',"a(0x000a,V(out),I(-40))","a(0x000a,V(out),I(0))",'cop -40'),
- ('threat_v41.py',"s.check(0x0021,[V(t1),F(6)],P+'NOT_ROOF');a(0x000a,V(out),I(15))","s.check(0x0021,[V(t1),F(6)],P+'NOT_ROOF');a(0x000a,V(out),I(0))",'roof +15 score'),
- ('threat_v41.py',"s.label(P+'W_SNIPER');a(0x000a,V(out),I(35))","s.label(P+'W_SNIPER');a(0x000a,V(out),I(0))",'sniper weight'),
- ('build_v25.py',"f.check(0x0019,[V(22),I(1)],P+'ROOM')","f.check(0x0019,[V(22),I(0)],P+'ROOM')",'focus two gunners'),
- ('build_v25.py',"f.eq(30,1,'SG_PRIMARY_%d'%guard);f.set(GT_SUPP+g,1)","f.eq(30,1,'SG_PRIMARY_%d'%guard);f.set(GT_SUPP+g,0)",'suppression flag'),
- ('build_v25.py',"f.check(0x8019,[V(31),I(4000)],fail)","f.check(0x8019,[V(31),I(400000)],fail)",'suppression 4 s'),
- ('build_v25.py',"f.get(12,SUP_Y+var-3)","f.get(31,SUP_Y+var-3)",'suppression aim'),
- ('build_v25.py',"f.check(0x001d,[V(30),V(31)],'GSI_NEXT_%d'%gp)","f.check(0x001d,[V(31),V(30)],'GSI_NEXT_%d'%gp)",'sorted insert'),
  ('build_v25.py',"msg(c,'HCSHOT')","pass",'evade on shots'),
  ('build_v25.py',"c.check(0x0019,[V(8),I(0)],'ORBIT_DIR_SET')","c.check(0x0019,[V(8),I(100)],'ORBIT_DIR_SET')",'orbit door'),
  ('build_v25.py',"c.check(0x0021,[V(8),F(6)],'TRACK_POS');a(0x000b,V(11),F(15))","c.check(0x0021,[V(8),F(6)],'TRACK_POS');a(0x000b,V(11),F(0))",'roof orbit'),
- ('build_v25_squad.py',"keep=uid('SORT_KEEP');s.check(0x001d,[V(SREG[j]),V(SREG[i])],keep)","keep=uid('SORT_KEEP');s.go(keep)",'squad sort'),
- ('build_v25_squad.py',"for key in [b.TB_SHOOTER,b.FIRE_TARGET]","for key in [b.FIRE_TARGET]",'squad considers shooter'),
- ('build_v25_squad.py',"s.go('CL_ACCEPT');s.label('CL_NOT_SHOOTER')","s.go('CL_NOT_SHOOTER');s.label('CL_NOT_SHOOTER')",'classify shooter'),
  ('build_v25_squad.py',"else:msg('SQ'+'XSVR'[kind-1]+letter,throttle)","else:msg('SQC'+letter,throttle)",'typed call-outs'),
  ('build_v25_squad.py',"s.check(0x06bd,[V(19),V(20),V(29),V(26),V(27),V(30),I(1),I(1),I(0),I(1),I(0)],blk);s.go(nxt)","s.check(0x06bd,[V(19),V(20),V(29),V(26),V(27),V(30),I(1),I(1),I(0),I(1),I(0)],nxt);s.go(blk)",'cover chest'),
  ('build_v25_squad.py',"s.check(0x0019,[V(19),I(10000)],P+'NO_RELOAD')","s.check(0x0019,[V(19),I(1000000)],P+'NO_RELOAD')",'reload'),
@@ -37,12 +23,7 @@ M+=[
  ('build_v25.py',"p.get(19,NOTICE_SKIP);p.check(0x003b,[V(8),V(19)],'NOTICE_SAY')","p.go('NOTICE_SAY')",'notice skip'),
  ('build_v25.py',"for pend,key in [(1,'HCRTEAM'),(2,'HCRBACK')]:","for pend,key in []:",'rope notice variants'),
  ('build_v25.py',"c.set(HELLO_AT,-1);","c.set(HELLO_AT,0);",'hello once'),
- ('build_v25.py',"squad_owns(f,'SOLO_HCCONT',30,31)","pass",'contact de-dup'),
- ('build_v25.py'," if var in (3,5):a(0x0407,V(22),F(0),F(1.8),F(.3),V(11),V(12),V(13))"," pass",'engine shots'),
- ('build_v25.py',"f.check(0x0457,[I(0),V(29)],nxt);f.call('GUNNER_FOCUS_%d'%guard)","f.check(0x0457,[I(0),V(29)],nxt);f.go(nxt);f.call('GUNNER_FOCUS_%d'%guard)",'CJ aim focus'),
- ('build_v25.py',"f.check(0x8019,[V(31),I(5000)],P+'YIELD')","f.check(0x8019,[V(31),I(500000)],P+'YIELD')",'yield after 5 s'),
  ('build_v25.py',"a(0x0013,V(26),F(.3));","a(0x0013,V(26),F(0));",'orbit centre shift'),
- ('build_v25_squad.py',"a(0x0668,V(G),V(26),V(27),V(28),I(1500));order(k,17,25,1500)","pass",'ground suppression'),
  ('build_v25_squad.py',"s.label(hurt);s.check(0x0021,[V(24),F(limit*.7)],ok)","s.label(hurt);s.check(0x0021,[V(24),F(limit)],ok)",'wounded leash'),
 ]
 M12=[
@@ -74,19 +55,11 @@ M12=[
  ('build_v25_squad.py',"a(0x05ca,V(G),V(6),I(8000),I(k))","a(0x05ca,V(G),V(6),I(8000),I(0))",'12 own seat'),
  ('build_v25_squad.py',"a(0x05f5,V(G),V(26),V(27),V(28),I(7),I(20000));setk_lit(k,'TASK',7)","a(0x00a1,V(G),V(26),V(27),V(28));setk_lit(k,'TASK',7)",'12 far guard teleport'),
  # D: the shooter / own-shot / helicopter-hit logic of the bullet-trace scan (lines, not exact end points)
- ('threat_v41.py',"jgt(t4,1.0,P+'INCOMING');jlt(t4,-160.0,P+'HELI');jgt(t3,2.25,P+'HELI')","jgt(t4,1.0,P+'INCOMING');jlt(t4,-160.0,P+'HELI');jgt(t3,225.0,P+'HELI')",'12 CJ line distance'),
- ('threat_v41.py',"s.check(0x8019,[V(t6),I(350)],P+'HELI')","s.check(0x8019,[V(t6),I(35000)],P+'HELI')",'12 CJ shot window'),
- ('threat_v41.py',"s.label(P+'INCOMING');jgt(t4,220.0,P+'HELI');jgt(t3,4.0,P+'HELI')","s.label(P+'INCOMING');jgt(t4,220.0,P+'HELI');jgt(t3,400.0,P+'HELI')",'12 incoming line distance'),
- ('threat_v41.py',"jgt(t3,36.0,P+'NEXT');a(0x000a,V(n),I(1))","jgt(t3,3600.0,P+'NEXT');a(0x000a,V(n),I(1))",'12 helicopter hit distance'),
- ('threat_v41.py',"a(0x000b,V(t6),F(.3));s.check(0x8025,[V(t3),V(t6)],P+'HELI')","a(0x000b,V(t6),F(.3))",'12 friend takes the credit'),
- ('threat_v41.py',"s.get(t5,b.TB_SEARCH_T);a(0x01bd,V(t6));a(0x0062,V(t6),V(t5));s.check(0x0019,[V(t6),I(250)],P+'HELI')","s.get(t5,b.TB_SEARCH_T);a(0x01bd,V(t6));a(0x0062,V(t6),V(t5));s.check(0x0019,[V(t6),I(0)],P+'HELI')",'12 search throttle'),
- ('build_v25_squad.py',"for key in [b.TB_SHOOTER,b.FIRE_TARGET]","for key in [b.FIRE_TARGET]",'12 squad adopts traced shooter'),
  # independent review of 1.2: crew change vs rope, scripted exit, platform handle, shared aim, muster
  ('build_v25.py',"(the rope workers abort when the state is 17)\nc.get(17,ROPE_BUSY);c.eq(17,0,'SWAP_DEFER')\n","(the rope workers abort when the state is 17)\n",'12 crew change waits'),
  ('build_v25.py',"c.call('EXIT_UNFREEZE');a(0x01bd,V(21))","c.call('UNFREEZE');a(0x01bd,V(21))",'12 exit keeps cruise'),
  ('build_v25.py',"c.set(FROZEN,0);c.set(CR_V,0);c.ret()","c.set(FROZEN,0);c.ret()",'12 unfreeze clears speed'),
  ('build_v25_ground.py'," a(0x009a,I(8),V(mdl),V(10),V(11),V(12),V(8));s.check(0x056d,[V(8)],skip)\n a(0x0173,V(8),V(13));a(0x0085,V(7),V(8));s.call('GSETUP');a(0x0223,V(8),V(14));a(0x035f,V(8),V(9))\n s.check(0x0019,[V(4),I(0)],noarm2);a(0x01b2,V(8),V(4),I(30000));a(0x01b9,V(8),V(4));s.label(noarm2)\n a(0x009b,V(var));a(0x0085,V(var),V(8));"," a(0x009a,I(8),V(mdl),V(10),V(11),V(12),V(6));s.check(0x056d,[V(6)],skip)\n a(0x0173,V(6),V(13));a(0x0085,V(7),V(6));s.call('GSETUP');a(0x0223,V(6),V(14));a(0x035f,V(6),V(9))\n s.check(0x0019,[V(4),I(0)],noarm2);a(0x01b2,V(6),V(4),I(30000));a(0x01b9,V(6),V(4));s.label(noarm2)\n a(0x009b,V(var));a(0x0085,V(var),V(6));",'12 decor keeps platform handle'),
- ('build_v25.py',"f.label('PRECISE_M2_'+str(var));f.get(11,PB_AIM);f.get(12,PB_AIM+1);f.get(13,PB_AIM+2);f.label('PRECISE_MODE_DONE_'+str(var))","f.label('PRECISE_M2_'+str(var));f.label('PRECISE_MODE_DONE_'+str(var))",'12 shared aim reload'),
  ('build_v25.py',"[(13,4,2,1),(14,-4,2,2),(15,4,-2,-1),(16,-4,-2,-1)]","[(13,-4,2,1),(14,4,2,2),(15,-4,-2,-1),(16,4,-2,-1)]",'12 muster side'),
  ('build_v25.py',"a(0x0407,V(5),F(x),F(y),F(0),V(17),V(19),V(31));a(0x050a,V(9),V(10),V(11),V(17),V(19),V(31),V(29))","a(0x00aa,V(5),V(17),V(19),V(31));a(0x050a,V(9),V(10),V(11),V(17),V(19),V(31),V(29))",'12 muster point'),
  # E3 / E4
@@ -96,7 +69,6 @@ M12=[
  ('build_v25_squad.py',"a(0x000b,V(31),F(2))\n  a(0x006b,V(31),V(20))","a(0x000b,V(31),F(0))\n  a(0x006b,V(31),V(20))",'12 fire line shift'),
  ('build_v25_squad.py',"leash(k,G,25,7);cover=","leash(k,G,40,7);cover=",'12 assault cap'),
  ('build_v25_squad.py'," if k==3:s.go(P+'BODYGUARD')"," if False:s.go(P+'BODYGUARD')",'12 medic stays'),
- ('build_v25.py',"a(0x0208,F(-1),F(1),V(21))","a(0x0208,F(0),F(0),V(21))",'12 dispersion'),
  # E5 decor
  ('build_v25_ground.py',"s.check(0x02f2,[V(var),V(mdl)],need);s.go(skip)","s.go(skip)",'12 team re-skin'),
  ('build_v25_ground.py',"a(0x01b2,V(var),V(4),I(30000));a(0x01b9,V(var),V(4));a(0x02e2,V(var),I(100));s.label(noarm)","s.label(noarm)",'12 team weapon'),
@@ -111,26 +83,9 @@ M12=[
  ('build_v25_squad.py',"s.check(0x003b,[V(26),V(0)],'DRV_DONE');s.set(b.SQ_DRIVES,1)","s.set(b.SQ_DRIVES,1)",'12 driver is CJ'),
  ('build_v25_squad.py',"a(0x046c,V(6),V(26));s.check(0x003b,[V(26),V(0)],'DRV_DONE')","a(0x01ea,V(6),V(26));s.check(0x0431,[V(6),I(1)],'DRV_DONE')",'12 driver not guessed from seats'),
  ('build_v25_ground.py'," a(0x000b,V(12),F(-1.0))\n","",'12 re-skin height'),
- ('build_v25.py',"f.check(0x00df,[V(0)],'AIM_LINE_FOOT');a(0x000b,V(18),F(OWN_CAR_CLEAR))","f.check(0x00df,[V(0)],'AIM_LINE_FOOT')",'12 drive-by line origin'),
- ('build_v25.py',"f.check(0x00df,[V(0)],'AIM_RAY_FOOT');a(0x000b,V(18),F(OWN_CAR_CLEAR))","f.check(0x00df,[V(0)],'AIM_RAY_FOOT')",'12 drive-by camera origin'),
- ('build_v25.py',"f.get(31,CJ_AIM_T);f.check(0x001d,[V(30),V(31)],'CJ_POLL_RET')\n","",'12 scan stops when the line is found'),
- ('build_v25.py',"f.check(0x003b,[V(30),V(31)],'ARM_TICK');f.go('WAIT')","f.go('ARM_TICK')",'12 fire pass waits a frame after a scan'),
- ('build_v25.py',"f.check(0x8019,[V(31),I(49)],'ARM_TICK')","f.check(0x8019,[V(31),I(4900000)],'ARM_TICK')",'12 fire pass cannot starve'),
  # beta 3: the Russian layout read off the player's screenshots
  ('i18n_v12.py',"out.append((0x80 if ch.isupper() else 0xA0)+i)","out.append((0x7F if ch.isupper() else 0x9F)+i)",'12 game layout base'),
  # second independent review: FOLLOW MY SHOTS
- ('threat_v41.py',"jgt(t1,100.0,P+'HELI');jlt(t1,-100.0,P+'HELI')","jgt(t1,1000.0,P+'HELI');jlt(t1,-1000.0,P+'HELI')",'12 aim direction check'),
- ('threat_v41.py',"jgt(t1,100.0,P+'HELI');jlt(t1,-100.0,P+'HELI')","jgt(t1,60.0,P+'HELI');jlt(t1,-60.0,P+'HELI')",'12 aim direction tight'),
- ('threat_v41.py',"jgt(t1,100.0,P+'HELI');jlt(t1,-100.0,P+'HELI')","jgt(t1,150.0,P+'HELI');jlt(t1,-150.0,P+'HELI')",'12 aim direction loose'),
- ('threat_v41.py'," s.check(0x80df,[V(cj)],P+'DIR_OK')\n"," pass\n",'12 aim direction in a car'),
- ('threat_v41.py',"s.check(0x0023,[F(-180),V(t1)],P+'D_LO');a(0x000b,V(t1),F(360));s.label(P+'D_LO')","s.label(P+'D_LO')",'12 aim direction seam low'),
- ('threat_v41.py',"s.check(0x0021,[V(t1),F(180)],P+'D_HI');a(0x000b,V(t1),F(-360));s.label(P+'D_HI')","s.label(P+'D_HI')",'12 aim direction seam high'),
- ('threat_v41.py',"s.label(P+'W_HEAVY');s.check(0x8019,[V(t1),I(38)],W)","s.label(P+'W_HEAVY');s.check(0x0019,[V(t1),I(38)],W)",'12 heavy weapon bonus'),
- ('build_v25.py',"a(0x0062,V(31),V(30));f.check(0x8019,[V(31),I(250)],'CJ_POLL_RET')","a(0x0062,V(31),V(30));f.check(0x0019,[V(31),I(250)],'CJ_POLL_RET')",'12 scan after a shot'),
- ('build_v25.py',"f.check(0x0019,[V(31),I(20)],'CJ_POLL_RET');f.call('TRACE_RUN')","f.check(0x0019,[V(31),I(200)],'CJ_POLL_RET');f.call('TRACE_RUN')",'12 scan every frame'),
- ('build_v25.py',"f.check(0x0019,[V(31),I(99)],'TRACE_TICK_RET');f.call('TRACE_RUN')","f.check(0x0019,[V(31),I(0)],'TRACE_TICK_RET');f.call('TRACE_RUN')",'12 scan tick 100 ms'),
- ('build_v25.py',"f.label('CJ_POLL');f.check(0x02e0,[V(0)],'CJ_POLL_IDLE')","f.label('CJ_POLL');f.get(30,GAME_OK);f.eq(30,1,'CJ_POLL_RET');f.check(0x02e0,[V(0)],'CJ_POLL_IDLE')",'12 stamp on every build'),
- ('build_v25.py',"f.call('FIND_CJ_AIMED');alive(f,29,'AIM_NO_LOCK');f.call('SHOOT_CHAR');f.go('WAIT')\nf.label('AIM_NO_LOCK');f.get(30,CJ_AIM_T);a(0x01bd,V(31));a(0x0062,V(31),V(30));f.check(0x0019,[V(31),I(900)],'AIM_LINE');f.go('AIM_RAY')","f.get(30,CJ_AIM_T);a(0x01bd,V(31));a(0x0062,V(31),V(30));f.check(0x0019,[V(31),I(900)],'AIM_LINE');f.go('AIM_NO_LOCK')\nf.label('AIM_NO_LOCK');f.call('FIND_CJ_AIMED');alive(f,29,'AIM_RAY');f.call('SHOOT_CHAR');f.go('WAIT')",'12 lock-on before line'),
 ] 
 # beta 4: one language rule, exit rows as switches, the command gate (an order twice, orders during rope work), guards never handed to the game, tap guards
 M14=[
@@ -164,7 +119,6 @@ M14=[
  ('build_v25_ground.py',"s.label('LA_FOOT');a(0x05de,V(8))","s.label('LA_FOOT')",'14 leaver walks off'),
  ('build_v25_ground.py',"s.check(0x82cb,[V(8)],seen);a(0x009b,V(8));s.set(b.LEAVE+k,-1);s.go(nxt)","s.go(seen)",'14 leaver removed unseen'),
  ('build_v25_ground.py',"a(0x009b,V(9));s.label('LA_ROT_GONE_%d'%k);a(0xddc,I(b.LEAVE+k),V(8))","s.label('LA_ROT_GONE_%d'%k);a(0x01c2,V(8))",'14 ninth leaver'),
- ('build_v25.py',"f.get(31,LEAVE_N);f.eq(31,1,'NF_NO_LEAVERS')","f.go('NF_NO_LEAVERS')",'14 leavers are friends'),
  ('build_v25_ground.py',"s.label('ACTIVE_RECALL');s.set(b.ROPE_WAIT,0);s.get(19,b.ESCORT_ON);s.eq(19,1,'ACTIVE_COVER_UP')","s.label('ACTIVE_RECALL');s.set(b.ROPE_WAIT,0);s.get(19,b.ESCORT_ON);s.eq(19,1,'CLEANUP')",'14 cover team climbs back'),
  ('build_v25_ground.py',"s.get(19,b.ESCORT_ON);s.eq(19,1,'CLEANUP');s.go('ACTIVE_TO_ESCORT')\n# the pickup ended by itself","s.go('CLEANUP')\n# the pickup ended by itself",'14 squad stays when the helicopter leaves'),
  ('build_v25_ground.py',"s.label('ACTIVE_LEFT');s.set(b.ROPE_COMMAND,0);s.set(b.ESCORT_CMD,0);","s.label('ACTIVE_LEFT');",'14 a waiting cancel ends with the pickup'),
@@ -220,21 +174,6 @@ M15=[   # beta 5: the menu opens at once
 ]
 G='build_v25_ground.py';Q='build_v25_squad.py';MS='msg_v42.py'
 M16=[   # beta 6: threats only, fire discipline, CJ's safety, notifications as a drawn line, brave crew, kneeling gunners
- (B,"a(0x0470,V(29),V(30));f.check(0x0019,[V(30),I(21)],'PROTECT_REJECT');f.check(0x8019,[V(30),I(38)],'PROTECT_REJECT')","a(0x0470,V(29),V(30))",'16 protect: a firearm in his hands'),
- (B,"f.label('CPN_ARMED');f.check(0x80df,[V(29)],'PROTECT_REJECT');","f.label('CPN_ARMED');",'16 protect: on foot only'),
- (B,"f.check(0x0023,[F(THREAT_NEAR_M),V(14)],'PROTECT_REJECT')","a(0)",'16 protect: close only'),
- (B,"facing(THREAT_FACING_DEG,'CPN')","facing(180,'CPN')",'16 protect: turned to CJ'),
- (B,"f.label('CPN_LOW');f.eq(30,6,'CPN_SERVICES');f.check(0x010f,[I(0),I(0)],'PROTECT_REJECT');f.go('CPN_ARMED')","f.label('CPN_LOW');f.eq(30,6,'CPN_SERVICES');f.go('CPN_ARMED')",'16 protect: police only when wanted'),
- (B,"f.go('PROTECT_REJECT')\nf.label('CPN_ARMED')","f.label('CPN_ARMED')",'16 protect: civilians are no hostile type'),
- (B,"f.check(0x8039,[V(30),I(8)],'PROTECT_REJECT');f.check(0x0019,[V(30),I(6)],'CPN_LOW')","f.check(0x0019,[V(30),I(6)],'CPN_LOW')",'16 protect: never our own type'),
- (B,"   # beta 6: no hatred in any mode - the gunners fire only at what the brain below gives them",";a(0x077a,V(var),I(4),I(7))",'16 no hatred'),
- (B,"a(0x0227,V(22),V(8));f.check(0x0019,[V(8),I(CAR_HOLD_HP-1)],'TARGET_CAR_UNSAFE');","",'16 car: health floor'),
- (B,"f.check(0x00df,[V(29)],'SHOOT_CHAR_CAR_OK_'+str(var));f.call('TARGET_CAR_SAFE')","f.go('SHOOT_CHAR_CAR_OK_'+str(var));f.call('TARGET_CAR_SAFE')",'16 car: no fire task below the floor'),
- (B,"f.label('PRECISE_CAR_'+str(var));f.call('TARGET_CAR_SAFE');f.eq(30,1,hold)","f.label('PRECISE_CAR_'+str(var));f.call('TARGET_CAR_SAFE');f.eq(30,1,skip)",'16 car: weapons down at once'),
- (B," f.label('PRECISE_ENGINE_DONE_'+str(var));"," if var in (3,5):a(0x0407,V(22),F(0),F(1.8),F(.3),V(11),V(12),V(13))\n f.label('PRECISE_ENGINE_DONE_'+str(var));",'16 car: nobody aims at the engine'),
- (B,"hold if friend==0 else skip","skip",'16 CJ in the line: weapon down'),
- (B," f.get(30,GH_HOLD+var-3);a(0x01bd,V(31));f.check(0x001d,[V(31),V(30)],skip)\n","",'16 CJ in the line: no new fire task'),
- (B,"a(0x0227,V(29),V(30));f.check(0x0019,[V(30),I(CAR_HOLD_HP-1)],'SILENCE');","",'16 follow: damaged car left alone'),
  (B,"a(0x0227,V(15),V(30));f.check(0x8019,[V(30),I(BURN_HP-1)],nxt)","a(0x0227,V(15),V(30))",'16 burning: only a burning car'),
  (B,"f.check(0x8119,[V(15)],nxt);","",'16 burning: not a wreck'),
  (B,"a(0x000a,V(31),I(4000));a(0xddc,I(BURN_SAID),V(31))","a(0xddc,I(BURN_SAID),V(31))",'16 burning: every 4 s'),
@@ -272,7 +211,7 @@ M17=[
  (B,"f.eq(9,2,nofire);a(0x06bc,V(11),V(12),V(13),V(14),V(15),V(16),I(ROUND_DAMAGE));f.label(nofire)","f.label(nofire)",'17 gunner: the round is fired'),
  (B,"a(0x06bc,V(11),V(12),V(13),V(14),V(15),V(16),I(ROUND_DAMAGE))","a(0x06bc,V(11),V(12),V(13),V(14),V(15),V(13),I(ROUND_DAMAGE))",'17 gunner: the round flies the checked line'),
  (B,"alive(f,var,skip);f.check(0x0a32,[V(var)],skip);a(0x0085,V(8),V(var));a(0x0e48,V(8),I(9),I(1))","alive(f,var,skip);a(0x0085,V(8),V(var));a(0x0e48,V(8),I(9),I(1))",'17 gunner: a crewman on foot makes no rounds'),
- (B,"a(0x0667,V(var),V(17),V(18),V(19),I(1500));a(0xddc,I(G_AIM+g),V(10))","a(0x074d,V(var),V(10));a(0xddc,I(G_AIM+g),V(10))",'17 gunner: he aims, the game\'s weapon never fires'),
+ (B,"a(0x0667,V(var),V(17),V(18),V(19),I(1500));a(0xddc,I(G_AIM+g),V(10))","a(0x074d,V(var),V(10),I(1500));a(0xddc,I(G_AIM+g),V(10))",'17 gunner: he aims, the game\'s weapon never fires'),
  (B,"a(0x0667,V(var),V(17),V(18),V(19),I(1500));a(0xddc,I(G_AIM+g),V(10))","a(0xddc,I(G_AIM+g),V(10))",'17 gunner: weapon on the man'),
  (B,"a(0x000a,V(31),I(700));a(0xddc,I(G_AIM_T+g),V(31))","a(0x000a,V(31),I(700000));a(0xddc,I(G_AIM_T+g),V(31))",'17 gunner: the aim follows a moving man'),
  (B,"rest(var,'REST2_'+str(var));f.set(G_AIM+g,-1)","f.set(G_AIM+g,-1)",'17 gunner: weapon down when the brain says rest'),
@@ -280,7 +219,6 @@ M17=[
  (B,"a(0xddc,I(BR_KILLS),V(11));f.get(31,KILLS);a(0x000a,V(31),I(1));a(0xddc,I(KILLS),V(31))","a(0xddc,I(BR_KILLS),V(11));f.get(31,KILLS)",'17 kills are counted from the brain'),
  (B,"f.eq(30,-1,'KILL_KNOWN');a(0xddc,I(BR_KILLS),V(11));f.go('KILL_DONE')","f.eq(30,-1,'KILL_KNOWN');a(0xddc,I(BR_KILLS),I(0));f.go('KILL_DONE')",'17 kills: the brain\'s old count is not a new kill'),
  (B,"a(0x01bd,V(31));a(0x0062,V(31),V(16));a(0xddc,I(HELI_SHOT_T),V(31));f.label('HELI_SHOT_DONE')","f.label('HELI_SHOT_DONE')",'17 fire at the helicopter reaches the pilot'),
- (B,"f.check(0x8019,[V(16),I(600)],'HELI_SHOT_DONE');","",'17 fire at the helicopter: only fresh'),
  (B,"f.check(0x0019,[V(12),I(0)],'TOP_SET');a(0x0085,V(30),V(12))","f.check(0x0019,[V(12),I(0)],'TOP_SET')",'17 the pilot is told the most dangerous man'),
  (B,"a(6,V(30),I(-1));f.eq(25,0,'TOP_FIRE_ALLOWED');f.go('TOP_SET');f.label('TOP_FIRE_ALLOWED')","a(6,V(30),I(-1))",'17 hold fire: no fight for the pilot either'),
  (B,"f.set(ENGAGED,1);f.get(30,SQ_GROUP);f.eq(30,0,'CONTACT_DONE');msg(f,'HCCONT')","f.set(ENGAGED,1);f.get(30,SQ_GROUP);f.eq(30,0,'CONTACT_DONE')",'17 contact is called'),
@@ -295,7 +233,8 @@ M17=[
  (Q,"s.check(0x0019,[V(19),I(1)],nx);s.get(13+k,b.SQ_BR_TG+k)","s.check(0x0019,[V(19),I(1)],nx)",'17 squad: each guard has the man the brain gave him'),
  (Q,"s.check(0x0019,[V(19),I(1)],nx);s.get(13+k,b.SQ_BR_TG+k)","s.check(0x0019,[V(19),I(0)],nx);s.get(13+k,b.SQ_BR_TG+k)",'17 squad: a covered suspect is not a man to fight'),
  (Q,"s.check(0x801d,[V(19),V(12)],'LOOP')","s.check(0x001d,[V(12),V(19)],'LOOP')",'17 squad: the full pass ten times a second'),
- ('brain_mock.py',"if len(out) == h.HCB_MAX_OURS:","if len(out) == 10:",'17 let-go guards are ours for the brain'),
+ ('brain_mock.py',"for k in range(18):","for k in range(10):",'17 let-go guards are ours for the brain'),
+ (B,"f.label('NO_HELI');f.set(FIRE_ACTIVE,0);f.set(FIRE_TARGET,-1);f.set(ENGAGED,0);f.set(CLEAR_AT,0);f.go('WAIT')","f.label('NO_HELI');f.go('WAIT')",'17 no helicopter: the fight is over for the gunners'),
 ]
 if sys.argv[1:2]==['--new']:
  M=M12+M14+M15+M16+M17;sys.argv.pop(1)
@@ -320,7 +259,7 @@ for fname,old,new,name in M:
  if ROOT.exists():shutil.rmtree(ROOT)
  (ROOT/'install').mkdir(parents=True);(ROOT/'sources').mkdir();shutil.copytree(SRC,ROOT/'builder',ignore=shutil.ignore_patterns('__pycache__'))
  os.symlink(SRC.parent/'brain',ROOT/'brain')   # the scripts are tested against the real core (brain_mock.py)
- p=ROOT/'builder'/fname;t=p.read_text()
+ p=ROOT/'builder'/fname;t=p.read_text() if p.exists() else ''
  if t.count(old)<1:print('GONE    '+name+'  (the code this mutant broke no longer exists)',flush=True);continue
  p.write_text(t.replace(old,new))
  env=dict(os.environ);env.pop('HC_OUT',None)

@@ -56,25 +56,10 @@ class World:
   """Position jumps of more than 3 m (SET_CHAR_COORDINATES, WARP..., SET_CAR_COORDINATES): the detector for 'no teleports'."""
   d=math.dist(old,new)
   if d>3.:self.teleports.append({'op':op,'who':who,'dist':d,'visible':self.visible(who),'time':self.now,'from':list(old),'to':list(new)})
- def engine_trace(self,start,end):
-  """CBulletTraces::AddTrace(start,end,weaponType,victim) as libGTASA does it: a random 2-5 m piece somewhere on the bullet path."""
-  d=[end[i]-start[i] for i in range(3)];length=math.sqrt(sum(x*x for x in d))
-  if length<.01:return None
-  u=[x/length for x in d];s=length*self.rng.random();piece=2.+3.*self.rng.random();rem=length-s
-  piece=rem if piece>=rem else 2.+3.*self.rng.random()
-  return {'start':[start[i]+u[i]*s for i in range(3)],'end':[start[i]+u[i]*(s+piece) for i in range(3)],'time':self.now}
- def ped_bullet(self,start,end):
-  """A bullet fired by a ped (or CJ): leaves an engine-style trace."""
-  tr=self.engine_trace(start,end)
-  if tr:self.traces=[x for x in getattr(self,'traces',[]) if self.now-x['time']<300]+[tr]
-  return tr
- def exact_bullet(self,start,end):
-  """FIRE_SINGLE_BULLET / police helicopter: FireOneInstantHitRound adds the exact start and end."""
-  tr={'start':list(start),'end':list(end),'time':self.now};self.traces=[x for x in getattr(self,'traces',[]) if self.now-x['time']<300]+[tr];return tr
  def bullet(self,start,end,damage):
   """FIRE_SINGLE_BULLET: a round from start to end. The first living person within 0.5 m of it is hit. Independently of whoever let it go,
   the world notes a round that passes within 2 m of CJ, or within 1 m of one of ours further than 1 m from where it starts."""
-  self.bullets.append((self.now,list(start),list(end),damage));self.exact_bullet(start,end)
+  self.bullets.append((self.now,list(start),list(end),damage))
   ours=[self.shared[b.PUB+i] for i in range(2,7)]+[self.shared[b.GROUND_PUB+i] for i in range(5)]+[self.shared[b.LEAVE+i] for i in range(8)]   # (the men who were let go and walk away are still ours)
   if self.seg_dist(start,end,self.coords(1))<2.:self.bullet_violations.append((self.now,'CJ',self.seg_dist(start,end,self.coords(1))))
   for o in ours:
@@ -132,10 +117,6 @@ class VM:
     marker=getattr(w,'marker',None);addr,size=vals[1],vals[2];entry=b.RADAR_TRACE_OFS+5*48
     mem={**{(ofs,4):val for ofs,val in b.GAME_SIG},(0xCE1771,1):1 if getattr(w,'russian',False) else 0,(0xCE1773,1):getattr(w,'efigs',1 if 1<=getattr(w,'game_lang',0)<=4 else 0),(0xC1DE88,1):getattr(w,'game_lang',0),(b.WAYPOINT_OFS,4):(5|7<<16) if marker else 0,(b.WAYPOINT_OFS,2):5 if marker else 0xffff,(b.WAYPOINT_OFS+2,2):7 if marker else 0xffff,
          (entry+20,2):getattr(w,'wp_ref',7),(entry+41,1):getattr(w,'wp_flags',0x42),(entry+8,4):marker[0] if marker else 0.,(entry+12,4):marker[1] if marker else 0.}
-    for k,tr in enumerate(getattr(w,'traces',[])):
-     tb=b.BULLET_TRACES_OFS+k*b.BULLET_TRACE_SIZE
-     for i in range(3):mem[(tb+4*i,4)]=tr['start'][i];mem[(tb+12+4*i,4)]=tr['end'][i]
-     mem[(tb+24,1)]=1 if tr.get('used',True) else 0;mem[(tb+28,4)]=tr['time']
     put(0,mem.get((addr,size),0))
    elif base==0xab6:
     marker=getattr(w,'marker',None)
@@ -1091,6 +1072,39 @@ w,c,f=fire_world();npc=target(w,typ=7,skin=102);w.weapons[npc]=30;w.actor_headin
 assert not attacks(w) and aims(w,npc),'PROTECT ME: the same man is covered - weapons on him - but not fired at'
 w,c,f=fire_world();w.shared[b.FIRE]=4;npc=target(w,typ=4);w.weapons[npc]=30;w.actor_heading[npc]=270.;w.step(c,f,n=20);assert not attacks(w) and not aims(w),'an armed civilian is nobody\'s target'
 passed('ARMED ONLY: an armed gang member is engaged even with his back to CJ (PROTECT ME only covers him); unarmed gang members and armed civilians are not targets')
+# the gunners hate nobody (the game would open fire on its own otherwise): every kind of person is cleared for each of them
+w,c,f=fire_world()
+for g_ in [w.shared[b.PUB+i] for i in range(3,7)]:
+ assert {x[2][2] for x in calls(w,0x77a) if x[2][0]==g_ and x[2][1]==2}==set(range(32)),g_
+passed('Door gunners are given no hatred of anybody: they fire only the rounds the brain lets go')
+# HOLD FIRE: the pilot is told of no fight either (he would start circling a man nobody may fire at)
+w,c,f=fire_world();w.shared[b.FIRE]=0;npc=target(w,typ=7,skin=102);w.weapons[npc]=30;w.health[npc]=100000;w.damage.add((1,npc));w.step(c,f,n=15)
+assert not attacks(w) and w.shared[b.FIRE_TARGET]==-1 and w.shared[b.BR_TOP]==-1 and w.shared[b.FIRE_ACTIVE]==0,(len(attacks(w)),w.shared[b.FIRE_TARGET])
+w.shared[b.FIRE]=3;w.step(c,f,n=15);assert attacks(w) and w.shared[b.FIRE_TARGET]==npc and w.shared[b.FIRE_ACTIVE]==1,'(control: with PROTECT ME the pilot is told the man)'
+passed('HOLD FIRE: no rounds, weapons down, and the pilot is told of no fight; back on PROTECT ME the most dangerous man is his business again')
+# the helicopter is gone in the middle of a fight (dismissed, shot down): nothing of the fight is left behind for the next call
+w,c,f=fire_world();npc=target(w,typ=7,skin=102);w.weapons[npc]=30;w.health[npc]=100000;w.damage.add((1,npc));w.step(c,f,n=15)
+assert w.shared[b.ENGAGED]==1 and w.shared[b.FIRE_ACTIVE]==1 and w.shared[b.FIRE_TARGET]==npc
+w.shared[b.STATE]=0;w.step(f,n=2);assert (w.shared[b.ENGAGED],w.shared[b.FIRE_ACTIVE],w.shared[b.FIRE_TARGET])==(0,0,-1),(w.shared[b.ENGAGED],w.shared[b.FIRE_ACTIVE],w.shared[b.FIRE_TARGET])
+passed('No helicopter any more in the middle of a fight: the gunners\' fight is over at once (no stale "engaged" flag or pilot target for the next call)')
+# "area clear" waits until nobody dangerous is left: an attacker who stops firing but still stands there armed and turned to CJ is a threat
+w,c,f=fire_world();w.shared[b.FIRE]=0;w.step(c,f,n=3);w.shared[b.MSG_UNTIL]=0;npc=target(w,typ=7,skin=102);threaten(w,npc);w.health[npc]=100000
+w.shot_at={npc:[w.player[0],w.player[1],1.]};w.shooting_chars={npc};w.step(c,f,n=5);w.shooting_chars=set();assert 'HCCONT' in w.messages,w.messages
+for _ in range(60):
+ w.now+=500;w.step(c,f)
+assert w.shared[b.BR_ATTACKERS]==0 and w.shared[b.BR_THREATS]>0 and 'HCCLEAR' not in w.messages,('he no longer attacks but is still a threat: not clear',w.shared[b.BR_ATTACKERS],w.shared[b.BR_THREATS],w.messages)
+w.weapons[npc]=0;w.actor_heading[npc]=(w.actor_heading.get(npc,0.)+180.)%360
+for _ in range(20):
+ w.now+=500;w.step(c,f)
+assert 'HCCLEAR' in w.messages,w.messages
+passed('"Area clear" is not called while a threat is left (an attacker who stopped firing but still stands armed, turned to CJ); it is called once he is no danger')
+# a crewman who is not in his door (stepping out after a landing, walking to the helicopter) fires the game's own weapon like a guard on
+# foot: the fire worker makes no rounds for him, whatever the brain's order for him says
+w,c,f=fire_world();w.step(c,f,n=3);g0=w.shared[b.PUB+3];w.attach.pop(g0);w.pos[g0]=[6.,6.,0.]
+npc=target(w,typ=7,skin=102);w.health[npc]=100000;w.weapons[npc]=30;w.damage.add((1,npc));w.step(c,f,n=30)
+assert w.brain.orders()[g0][:2]==(npc,1),'(the brain does give him the man)'
+assert attacks(w) and not [x for x in attacks(w) if math.dist(x[1],[6.,6.,0.])<3.] and not [x for x in calls(w,0x667) if x[2][0]==g0] and not invariants(w),'no round and no aiming task from the fire worker for a crewman on foot'
+passed('A crewman out of his door gets no rounds from the fire worker (he is a guard on foot then); the men in the doors go on firing')
 # police: without stars nobody; with stars a policeman is fired at only once he has fired himself ("fire back"), and never with POLICE: NEVER FIRE
 w,c,f=fire_world();w.shared[b.FIRE]=4;w.step(c,f,n=3);npc=target(w,typ=6,skin=280);threaten(w,npc,weapon=22);w.step(c,f,n=15);assert not attacks(w) and not aims(w)
 w.wanted=2;w.step(c,f,n=15);assert not attacks(w) and aims(w,npc),'stars up: weapons on him, no fire yet'
@@ -1105,6 +1119,9 @@ for _ in range(30):
 assert npc in w.dead and 'HCCONT' in w.messages and w.messages.count('HCCONT')==1,w.messages
 w.step(c,f,n=5);assert w.shared[b.KILLS]==1 and 1 in getattr(w,'debug',[]),(w.shared[b.KILLS],getattr(w,'debug',None))
 assert 'HCCLEAR' not in w.messages;w.step(c,f,n=40);assert 'HCCLEAR' in w.messages and w.messages.count('HCCONT')==1 and w.shared[b.ENGAGED]==0,w.messages
+# the fire worker starts again (a loaded game) while the brain still remembers its count: that is not a new kill
+f2=VM('Helicover_Fire',w);w.step(c,f2,n=8);assert w.shared[b.KILLS]==1,('the brain\'s old count is taken as it is',w.shared[b.KILLS])
+f=f2
 w.shared[b.FIRE]=4;w.step(c,f,n=3);w.shared[b.FIRE]=2;w.step(c,f,n=3);w.shared[b.FIRE]=0;w.step(c,f,n=3);w.shared[b.FIRE]=3;w.step(c,f,n=3)
 assert [m for m in w.messages if m.startswith('HCFM')]==['HCFM4','HCFM2','HCFM0','HCFM3'],w.messages
 passed('Gunner callouts: CONTACT once when somebody attacks, TARGET DOWN with the kill count when a man dies under their fire, AREA CLEAR 3 s after the last dangerous man is gone, and a report for each fire rule')

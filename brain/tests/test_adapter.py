@@ -592,7 +592,13 @@ e.share(HC_POLICE, 0); e.share(HC_MISSION, 0)
 e.share(HC_STATE + 27, 1); e.frame(n=1)                              # the helicopter has landed: the crew are guards on foot now
 s = replay_tool.replay(e.save())[2][-1]['snapshot']
 assert sorted(s.our_role[:s.n_ours]) == [1, 6, 6, 7, 7], list(s.our_role[:s.n_ours])
-e.share(HC_STATE + 27, 0); e.frame(n=1)
+e.share(HC_STATE + 27, 0)
+# a guard who was let go and walks away (the scripts keep him in LEAVE..+7) is still ours: a friend in every line of fire, no orders
+gone = e.ped(-6, -9, pedtype=8, weapon=0)
+e.share(HC_STATE + 416, e.handle(gone)); e.frame(n=1)
+s = replay_tool.replay(e.save())[2][-1]['snapshot']
+assert H_(gone) in list(s.ours[:s.n_ours]) and s.our_role[list(s.ours[:s.n_ours]).index(H_(gone))] == h.HCB_ROLE_NONE, list(s.our_role[:s.n_ours])
+e.share(HC_STATE + 416, 0); e.frame(n=1)
 passed('Lines of sight are asked from the game chest to chest (buildings, vehicles and objects block; people do not): armed people to CJ, and every pair the core asked about. The player\'s settings "police" and "missions" are read from the scripts\' shared values; the crew count as door gunners only while they are mounted (on foot they fire the game\'s own weapon and are judged like the ground team)')
 
 # shots, a weapon on CJ, damage

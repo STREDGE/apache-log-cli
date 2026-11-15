@@ -12,7 +12,6 @@ HCNEED ~y~HELICOVER:~w~ call the helicopter first.
 HCVER ~y~HELICOVER:~w~ map marker is not supported on this game version.
 HCNOMAP ~y~HELICOVER:~w~ put a marker on the map first.
 HCCHOS ~b~PILOT:~w~ over the destination. Press exit to get out.
-HCAIR ~r~POLICE CHOPPER!~w~ Gunners returning fire.
 HCCONT ~r~CONTACT!~w~ Gunners engaging.
 HCKILL ~g~TARGET DOWN~w~ ~1~
 HCCLEAR ~g~GUNNERS:~w~ area clear.
@@ -67,12 +66,11 @@ HCRBSY ~y~PILOT:~w~ wait - rope work in progress.
 HCRCAN ~b~PILOT:~w~ pickup cancelled. Ropes up.
 HCRUP ~b~PILOT:~w~ squad, back up the ropes.
 HCDSQ ~b~PILOT:~w~ picking the squad up first, then we leave.
-HCFOCUS ~r~SHOOTER ON CJ!~w~ Gunners focusing fire.
 HCBURN ~r~CAR ON FIRE!~w~ Get away from it.
 HCEVADE ~r~TAKING HITS!~w~ Pilot breaking away.
 HCSHOT ~r~TAKING FIRE!~w~ Pilot breaking away.
-HCHELLO ~b~HELICOVER 1.2 BETA~w~ ready. CLEO menu > Helicover.
-HCHELLV ~b~HELICOVER 1.2 BETA~w~ ready. Map marker is off here.
+HCHELLO ~b~HELICOVER 1.3 BETA~w~ ready. CLEO menu > Helicover.
+HCHELLV ~b~HELICOVER 1.3 BETA~w~ ready. Map marker is off here.
 RGDEP ~b~PILOT:~w~ team going down the ropes.
 RGDONE ~g~SQUAD:~w~ team back aboard.
 RGFAIL ~r~HELICOVER:~w~ could not load the team.

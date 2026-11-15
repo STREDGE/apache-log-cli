@@ -295,7 +295,7 @@ assert w.shared[b.CJ_AIM_T]==t0,'rounds of somebody else are never CJ\'s line, h
 w.shooting_chars=set();w.cj_aim=[24.,0.,1.];w.shooting=True;steps(w,V,1);w.shooting=False
 assert w.now-w.shared[b.CJ_AIM_T]<=150 and w.shared[b.CJ_AIM_X]>.99 and abs(w.shared[b.CJ_AIM_Y])<.05,('his own shot: the line in the frame of the shot',w.now-w.shared[b.CJ_AIM_T],w.shared[b.CJ_AIM_X])
 t1=w.shared[b.CJ_AIM_T];steps(w,V,20);assert abs(w.shared[b.CJ_AIM_T]-t1)<=150,'no new shot: the line is not refreshed'
-assert not [x for x in w.calls if x[1]==0x0a8d or (x[1]==0xddc and x[2][0] in (b.TRACE_SCAN_T,b.TB_SEARCH_T,b.TB_SHOOTER))],'no script reads the game\'s bullet traces or keeps a threat board'
+assert not [x for x in w.calls if x[1]==0xdd8 and 0xCFA500<=x[2][1]<0xCFA500+16*44],'no script reads the game\'s bullet traces (the table at G+0xCFA500)'
 passed('CJ\'s line of fire comes from the brain: there in the frame of his shot, never from somebody else\'s rounds; the scripts read no bullet traces')
 
 # =================================================================== E4: gunners are not lasers

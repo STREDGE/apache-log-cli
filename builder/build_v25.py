@@ -5,13 +5,13 @@ import zipfile
 STATE=0x48456A00;CMD=STATE+1;HEART=STATE+2;OPEN=STATE+3;PANELHEART=STATE+4
 MODEL=STATE+5;CREW=STATE+6;FIRE=STATE+7;TOUCH=STATE+8;HUD=STATE+9;HP=STATE+10
 PUB=STATE+20;PHASE=STATE+27;ACTUAL=STATE+28;BUSY=STATE+29;FIREHEART=STATE+30;WPN=STATE+31;FIRENEXT=STATE+32
-ACREW=STATE+33;LSTAGE=STATE+34;LALT=STATE+35;FROZEN=STATE+36;SKINSAVE=STATE+37;CREWNEW=STATE+40;CREWGEN=STATE+45;FIREGEN=STATE+46;FWANTED=STATE+47
+ACREW=STATE+33;LSTAGE=STATE+34;LALT=STATE+35;FROZEN=STATE+36;SKINSAVE=STATE+37;CREWNEW=STATE+40;CREWGEN=STATE+45;FIREGEN=STATE+46
 GROVE_STREAM=STATE+50;GROVE_WAIT=STATE+51;LAND_STABLE=STATE+53;GROVE_NEXT_SCAN=STATE+54
-FIRE_TARGET=STATE+55;FIRE_TASK_TARGET=STATE+56;FIRE_TASK_PHASE=STATE+57;FIRE_TASK_NEXT=STATE+58
-FIRE_ACTIVE=STATE+59;TRACKED_TARGET=STATE+60;FIRE_SCAN_NEXT=STATE+61;FIRE_TASK_MODE=STATE+62
+FIRE_TARGET=STATE+55
+FIRE_ACTIVE=STATE+59;TRACKED_TARGET=STATE+60
 LAND_SLOW=STATE+63;LAND_FINAL=STATE+64
 WEAPON_SETTING=STATE+65
-ROPE_COMMAND=STATE+70;GROUND_PUB=STATE+71;GROUND_MOVE_NEXT=STATE+80;DROP_COMMAND=STATE+81;DEST_X=STATE+82;DEST_Y=STATE+83;DEST_Z=STATE+84;GUARD_TARGET=STATE+90;PATROL_STEP=STATE+97;PATROL_NEXT=STATE+98;FOLLOW_NEXT=STATE+99;AVOID_STAGE=STATE+110;AVOID_NEXT=STATE+111;AVOID_AT=STATE+112;AVOID_X=STATE+113;AVOID_Y=STATE+114;AVOID_Z=STATE+115
+ROPE_COMMAND=STATE+70;GROUND_PUB=STATE+71;GROUND_MOVE_NEXT=STATE+80;DROP_COMMAND=STATE+81;DEST_X=STATE+82;DEST_Y=STATE+83;DEST_Z=STATE+84;PATROL_STEP=STATE+97;PATROL_NEXT=STATE+98;FOLLOW_NEXT=STATE+99;AVOID_STAGE=STATE+110;AVOID_NEXT=STATE+111;AVOID_AT=STATE+112;AVOID_X=STATE+113;AVOID_Y=STATE+114;AVOID_Z=STATE+115
 GLIDE_C=STATE+116;STUCK_SINCE=STATE+117
 # v36 diagnostic breadcrumbs: 'DBG state*100+step' is printed whenever it changes, so a screenshot
 # of a frozen screen shows where the core was. Set DEBUG_BREADCRUMBS=False for a quiet build.
@@ -24,8 +24,7 @@ EXIT_MODE=STATE+134;AUTO_EXIT=STATE+135;LOCK_HOLD=STATE+136
 # v39-fire fire control: kill counter, current engaged target, engagement flag, area-clear timer,
 # combat-orbit point index and next switch time.
 KILLS=STATE+137;LAST_TGT=STATE+138;ENGAGED=STATE+139;CLEAR_AT=STATE+140;ORBIT_I=STATE+141;ORBIT_NEXT=STATE+142
-OVERWATCH_DAMAGE=75;OVERWATCH_CADENCE=900;ORBIT_RADIUS=28.0
-OWN_CAR_CLEAR=3.5   # FOLLOW MY SHOTS from a vehicle: extra metres before the aim ray starts, to clear CJ's own car
+ORBIT_RADIUS=28.0
 # beta 4 command gate: orders that must not interrupt somebody on a rope; orders that are dropped when they are already in force
 GATE_ROPE_ORDERS=[2,3,4,7,10,11,14,15,16,17];GATE_SAME=[(2,[2]),(3,[3]),(14,[24]),(7,[20,10,11])];MAP_FLIGHT_STATES=[21,25,22]
 # v39b robust exit: rope drop retries with repositioning, and a rope fallback when there is
@@ -43,8 +42,7 @@ EXIT_PRESSED=STATE+148;EXIT_LAST=STATE+149
 # (CHeli::ProcessControl -> FireOneInstantHitRound -> CBulletTraces::AddTrace). So in PROTECT CJ
 # at 3+ stars the fire worker reads CBulletTraces::aTraces (16 x 44 bytes, image-relative) with
 # 0DD8 and returns fire at the start point of a fresh round that came down at CJ from >=10 m above.
-BULLET_TRACES_OFS=0xCFA500;BULLET_TRACE_SIZE=44;BULLET_TRACE_COUNT=16
-AIR_X=STATE+150;AIR_Y=STATE+151;AIR_Z=STATE+152;AIR_SEEN=STATE+153;AIR_CALL_NEXT=STATE+154
+AIR_SEEN=STATE+153;AIR_CALL_NEXT=STATE+154
 # v40 tactical squad AI (Helicover_Squad.csa). SQ_HEART = squad worker heartbeat; TACTICS 0 bodyguard /
 # 1 assault; SQ_ROPE 1 while the ground worker's rope/escort guards are on the ground under squad control;
 # ESCORT_ON 1 while the escort team is deployed; ESCORT_CMD core->ground 1 deploy / 2 recall;
@@ -54,17 +52,12 @@ SQ_THREATS=STATE+161;SQ_T=STATE+162  # SQ_T..SQ_T+3 = current threats (char hand
 SQ_MSG_NEXT=STATE+166;SQ_MEDIC_NEXT=STATE+167;SQ_CONTACT=STATE+168;SQ_CLEAR_AT=STATE+169;SQ_SCAN_NEXT=STATE+170;SQ_GROUP=STATE+171
 SQ_SLOT=STATE+172;SQ_SLOT_SIZE=10   # per guard slot: TASK NEXT TX TY LX LY LT DEAD TGT spare
 # v40 overwatch flight: station index/time, hull sampling and evasive manoeuvre deadline
-# v40.3 gunner brain: each gunner's previous target, last announced heavy-weapon threat
-GT_PREV=STATE+225;FOCUS_SEEN=STATE+229;GC_TIME=STATE+250;GC_CAND=STATE+230  # GC_CAND..+18: this round's checked candidates (shooter, primary, 4 squad threats, 13 cells), -1 = none
-# v41 threat board (threat_v41.py): shooter found through bullet traces, fire at the helicopter,
-# the gunners' sorted list, suppression memory, and the squad's cover / reload / call-out state.
+# the squad's cover / reload / call-out state
 from msg_v42 import say,emit_resolve_lang,emit_banner,LANG,print_key,MSG_UNTIL,MSG_PRIO,MSG_ID,MSG_HOLD,BANNER_ARMED,LEVEL_ALL,GAME_RU_FLAG
 import msg_v42 as _mv;assert _mv.HUD==HUD
-from threat_v41 import TB_SHOOTER,TB_SHOOTER_T,HELI_SHOT_T,TRACE_SCAN_T,SHOOTER_FRESH_MS,SCORE_FOCUS,emit_score,emit_trace_scan
-from threat_v41 import CJ_SHOT_T,CJ_AIM_X,CJ_AIM_Y,CJ_AIM_Z,CJ_AIM_PX,CJ_AIM_PY,CJ_AIM_PZ,CJ_AIM_T,CJ_AIM_E,TB_SEARCH_T
-import threat_v41 as _tv;assert _tv.STATE==STATE and _tv.GROUND_PUB==GROUND_PUB
-TS_SAVE=STATE+380   # 4 slots: registers the trace scan borrows
-PREV_HP=STATE+356;PREV_HP_T=STATE+360;GT_YIELD=STATE+364;LS_X=STATE+340;LS_Y=STATE+344;LS_Z=STATE+348;LS_T=STATE+352  # gunner hit tracking / guard last-seen
+# What the brain tells the scripts about fire that is not ours (1.3: the threat board, the scores and the reading of bullet traces are gone)
+HELI_SHOT_T=STATE+254                                  # when a stranger's round last passed the helicopter (the pilot's evasion)
+CJ_AIM_X=STATE+369;CJ_AIM_Y=STATE+370;CJ_AIM_T=STATE+375   # the line of CJ's own last shot and its time (the squad keeps out of it)
 BLOCK_T=STATE+390;SQ_CARH=STATE+391;SQ_DRIVES=STATE+392;ESC_LAGGED=STATE+393;ROPE_T0=STATE+394;SQ_LAG=STATE+395   # SQ_LAG..+3: per guard, time since he fell 70 m behind CJ
 # 1.3: the brain. BRAIN_HELLO is created with 0 by the core; the mod answers BRAIN_MAGIC in it once its opcode is registered.
 # POLICE 0 = fire back at policemen who shoot, 1 = never fire at the police; MISSIONS 0 = defensive in missions, 1 = as usual.
@@ -73,19 +66,15 @@ G_AIM=STATE+443;G_AIM_T=STATE+447        # per gunner: the man his weapon is on 
 BR_ALERT=STATE+451;BR_TOP=STATE+452;BR_KILLS=STATE+453;BR_THREATS=STATE+454;BR_ATTACKERS=STATE+455
 SQ_BR_ST=STATE+456;SQ_BR_TG=STATE+460    # per guard of the squad: the brain's state (0 nothing, 1 cover, 2 fire, 3 cease fire) and man
 SQ_TICK=STATE+464
-GH_HOLD=STATE+429;BURN_NEXT=STATE+433;BURN_SAID=STATE+434;POSE=STATE+435;POSE_DONE=STATE+436   # beta 6: per-gunner 'weapon down' deadline (4), burning-car watch, gunners kneel (1) / stand (0)
-# beta 6 fire discipline. The gunners never finish a vehicle off: no shot at a car (or at a man inside one) once its health is below
-# CAR_HOLD_HP (it burns below 250), and nobody aims at an engine any more. A burning car within BURN_WARN_M of CJ is called out.
-CAR_HOLD_HP=700;BURN_HP=250;BURN_WARN_M=12.0;CJ_LINE_CLEAR_M=2.0;HOLD_MS=700
-THREAT_NEAR_M=40.0;THREAT_FACING_DEG=40   # PROTECT CJ: an armed hostile on foot this close, turned to CJ and in sight, is engaged before he fires
+BURN_NEXT=STATE+433;BURN_SAID=STATE+434;POSE=STATE+435;POSE_DONE=STATE+436   # beta 6: burning-car watch, gunners kneel (1) / stand (0)
+# A burning car (health below BURN_HP) within BURN_WARN_M of CJ is called out. Which cars may be fired at is the brain's business (1.3).
+BURN_HP=250;BURN_WARN_M=12.0
 NAP_UNTIL=STATE+428   # beta 5: end of the core's current 100 ms nap (an order ends the nap at once)
 AFTER_ROPE=STATE+425;DISMISS_NEXT=STATE+426;LEAVE_ROT=STATE+427   # beta 4: the order that follows once a cancelled pickup's cover team is back aboard / when the panel may ask for the recall again
 ROPE_WAIT=STATE+415;LEAVE=STATE+416;LEAVE_N=STATE+424   # beta 4: the rope hangs waiting for CJ / LEAVE..+7: guards who were let go and walk away / 1 while any is left
 ROPE_BUSY=STATE+406;SWAP_MSG=STATE+407;TEAM_CREW=STATE+408;DISMISS_T=STATE+411;PB_AIM=STATE+412   # PB_AIM..+2: the aim point the gunners were called with   # 1.2 decor: a rope motion is under way / swap message shown / crew setting the ground team wears
 FORM_UX=STATE+399;FORM_UY=STATE+400;FORM_PX=STATE+401;FORM_PY=STATE+402;FORM_T=STATE+403;FORM_CT=STATE+404;FORM_OK=STATE+405   # formation anchor (unit travel direction)
 NOTICE_SKIP=STATE+335;HELLO_AT=STATE+336;KILL_NEXT=STATE+337
-GS_H=STATE+256;GS_S=STATE+264            # 8 handles / scores, best first
-SUP_X=STATE+272;SUP_Y=STATE+276;SUP_Z=STATE+280;SUP_T=STATE+284;GT_SUPP=STATE+288  # per gunner
 CV_X=STATE+292;CV_Y=STATE+296;CV_Z=STATE+300;CV_T=STATE+304;CV_H=STATE+308;CV_OK=STATE+312;ENG_T=STATE+316  # per guard
 SQ_CV_TICK=STATE+320;SQ_QUIET_T=STATE+321;SQ_EVAC_NEXT=STATE+322;SQ_CALLED=STATE+323;SQ_SC=STATE+324  # SQ_SC..+3 squad scores
 ST_I=STATE+215;ST_NEXT=STATE+216;HP_PREV=STATE+217;HP_T=STATE+218;EVADE_UNTIL=STATE+219
@@ -127,7 +116,6 @@ MESSAGES={'HCLOAD': '~b~PILOT:~w~ inbound to your position.',
  'HCVER': '~y~HELICOVER:~w~ map marker is not supported on this game version.',
  'HCNOMAP': '~y~HELICOVER:~w~ put a marker on the map first.',
  'HCCHOS': '~b~PILOT:~w~ over the destination. Press exit to get out.',
- 'HCAIR': '~r~POLICE CHOPPER!~w~ Gunners returning fire.',
  'HCCONT': '~r~CONTACT!~w~ Gunners engaging.',
  'HCKILL': '~g~TARGET DOWN~w~ ~1~',
  'HCCLEAR': '~g~GUNNERS:~w~ area clear.',
@@ -182,12 +170,11 @@ MESSAGES={'HCLOAD': '~b~PILOT:~w~ inbound to your position.',
  'HCRCAN':'~b~PILOT:~w~ pickup cancelled. Ropes up.',
  'HCRUP':'~b~PILOT:~w~ squad, back up the ropes.',
  'HCDSQ':'~b~PILOT:~w~ picking the squad up first, then we leave.',
- 'HCFOCUS': '~r~SHOOTER ON CJ!~w~ Gunners focusing fire.',
  'HCBURN': '~r~CAR ON FIRE!~w~ Get away from it.',
  'HCEVADE': '~r~TAKING HITS!~w~ Pilot breaking away.',
  'HCSHOT': '~r~TAKING FIRE!~w~ Pilot breaking away.',
- 'HCHELLO': '~b~HELICOVER 1.2 BETA~w~ ready. CLEO menu > Helicover.',
- 'HCHELLV': '~b~HELICOVER 1.2 BETA~w~ ready. Map marker is off here.'}
+ 'HCHELLO': '~b~HELICOVER 1.3 BETA~w~ ready. CLEO menu > Helicover.',
+ 'HCHELLV': '~b~HELICOVER 1.3 BETA~w~ ready. Map marker is off here.'}
 # Generate state updates; panel prints messages when the state changes.
 # beta 6: our people do not cower. CREATE_CHAR gives a mission ped the built-in "normal" decision maker (m_norm.ped): punched, shot at or
 # aimed at, it picks "duck and cover" / "flee" like any passer-by. 65542 is the game's built-in EMPTY decision maker (slot 6 | 1<<16, loaded
@@ -1204,10 +1191,10 @@ p.label('CORE_MISSING');a(0xdd0,V(4),L('OFFLINE_MENU'));a(0xdf2,V(4),I(1))
 p.label('OFFLINE_POLL');a(1,I(50));a(0x01bd,V(20));a(0xddc,I(PANELHEART),V(20));p.check(0x0256,[I(0)],'CLOSE');a(0xdf4,V(1),I(250));p.eq(1,-1,'CLOSE');p.go('OFFLINE_POLL')
 p.label('CLOSE');p.call('UNLOAD');a(0xdf3);p.set(OPEN,0);p.set(0,0);a(6,V(10),I(0));p.go('WATCH')
 # All menus fit on one page (<=8 rows); metadata is appended beyond terminating branches.
-VERSION='1.2'
+VERSION='1.3'
 for st,sit,x in MAIN_VARIANTS:
  for prof,suf in zip(PROFILES,SUFFIX):
-  title=(i18n.encode('HELICOVER 1.2 BETA','en') if prof=='en' else i18n.menu_text('TITLE_READY',prof)) if st==0 else i18n.state_title(st,STATES[st],prof)
+  title=(i18n.encode('HELICOVER 1.3 BETA','en') if prof=='en' else i18n.menu_text('TITLE_READY',prof)) if st==0 else i18n.state_title(st,STATES[st],prof)
   p.blob('MAIN_%d_%d_%d'%(st,sit,x)+suf,title,main_rows(st,sit,x,prof))
 for prof,suf in zip(PROFILES,SUFFIX):
  if prof=='en':p.blob('OFFLINE_MENU',i18n.menu_text('OFFLINE_TITLE',prof),[i18n.menu_text('OFFLINE_ROW',prof)])   # the core is missing, so the language is unknown: English only
@@ -1261,7 +1248,7 @@ for i in range(4):f.set(G_AIM+i,-1);f.set(G_AIM_T+i,0)
 f.set(FIRENEXT,0);f.set(FIREGEN,-1);f.set(FIRE_ACTIVE,0);f.set(FIRE_TARGET,-1);a(6,V(26),I(-1))
 f.label('WAIT');a(1,I(0));f.call('BANNER');a(0x01bd,V(30));a(0xddc,I(FIREHEART),V(30));f.check(0x0a52,[I(EXIT_WIDGET)],'EXIT_POLL_DONE');a(0xddc,I(EXIT_PRESSED),V(30));f.label('EXIT_POLL_DONE');f.get(30,BUSY);f.eq(30,0,'WAIT');f.get(30,STATE)
 for stateid in [0,1,5,6,16]:
- nxt='FSTATE_NEXT_'+str(stateid);f.eq(30,stateid,nxt);f.go('WAIT');f.label(nxt)
+ nxt='FSTATE_NEXT_'+str(stateid);f.eq(30,stateid,nxt);f.go('NO_HELI');f.label(nxt)
 for index in range(7):f.get(index,PUB+index)
 f.get(30,CREWGEN);f.get(31,FIREGEN);f.check(0x003b,[V(30),V(31)],'FIRE_CREW_CHANGED');f.go('FIRE_CREW_READY')
 f.label('FIRE_CREW_CHANGED');a(0xddc,I(FIREGEN),V(30));a(6,V(26),I(-1))
@@ -1319,6 +1306,9 @@ for var in [3,4,5,6]:
 a(0xddc,I(FIRE_ACTIVE),V(27));f.go('WAIT')
 # no brain (the mod is not loaded, or it refused this game): nobody fires. The core does not call the helicopter in the first place.
 f.label('NO_BRAIN');f.call('ALL_REST');f.go('WAIT')
+# no helicopter (dismissed, lost, on its way in or out): a fight that was going on is over for the gunners - nothing of it is left behind
+# for the next call ("contact" is said again, the pilot has no old target)
+f.label('NO_HELI');f.set(FIRE_ACTIVE,0);f.set(FIRE_TARGET,-1);f.set(ENGAGED,0);f.set(CLEAR_AT,0);f.go('WAIT')
 f.label('ALL_REST');f.set(FIRE_ACTIVE,0);f.set(FIRE_TARGET,-1)
 for var in [3,4,5,6]:
  g=var-3;skip='AR_SKIP_%d'%var;f.get(30,G_AIM+g);f.check(0x8039,[V(30),I(-1)],skip);f.set(G_AIM+g,-1);alive(f,var,skip);rest(var,'REST3_'+str(var));f.label(skip)
