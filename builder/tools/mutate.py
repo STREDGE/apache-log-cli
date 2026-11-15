@@ -1,5 +1,5 @@
 """Mutation check: break one rule at a time in a scratch copy of builder/ and make sure the tests notice.
-   python3 tools/mutate.py            all mutants      python3 tools/mutate.py --new     only the 1.2 ones      --b4  only the beta 4 ones      --b5  only the beta 5 ones      (names as arguments pick single mutants)
+   python3 tools/mutate.py            all mutants      python3 tools/mutate.py --new     only the 1.2 ones      --b4  only the beta 4 ones      --b5  only the beta 5 ones      --b6  only the beta 6 ones      (names as arguments pick single mutants)
    A line 'MISSED ... <<<<<<' means a rule has no test that guards it."""
 import shutil,subprocess,sys,os,tempfile
 from pathlib import Path
@@ -218,8 +218,53 @@ M15=[   # beta 5: the menu opens at once
  (B,"c.label('IDLE');c.call('NAP')","c.label('IDLE');a(1,I(100))",'15 core: idle nap'),
  (B,"c.label('TICK_NORMAL_WAIT');c.call('NAP')","c.label('TICK_NORMAL_WAIT');a(1,I(100))",'15 core: flight nap'),
 ]
+G='build_v25_ground.py';Q='build_v25_squad.py';MS='msg_v42.py'
+M16=[   # beta 6: threats only, fire discipline, CJ's safety, notifications as a drawn line, brave crew, kneeling gunners
+ (B,"a(0x0470,V(29),V(30));f.check(0x0019,[V(30),I(21)],'PROTECT_REJECT');f.check(0x8019,[V(30),I(38)],'PROTECT_REJECT')","a(0x0470,V(29),V(30))",'16 protect: a firearm in his hands'),
+ (B,"f.label('CPN_ARMED');f.check(0x80df,[V(29)],'PROTECT_REJECT');","f.label('CPN_ARMED');",'16 protect: on foot only'),
+ (B,"f.check(0x0023,[F(THREAT_NEAR_M),V(14)],'PROTECT_REJECT')","a(0)",'16 protect: close only'),
+ (B,"facing(THREAT_FACING_DEG,'CPN')","facing(180,'CPN')",'16 protect: turned to CJ'),
+ (B,"f.label('CPN_LOW');f.eq(30,6,'CPN_SERVICES');f.check(0x010f,[I(0),I(0)],'PROTECT_REJECT');f.go('CPN_ARMED')","f.label('CPN_LOW');f.eq(30,6,'CPN_SERVICES');f.go('CPN_ARMED')",'16 protect: police only when wanted'),
+ (B,"f.go('PROTECT_REJECT')\nf.label('CPN_ARMED')","f.label('CPN_ARMED')",'16 protect: civilians are no hostile type'),
+ (B,"f.check(0x8039,[V(30),I(8)],'PROTECT_REJECT');f.check(0x0019,[V(30),I(6)],'CPN_LOW')","f.check(0x0019,[V(30),I(6)],'CPN_LOW')",'16 protect: never our own type'),
+ (B,"   # beta 6: no hatred in any mode - the gunners fire only at what the brain below gives them",";a(0x077a,V(var),I(4),I(7))",'16 no hatred'),
+ (B,"a(0x0227,V(22),V(8));f.check(0x0019,[V(8),I(CAR_HOLD_HP-1)],'TARGET_CAR_UNSAFE');","",'16 car: health floor'),
+ (B,"f.check(0x00df,[V(29)],'SHOOT_CHAR_CAR_OK_'+str(var));f.call('TARGET_CAR_SAFE')","f.go('SHOOT_CHAR_CAR_OK_'+str(var));f.call('TARGET_CAR_SAFE')",'16 car: no fire task below the floor'),
+ (B,"f.label('PRECISE_CAR_'+str(var));f.call('TARGET_CAR_SAFE');f.eq(30,1,hold)","f.label('PRECISE_CAR_'+str(var));f.call('TARGET_CAR_SAFE');f.eq(30,1,skip)",'16 car: weapons down at once'),
+ (B," f.label('PRECISE_ENGINE_DONE_'+str(var));"," if var in (3,5):a(0x0407,V(22),F(0),F(1.8),F(.3),V(11),V(12),V(13))\n f.label('PRECISE_ENGINE_DONE_'+str(var));",'16 car: nobody aims at the engine'),
+ (B,"hold if friend==0 else skip","skip",'16 CJ in the line: weapon down'),
+ (B," f.get(30,GH_HOLD+var-3);a(0x01bd,V(31));f.check(0x001d,[V(31),V(30)],skip)\n","",'16 CJ in the line: no new fire task'),
+ (B,"a(0x0227,V(29),V(30));f.check(0x0019,[V(30),I(CAR_HOLD_HP-1)],'SILENCE');","",'16 follow: damaged car left alone'),
+ (B,"a(0x0227,V(15),V(30));f.check(0x8019,[V(30),I(BURN_HP-1)],nxt)","a(0x0227,V(15),V(30))",'16 burning: only a burning car'),
+ (B,"f.check(0x8119,[V(15)],nxt);","",'16 burning: not a wreck'),
+ (B,"a(0x000a,V(31),I(4000));a(0xddc,I(BURN_SAID),V(31))","a(0xddc,I(BURN_SAID),V(31))",'16 burning: every 4 s'),
+ (B,"BURN_WARN_M=12.0","BURN_WARN_M=80.0",'16 burning: near CJ only'),
+ (MS,"s.get(t1,BANNER_ARMED);s.eq(t1,0,P+'DRAW');s.set(BANNER_ARMED,1);s.ret()","s.go(P+'DRAW')",'16 line: first frame only arms'),
+ (MS,"s.check(0x001d,[V(t2),V(t1)],P+'OFF');a(0x03f0,I(1))","s.check(0x001d,[V(t2),V(t1)],P+'OFF')",'16 line: wipe every frame'),
+ (MS,"s.check(0x001d,[V(t2),V(t1)],P+'OFF');a(0x03f0,I(1))","a(0x03f0,I(1))",'16 line: ends on time'),
+ (MS,"s.get(t2,MSG_ID);s.get(t1,LANG);s.eq(t1,0,P+'RU')","s.get(t2,MSG_ID);s.get(t1,LANG)",'16 line: language'),
+ (MS,"for b0 in range(0,len(KEYS),16):s.check(0x0019,[V(t2),I(b0+15)],P+'%s_B%d'%(lang,b0))","for b0 in range(0,len(KEYS),16):s.check(0x0019,[V(t2),I(b0+14)],P+'%s_B%d'%(lang,b0))",'16 line: dispatch'),
+ (MS,"MIN_SHOW_MS=1200","MIN_SHOW_MS=0",'16 say: readable first'),
+ (MS,"s.check(0x8019,[V(18),I(1)],skip)","s.check(0x8019,[V(18),I(3)],skip)",'16 say: one level at most'),
+ (MS,"ack=level is None and key in ORDER_ACK","ack=False",'16 say: an acknowledgement takes the line'),
+ (MS,"s.set(MSG_PRIO,p+1 if ack else p)","s.set(MSG_PRIO,p)",'16 say: an acknowledgement yields to alarms only'),
+ (MS,"a(0x000a,V(19),I(SHOW_MS[p]));a(0xddc,I(MSG_UNTIL),V(19))","a(0x000a,V(19),I(SHOW_MS[p]+900));a(0xddc,I(MSG_UNTIL),V(19))",'16 say: lasts its time'),
+ (B,"brave(c,v,'BRAVE_CREW_%d'%v)","a(0)",'16 brave: gunners'),
+ (B,";brave(c,4,'BRAVE_PILOT')","",'16 brave: pilot'),
+ (B,"brave(c,29,'BRAVE_NEW_%d'%var);","",'16 brave: new crew'),
+ (G,"b.brave(s,7,'GSETUP_BRAVE');","",'16 brave: squad'),
+ (B,"s.check(0x09f2,[I(EMPTY_DM)],P+'_NO_DM');","",'16 brave: only when the decision maker exists'),
+ (Q,"s.label(P+'RELOAD_ISSUE');a(0x04eb,V(G),I(1))","s.label(P+'RELOAD_ISSUE');a(0x05c5,V(G),I(1500))",'16 reload drill: weapon crouch'),
+ (B,"c.get(11,POSE);c.eq(11,1,'ATTACH_END_'+str(var));a(0x04eb,V(var),I(1))","c.get(11,POSE);c.eq(11,1,'ATTACH_END_'+str(var))",'16 pose: kneel when mounted'),
+ (B,"c.get(11,POSE);c.eq(11,1,'ATTACH_END_'+str(var));a(0x04eb,V(var),I(1))","a(0x04eb,V(var),I(1))",'16 pose: the setting is obeyed'),
+ (B,"c.call('CHANGE_CREW');c.call('CHANGE_POSE');","c.call('CHANGE_CREW');",'16 pose: the switch acts at once'),
+ (B,"a(0xddc,I(POSE_DONE),V(19));c.call('REATTACH_TEAM')","c.call('REATTACH_TEAM')",'16 pose: re-mounted once'),
+ (B,"f.check(0x0a32,[V(var)],P);a(0x04eb,V(var),I(1));f.label(P)","f.label(P)",'16 pose: back on one knee after a fight'),
+]
 if sys.argv[1:2]==['--new']:
- M=M12+M14+M15;sys.argv.pop(1)
+ M=M12+M14+M15+M16;sys.argv.pop(1)
+elif sys.argv[1:2]==['--b6']:
+ M=M16;sys.argv.pop(1)
 elif sys.argv[1:2]==['--b5']:
  M=M15;sys.argv.pop(1)
 elif sys.argv[1:2]==['--b4']:
@@ -228,7 +273,7 @@ elif sys.argv[1:2]==['--12']:
  M=M12;sys.argv.pop(1)
 elif sys.argv[1:2]==['--old']:
  sys.argv.pop(1)
-else:M=M+M12+M14+M15
+else:M=M+M12+M14+M15+M16
 only=sys.argv[1:]
 for fname,old,new,name in M:
  if only and name not in only:continue

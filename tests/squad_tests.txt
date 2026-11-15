@@ -99,7 +99,13 @@ PASS: Without cover nearby the engager fights crouched where he stands
 PASS: Reload drill: after 10 s of fighting guards crouch 1.5 s to reload, staggered so the others keep firing
 PASS: CJ badly hurt with three or more threats: shields up, then "EVAC recommended"
 PASS: After 20 s of quiet the team lowers its weapons; the first threat puts them back on alert
-PASS: A car target: right-door gunners hit the engine, left-door gunners the driver
+PASS: A car target: every gunner aims at the man inside, nobody at the engine (beta 6: the gunners do not blow cars up)
+PASS: A car below 700 health is never fired at (it burns below 250): no rounds, no fire task, weapons down - the man is engaged again once he is out of it
+PASS: PROTECT CJ engages threats only: whoever hurt CJ / the crew / the helicopter, or an armed gang member (policeman when CJ is wanted) on foot within 40 m, turned to CJ and in sight - not passers-by, not cars driving past
+PASS: No fire mode makes the gunners hate a ped type any more: the game's own AI cannot open fire on a car by itself, every target comes from the rules
+PASS: An attacker right behind CJ as seen from the helicopter: no round passes within 2 m of CJ and the gunners take their weapons down; they fire again once he is clear
+PASS: WHERE I SHOOT: the gunners join CJ on a car only while it is above 700 health - they never finish it off next to him
+PASS: A burning car within 12 m of CJ is called out ("CAR ON FIRE! Get away from it."), whoever set it on fire; repeated every 4 s, not for wrecks
 PASS: CJ aiming at someone: two gunners join him on that target at once
 PASS: A gunner keeps a target he is hurting, and hands it over after 5 s without a hit
 PASS: Threat 40 m from CJ: the orbit centre moves 30% towards CJ so the gunners cover both
@@ -108,11 +114,11 @@ PASS: A wounded guard (below 50 HP) stays closer to CJ: 10 m leash instead of 14
 PASS: Welcome message once, a few seconds after the game starts
 PASS: Team drop notices say what really happens: "moving in to drop the team", "on the ground" - no false "rope pickup" / "holding"
 PASS: A 12 s fight with four shooters gives 2 clear radio calls, not a stream (SQCB, SQRLD)
-PASS: An alarm on screen is not covered by lesser calls; once it expires the chatter comes back
+PASS: An alarm on screen: nothing lesser for 1.2 s, then a tactical call may take its place but never chatter; chatter comes back once the line is free
 PASS: MESSAGES: IMPORTANT keeps danger and tactical calls, drops the chatter
 PASS: MESSAGES: OFF is silent in a fight but still explains why a command was refused
 PASS: With the team on the ground only the squad calls the contact (no double "CONTACT!")
 PASS: SETTINGS: one row cycles MESSAGES: ALL / IMPORTANT / OFF
-PASS: Frame cost in a busy fight (8 threats, rounds at CJ): fire worker peak 3123, squad worker peak 1510 script instructions
-PASS: Frame cost in FOLLOW MY SHOTS under fire at 30 fps: free aim peak 2999 / average 1093, lock-on peak 1961 / average 911 script instructions (it was 5063 / 2300: the whole trace table was read every frame of a burst)
+PASS: Frame cost in a busy fight (8 threats, rounds at CJ): fire worker peak 3272, squad worker peak 1508 script instructions
+PASS: Frame cost in FOLLOW MY SHOTS under fire at 30 fps: free aim peak 3065 / average 1128, lock-on peak 2039 / average 946 script instructions (it was 5063 / 2300: the whole trace table was read every frame of a burst)
 Mocked script execution only: real pathing, cover and gunfire are not tested.

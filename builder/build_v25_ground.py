@@ -211,7 +211,7 @@ s.label('GM_SWAT');a(6,V(2),I(285));a(6,V(3),I(285));s.ret()
 # GSETUP: V7 = a new team member: mine, friendly to everybody, accurate.
 s.label('GSETUP');a(0x01c5,V(7));a(0x08af,V(7),I(150));a(0x02e2,V(7),I(100))
 for typ in range(32):a(0x077a,V(7),I(2),I(typ))
-a(0x077a,V(7),I(0),I(0));a(0x077a,V(7),I(0),I(8));s.ret()
+a(0x077a,V(7),I(0),I(0));a(0x077a,V(7),I(0),I(8));b.brave(s,7,'GSETUP_BRAVE');s.ret()
 # TEAM_DECOR: every living guard holds the chosen weapon and wears the chosen crew's clothes; a guard in the wrong clothes is
 # replaced in place (new one created at his spot with his heading / health / armour, then the old one is removed in the same
 # tick; a guard in a car or a model that is not resident yet waits for the next cycle). Uses V2-V5, V7-V9-V16, V19 (never V6: the

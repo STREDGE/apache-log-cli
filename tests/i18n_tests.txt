@@ -1,12 +1,12 @@
 PASS: The simulated font of the game's Russian reproduces the player's screenshots of beta 1 (@@♥ц@х@)
 PASS: Game Russian: А-Я = 0x80-0x9F, а-я = 0xA0-0xBF (х = 181, ц = 182 as on the screenshot), Latin and tags untouched; it is the only Russian layout
-PASS: Helicover.fxt (ASCII) holds the 126 English messages, Helicover_RU.fxt the same ones with U keys (no third layout, no test message), same colour tags
-PASS: Every one of the 126 messages reads back as its Russian text in the simulated font, no @ anywhere
+PASS: Helicover.fxt (ASCII) holds the 127 English messages, Helicover_RU.fxt the same ones with U keys (no third layout, no test message), same colour tags
+PASS: Every one of the 127 messages reads back as its Russian text in the simulated font, no @ anywhere
 PASS: The language follows the game: its own Russian -> Russian; English, SanLTD (the French slot), German, Italian, Spanish, Japanese -> English; an unknown build -> English
 PASS: Changing the game language while playing changes the mod's language at once (messages: English keys / U keys)
 PASS: With the game in Russian the menu is Russian and reads correctly in the simulated font: main page, state in the title, settings
 PASS: Aboard in Russian: the two exit-button switches; switching shows the Russian hint and starts nothing
-PASS: Every one of the 248 menu pages has an English and a Russian version with the same rows; at most 8 rows, none longer than 26 (RU 30) characters; no language page, no FONT TEST
+PASS: Every one of the 254 menu pages has an English and a Russian version with the same rows; at most 8 rows, none longer than 26 (RU 30) characters; no language page, no FONT TEST
 PASS: The launcher's "files missing" message is Russian in the game's Russian and English otherwise
 PASS: CALL HELICOPTER: once called the page is the FOLLOWING page - there is no CALL row to press twice, and one helicopter exists
 PASS: While the helicopter is being prepared, swapped or is leaving the first row says so ("HELICOPTER INBOUND...", "CHANGING, PLEASE WAIT...", "HELICOPTER LEAVING...") and orders nothing
@@ -31,4 +31,16 @@ PASS: A tapped row: the core takes the order within 2 frame(s) and the page show
 PASS: A tap that CLEO keeps reporting for 0.25 s does exactly what a single report does on all 8 rows at 10, 30 and 60 fps: one order at most, and nothing is chosen on the page that has just opened
 PASS: Nothing asked: the core still works once per 0.1 s (20 passes in 2 s at 10 fps, 15 at 30 fps, 18 at 60 fps - the same as with the plain pause)
 PASS: Any order number in any situation (no helicopter, following, aboard, squad down, roping, leaving) is taken or dropped within 2 frames (while leaving: 0.1 s) - an order never stays pending, so the nap cannot turn into a busy loop
+PASS: CALL HELICOPTER: the pilot's answer is on the screen within 3 frames of the order at 10, 30 and 60 fps (the help box needed 0.3-1.1 s when free and queued 5.65 s per message when not)
+PASS: The line is drawn every frame while the message lasts (exactly its time, to the frame) and never after: wipe on, size, colour, centred, line width, outline, text - one line of text per frame
+PASS: A new message replaces the one on screen in the next frame: never two at once, no queue
+PASS: In the game's Russian the line shows the U key of the same message ("МАШИНА ГОРИТ! Отойдите от нее.")
+PASS: Each of the 127 messages is drawn with its own text in both languages (two-level dispatch by number)
+PASS: Who takes the line: an answer to a refused order always; an equally or more important call at once; a call one level lower only after the line has been readable for 1.2 s; anything lower waits for it to end
+PASS: The acknowledgement of an order ("PILOT: following you") takes the line at once whatever is on it; an alarm may replace it at once, a routine call after 1.2 s. MESSAGES: OFF still silences it (not the answers to refused orders), IMPORTANT drops only chatter
+PASS: No script but the launcher ("files missing") uses the help box any more
+PASS: Pilot, gunners and every squad member (also after a change of clothes) get the game's empty decision maker: punched or shot at they keep their task instead of ducking with their hands over their heads; TASK_DUCK (the scared pose) is not used anywhere
+PASS: Door gunners kneel on the skids by default (TASK_TOGGLE_DUCK right after they are mounted)
+PASS: SETTINGS > "GUNNERS: KNEELING / STANDING" switches the pose at once (crew re-mounted once, weapons back in their hands)
+PASS: After a fight the gunners go back to one knee (clearing their fire task would leave them standing)
 Mocked script execution only: the Russian layout was confirmed on the player's phone (beta 3); the look of the menu itself is the game's.
