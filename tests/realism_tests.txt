@@ -44,5 +44,11 @@ PASS: Helicopter swapped while the ropes are out: the rope session carries on wi
 PASS: Helicopter model changed while the escort team is on the ground: the team is not recalled or lost
 PASS: Crew changed while the ropes are out: the rope session carries on, the helicopter stays frozen on its spot
 PASS: Model swap asked for during the climb waits for the end of the rope work, then CJ sits in the new helicopter
+PASS: A crew change asked for during CJ's climb waits for the end of the rope work: CJ is not left on the ground
+PASS: A crew change in the middle of a squad recall does not cancel it: the squad climbs aboard first, then the crew changes
+PASS: Exit requested during a scripted flight keeps the helicopter on its cruise and its speed: it slows down smoothly, no dead stop
+PASS: Releasing the helicopter clears the cruise speed
+PASS: After a live re-skin the clean-up deletes only real objects (no ped handle in the platform slot)
+PASS: Boarding muster: each guard walks to the side of the helicopter he is mounted on (it was mirrored: a 4 m snap through the fuselage)
 PASS: A whole day - deploy, fire fight, CJ drives off, the squad cannot keep up, dismiss - without a single teleport of a person
 Mocked script execution only: real flight, pathing and animations are not simulated.

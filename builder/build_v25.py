@@ -63,7 +63,7 @@ import threat_v41 as _tv;assert _tv.STATE==STATE and _tv.GROUND_PUB==GROUND_PUB
 TS_SAVE=STATE+380   # 4 slots: registers the trace scan borrows
 PREV_HP=STATE+356;PREV_HP_T=STATE+360;GT_YIELD=STATE+364;LS_X=STATE+340;LS_Y=STATE+344;LS_Z=STATE+348;LS_T=STATE+352  # gunner hit tracking / guard last-seen
 BLOCK_T=STATE+390;SQ_CARH=STATE+391;SQ_DRIVES=STATE+392;ESC_LAGGED=STATE+393;ROPE_T0=STATE+394;SQ_LAG=STATE+395   # SQ_LAG..+3: per guard, time since he fell 70 m behind CJ
-ROPE_BUSY=STATE+406;SWAP_MSG=STATE+407;TEAM_CREW=STATE+408;DISMISS_T=STATE+411   # 1.2 decor: a rope motion is under way / swap message shown / crew setting the ground team wears
+ROPE_BUSY=STATE+406;SWAP_MSG=STATE+407;TEAM_CREW=STATE+408;DISMISS_T=STATE+411;PB_AIM=STATE+412   # PB_AIM..+2: the aim point the gunners were called with   # 1.2 decor: a rope motion is under way / swap message shown / crew setting the ground team wears
 FORM_UX=STATE+399;FORM_UY=STATE+400;FORM_PX=STATE+401;FORM_PY=STATE+402;FORM_T=STATE+403;FORM_CT=STATE+404;FORM_OK=STATE+405   # formation anchor (unit travel direction)
 NOTICE_SKIP=STATE+335;HELLO_AT=STATE+336;KILL_NEXT=STATE+337
 GS_H=STATE+256;GS_S=STATE+264            # 8 handles / scores, best first
@@ -157,7 +157,7 @@ MESSAGES={'HCLOAD': '~b~PILOT:~w~ inbound to your position.',
  'SQFOOT': '~y~SQUAD:~w~ CJ must be on foot to receive the team.',
  'SQCREW': '~y~SQUAD:~w~ wait until the crew is back aboard.',
  'HCBUSY':'~y~PILOT:~w~ emergency landing - cannot comply.',
- 'HCSLATE':'~y~PILOT:~w~ I swap the helicopter right after the rope.',
+ 'HCSLATE':'~y~PILOT:~w~ I make the change right after the rope.',
  'HFTEST':'~b~FONT TEST~w~ ABCDEFGH abcdefgh 12345',
  'HCFOCUS': '~r~SHOOTER ON CJ!~w~ Gunners focusing fire.',
  'HCEVADE': '~r~TAKING HITS!~w~ Pilot breaking away.',
@@ -456,10 +456,10 @@ for var in [13,14,15,16]:
  skip='MUSTER_STOP_'+str(var);alive(c,var,skip);a(0x0792,V(var));a(0x04eb,V(var),I(0));c.label(skip)
 c.go('TICK')
 c.label('MUSTER_TICK');a(6,V(30),I(1))
-for var,x,y,seat in [(13,-4,2,1),(14,4,2,2),(15,-4,-2,-1),(16,4,-2,-1)]:
+for var,x,y,seat in [(13,4,2,1),(14,-4,2,2),(15,4,-2,-1),(16,-4,-2,-1)]:   # 1.2: the side each guard is mounted on
  skip='MUSTER_DONE_'+str(var);alive(c,var,skip)
  c.check(0x8a32,[V(var)],skip)
- a(0x00a0,V(var),V(9),V(10),V(11));a(0x00aa,V(5),V(17),V(19),V(31));a(0x050a,V(9),V(10),V(11),V(17),V(19),V(31),V(29))
+ a(0x00a0,V(var),V(9),V(10),V(11));a(0x0407,V(5),F(x),F(y),F(0),V(17),V(19),V(31));a(0x050a,V(9),V(10),V(11),V(17),V(19),V(31),V(29))   # 1.2: distance to HIS muster point (the door side), not to the helicopter's centre
  c.check(0x0023,[F(3),V(29)],'MUSTER_WALK_'+str(var));c.go('MUSTER_BOARD_'+str(var))   # 1.2: attach only within 3 m (was 9 m: a visible snap)
  c.label('MUSTER_WALK_'+str(var));a(0x0085,V(17),V(20));a(0x0062,V(17),V(21));c.check(0x0019,[V(17),I(8000)],'MUSTER_WALK_TASK_'+str(var));c.check(0x0023,[F(25),V(29)],'MUSTER_FAR_'+str(var));c.check(0x82cb,[V(var)],'MUSTER_WALK_TASK_'+str(var));c.go('MUSTER_RECOVER_'+str(var))   # 1.2: warp only out of sight
  c.label('MUSTER_FAR_'+str(var));c.check(0x0019,[V(17),I(30000)],'MUSTER_OFFSCREEN_'+str(var));c.check(0x82cb,[V(var)],'MUSTER_WALK_TASK_'+str(var));c.go('MUSTER_RECOVER_'+str(var))
@@ -813,7 +813,7 @@ c.label('EXIT_HERE');a(0x00aa,V(5),V(9),V(10),V(11))
 # scripted cruise slows it down smoothly; the exit follows on arrival (AUTO_EXIT). A frozen, script-flown helicopter reports no speed, so CR_V counts.
 a(0x02e3,V(5),V(19));c.get(17,FROZEN);c.eq(17,1,'EXH_SPD');c.get(17,CR_V);c.check(0x8025,[V(19),V(17)],'EXH_SPD');a(0x0087,V(19),V(17));c.label('EXH_SPD')
 c.check(0x0021,[V(19),F(8)],'EXH_AT');a(0x000b,V(19),F(10));c.check(0x0021,[V(19),F(100)],'EXH_D');a(0x0007,V(19),F(100));c.label('EXH_D');a(0x0407,V(5),F(0),V(19),F(0),V(9),V(10),V(17))
-c.label('EXH_AT');a(0x02ce,V(9),V(10),F(1000),V(28));a(0xddc,I(DEST_X),V(9));a(0xddc,I(DEST_Y),V(10));a(0xddc,I(DEST_Z),V(28));c.set(GROVE_WAIT,0);c.set(GROVE_NEXT_SCAN,0);c.set(AVOID_STAGE,0);c.set(AUTO_EXIT,1);c.call('UNFREEZE');a(0x01bd,V(21));state(c,21);msg(c,'HCXHERE');c.go('TICK')
+c.label('EXH_AT');a(0x02ce,V(9),V(10),F(1000),V(28));a(0xddc,I(DEST_X),V(9));a(0xddc,I(DEST_Y),V(10));a(0xddc,I(DEST_Z),V(28));c.set(GROVE_WAIT,0);c.set(GROVE_NEXT_SCAN,0);c.set(AVOID_STAGE,0);c.set(AUTO_EXIT,1);c.call('EXIT_UNFREEZE');a(0x01bd,V(21));state(c,21);msg(c,'HCXHERE');c.go('TICK')
 # v39b: while hovering over the destination, a failed rope drop (slope, height window, shaft)
 # moves the helicopter 6-8 m to another spot, re-hovers 16 m above the ground there and retries
 # after 3.5 s - up to 5 times - before reporting RPDFAIL.
@@ -837,8 +837,15 @@ c.label('LAND_SPEED_FAST');a(0x00ad,V(5),F(25));c.ret()
 c.label('SET_FINAL_LANDING');a(0x0743,V(5),V(26),V(27),V(28),F(0),F(0));a(0x00ad,V(5),F(8));c.ret()
 
 c.label('UNFREEZE');c.check(0x056e,[V(5)],'UNFREEZE_DONE');a(0x0574,V(5),I(0))
-c.label('UNFREEZE_DONE');c.set(FROZEN,0);c.ret()
+c.label('UNFREEZE_DONE');c.set(FROZEN,0);c.set(CR_V,0);c.ret()   # 1.2: no stale cruise speed for the next exit
+# 1.2: a helicopter the script is flying (frozen, cruising to Grove / the map point) must not be released for an exit request: the cruise
+# gets its new destination and brakes smoothly (releasing it restarted the cruise from a standstill = a dead stop)
+c.label('EXIT_UNFREEZE');c.get(17,FROZEN);c.eq(17,1,'EXU_DO');c.eq(7,10,'EXU_N21');c.ret()
+c.label('EXU_N21');c.eq(7,21,'EXU_DO');c.ret()
+c.label('EXU_DO');c.call('UNFREEZE');c.ret()
 c.label('CHANGE_CREW');c.get(29,CREW);c.get(30,ACREW);c.check(0x803b,[V(29),V(30)],'CREW_RETURN')
+# 1.2: same rule as the model: only a rope motion in progress makes the change wait (the rope workers abort when the state is 17)
+c.get(17,ROPE_BUSY);c.eq(17,0,'SWAP_DEFER')
 for value in [0,1,2]:
  nxt='CREW_VALIDATE_'+str(value);c.eq(29,value,nxt);c.go('CREW_LOAD');c.label(nxt)
 c.go('CREW_REJECT')
@@ -1223,12 +1230,13 @@ f.label('TARGET_CAR_UNSAFE');a(6,V(30),I(0));f.ret()
 # One checked shot per living guard every 150 ms, toward the current target point.
 # The game's bullet operation handles collision and the visual trace; reject a line
 # containing any protected actor, building, object or intervening vehicle.
-f.label('PRECISE_BULLETS')
+f.label('PRECISE_BULLETS');a(0xddc,I(PB_AIM),V(11));a(0xddc,I(PB_AIM+1),V(12));a(0xddc,I(PB_AIM+2),V(13))   # the aim as called: coordinate mode reloads it for every gunner
 for var in [3,4,5,6]:
  skip='PRECISE_SKIP_'+str(var);onfoot='PRECISE_CHECK_ATTACH_'+str(var);origin='PRECISE_ORIGIN_'+str(var);pedmin='PRECISE_PED_MIN_'+str(var);minready='PRECISE_MIN_READY_'+str(var);pedcut='PRECISE_PED_CUT_'+str(var);cutready='PRECISE_CUT_READY_'+str(var)
- f.get(30,FIRE_TASK_MODE);f.eq(30,1,'PRECISE_MODE_DONE_'+str(var));f.get(29,GUARD_TARGET+var-3);alive(f,29,skip);a(6,V(7),I(0));f.check(0x80df,[V(29)],'PRECISE_CAR_'+str(var));f.go('PRECISE_TARGET_DONE_'+str(var));f.label('PRECISE_CAR_'+str(var));f.call('TARGET_CAR_SAFE');f.eq(30,1,skip);a(6,V(7),I(1));f.label('PRECISE_TARGET_DONE_'+str(var));a(0x00a0,V(29),V(11),V(12),V(13));a(0x000b,V(13),F(.25));f.eq(7,1,'PRECISE_ENGINE_DONE_'+str(var))
+ f.get(30,FIRE_TASK_MODE);f.eq(30,1,'PRECISE_M2_'+str(var));f.get(29,GUARD_TARGET+var-3);alive(f,29,skip);a(6,V(7),I(0));f.check(0x80df,[V(29)],'PRECISE_CAR_'+str(var));f.go('PRECISE_TARGET_DONE_'+str(var));f.label('PRECISE_CAR_'+str(var));f.call('TARGET_CAR_SAFE');f.eq(30,1,skip);a(6,V(7),I(1));f.label('PRECISE_TARGET_DONE_'+str(var));a(0x00a0,V(29),V(11),V(12),V(13));a(0x000b,V(13),F(.25));f.eq(7,1,'PRECISE_ENGINE_DONE_'+str(var))
  if var in (3,5):a(0x0407,V(22),F(0),F(1.8),F(.3),V(11),V(12),V(13))
- f.label('PRECISE_ENGINE_DONE_'+str(var));f.get(30,GT_SUPP+var-3);f.eq(30,1,'PRECISE_MODE_DONE_'+str(var));f.get(11,SUP_X+var-3);f.get(12,SUP_Y+var-3);f.get(13,SUP_Z+var-3);f.label('PRECISE_MODE_DONE_'+str(var))
+ f.label('PRECISE_ENGINE_DONE_'+str(var));f.get(30,GT_SUPP+var-3);f.eq(30,1,'PRECISE_MODE_DONE_'+str(var));f.get(11,SUP_X+var-3);f.get(12,SUP_Y+var-3);f.get(13,SUP_Z+var-3);f.go('PRECISE_MODE_DONE_'+str(var))
+ f.label('PRECISE_M2_'+str(var));f.get(11,PB_AIM);f.get(12,PB_AIM+1);f.get(13,PB_AIM+2);f.label('PRECISE_MODE_DONE_'+str(var))
  alive(f,var,skip);a(0x00a0,V(var),V(8),V(9),V(10));a(0x000b,V(10),F(.25));a(0x050a,V(8),V(9),V(10),V(11),V(12),V(13),V(17));f.check(0x0023,[F(150),V(17)],skip)
  # 1.2 dispersion: the aim point is scattered by +-(0.1 m + 1 % of the distance + 2 cm per m/s of helicopter speed) on every axis, before the
  # line checks, so a gunner is no longer a laser (and the friendly-fire checks look at the line he really fires along)

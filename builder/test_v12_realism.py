@@ -366,6 +366,51 @@ w.step(c,ground,n=400)
 assert c.v[5]!=old and w.model[c.v[5]]==497 and w.incar.get(1)==c.v[5] and w.control is True and not w.frozen.get(old),(c.v[5],old,w.incar.get(1),w.control)
 passed('Model swap asked for during the climb waits for the end of the rope work, then CJ sits in the new helicopter')
 
+# =================================================================== findings of the independent review
+# a crew change waits for a rope motion like the model swap does (the rope workers abort when the state is 17)
+def climbing_world():
+ w,c,_=setup();summon(w,c);command(w,c,3,ticks=5);w.car=[0.,0.,18.];w.speed=0.;ground=VM('Helicover_Ground',w);w.step(c,ground,n=3)
+ w.shared[b.ROPE_COMMAND]=1;w.step(c,ground,n=5);rope=[w.shared[b.GROUND_PUB+i] for i in range(4)]
+ for ch,(x,y) in zip(rope,[(-1.5,1.2),(1.5,1.2),(-1.5,-1.2),(1.5,-1.2)]):w.pos[ch]=[x,y,.7]
+ w.now+=8000;w.player=[0.,-3.,.7];w.step(c,ground,n=8);assert w.control is False;return w,c,ground
+w,c,ground=climbing_world();w.shared[b.CREW]=1;w.messages.clear();w.step(c,ground,n=4)
+assert w.control is False and w.shared[b.ACREW]!=1 and 'HCSLATE' in w.messages,(w.control,w.shared[b.ACREW],w.messages)
+w.step(c,ground,n=400)
+assert w.incar.get(1)==c.v[5] and w.control is True and w.shared[b.ACREW]==1,(w.incar,w.control,w.shared[b.ACREW])
+passed('A crew change asked for during CJ\'s climb waits for the end of the rope work: CJ is not left on the ground')
+w,c,ground,sq,team=escort_world();V=(c,ground,sq)
+for k,t_ in enumerate(team):w.pos[t_]=[BG[k][0],BG[k][1],0.]
+w.pos[team[3]]=[0.,-18.,0.];w.car=[0.,-40.,28.];w.shared[b.CMD]=17;steps(w,V,6);w.car=[c.v[26],c.v[27],c.v[28]+18.];w.speed=0.;steps(w,V,40)
+assert w.shared[b.ESCORT_ON]==3,w.shared[b.ESCORT_ON]
+w.shared[b.CREW]=1;w.messages.clear();steps(w,V,240)
+assert 'SQBACK' in w.messages and 'HCCREW' in w.messages and w.messages.index('SQBACK')<w.messages.index('HCCREW'),('the recall finishes first, then the crew changes',w.messages)
+assert w.shared[b.ESCORT_ON]==0 and all(t_ not in w.exists for t_ in team) and w.shared[b.ACREW]==1
+passed('A crew change in the middle of a squad recall does not cancel it: the squad climbs aboard first, then the crew changes')
+# leaving a script-flown helicopter: the cruise keeps its speed and brakes along the way (no dead stop)
+w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.speed=0.;command(w,c,7,ticks=2);w.step(c,n=30)
+assert w.shared[b.STATE]==10 and w.frozen.get(c.v[5]),(w.shared[b.STATE],);v0=w.shared[b.CR_V];assert v0>8.,v0
+w.shared[b.EXIT_MODE]=1;w.shared[b.CMD]=15;w.step(c,n=3)
+assert w.frozen.get(c.v[5]) and w.shared[b.STATE] in (21,22) and w.shared[b.CR_V]>=.5*v0,('the cruise is not restarted from a standstill',w.shared[b.CR_V],v0,w.shared[b.STATE])
+passed('Exit requested during a scripted flight keeps the helicopter on its cruise and its speed: it slows down smoothly, no dead stop')
+w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.speed=0.;command(w,c,7,ticks=2);w.step(c,n=30);assert w.shared[b.CR_V]>8.
+command(w,c,3,ticks=4);assert not w.frozen.get(c.v[5]) and w.shared[b.CR_V]==0,'a later exit never sees a stale cruise speed'
+passed('Releasing the helicopter clears the cruise speed')
+# re-skinning the squad never touches the invisible platform handle: later clean-up deletes objects only
+w,c,ground,sq,team=escort_world();V=(c,ground,sq)
+for k,t_ in enumerate(team):w.pos[t_]=[BG[k][0],BG[k][1],0.]
+w.shared[b.CREW]=1;steps(w,V,12);w.calls.clear();command(w,c,4,ticks=6);steps(w,V,30)
+assert not [x for x in calls(w,0x108) if x[2][0] in w.pos],'DELETE_OBJECT must never get a ped handle'
+passed('After a live re-skin the clean-up deletes only real objects (no ped handle in the platform slot)')
+# muster: the guards walk to the side they are mounted on
+w,c,_=setup();summon(w,c);g['near_cj_landing'](w,c);w.player=w.car.copy();hx,hy=w.car[:2]
+for var,sign in ((13,1),(14,-1),(15,1),(16,-1)):w.pos[c.v[var]]=[hx-sign*20.,hy+2.,0.]
+w.attach.clear();[w.incar.pop(c.v[v],None) for v in (13,14,15,16)];w.calls.clear();command(w,c,6,ticks=3)
+sides={}
+for var in (13,14,15,16):
+ o=[x[2] for x in calls(w,0x5d3) if x[2][0]==c.v[var]];assert o,('muster order',var);sides[var]=1 if o[-1][1]>hx else -1
+assert sides=={13:1,14:-1,15:1,16:-1},sides
+passed('Boarding muster: each guard walks to the side of the helicopter he is mounted on (it was mirrored: a 4 m snap through the fuselage)')
+
 # =================================================================== one long day: no teleports anywhere
 w,c,ground,sq,team=escort_world();V=(c,ground,sq,VM('Helicover_Fire',w))
 for k,t_ in enumerate(team):w.pos[t_]=[BG[k][0],BG[k][1],0.]

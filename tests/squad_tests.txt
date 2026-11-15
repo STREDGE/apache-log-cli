@@ -67,6 +67,7 @@ PASS: A gunman who is shooting AND turned towards CJ outranks one shooting the o
 PASS: FOLLOW MY SHOTS: single shots (one-frame IS_CHAR_SHOOTING pulses) keep the gunners on his target without flicker
 PASS: FOLLOW MY SHOTS: about a second after CJ stops, the gunners stop too
 PASS: FOLLOW MY SHOTS, free aim at a wall: the gunners fire at the point where his line meets the wall
+PASS: Dispersion in coordinate mode is the same for every gunner (it used to add up: the 4th scattered twice as much)
 PASS: FOLLOW MY SHOTS: nothing on his line within 170 m (the sky) - no rounds wasted
 PASS: FOLLOW MY SHOTS without any bullet trace (grenade, flamethrower): the game's lock-on target still draws fire
 PASS: FOLLOW MY SHOTS: a guard firing next to CJ (CJ not shooting) does not start the gunners

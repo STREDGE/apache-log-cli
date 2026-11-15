@@ -83,6 +83,14 @@ M12=[
  ('threat_v41.py',"a(0x000b,V(t6),F(.3));s.check(0x8025,[V(t3),V(t6)],P+'HELI')","a(0x000b,V(t6),F(.3))",'12 friend takes the credit'),
  ('threat_v41.py',"s.get(t5,b.TB_SEARCH_T);a(0x01bd,V(t6));a(0x0062,V(t6),V(t5));s.check(0x0019,[V(t6),I(250)],P+'HELI')","s.get(t5,b.TB_SEARCH_T);a(0x01bd,V(t6));a(0x0062,V(t6),V(t5));s.check(0x0019,[V(t6),I(0)],P+'HELI')",'12 search throttle'),
  ('build_v25_squad.py',"for key in [b.TB_SHOOTER,b.FIRE_TARGET]","for key in [b.FIRE_TARGET]",'12 squad adopts traced shooter'),
+ # independent review of 1.2: crew change vs rope, scripted exit, platform handle, shared aim, muster
+ ('build_v25.py',"(the rope workers abort when the state is 17)\nc.get(17,ROPE_BUSY);c.eq(17,0,'SWAP_DEFER')\n","(the rope workers abort when the state is 17)\n",'12 crew change waits'),
+ ('build_v25.py',"c.call('EXIT_UNFREEZE');a(0x01bd,V(21))","c.call('UNFREEZE');a(0x01bd,V(21))",'12 exit keeps cruise'),
+ ('build_v25.py',"c.set(FROZEN,0);c.set(CR_V,0);c.ret()","c.set(FROZEN,0);c.ret()",'12 unfreeze clears speed'),
+ ('build_v25_ground.py'," a(0x009a,I(8),V(mdl),V(10),V(11),V(12),V(8));s.check(0x056d,[V(8)],skip)\n a(0x0173,V(8),V(13));a(0x0085,V(7),V(8));s.call('GSETUP');a(0x0223,V(8),V(14));a(0x035f,V(8),V(9))\n s.check(0x0019,[V(4),I(0)],noarm2);a(0x01b2,V(8),V(4),I(30000));a(0x01b9,V(8),V(4));s.label(noarm2)\n a(0x009b,V(var));a(0x0085,V(var),V(8));"," a(0x009a,I(8),V(mdl),V(10),V(11),V(12),V(6));s.check(0x056d,[V(6)],skip)\n a(0x0173,V(6),V(13));a(0x0085,V(7),V(6));s.call('GSETUP');a(0x0223,V(6),V(14));a(0x035f,V(6),V(9))\n s.check(0x0019,[V(4),I(0)],noarm2);a(0x01b2,V(6),V(4),I(30000));a(0x01b9,V(6),V(4));s.label(noarm2)\n a(0x009b,V(var));a(0x0085,V(var),V(6));",'12 decor keeps platform handle'),
+ ('build_v25.py',"f.label('PRECISE_M2_'+str(var));f.get(11,PB_AIM);f.get(12,PB_AIM+1);f.get(13,PB_AIM+2);f.label('PRECISE_MODE_DONE_'+str(var))","f.label('PRECISE_M2_'+str(var));f.label('PRECISE_MODE_DONE_'+str(var))",'12 shared aim reload'),
+ ('build_v25.py',"[(13,4,2,1),(14,-4,2,2),(15,4,-2,-1),(16,-4,-2,-1)]","[(13,-4,2,1),(14,4,2,2),(15,-4,-2,-1),(16,4,-2,-1)]",'12 muster side'),
+ ('build_v25.py',"a(0x0407,V(5),F(x),F(y),F(0),V(17),V(19),V(31));a(0x050a,V(9),V(10),V(11),V(17),V(19),V(31),V(29))","a(0x00aa,V(5),V(17),V(19),V(31));a(0x050a,V(9),V(10),V(11),V(17),V(19),V(31),V(29))",'12 muster point'),
  # E3 / E4
  ('build_v25_squad.py',"s.check(0x0019,[V(30),I(1500)],'AN_RET')","s.check(0x0019,[V(30),I(15)],'AN_RET')",'12 anchor 1.5 s'),
  ('build_v25_squad.py',"s.check(0x0021,[V(31),F(.5)],'AN_OFF')","s.check(0x0021,[V(31),F(-2)],'AN_OFF')",'12 anchor 60 deg'),

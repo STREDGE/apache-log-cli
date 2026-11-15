@@ -412,6 +412,14 @@ w.los_fn=lambda a,z:not((a[0]<15.<=z[0]) or (z[0]<15.<=a[0]))
 cj_fire(w,c,f,60,target=(14.9,0.,.9));ends=fired_at(w,0)
 assert ends and all(13.5<e[0]<16.5 and abs(e[1])<1.5 for e in ends),ends[:5]
 passed('FOLLOW MY SHOTS, free aim at a wall: the gunners fire at the point where his line meets the wall')
+# the four gunners share one aim point in coordinate mode: the scatter must not add up from gunner to gunner
+import collections,statistics
+w,c,f=follow_world([]);w.jitter=True;w.los_fn=lambda a,z:not((a[0]<15.<=z[0]) or (z[0]<15.<=a[0]))
+cj_fire(w,c,f,150,target=(14.9,0.,.9));groups=collections.defaultdict(list)
+for x in calls(w,0x6bc):groups[(x[2][0]>1.5,x[2][1]>-40.2)].append(x[2][4])   # the four door positions
+spreads=[statistics.pstdev(v) for v in groups.values() if len(v)>=12]
+assert len(spreads)>=3 and max(spreads)/min(spreads)<1.6,('every gunner scatters alike',[round(s,2) for s in spreads])
+passed('Dispersion in coordinate mode is the same for every gunner (it used to add up: the 4th scattered twice as much)')
 w,c,f=follow_world([]);cj_fire(w,c,f,60,target=(120.,0.,40.))
 assert not calls(w,0x6bc),'shots at the sky / far scenery do not draw gunner fire'
 passed('FOLLOW MY SHOTS: nothing on his line within 170 m (the sky) - no rounds wasted')
