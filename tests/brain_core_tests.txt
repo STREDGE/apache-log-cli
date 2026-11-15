@@ -1,0 +1,25 @@
+PASS: Passers-by, an armed civilian, police without stars and a gang member 30 m away are nobody; an armed gang member turned to CJ is a THREAT, turned away he is only watched
+PASS: With a wanted level an armed policeman turned to CJ is a THREAT, one with a nightstick is watched
+PASS: "Turned to CJ" is 40 degrees either side; a man known to be behind a wall, one 55 m away or one sitting in a car is watched, not engaged
+PASS: Anybody who holds a weapon on CJ for a quarter of a second is a THREAT, whoever he is; lowering it clears him within 0.3 s (not on the very next look: a gun that wavers is still a gun)
+PASS: A weapon held on one of ours counts the same; an unarmed man "targeting" CJ from a distance does not
+PASS: A round that passes within 3 m of CJ (or stops just short of him) makes the shooter an ATTACKER; shooting somewhere else nearby only gets him watched
+PASS: Fire at one of ours counts as an attack; our own fire and CJ's never turn anybody of ours into a suspect
+PASS: A sniper too far away to be in the snapshot is still known from his shot: an ATTACKER, placed at the muzzle
+PASS: Whoever hurts CJ or one of ours is an ATTACKER (a punch is enough); the people CJ and the guards hurt are not thereby enemies
+PASS: An attacker who does nothing more for 20 s is an ordinary man again
+PASS: A shooter who disappears round a corner is remembered where he was last seen for 20 s (at a quarter of his danger); a passer-by is forgotten in 4 s
+PASS: A dead man is dropped at once
+PASS: Friends come from the game: ours, Grove, recruited homies, whoever respects CJ - even armed and looking at him. Hatred set by the game overrides the uniform, and an "ally" who puts 20+ damage into CJ is an attacker
+PASS: In a mission the mission's own people are only watched until they put a weapon on CJ or attack - the brain does not start the mission's fights for it
+PASS: A car whose path comes within 2.5 m of CJ in the next 2 s at 8 m/s or more is called out as RAMMING; passing wide, slow, far, leaving, or CJ in a car - not
+PASS: A burning car within 14 m of CJ is a hazard; a wreck or a distant fire is not, and our own helicopter never is
+PASS: The alert level rises at once (calm, wary, threat, combat) and comes down one step per 6 quiet seconds, not straight to calm
+PASS: Four riflemen on CJ at once, or any attacker while CJ is below 30 health, means EVACUATE; a cutscene lets the level fall
+PASS: Contacts are ranked by the damage they can be expected to do to CJ: the rifle already on him, then the rifle close by, then the pistol at long range, then the man looking away
+PASS: 300 people around CJ (64 fit in a snapshot, 96 in memory): the six who fired, standing further away than all of them, are never pushed out
+PASS: Black box: a random 30 s fight (300 snapshots, 416 kB) decodes byte for byte and replays in a fresh brain to exactly the same decisions, tick by tick
+PASS: Black box in a small buffer: the oldest records make room (237 dropped), the last 63 are intact and in order
+PASS: Twenty random fights run twice give identical decisions: the core has no hidden state and no hidden randomness
+PASS: 300 snapshots of pure noise (counts beyond the arrays, NaNs, wild ids) and a damaged black box: no crash, outputs stay in range
+The core only. Nothing here has run in the game.
