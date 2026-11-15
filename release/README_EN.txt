@@ -6,6 +6,29 @@ Call a support helicopter: it flies in from far away, follows CJ and covers him 
 gunners. Drop a four-man team on foot, get picked up by rope, fly to the map marker or Grove
 Street and get out there by landing or by rope.
 
+NEW IN BETA 6
+- Messages arrive at once. In the mobile game the help box is a queue: every message stayed for 5
+  seconds and the next one waited its turn, so calls ran far behind the events. The mod now draws
+  one line of its own at the top centre of the screen: it is there in the same frame and is replaced
+  at once by the next one. One line only - messages never overlap. The answer to a button you
+  pressed takes the line immediately; only an alarm may replace it early.
+- PROTECT ME is close protection now, not a gang war. The gunners engage real threats only: whoever
+  hurt CJ, the crew or the helicopter, whoever fires towards CJ, or an armed gang member (a
+  policeman when CJ is wanted) on foot within 40 m, turned to CJ and in sight. Gang members walking
+  by and cars driving past are left alone. No fire mode makes the gunners "hate" a ped type any
+  more, so the game's own AI no longer opens fire on cars.
+- The gunners do not blow cars up. Nobody aims at an engine; a car below 700 health (it burns below
+  250) is not fired at at all - in every mode, WHERE I SHOOT included.
+- CJ in the line of fire: if a round would pass within 2 m of CJ the gunner holds fire and lowers
+  his weapon.
+- New call "CAR ON FIRE! Get away from it." when a car burns within 12 m of CJ.
+- Your people no longer cower. Punched or shot at they used to duck with their hands over their
+  heads: the game gave them an ordinary pedestrian's behaviour. Pilot, gunners and squad now have
+  the "empty" behaviour - they carry on with their orders and can never turn on CJ. For the reload
+  drill the squad takes a knee with the weapon instead of the scared pose.
+- Door gunners kneel on the skids instead of standing bolt upright. If it looks worse in the game:
+  SETTINGS > GUNNERS: KNEELING / STANDING.
+
 NEW IN BETA 5
 - The menu opens at once. After a tap on "helicover" in the CLEO list it used to take almost a
   second: the mod's scripts checked each other with fixed pauses. Now the menu is there on the
@@ -88,7 +111,7 @@ CJ aboard: FLY TO MAP MARKER, FLY TO GROVE STREET, EXIT BUTTON: LAND / EXIT BUTT
 [X] marks what the vehicle exit button does - the exit itself is that button), GUNNER FIRE >,
 SETTINGS >.
 SETTINGS: crew, helicopter model, crew weapon, squad tactics (GUARD / ASSAULT),
-messages (ALL / IMPORTANT / OFF).
+messages (ALL / IMPORTANT / OFF), gunners' pose (KNEELING / STANDING).
 
 LANGUAGE
 The mod draws its text with the game's own font, and the game has a different font per language.
@@ -98,8 +121,9 @@ supported). The language changes together with the game's, no restart needed.
 
 MESSAGES
 Calls sound like radio traffic: PILOT (blue), GUNNERS, SQUAD and MEDIC (green), HELICOVER hints
-(yellow), alarms in red capitals. Important calls replace less important ones. ALL shows
-everything; IMPORTANT only alarms and tactics; OFF is silent except for why a command was refused.
+(yellow), alarms in red capitals. One line at the top of the screen; important calls replace
+less important ones at once. ALL shows everything; IMPORTANT only alarms and tactics; OFF is
+silent except for why a command was refused.
 
 TIPS
 - If it cannot land or hover, move to open, level ground.
@@ -111,8 +135,8 @@ TIPS
 
 HONEST LIMITS
 - This is a beta. I cannot see a phone screen, so the logic was checked on a simulation of the game,
-  not in the game: flight, the squad, the double-press protection, the WHERE I SHOOT mode and how
-  fast the menu opens (beta 5) need
+  not in the game: what is new in beta 6 (look and place of the message line, your people under
+  attack, the kneeling gunners, the new fire rules), flight, the squad and the WHERE I SHOOT mode need
   your check. The Russian letters in the game's Russian were confirmed on a phone (beta 3).
 - The look of the menu itself (the blue box) is drawn by CLEO, not by Helicover: the mod only
   supplies the rows. A new look for the CLEO menu is a separate mod (CLEO UI).

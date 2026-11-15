@@ -130,6 +130,7 @@ class VM:
    elif base in [0xdb,0x448]:cond(w.incar.get(vals[0])==vals[1] or (base==0xdb and w.attached_reports_incar and vals[0] in w.attach and w.attach[vals[0]][0]==vals[1]))
    elif base==0xdf:cond(vals[0] in w.incar or (w.attached_reports_incar and vals[0] in w.attach))
    elif base==0xa32:cond(vals[0] in w.attach)
+   elif base==0x9f2:cond(getattr(w,'empty_dm',True))
    elif base==0x2e0:cond(w.shooting if vals[0]==1 else vals[0] in w.shooting_chars)
    elif base==0x10f:cond(w.wanted>vals[1])
    elif base==0x2f2:cond(w.skin.get(vals[0])==vals[1])
@@ -139,7 +140,9 @@ class VM:
    elif base==0x6bd:cond(w.siteclear and w.clear_fn(vals[0],vals[1]) and getattr(w,'los_fn',lambda a,b:True)(vals[:3],vals[3:6]) and (w.ray_block_distance is None or math.dist(vals[:3],vals[3:6])<w.ray_block_distance) and not (vals[8] and any(w.seg_dist(vals[:3],vals[3:6],pos)<rad for pos,rad in getattr(w,'blockers',[]))) and not (vals[7] and getattr(w,'car_body',None) and w.incar.get(1) in w.cars and w.seg_dist(vals[:3],vals[3:6],w.cars[w.incar[1]]['pos'])<w.car_body))   # car_body: CJ's own car is solid for lines that include vehicles
    elif base in [0x51a,0x51c]:cond((vals[0],vals[1]) in w.damage)
    elif op==0xddd:put(0,w.shared[vals[1]])
-   elif op==0xddc:w.shared[vals[0]]=vals[1]
+   elif op==0xddc:
+    w.shared[vals[0]]=vals[1]
+    if vals[0]==b.MSG_ID:w.messages.append(b._mv.KEYS[vals[1]])   # beta 6: a message is 'said' by naming it; the fire worker draws it
    elif op in [6,7,0x85,0x87]:put(0,vals[1])
    elif op==0x93:put(0,float(vals[1]))
    elif op==0x62:put(0,vals[0]-vals[1])
@@ -264,7 +267,7 @@ class VM:
    elif op==0xdf4:put(0,w.events.popleft() if w.events else -1)
    elif op==0xde0:put(0,int(vals[1] in w.touches and w.now-w.touches[vals[1]]>=vals[2]))
    else:
-    assert op in [0x1e5,0x247,0x38b,0x39f,0x1c5,0x8af,0x54a,0x446,0x77a,0x168,0x165,0x7e0,0x957,0x35f,0x825,0x918,0x7bb,0x249,0x4df,0x726,0x780,0x4a2,0x743,0x164,0x1c2,0x1c3,0x1b9,0x687,0x74d,0x5d3,0x4eb,0x637,0x667,0x792,0x619,0x83c,0x99a,0x4ba,0x668,0x713,0x6bc,0xaf,0x7db,0x4e4,0xad,0x853,0x337,0x4ed,0x605,0x614,0x393,0x634,0x7a5,0x856,0x350,0x5ba,0x639,0x5f5,0x78f,0x637,0x5c5],hex(op)
+    assert op in [0x33e,0x33f,0x340,0x342,0x344,0x81c,0x3f0,0x60b,0x1e5,0x247,0x38b,0x39f,0x1c5,0x8af,0x54a,0x446,0x77a,0x168,0x165,0x7e0,0x957,0x35f,0x825,0x918,0x7bb,0x249,0x4df,0x726,0x780,0x4a2,0x743,0x164,0x1c2,0x1c3,0x1b9,0x687,0x74d,0x5d3,0x4eb,0x637,0x667,0x792,0x619,0x83c,0x99a,0x4ba,0x668,0x713,0x6bc,0xaf,0x7db,0x4e4,0xad,0x853,0x337,0x4ed,0x605,0x614,0x393,0x634,0x7a5,0x856,0x350,0x5ba,0x639,0x5f5,0x78f,0x637,0x5c5],hex(op)
   raise AssertionError('loop without WAIT')
 def invariants(w):
  """Beta 4: what must hold between any two frames, whatever was pressed and however often. Returns the list of violations.
@@ -408,6 +411,10 @@ passed('Main menu updates the status in its title while it is open')
 
 def fire_world():
  w,c,_=setup();summon(w,c);f=VM('Helicover_Fire',w);w.step(c,f,n=3);w.shared[b.FIRE]=3;return w,c,f
+def threaten(w,*npcs,weapon=30):
+ """Beta 6: PROTECT CJ engages a real threat only - arm the man and turn him to CJ (an armed gang member / policeman on foot, close, in sight)."""
+ for npc in npcs:
+  w.weapons[npc]=weapon;p=w.pos[npc];w.actor_heading[npc]=math.degrees(math.atan2(-(w.player[0]-p[0]),w.player[1]-p[1]))%360
 def target(w,typ=4,skin=20):
  npc=900;w.exists.add(npc);w.pos[npc]=[20.,0.,0.];w.skin[npc]=skin;w.pedtype[npc]=typ;w.random_char=npc;return npc
 def attacks(w):return [x for x in w.calls if x[1] in [0x74d,0x713,0x668]]
@@ -797,7 +804,7 @@ else:
 w,c,f=fire_world();w.civilians=[]
 for npc,x,y in [(900,0.,0.),(901,-12.,0.),(902,12.,0.),(903,0.,12.)]:
  w.exists.add(npc);w.pos[npc]=[x,y,0.];w.skin[npc]=20;w.pedtype[npc]=7;w.civilians.append(npc)
-w.step(c,f,n=16)
+threaten(w,900,901,902,903);w.step(c,f,n=16)
 assigned=[w.shared[b.GUARD_TARGET+i] for i in range(4)]
 assert len(set(assigned))==4 and all(x in w.civilians for x in assigned),assigned
 assert any(x[2][-1]==18 for x in calls(w,0x6bc))
@@ -844,7 +851,7 @@ else:
 w,c,f=fire_world();w.civilians=[]
 for npc,x,skin,typ in [(900,0.,20,7),(901,-12.,105,7),(902,12.,20,7)]:
  w.exists.add(npc);w.pos[npc]=[x,0.,0.];w.skin[npc]=skin;w.pedtype[npc]=typ;w.civilians.append(npc)
-w.shared[b.GROUND_PUB]=902;w.step(c,f,n=16)
+threaten(w,900,901,902);w.shared[b.GROUND_PUB]=902;w.step(c,f,n=16)
 assigned=[w.shared[b.GUARD_TARGET+i] for i in range(4)]
 assert 901 not in assigned and 902 not in assigned and 900 in assigned,assigned
 passed('Target distribution excludes Grove and the additional ground squad')
@@ -901,8 +908,8 @@ def to_destination(w,c,*vms):
 # menu (beta 4): the two EXIT BUTTON rows are switches for the game's own exit button - they start nothing themselves
 w,c,p=setup(True);summon(w,c);w.incar[1]=c.v[5];launch=VM('Helicover',w);w.step(c,p,launch,n=15)
 assert b'EXIT BUTTON: LAND [X]' in w.menu and b'EXIT BUTTON: ROPE' in w.menu and b'GET OUT HERE' not in w.menu,w.menu
-w.events.append(5);w.step(c,p,n=5);assert w.menu==[b'HELICOVER / SETTINGS',b'CLOSE',b'CREW >',b'HELICOPTER MODEL >',b'CREW WEAPON >',b'SQUAD TACTICS: GUARD',b'MESSAGES: ALL',b'< BACK'] and not any(b'EXIT' in r or b'LANGUAGE' in r for r in w.menu),w.menu
-w.events.append(5);w.step(c,p,n=5);assert w.menu[0]==b'HELICOVER / FOLLOWING',w.menu
+w.events.append(5);w.step(c,p,n=5);assert w.menu==[b'HELICOVER / SETTINGS',b'CLOSE',b'CREW >',b'HELICOPTER MODEL >',b'CREW WEAPON >',b'SQUAD TACTICS: GUARD',b'MESSAGES: ALL',b'GUNNERS: KNEELING',b'< BACK'] and not any(b'EXIT' in r or b'LANGUAGE' in r for r in w.menu),w.menu
+w.events.append(6);w.step(c,p,n=5);assert w.menu[0]==b'HELICOVER / FOLLOWING',w.menu
 st=w.shared[b.STATE];pos=list(w.car)
 for idx,mode,row,key in [(3,1,b'EXIT BUTTON: ROPE [X]','HCXBR'),(3,1,b'EXIT BUTTON: ROPE [X]','HCXBR'),(2,0,b'EXIT BUTTON: LAND [X]','HCXBL'),(2,0,b'EXIT BUTTON: LAND [X]','HCXBL'),(3,1,b'EXIT BUTTON: ROPE [X]','HCXBR')]:
  w.calls.clear();w.messages.clear();w.shared[b.MSG_UNTIL]=0;w.events.append(idx);w.step(c,p,n=12)

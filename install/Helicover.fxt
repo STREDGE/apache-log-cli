@@ -68,6 +68,7 @@ HCRCAN ~b~PILOT:~w~ pickup cancelled. Ropes up.
 HCRUP ~b~PILOT:~w~ squad, back up the ropes.
 HCDSQ ~b~PILOT:~w~ picking the squad up first, then we leave.
 HCFOCUS ~r~SHOOTER ON CJ!~w~ Gunners focusing fire.
+HCBURN ~r~CAR ON FIRE!~w~ Get away from it.
 HCEVADE ~r~TAKING HITS!~w~ Pilot breaking away.
 HCSHOT ~r~TAKING FIRE!~w~ Pilot breaking away.
 HCHELLO ~b~HELICOVER 1.2 BETA~w~ ready. CLEO menu > Helicover.

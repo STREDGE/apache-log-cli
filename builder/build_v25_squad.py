@@ -413,9 +413,9 @@ def guard(k):
  # v41 reload drill: after 10 s of fighting a guard drops into a crouch for 1.5 s (the others keep
  # firing; the clocks are staggered 2.5 s per guard so they never all reload together)
  s.get(31,b.ENG_T+k);a(0x0085,V(19),V(12));a(0x0062,V(19),V(31));s.check(0x0019,[V(19),I(10000)],P+'NO_RELOAD')
- s.check(0x0019,[V(19),I(11500)],P+'RELOADING');a(0xddc,I(b.ENG_T+k),V(12));s.go(P+'NO_RELOAD')
+ s.check(0x0019,[V(19),I(11500)],P+'RELOADING');a(0xddc,I(b.ENG_T+k),V(12));s.get(31,fk(k,'TASK'));s.eq(31,15,P+'NO_RELOAD');a(0x04eb,V(G),I(0));s.go(P+'NO_RELOAD')   # the drill is over: up again
  s.label(P+'RELOADING');s.get(31,fk(k,'TASK'));s.eq(31,15,P+'RELOAD_ISSUE');s.ret()
- s.label(P+'RELOAD_ISSUE');a(0x05c5,V(G),I(1500));setk_lit(k,'TASK',15);later(k,1500);msg('SQRLD');s.ret()
+ s.label(P+'RELOAD_ISSUE');a(0x04eb,V(G),I(1));setk_lit(k,'TASK',15);later(k,1500);msg('SQRLD');s.ret()   # beta 6: 04EB = the weapon crouch; 05C5 TASK_DUCK plays the scared 'cower' pose (CTaskSimpleDuck type 0)
  s.label(P+'NO_RELOAD')
  s.eq(7,1,P+'BODYGUARD')
  # ASSAULT: pair 0/1 advances crouched, guard 2 flanks 9 m to the side of the threat, never further than 25 m from CJ (1.2: was 40 m);

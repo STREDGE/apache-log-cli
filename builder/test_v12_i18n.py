@@ -1,4 +1,4 @@
-"""Helicover 1.2 language and menu (beta 4, beta 5: the menu opens at once): one rule for the language - the game's own Russian -> Russian, anything else -> English -
+"""Helicover 1.2 language and menu (beta 4, beta 5: the menu opens at once, beta 6: notifications as a drawn line, brave crew, kneeling gunners): one rule for the language - the game's own Russian -> Russian, anything else -> English -
 no language page, no FONT TEST, no SanLTD layout; the menu pages in both languages; rows that show an operation in progress instead of
 a button that could be pressed twice; the exit rows as switches; DISMISS with a squad on the ground.
 The game's Russian font is simulated from libGTASA's CFont code; the layout itself was confirmed on the player's phone (beta 3)."""
@@ -65,12 +65,12 @@ for russian,game_lang,efigs,expect in [(False,0,None,0),(True,5,None,1),(False,1
  w,c,p=lang_world(russian,game_lang,efigs);assert w.shared[b.LANG]==expect,(russian,game_lang,efigs,w.shared[b.LANG])
 w,c,p=lang_world(True,5);w.shared[b.GAME_OK]=0;w.step(c,p,n=3);assert w.shared[b.LANG]==0,'an unknown game build is never probed: English'
 passed('The language follows the game: its own Russian -> Russian; English, SanLTD (the French slot), German, Italian, Spanish, Japanese -> English; an unknown build -> English')
-def keys_printed(w):return [x[2][0] for x in calls(w,0x3e5)]
-w,c,p=lang_world(False);w.calls.clear();w.shared[b.CMD]=1;w.step(c,p,n=8);ks=keys_printed(w);assert ks and all(k_[0]=='H' for k_ in ks),ks
-w.russian=True;w.game_lang=5;w.step(c,p,n=3);assert w.shared[b.LANG]==1,'the player switched the game to Russian in the pause menu'
-w.calls.clear();w.shared[b.MSG_UNTIL]=0;w.shared[b.CMD]=3;w.step(c,p,n=8);ks=keys_printed(w);assert ks and all(k_[0]=='U' for k_ in ks),ks
-w.russian=False;w.game_lang=1;w.step(c,p,n=3);assert w.shared[b.LANG]==0
-w.calls.clear();w.shared[b.MSG_UNTIL]=0;w.shared[b.CMD]=2;w.step(c,p,n=8);ks=keys_printed(w);assert ks and all(k_[0]=='H' for k_ in ks),ks
+def keys_printed(w):return [x[2][2] for x in calls(w,0x33e)]   # beta 6: the key the fire worker draws on the screen
+w,c,p=lang_world(False);fw_=VM('Helicover_Fire',w);V_=(c,p,fw_);w.step(*V_,n=2);w.calls.clear();w.shared[b.CMD]=1;w.step(*V_,n=8);ks=keys_printed(w);assert ks and all(k_[0]=='H' for k_ in ks),ks
+w.russian=True;w.game_lang=5;w.step(*V_,n=3);assert w.shared[b.LANG]==1,'the player switched the game to Russian in the pause menu'
+w.calls.clear();w.shared[b.MSG_UNTIL]=0;w.shared[b.CMD]=3;w.step(*V_,n=8);ks=keys_printed(w);assert ks and all(k_[0]=='U' for k_ in ks),ks
+w.russian=False;w.game_lang=1;w.step(*V_,n=3);assert w.shared[b.LANG]==0
+w.calls.clear();w.shared[b.MSG_UNTIL]=0;w.shared[b.CMD]=2;w.step(*V_,n=8);ks=keys_printed(w);assert ks and all(k_[0]=='H' for k_ in ks),ks
 passed('Changing the game language while playing changes the mod\'s language at once (messages: English keys / U keys)')
 
 # =================================================================== the menu
@@ -88,12 +88,12 @@ MAIN_RU=('ЛЕТЕТЬ ЗА МНОЙ [X]','ЖДАТЬ ЗДЕСЬ','ПАТРУЛ�
 w,c,p=open_menu(True)
 assert rows_of(w)==[i18n.encode(x,'game') for x in MAIN_RU],rows_of(w)
 assert [draw_game(r_) for r_ in rows_of(w)]==list(MAIN_RU) and draw_game(w.menu[0])=='HELICOVER / ЛЕТИТ ЗА ВАМИ',[draw_game(r_) for r_ in w.menu]
-press(w,(c,p),6,5);assert [draw_game(r_) for r_ in w.menu]==['HELICOVER / НАСТРОЙКИ','CLOSE','ЭКИПАЖ >','МОДЕЛЬ ВЕРТОЛЕТА >','ОРУЖИЕ ЭКИПАЖА >','ТАКТИКА: ОХРАНА','СООБЩЕНИЯ: ВСЕ','< НАЗАД'],[draw_game(r_) for r_ in w.menu]
+press(w,(c,p),6,5);assert [draw_game(r_) for r_ in w.menu]==['HELICOVER / НАСТРОЙКИ','CLOSE','ЭКИПАЖ >','МОДЕЛЬ ВЕРТОЛЕТА >','ОРУЖИЕ ЭКИПАЖА >','ТАКТИКА: ОХРАНА','СООБЩЕНИЯ: ВСЕ','СТРЕЛКИ: С КОЛЕНА','< НАЗАД'],[draw_game(r_) for r_ in w.menu]
 passed('With the game in Russian the menu is Russian and reads correctly in the simulated font: main page, state in the title, settings')
 w,c,p=open_menu(True,aboard=True)
 assert [draw_game(r_) for r_ in rows_of(w)]==['ЛЕТЕТЬ К МЕТКЕ НА КАРТЕ','ЛЕТЕТЬ НА ГРОУВ-СТРИТ','КНОПКА ВЫХОДА: ПОСАДКА [X]','КНОПКА ВЫХОДА: ВЕРЕВКА','ОГОНЬ СТРЕЛКОВ >','НАСТРОЙКИ >'],[draw_game(r_) for r_ in rows_of(w)]
 w.calls.clear();w.messages.clear();press(w,(c,p),3)
-assert w.shared[b.EXIT_MODE]==1 and draw_game(rows_of(w)[3])=='КНОПКА ВЫХОДА: ВЕРЕВКА [X]' and not orders_given(w) and w.incar.get(1)==c.v[5] and 'UCXBR' in w.messages,(w.menu,orders_given(w),w.messages)
+assert w.shared[b.EXIT_MODE]==1 and draw_game(rows_of(w)[3])=='КНОПКА ВЫХОДА: ВЕРЕВКА [X]' and not orders_given(w) and w.incar.get(1)==c.v[5] and 'HCXBR' in w.messages,(w.menu,orders_given(w),w.messages)
 passed('Aboard in Russian: the two exit-button switches; switching shows the Russian hint and starts nothing')
 # every page: both languages, at most 8 rows, short rows, nothing unreadable, nothing left of the language page
 for label,data in b.p.data.items():
@@ -107,7 +107,7 @@ for label,data in b.p.data.items():
 bases=[l_ for l_ in b.p.data if l_.startswith(('MAIN_','SETUP_','PREF_','DISMISS_')) and not l_.endswith('_U')]
 for base in bases:
  assert base+'_U' in b.p.data and len(b.p.data[base].split(b'\0'))==len(b.p.data[base+'_U'].split(b'\0')),base
-assert all(len([f_ for f_ in b.p.data[l_][4:].split(b'\0')[2:] if f_])==6 for l_ in b.p.data if l_.startswith('SETUP_')),'settings: three sub-pages, two switches, BACK'
+assert all(len([f_ for f_ in b.p.data[l_][4:].split(b'\0')[2:] if f_])==7 for l_ in b.p.data if l_.startswith('SETUP_')),'settings: three sub-pages, three switches, BACK'
 passed('Every one of the %d menu pages has an English and a Russian version with the same rows; at most 8 rows, none longer than 26 (RU 30) characters; no language page, no FONT TEST'%len(bases))
 # the launcher's "files missing" message follows the same rule
 def missing_key(russian,game_lang):
@@ -133,8 +133,8 @@ def squad_menu(russian=False):
  V=(c,p,ground,sq);w.step(*V,launch,n=15);return w,c,p,V
 def hover(w,c):w.car=[c.v[26],c.v[27],c.v[28]+18.];w.speed=0.
 w,c,p,V=squad_menu()
-w.calls.clear();press(w,V,0);press(w,V,0);assert not orders_given(w) or set(orders_given(w))=={2} and w.shared[b.STATE]==2,'FOLLOW ME [X] pressed again changes nothing'
-assert not [k for k in keys_printed(w) if k=='HCFOLL'],'and the pilot does not repeat himself'
+w.calls.clear();w.messages.clear();press(w,V,0);press(w,V,0);assert not orders_given(w) or set(orders_given(w))=={2} and w.shared[b.STATE]==2,'FOLLOW ME [X] pressed again changes nothing'
+assert 'HCFOLL' not in w.messages,'and the pilot does not repeat himself'
 press(w,V,5);assert w.shared[b.STATE]==19 and w.shared[b.ESCORT_PENDING]==1 and rows_of(w)[5]==b'SQUAD ROPING DOWN...' and rows_of(w)[4]==b'CLIMB ABOARD BY ROPE',(w.shared[b.STATE],w.menu)
 w.calls.clear()
 for _ in range(3):press(w,V,5,4)
@@ -228,7 +228,7 @@ w,c,p=open_menu();w.calls.clear();press(w,(c,p),6,4);press(w,(c,p),0,4)
 assert w.menu[0]==b'HELICOVER / CREW' and {x[2][0] for x in calls(w,0x247)}=={105,106,107,285,287},'only the crew skins are requested when the CREW page opens (not three helicopter models)'
 w.calls.clear();press(w,(c,p),3,4);press(w,(c,p),1,4)
 assert w.menu[0]==b'HELICOVER / HELICOPTER' and {x[2][0] for x in calls(w,0x247)}=={487,497,425},'the helicopter models when the HELICOPTER page opens'
-w.calls.clear();press(w,(c,p),3,4);press(w,(c,p),5,4);assert w.menu[0]==b'HELICOVER / FOLLOWING' and {x[2][0] for x in calls(w,0x249)}>={285,287,487,497,425},'and released when the pages are left'
+w.calls.clear();press(w,(c,p),3,4);press(w,(c,p),6,4);assert w.menu[0]==b'HELICOVER / FOLLOWING' and {x[2][0] for x in calls(w,0x249)}>={285,287,487,497,425},'and released when the pages are left'
 passed('Crew and helicopter models are pre-requested while their pages are open, so choosing one does not stall a frame')
 
 # =================================================================== beta 5: the menu opens at once
@@ -316,6 +316,93 @@ for sit in ('none','follow','aboard','squad','rope','leaving'):
   assert not invariants(w),(sit,cmd,invariants(w))
 assert not late,late
 passed('Any order number in any situation (no helicopter, following, aboard, squad down, roping, leaving) is taken or dropped within 2 frames (while leaving: 0.1 s) - an order never stays pending, so the nap cannot turn into a busy loop')
+
+# =================================================================== beta 6: notifications are a line of script text, drawn at once
+mv=b._mv
+def banner_world(russian=False):
+ w,c,p=setup(True);w.russian=russian;w.game_lang=5 if russian else 0;f_=VM('Helicover_Fire',w);V_=(c,p,f_);w.step(*V_,n=3);return w,c,p,f_,V_
+def drawn(w):return [x[2][2] for x in calls(w,0x33e)]
+def say_now(w,key,prio=None,ms=3000):
+ """What say() leaves behind (the scripts' own say() is exercised by every other test)."""
+ w.shared[b.MSG_ID]=mv.KEYS.index(key);w.shared[b.MSG_UNTIL]=w.now+ms;w.shared[b.MSG_HOLD]=w.now+mv.MIN_SHOW_MS;w.shared[b.MSG_PRIO]=mv.PRIO.get(key,2) if prio is None else prio
+for frame_ms in (100,33,16):
+ w,c,p,f_,V_=banner_world();w.frame_ms=frame_ms;w.step(*V_,n=5);w.calls.clear();w.shared[b.CMD]=1
+ n=frames_until(w,V_,lambda w:drawn(w));assert n is not None and n<=3 and set(drawn(w))<={'HCLOAD','HCFOLL'},(frame_ms,n,drawn(w))
+passed('CALL HELICOPTER: the pilot\'s answer is on the screen within 3 frames of the order at 10, 30 and 60 fps (the help box needed 0.3-1.1 s when free and queued 5.65 s per message when not)')
+w,c,p,f_,V_=banner_world();w.calls.clear();say_now(w,'HCFOLL',ms=1000);w.step(*V_);assert not drawn(w) and [x[2] for x in calls(w,0x3f0)]==[[1]],'the first frame only switches the per-frame wiping on'
+frames=[]
+for _ in range(14):w.calls.clear();w.step(*V_);frames.append(drawn(w))
+assert frames[:8]==[['HCFOLL']]*8 and frames[8:]==[[]]*6,frames   # 1000 ms at 100 ms frames: armed at +100, drawn +200..+900, gone at +1000
+w.calls.clear();say_now(w,'HCFOLL');w.step(*V_,n=2);k=w.calls
+order=[x[1] for x in k if x[1] in (0x3f0,0x33f,0x340,0x342,0x344,0x81c,0x33e)][-7:];assert order==[0x3f0,0x33f,0x340,0x342,0x344,0x81c,0x33e],[hex(o) for o in order]
+line=calls(w,0x33e)[-1][2];near=lambda a_,b_:abs(a_-b_)<1e-4;assert near(line[0],mv.BANNER_X) and near(line[1],mv.BANNER_Y) and near(calls(w,0x33f)[-1][2][1],mv.BANNER_HEIGHT) and calls(w,0x342)[-1][2]==[1] and near(calls(w,0x344)[-1][2][0],mv.BANNER_CENTRE_SIZE)
+passed('The line is drawn every frame while the message lasts (exactly its time, to the frame) and never after: wipe on, size, colour, centred, line width, outline, text - one line of text per frame')
+w,c,p,f_,V_=banner_world();say_now(w,'HCFOLL');w.step(*V_,n=3);w.calls.clear();say_now(w,'HCBURN');w.step(*V_);assert drawn(w)==['HCBURN'],'a new message is on the screen in the very next frame, in place of the old one'
+passed('A new message replaces the one on screen in the next frame: never two at once, no queue')
+w,c,p,f_,V_=banner_world(True);say_now(w,'HCBURN');w.step(*V_,n=3);assert set(drawn(w))=={'UCBURN'}
+assert draw_game(fxt['UCBURN'])==i18n.RU_MESSAGES['HCBURN'].replace('ё','е'),draw_game(fxt['UCBURN'])
+passed('In the game\'s Russian the line shows the U key of the same message ("%s")'%i18n.visible(i18n.RU_MESSAGES['HCBURN']))
+assert len(mv.KEYS)==len(en_keys) and set(mv.KEYS)==set(en_keys),'every message can be drawn'
+w,c,p,f_,V_=banner_world()
+for i_,k_ in enumerate(mv.KEYS):
+ for russian in (False,True):
+  w.shared[b.LANG]=int(russian);w.calls.clear();say_now(w,k_);w.step(f_,n=2);assert set(drawn(w))=={i18n.ukey(k_) if russian else k_},(k_,russian,drawn(w))
+passed('Each of the %d messages is drawn with its own text in both languages (two-level dispatch by number)'%len(mv.KEYS))
+# who may take the line from whom
+shown={}
+import asm_v25 as asm,tempfile
+PROBE_DIR=Path(tempfile.mkdtemp(prefix='hc_probe_'))
+def probe_vm(name,w):
+ keep=b.OUT;b.OUT=PROBE_DIR
+ try:return VM(name,w)
+ finally:b.OUT=keep
+PROBE={4:'HCBUSY',3:'HCBURN',2:'HCCLEAR',1:'SQRLD',5:'HCFOLL'}   # an answer to a refused order, an alarm, a routine call, chatter; 5 = the acknowledgement of an order
+assert [mv.PRIO[PROBE[k_]] for k_ in (4,3,2,1,5)]==[4,3,2,1,2] and PROBE[5] in mv.ORDER_ACK and PROBE[2] not in mv.ORDER_ACK
+for new in PROBE:
+ sc=asm.Script();a_=sc.add;a_(0);mv.say(sc,PROBE[new]);sc.label('END');a_(1,asm.I(100000));sc.go('END');_keep=asm.OUT;asm.OUT=PROBE_DIR;sc.build('SayProbe%d'%new,'csa');asm.OUT=_keep   # scratch scripts, built outside build/ so that nothing can ship them
+def probe(new,on_screen=0,age=0,hud=2):
+ w=World();w.shared[b.HUD]=hud;w.now=50000;w.shared[b.MSG_PRIO]=on_screen;w.shared[b.MSG_UNTIL]=w.now+(3000 if on_screen else -1);w.shared[b.MSG_HOLD]=w.now+mv.MIN_SHOW_MS-age;w.step(probe_vm('SayProbe%d'%new,w));return w
+for on_screen in (4,3,2,1):
+ for age in (0,mv.MIN_SHOW_MS+100):
+  for new in (4,3,2,1):
+   got=bool(probe(new,on_screen,age).messages);want=new==4 or new>=on_screen or (age>0 and on_screen-new==1);assert got==want,(on_screen,age,new,got)
+passed('Who takes the line: an answer to a refused order always; an equally or more important call at once; a call one level lower only after the line has been readable for %.1f s; anything lower waits for it to end'%(mv.MIN_SHOW_MS/1000.))
+for on_screen in (4,3,2,1):assert probe(5,on_screen).messages==['HCFOLL'],on_screen
+w=probe(5,4);assert w.shared[b.MSG_PRIO]==3 and probe(3,3,0).messages and not probe(2,3,0).messages and probe(2,3,mv.MIN_SHOW_MS+100).messages
+assert not probe(5,hud=0).messages and probe(5,hud=1).messages and probe(4,hud=0).messages and not probe(1,hud=1).messages and not probe(3,hud=0).messages
+passed('The acknowledgement of an order ("PILOT: following you") takes the line at once whatever is on it; an alarm may replace it at once, a routine call after %.1f s. MESSAGES: OFF still silences it (not the answers to refused orders), IMPORTANT drops only chatter'%(mv.MIN_SHOW_MS/1000.))
+w=probe(3);assert w.shared[b.MSG_UNTIL]==w.now+mv.SHOW_MS[3] and w.shared[b.MSG_HOLD]==w.now+mv.MIN_SHOW_MS and w.shared[b.MSG_PRIO]==3 and w.shared[b.MSG_ID]==mv.KEYS.index('HCBURN')
+for name in ('Helicover_Core','Helicover_Fire','Helicover_Ground','Helicover_Squad','Helicover_Panel'):
+ import check_wait_loops as cw
+ ins,order=cw.parse(name);assert not [a_ for a_ in order if (ins[a_][0]&0x7fff)==0x3e5],name
+passed('No script but the launcher ("files missing") uses the help box any more')
+
+# =================================================================== beta 6: our people do not cower
+w,c,p=open_menu();dm=[x[2] for x in calls(w,0x60b)];crew=[c.v[4]]+[c.v[v] for v in (13,14,15,16)]
+assert sorted(x[0] for x in dm)==sorted(crew) and all(x[1]==b.EMPTY_DM for x in dm),dm
+w,c,p,V=squad_menu();w.calls.clear();press(w,V,5);hover(w,c);w.step(*V,n=40);team=[w.shared[b.GROUND_PUB+i] for i in range(4)]
+assert all(t in w.exists for t in team) and sorted(x[2][0] for x in calls(w,0x60b))==sorted(team),(team,[x[2] for x in calls(w,0x60b)])
+before=set(w.exists);w.calls.clear();w.shared[b.CREW]=(w.shared[b.CREW]+1)%3;w.step(*V,n=40);fresh={x[2][0] for x in calls(w,0x60b)};made={x[5] if False else x for x in set(w.exists)-before}
+assert len(made)>=9 and made<=fresh and all(x[2][1]==b.EMPTY_DM for x in calls(w,0x60b)),('everybody created for the change of clothes - pilot, four gunners, four squad members - gets it again',sorted(made),sorted(fresh))
+w2,c2,p2=setup(True);w2.empty_dm=False;summon(w2,c2);assert not calls(w2,0x60b),'no such decision maker in this game build: nothing is set (they behave as before)'
+for name in ('Helicover_Core','Helicover_Ground','Helicover_Squad','Helicover_Fire'):
+ ins,order=cw.parse(name);assert not [a_ for a_ in order if (ins[a_][0]&0x7fff)==0x5c5],name
+passed('Pilot, gunners and every squad member (also after a change of clothes) get the game\'s empty decision maker: punched or shot at they keep their task instead of ducking with their hands over their heads; TASK_DUCK (the scared pose) is not used anywhere')
+
+# =================================================================== beta 6: door gunners kneel
+def pose_calls(w,c):return {c.v[v]:[x[2][1] for x in calls(w,0x4eb) if x[2][0]==c.v[v]] for v in (13,14,15,16)}
+w,c,p=open_menu();pc=pose_calls(w,c);assert all(v and v[-1]==1 for v in pc.values()),pc
+att={x[2][0]:x[0] for x in calls(w,0x464)};assert all([x[0] for x in calls(w,0x4eb) if x[2]==[g_,1]][-1]>=att[g_] for g_ in att),'the crouch is asked for after the attach'
+passed('Door gunners kneel on the skids by default (TASK_TOGGLE_DUCK right after they are mounted)')
+press(w,(c,p),6,4);assert rows_of(w)[5]==b'GUNNERS: KNEELING';w.calls.clear();press(w,(c,p),5,6)
+assert rows_of(w)[5]==b'GUNNERS: STANDING' and w.shared[b.POSE]==0 and len(calls(w,0x464))==4 and all(v and v[-1]==0 for v in pose_calls(w,c).values()),(rows_of(w),pose_calls(w,c))
+assert all(w.weapons[c.v[v]]!=0 for v in (13,14,15,16)),'re-mounting strips the weapons: they are handed back at once'
+w.calls.clear();w.now+=1100;press(w,(c,p),5,6);assert rows_of(w)[5]==b'GUNNERS: KNEELING' and all(v and v[-1]==1 for v in pose_calls(w,c).values())
+w.calls.clear();w.step(c,p,n=20);assert not calls(w,0x464),'the crew is re-mounted once per change, not every pass'
+passed('SETTINGS > "GUNNERS: KNEELING / STANDING" switches the pose at once (crew re-mounted once, weapons back in their hands)')
+w,c,f=g['fire_world']();npc=g['target'](w);w.damage.add((1,npc));w.step(c,f,n=14);w.calls.clear();w.exists.discard(npc);w.step(c,f,n=20)
+gun=[c.v[v] for v in (13,14,15,16)];assert calls(w,0x687) and all([x[0] for x in calls(w,0x4eb) if x[2]==[g_,1]] for g_ in gun if g_ in w.attach),(len(calls(w,0x687)),[x[2] for x in calls(w,0x4eb)])
+passed('After a fight the gunners go back to one knee (clearing their fire task would leave them standing)')
 
 text='\n'.join(results)+'\nMocked script execution only: the Russian layout was confirmed on the player\'s phone (beta 3); the look of the menu itself is the game\'s.\n'
 (b.OUT/'i18n_tests.txt').write_text(text);print(text)

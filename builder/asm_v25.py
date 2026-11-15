@@ -20,7 +20,11 @@ for _op,_name,_n in [(0x020a,'SET_CAR_DOORS_LOCKED',2),(0x0a52,'IS_WIDGET_RELEAS
  # 1.2: GET_RANDOM_FLOAT_IN_RANGE (min, max, result): checked in libGTASA (ProcessCommands500To599 case 0x208: two floats in, one float out)
  (0x0208,'GENERATE_RANDOM_FLOAT_IN_RANGE',3),
  # beta 4: a guard who is let go strolls away like a pedestrian (one parameter in libGTASA's handler)
- (0x05de,'TASK_WANDER_STANDARD',1)]:
+ (0x05de,'TASK_WANDER_STANDARD',1),
+ # beta 6 (parameter counts read from the handlers in libGTASA): the empty decision maker for our people, script text for the notifications
+ (0x060b,'SET_CHAR_DECISION_MAKER',2),(0x09f2,'DOES_DECISION_MAKER_EXIST',1),
+ (0x033e,'DISPLAY_TEXT',3),(0x033f,'SET_TEXT_SCALE',2),(0x0340,'SET_TEXT_COLOUR',4),(0x0342,'SET_TEXT_CENTRE',1),(0x0344,'SET_TEXT_CENTRE_SIZE',1),
+ (0x081c,'SET_TEXT_EDGE',5),(0x03f0,'USE_TEXT_COMMANDS',1)]:
  LIB.setdefault(_op,{'id':'%04X'%_op,'name':_name,'num_params':_n})
 STATE=0x48454d00;CMD=STATE+1;HEART=STATE+2
 # Protocol: commands 1 summon, 2 follow, 3 hold, 4 depart.
