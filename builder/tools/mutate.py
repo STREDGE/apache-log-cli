@@ -74,6 +74,7 @@ M12=[
  ('build_v25_squad.py',"s.check(0x0021,[V(24),F(40)],P+'NEAR');form_point(k)","s.check(0x0021,[V(24),F(4000)],P+'NEAR');form_point(k)",'12 far guards sprint'),
  ('build_v25_squad.py',"s.get(25,b.SQ_DRIVES);s.eq(25,1,R)","pass",'12 driver only'),
  ('build_v25_squad.py',"a(0x05ca,V(G),V(6),I(8000),I(k))","a(0x05ca,V(G),V(6),I(8000),I(0))",'12 own seat'),
+ ('build_v25_squad.py',"a(0x05f5,V(G),V(26),V(27),V(28),I(7),I(20000));setk_lit(k,'TASK',7)","a(0x00a1,V(G),V(26),V(27),V(28));setk_lit(k,'TASK',7)",'12 far guard teleport'),
  # E3 / E4
  ('build_v25_squad.py',"s.check(0x0019,[V(30),I(1500)],'AN_RET')","s.check(0x0019,[V(30),I(15)],'AN_RET')",'12 anchor 1.5 s'),
  ('build_v25_squad.py',"s.check(0x0021,[V(31),F(.5)],'AN_OFF')","s.check(0x0021,[V(31),F(-2)],'AN_OFF')",'12 anchor 60 deg'),

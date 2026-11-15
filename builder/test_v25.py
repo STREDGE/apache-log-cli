@@ -867,6 +867,7 @@ w.events.append(4);w.step(c,p,n=5);assert w.shared[b.EXIT_MODE]==1 and w.menu[6]
 w.events.append(4);w.step(c,p,n=5);assert w.shared[b.EXIT_MODE]==0 and w.menu[6]==b'EXIT BUTTON: LAND'
 w.events.append(4);w.step(c,p,n=5);w.events.append(7);w.step(c,p,n=5);assert w.menu[0]==b'HELICOVER / FOLLOWING' and b'EXIT: ROPE [X]' in w.menu,w.menu
 w.calls.clear();w.events.append(2);w.step(c,p,n=6);assert w.shared[b.EXIT_MODE]==0 and any(x[2]==[b.CMD,15] for x in calls(w,0xddc)),'EXIT: LAND is one tap and starts the exit'
+w.calls.clear();w.events.append(3);w.step(c,p,n=6);assert w.shared[b.EXIT_MODE]==1 and any(x[2]==[b.CMD,15] for x in calls(w,0xddc)),'EXIT: ROPE is one tap and starts the exit'
 passed('Aboard, EXIT: LAND and EXIT: ROPE are one tap each; the settings page has the same choice for the exit button')
 # doors are locked against the player while CJ is aboard, unlocked when he is outside
 w,c,_=setup();summon(w,c);w.step(c,n=3);assert w.locks.get(c.v[5])==1

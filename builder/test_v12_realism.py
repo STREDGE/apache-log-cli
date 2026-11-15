@@ -213,8 +213,8 @@ passed('When CJ stops shooting the guard returns to his slot')
 w,c,ground,sq,team=escort_world(tactics=1);V=(c,ground,sq)
 AS=sqb.AS_FORM
 for k,t_ in enumerate(team):w.pos[t_]=list(AS[k])+[0.]
-hostile=950;w.exists.add(hostile);w.pos[hostile]=[40.,0.,0.];w.pedtype[hostile]=7;w.weapons[hostile]=30;w.civilians=[hostile];w.damage.add((1,hostile))
-w.pos[team[0]]=[0.,27.,0.];w.calls.clear();w.now+=3000;steps(w,V,6)
+hostile=950;w.exists.add(hostile);w.pos[hostile]=[20.,0.,0.];w.pedtype[hostile]=7;w.weapons[hostile]=30;w.civilians=[hostile];w.damage.add((1,hostile))
+w.pos[team[0]]=[0.,27.,0.];w.calls.clear();w.now+=3000;steps(w,V,6);assert w.shared[b.SQ_T]==hostile,'the hostile is a threat'
 o=last(w,0x5d3,team[0]);assert abs(o[2]-AS[0][1])<.5 and not orders(w,0x637,team[0]),o
 passed('Assault: a guard 27 m from CJ turns back to his slot (25 m cap, was 40 m)')
 assert not orders(w,0x637,team[3]),'the medic never joins the advance'
@@ -301,7 +301,8 @@ assert c.v[5]!=old and w.frozen.get(c.v[5]) and all(r_ in w.exists for r_ in rop
 passed('Helicopter swapped while the ropes are out: the rope session carries on with the new helicopter, still frozen on the spot')
 
 # the same swap with a team on the ground, and a crew change while the ropes are out
-w,c,ground,sq,team=escort_world();V=(c,ground,sq);old=c.v[5];w.shared[b.MODEL]=497;steps(w,V,14)
+w,c,ground,sq,team=escort_world();V=(c,ground,sq);old=c.v[5];w.calls.clear();w.shared[b.MODEL]=497;steps(w,V,14)
+assert not any(x[2]==[b.SQ_GROUP,0] for x in calls(w,0xddc)),'the squad never lets go of the team on the ground during the swap'
 assert c.v[5]!=old and w.shared[b.ESCORT_ON]==1 and all(t_ in w.exists for t_ in team) and w.shared[b.GROUND_PUB]==team[0],(w.shared[b.ESCORT_ON],w.messages)
 passed('Helicopter model changed while the escort team is on the ground: the team is not recalled or lost')
 w,c,_=setup();summon(w,c);command(w,c,3,ticks=5);w.car=[0.,0.,18.];w.speed=0.;ground=VM('Helicover_Ground',w);w.step(c,ground,n=3)
@@ -320,6 +321,31 @@ assert c.v[5]==old and w.control is False and 'HCSLATE' in w.messages,(c.v[5],ol
 w.step(c,ground,n=400)
 assert c.v[5]!=old and w.model[c.v[5]]==497 and w.incar.get(1)==c.v[5] and w.control is True and not w.frozen.get(old),(c.v[5],old,w.incar.get(1),w.control)
 passed('Model swap asked for during the climb waits for the end of the rope work, then CJ sits in the new helicopter')
+
+# =================================================================== one long day: no teleports anywhere
+w,c,ground,sq,team=escort_world();V=(c,ground,sq,VM('Helicover_Fire',w))
+for k,t_ in enumerate(team):w.pos[t_]=[BG[k][0],BG[k][1],0.]
+w.teleports.clear();w.calls.clear()
+# a fire fight: two hostiles come at CJ and die
+for i,(x,y) in enumerate([(18.,6.),(18.,-6.)]):
+ h=970+i;w.exists.add(h);w.pos[h]=[x,y,0.];w.pedtype[h]=7;w.weapons[h]=30;w.shooting_chars.add(h);w.damage.add((1,h));w.civilians.append(h)
+steps(w,V,40)
+for h in (970,971):w.dead.add(h);w.shooting_chars.discard(h)
+steps(w,V,20)
+# CJ takes a car and drives 600 m away at 15 m/s, the squad cannot follow
+car=777;w.exists.add(car);w.cars[car]={'pos':[0.,0.,0.],'heading':0.};w.model[car]=400;w.incar[1]=car;w.seats_count=0   # a car with no free seat for the squad
+for _ in range(400):
+ w.cars[car]['pos'][0]+=1.5;w.player=list(w.cars[car]['pos']);w.speed=15.;w.car_speeds={car:15.};w.step(*V)
+w.car_speeds={};w.incar.pop(1);w.player=[w.cars[car]['pos'][0],w.cars[car]['pos'][1],0.];w.speed=12.
+steps(w,V,100);w.now+=65000;steps(w,V,20)
+alive=[g_ for g_ in team if g_ in w.exists and g_ not in w.released]
+assert w.shared[b.ESCORT_ON]==0 and not alive and 'SQAWAY' in w.messages,('the lagging team is stood down',w.shared[b.ESCORT_ON],alive,w.messages)
+# the helicopter, still following him, is told to leave
+command(w,c,4,ticks=6);w.now+=40000;steps(w,V,20)
+bad=[x for x in w.teleports if x['who']!=c.v[5] or x['dist']>12.]
+bad=[x for x in bad if not (x['who']==c.v[5] and x['op']==0xab)]
+assert not bad,[(hex(x['op']),x['who'],round(x['dist'],1)) for x in bad][:6]
+passed('A whole day - deploy, fire fight, CJ drives off, the squad cannot keep up, dismiss - without a single teleport of a person')
 
 text='\n'.join(results)+'\nMocked script execution only: real flight, pathing and animations are not simulated.\n'
 (b.OUT/'realism_tests.txt').write_text(text);print(text)
