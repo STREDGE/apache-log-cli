@@ -15,7 +15,7 @@ PASS: Fire mode selection still enables and stops issuing tasks in the mock
 PASS: All four onboard guards remain attached after Grove and follow takeoff
 PASS: Takeoff-follow requests CJ to exit; no unintended hover with CJ aboard
 PASS: Follow-shots finds the game auto-aim target instead of the first nearby NPC
-PASS: Main menu shows only what fits the moment: call it; on foot - mode, gunners, rope, team; aboard - destinations and exit
+PASS: Main menu shows only what fits the moment: call it; on foot - three modes (marked), gunner fire, rope, squad, dismiss; aboard - destinations and two explicit exits
 PASS: Protect CJ and cease-fire remain active after aim and takeoff changes
 PASS: Weapon menu changes all four live guards to MP5
 PASS: Crew-based automatic weapon selection can be restored
@@ -26,7 +26,8 @@ PASS: With CJ on foot the main menu offers the rope pickup, not destinations
 PASS: Protect CJ does not target a member of the ground team
 PASS: Ground team receives CJ-relative formation tasks after descent
 PASS: Ground team attacks the hostile selected by Protect CJ in the mock
-PASS: Leaving hold removes the temporary ground squad and clears friendly handles
+PASS: Leaving hold hands the ground squad back to the game in view (no deletion on screen) and clears friendly handles
+PASS: Out of sight the ground squad is deleted when the helicopter leaves hold
 PASS: Insertion is rejected unless helicopter is holding
 PASS: Fifth rope proximity triggers simulated reverse ascent, restores CJ control and returns four guards
 PASS: Interrupting player ascent restores control and the last ground position
@@ -45,9 +46,9 @@ PASS: Rope approach glides from 45 m to an exact hover without circling, compens
 PASS: Beyond 45 m the native autopilot flies the approach at higher speed
 PASS: An obstructed glide path keeps the native approach instead of teleporting through it
 PASS: Spawn height clears tall buildings
-PASS: A wedged helicopter is lifted out and resumes its order
+PASS: A wedged helicopter climbs out under its own power (no teleport) and resumes its order
 PASS: A slow hover close to CJ is not mistaken for being stuck
-PASS: Dismiss deletes a stuck on-screen helicopter and a new call works
+PASS: Dismiss: a helicopter that stays in view is never deleted; after 60 s it is released and a new call works
 PASS: Rope descent starts below the hull and restores control on the ground
 PASS: Rope descent keeps an invisible platform under CJ so the game never starts free fall
 PASS: Pickup waits until every rope guard is on the ground
@@ -75,20 +76,20 @@ PASS: Patrol summons a helicopter if none is active
 PASS: Follow reissues its order if the helicopter is far from CJ
 PASS: Marked destination hover -> choose landing preserves CJ aboard
 PASS: Target distribution excludes Grove and the additional ground squad
-PASS: One MODE row cycles FOLLOW CJ -> HOLD POSITION -> PATROL AROUND CJ
+PASS: Three explicit mode rows: FOLLOW ME / HOLD HERE / PATROL AROUND ME - one tap each, the active one marked [X]
 PASS: CLEO evacuation menu starts the marked route
 PASS: Blocked cruise segment climbs in place instead of passing through
 PASS: Destination: scripted cruise to overhead, then native vertical descent to 18 m
 PASS: A stalled native descent still offers LAND / ROPE after 25 s
 PASS: Pilot can reposition to keep an active threat in view
 PASS: New hold command stops the scripted cruise without ejecting CJ
-PASS: Aboard, one row toggles the exit method (also in SETTINGS)
+PASS: Aboard, EXIT: LAND and EXIT: ROPE are one tap each; the settings page has the same choice for the exit button
 PASS: Doors lock while CJ is aboard so the native exit cannot drop him
 PASS: Exit button over the destination in ROPE mode starts the rope descent
 PASS: Exit button over the destination in LAND mode lands and then lets CJ out
-PASS: Exit button in flight (ROPE): the helicopter stops dead and CJ abseils at once
+PASS: Exit button in flight (ROPE): the helicopter slows down on the way, stops, and CJ abseils
 PASS: Abseil duration scales with the height (2-6 s)
-PASS: Exit button in flight (LAND): finds a spot below and starts the landing
+PASS: Exit button in flight (LAND): finds a spot ahead (the cruise slows down on the way) and starts the landing
 PASS: Exit button after landing lets CJ out
 PASS: A blocked rope drop moves a few metres and retries automatically
 PASS: After five failed rope attempts the player gets one clear message and stays aboard
@@ -96,7 +97,7 @@ PASS: LAND mode falls back to the rope when there is no place to land
 PASS: No flat pad near the marker: hover over it for a rope exit instead of giving up
 PASS: Exit works on the first press: per-frame polling of the one-frame widget release, with debounce
 PASS: Rope evacuation lifts CJ only after he walks to the rope (6 m away)
-PASS: GUNNERS page: PROTECT CJ by default, then OVERWATCH, FOLLOW MY SHOTS, WEAPONS FREE, CEASE FIRE; BACK returns to the main page
+PASS: GUNNER FIRE page: PROTECT ME by default, then ARMED ONLY, WHERE I SHOOT, FIRE AT ALL, HOLD FIRE; BACK returns to the main page
 PASS: DISMISS HELICOPTER asks for confirmation; NO keeps it, YES sends it away
 PASS: OVERWATCH: armed hostiles only, 75-damage precision rounds
 PASS: OVERWATCH leaves armed police alone unless CJ is wanted

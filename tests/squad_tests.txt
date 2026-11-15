@@ -13,17 +13,18 @@ PASS: Medic also treats a wounded teammate (+60 HP, max 150)
 PASS: Mount up: the guards take CJ's passenger seats
 PASS: CJ gets out: the guards get out of the car too
 PASS: A car driving away is not chased; the guards hold and regroup when CJ stops
-PASS: Far behind: teleport only out of sight, otherwise run on the path network
-PASS: A stuck guard (moving, far, not progressing) is recovered out of sight
+PASS: Far behind (out of sight or not): the guards sprint along the path network, nobody is teleported
+PASS: A stuck guard (moving, far, not progressing) is sent along the path network again, never teleported
 PASS: MAN DOWN is called once when a guard dies
 PASS: RECALL TEAM: hover, the team ropes back up, then FOLLOW resumes
-PASS: CJ boards the helicopter another way: the team withdraws and boards
+PASS: CJ boards the helicopter another way: the team stays on the ground (deleted out of sight, nobody warped aboard)
+PASS: The same in view: the team is handed back to the game, nobody vanishes on screen
 PASS: Losing the whole team is reported and cleaned up
 PASS: Rope pickup with the team on the ground: the same team covers CJ (only the CJ rope is added)
-PASS: Assault contact: one man bounds forward firing while his partner covers crouched; flankers move out firing
+PASS: Assault contact: one man bounds forward firing while his partner covers crouched; the flanker moves out firing; the medic stays with CJ
 PASS: Bounding overwatch: every 3 s the pair swaps who moves and who covers
 PASS: A flanker who reached his flank point attacks from there
-PASS: Assault leash: nobody pushes more than 40 m away from CJ
+PASS: Assault leash: nobody pushes more than 40 m away from CJ; beyond it he sprints back (no teleport)
 PASS: Assault holding: each man faces his sector, then takes a knee
 PASS: CEASE FIRE: the team only answers someone who hurt CJ or a teammate
 PASS: PROTECT CJ: armed shooters, or armed Ballas/Vagos/Rifa close to CJ
@@ -40,7 +41,7 @@ PASS: CJ inside an interior: the team waits outside instead of teleporting after
 PASS: The squad also engages whatever the door gunners are firing at
 PASS: A fence in the way: the guard turns to it and climbs over
 PASS: Stairs or a slope are walked, not vaulted
-PASS: Main menu: one row deploys / recalls the team; SETTINGS switches BODYGUARD / ASSAULT
+PASS: Main menu: one row deploys / recalls the squad; SETTINGS switches GUARD / ASSAULT
 PASS: TEAM ON FOOT refuses politely: CJ aboard, team already down, nothing to recall, CJ in a car
 PASS: Overwatch: the helicopter circles CJ at 30 m, 24 m above him, instead of hovering on top
 PASS: Overwatch skips stations from which a building hides CJ
@@ -52,14 +53,33 @@ PASS: Door gunners take a target on their own side: right door right, left door 
 PASS: A gunner without a clear line from his seat leaves that target to someone else
 PASS: Gunners also use the threats the ground squad has found
 PASS: With four threats around, the four gunners never double up
-PASS: A round that lands at CJ names its shooter from the bullet trace: top of the board, two gunners on him, call-out
+PASS: A shot at CJ names its shooter from the bullet trace (the engine stores a random 2-5 m piece of the path, not its ends): top of the board, two gunners on him, call-out
+PASS: The shooter is found at 6, 20, 60 and 85 m, whatever random piece of the path the engine recorded
 PASS: Rounds that do not come down at CJ do not make anyone the shooter
+PASS: An unarmed bystander standing on the back-ray is not mistaken for the shooter
 PASS: On another game build the bullet traces are not read at all
 PASS: Threats are ranked by weapon (sniper, then rifle, then pistol) and position (a rifleman on a roof above one on the street)
 PASS: A passive police officer ranks below a gang member (no wanted stars for nothing)
 PASS: A car racing at CJ scores +50 for its driver; one driving away does not
 PASS: A target that ducks behind cover gets suppressive fire at his last seen position
 PASS: Suppression stops after about 4 s instead of wasting rounds on a wall
+PASS: A gunman who is shooting AND turned towards CJ outranks one shooting the other way (+60), with no bullet trace needed
+PASS: FOLLOW MY SHOTS: single shots (one-frame IS_CHAR_SHOOTING pulses) keep the gunners on his target without flicker
+PASS: FOLLOW MY SHOTS: about a second after CJ stops, the gunners stop too
+PASS: FOLLOW MY SHOTS, free aim at a wall: the gunners fire at the point where his line meets the wall
+PASS: FOLLOW MY SHOTS: nothing on his line within 170 m (the sky) - no rounds wasted
+PASS: FOLLOW MY SHOTS without any bullet trace (grenade, flamethrower): the game's lock-on target still draws fire
+PASS: FOLLOW MY SHOTS: a guard firing next to CJ (CJ not shooting) does not start the gunners
+PASS: FOLLOW MY SHOTS: with a guard firing the other way next to him, the gunners still follow CJ's own line
+PASS: CALL HELICOPTER: it is created 160 m out, 50 m up and behind CJ, out of the camera's view, and flies in
+PASS: When the first bearing is in view it is moved, in the same tick, to the next bearing where it is not
+PASS: When every bearing is in view (e.g. a tall tower) the last one is used instead of looping
+PASS: The relocation to a hidden bearing happens in the creation tick: no visible teleport
+PASS: Spawn altitude clears the highest surface by 25 m
+PASS: The gunners are created at the helicopter (not at CJ) and attached at once
+PASS: DISMISS: the helicopter flies off AWAY from CJ (through its own position), at cruise speed 40
+PASS: DISMISS: removed only when out of sight AND at least 200 m away
+PASS: Clean-up (CJ dead or arrested) does not eject a living pilot from his helicopter
 PASS: Rounds hitting the helicopter make the pilot break away at once, before the hull is damaged
 PASS: The gunners' own rounds leaving the helicopter do not trigger evasion
 PASS: Combat orbit direction keeps the door with more living gunners towards the threat (left door by default, right when the left gunners are down)
@@ -80,11 +100,11 @@ PASS: A threat that slips out of a guard's sight gets 4 s of suppressive fire at
 PASS: A wounded guard (below 50 HP) stays closer to CJ: 10 m leash instead of 14 m
 PASS: Welcome message once, a few seconds after the game starts
 PASS: Team drop notices say what really happens: "moving in to drop the team", "on the ground" - no false "rope pickup" / "holding"
-PASS: A 12 s fight with four shooters gives 2 clear radio calls, not a stream (SQXL, SQRLD)
+PASS: A 12 s fight with four shooters gives 2 clear radio calls, not a stream (SQCB, SQRLD)
 PASS: An alarm on screen is not covered by lesser calls; once it expires the chatter comes back
 PASS: MESSAGES: IMPORTANT keeps danger and tactical calls, drops the chatter
 PASS: MESSAGES: OFF is silent in a fight but still explains why a command was refused
 PASS: With the team on the ground only the squad calls the contact (no double "CONTACT!")
 PASS: SETTINGS: one row cycles MESSAGES: ALL / IMPORTANT / OFF
-PASS: Frame cost in a busy fight (8 threats, rounds at CJ): fire worker peak 2481, squad worker peak 1533 script instructions
+PASS: Frame cost in a busy fight (8 threats, rounds at CJ): fire worker peak 3088, squad worker peak 1508 script instructions
 Mocked script execution only: real pathing, cover and gunfire are not tested.

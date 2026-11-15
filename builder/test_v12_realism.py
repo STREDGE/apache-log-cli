@@ -240,6 +240,46 @@ o3=orders(w,0x634,team[3]);assert not o3 or all(o[1]==mine for o in o3),(mine,o3
 o0=orders(w,0x634,team[0]);assert o0 and o0[-1][1]==D,('guard 0 always takes the top threat',o0)
 passed('Guards keep the target they are on while it lives (no flipping when the threat list is reshuffled)')
 
+# the squad adopts a shooter that the gunners' bullet-trace scan found, even outside its own search cells
+w,c,ground,sq,team=escort_world();V=(c,ground,sq)
+for k,t_ in enumerate(team):w.pos[t_]=[BG[k][0],BG[k][1],0.]
+h=980;w.exists.add(h);w.pos[h]=[45.,0.,0.];w.pedtype[h]=7;w.weapons[h]=30;w.civilians=[h]
+steps(w,V,6);assert w.shared[b.SQ_T]!=h,'45 m away and silent: not noticed by the squad itself'
+w.shared[b.TB_SHOOTER]=h;w.shared[b.TB_SHOOTER_T]=w.now;steps(w,V,6)
+assert w.shared[b.SQ_T]==h,('a shooter found by the traces is adopted',[w.shared[b.SQ_T+i] for i in range(4)])
+passed('The squad adopts a shooter the bullet-trace scan found, even 45 m away outside its own search')
+
+# the bullet-trace scan reads lines: what counts as CJ's own shot, as a hit on the helicopter, and how often it searches
+def aim_updated(start,end,cj_shooting,frames=36):
+ w,c,f=fire_world();w.shared[b.FIRE]=2;w.frame_ms=33;w.step(c,f,n=3);t0=w.shared[b.CJ_AIM_T]
+ for i in range(frames):
+  w.shooting=cj_shooting and i%6==0;w.ped_bullet(list(start),list(end));w.step(c,f)
+ return w.shared[b.CJ_AIM_T]!=t0
+fire_world=g['fire_world']
+assert aim_updated((.5,0.,.7),(24.,0.,1.),True),'control: his own shot, he is shooting'
+assert not aim_updated((.5,0.,.7),(24.,0.,1.),False),'a line through him while he is NOT shooting is somebody else'
+assert not aim_updated((.5,4.,.7),(24.,4.,1.),True),'a line passing 4 m beside him is not his shot'
+w,c,f=fire_world();w.shared[b.FIRE]=2;w.frame_ms=33;w.step(c,f,n=3)
+for i in range(12):w.shooting=i%6==0;w.ped_bullet([.5,0.,.7],[24.,0.,1.]);w.step(c,f)      # CJ fires a burst
+w.shooting=False;w.step(c,f,n=40);t1=w.shared[b.CJ_AIM_T]                                    # then 1.3 s of quiet
+for _ in range(20):w.ped_bullet([.5,0.,.7],[24.,0.,1.]);w.step(c,f)                          # rounds along his line, but he is not shooting
+assert w.shared[b.CJ_AIM_T]==t1,'older than 350 ms since his last shot: not his'
+passed('CJ aim line: only a round whose line passes within 1.5 m of him within 350 ms of his own shot counts as his')
+def evaded(offset):
+ w,c,f=fire_world();w.step(c,f,n=3);car=w.car
+ for _ in range(8):w.ped_bullet([car[0]+70.,car[1]+offset,car[2]],[car[0]+5.,car[1]+offset,car[2]]);w.step(c,f)
+ return w.shared[b.HELI_SHOT_T]>0 and w.now-w.shared[b.HELI_SHOT_T]<1500
+assert evaded(3.),'control: rounds passing 3 m from the helicopter'
+assert not evaded(12.),'rounds passing 12 m from it are not "taking fire"'
+passed('Hits on the helicopter: a line within 6 m counts, one 12 m away does not')
+def search_passes():
+ w,c,f=fire_world();w.step(c,f,n=3);w.civilians=[]
+ for _ in range(60):w.ped_bullet([40.,0.,1.],list(w.player));w.step(c,f)
+ return len([x for x in calls(w,0xddc) if x[2][0]==b.TB_SEARCH_T]),w.now
+n_search,now=search_passes()
+assert 2<=n_search<=1+int(6.0/0.25)+1,(n_search,)
+passed('The reverse search for a shooter runs at most four times a second even under a stream of rounds (%d passes in 6 s)'%n_search)
+
 # =================================================================== E4: gunners are not lasers
 fire_world,target=g['fire_world'],g['target']
 def bullet_ends(jitter,dist=40.):

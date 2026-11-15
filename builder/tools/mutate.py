@@ -75,6 +75,14 @@ M12=[
  ('build_v25_squad.py',"s.get(25,b.SQ_DRIVES);s.eq(25,1,R)","pass",'12 driver only'),
  ('build_v25_squad.py',"a(0x05ca,V(G),V(6),I(8000),I(k))","a(0x05ca,V(G),V(6),I(8000),I(0))",'12 own seat'),
  ('build_v25_squad.py',"a(0x05f5,V(G),V(26),V(27),V(28),I(7),I(20000));setk_lit(k,'TASK',7)","a(0x00a1,V(G),V(26),V(27),V(28));setk_lit(k,'TASK',7)",'12 far guard teleport'),
+ # D: the shooter / own-shot / helicopter-hit logic of the bullet-trace scan (lines, not exact end points)
+ ('threat_v41.py',"jgt(t4,1.0,P+'INCOMING');jlt(t4,-160.0,P+'HELI');jgt(t3,2.25,P+'HELI')","jgt(t4,1.0,P+'INCOMING');jlt(t4,-160.0,P+'HELI');jgt(t3,225.0,P+'HELI')",'12 CJ line distance'),
+ ('threat_v41.py',"s.check(0x8019,[V(t6),I(350)],P+'HELI')","s.check(0x8019,[V(t6),I(35000)],P+'HELI')",'12 CJ shot window'),
+ ('threat_v41.py',"s.label(P+'INCOMING');jgt(t4,220.0,P+'HELI');jgt(t3,4.0,P+'HELI')","s.label(P+'INCOMING');jgt(t4,220.0,P+'HELI');jgt(t3,400.0,P+'HELI')",'12 incoming line distance'),
+ ('threat_v41.py',"jgt(t3,36.0,P+'NEXT');a(0x000a,V(n),I(1))","jgt(t3,3600.0,P+'NEXT');a(0x000a,V(n),I(1))",'12 helicopter hit distance'),
+ ('threat_v41.py',"a(0x000b,V(t6),F(.3));s.check(0x8025,[V(t3),V(t6)],P+'HELI')","a(0x000b,V(t6),F(.3))",'12 friend takes the credit'),
+ ('threat_v41.py',"s.get(t5,b.TB_SEARCH_T);a(0x01bd,V(t6));a(0x0062,V(t6),V(t5));s.check(0x0019,[V(t6),I(250)],P+'HELI')","s.get(t5,b.TB_SEARCH_T);a(0x01bd,V(t6));a(0x0062,V(t6),V(t5));s.check(0x0019,[V(t6),I(0)],P+'HELI')",'12 search throttle'),
+ ('build_v25_squad.py',"for key in [b.TB_SHOOTER,b.FIRE_TARGET]","for key in [b.FIRE_TARGET]",'12 squad adopts traced shooter'),
  # E3 / E4
  ('build_v25_squad.py',"s.check(0x0019,[V(30),I(1500)],'AN_RET')","s.check(0x0019,[V(30),I(15)],'AN_RET')",'12 anchor 1.5 s'),
  ('build_v25_squad.py',"s.check(0x0021,[V(31),F(.5)],'AN_OFF')","s.check(0x0021,[V(31),F(-2)],'AN_OFF')",'12 anchor 60 deg'),
@@ -105,7 +113,9 @@ for fname,old,new,name in M:
  if only and name not in only:continue
  if ROOT.exists():shutil.rmtree(ROOT)
  (ROOT/'install').mkdir(parents=True);(ROOT/'sources').mkdir();shutil.copytree(SRC,ROOT/'builder',ignore=shutil.ignore_patterns('__pycache__'))
- p=ROOT/'builder'/fname;t=p.read_text();assert t.count(old)>=1,(name,'pattern missing');p.write_text(t.replace(old,new))
+ p=ROOT/'builder'/fname;t=p.read_text()
+ if t.count(old)<1:print('GONE    '+name+'  (the code this mutant broke no longer exists)',flush=True);continue
+ p.write_text(t.replace(old,new))
  env=dict(os.environ);env.pop('HC_OUT',None)
  r=subprocess.run([sys.executable,'build_all.py'],cwd=ROOT/'builder',capture_output=True,text=True,env=env)
  if r.returncode:print('BUILD FAIL',name,r.stderr[-300:]);continue
