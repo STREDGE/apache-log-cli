@@ -41,7 +41,10 @@ class Script:
  def get(self,var,key):self.add(0xddd,V(var),I(key))
  def call(self,n):self.add(0x50,L(n))
  def ret(self):self.add(0x51)
- def blob(self,label,title,items):self.data[label]=struct.pack('<I',0)+(title+'\0CLOSE\0'+'\0'.join(items)+'\0\0').encode('ascii')
+ def blob(self,label,title,items):
+  # 1.2: text may be str (ASCII) or bytes (Cyrillic in the game's byte codes)
+  def b(x):return x.encode('ascii') if isinstance(x,str) else bytes(x)
+  self.data[label]=struct.pack('<I',0)+b(title)+b'\0CLOSE\0'+b'\0'.join(b(i) for i in items)+b'\0\0'
  def build(self,name,ext):
   def param(t,v,labels=None):
    if t==9:return b'\x09'+v.encode('ascii').ljust(8,b'\0')

@@ -258,12 +258,12 @@ w.calls.clear();steps(w,V,3);assert not orders(w,0x78f,team[0])
 passed('Stairs or a slope are walked, not vaulted')
 # ------------------------------------------------------------------ menu
 w,c,p=setup(True);launch=VM('Helicover',w);summon(w,c);w.step(c,p,launch,n=15)
-assert w.menu[5]==b'DEPLOY TEAM ON FOOT',w.menu
-w.events.append(4);w.step(c,p,n=4);assert w.menu[5]==b'TEAM TACTICS: BODYGUARD',w.menu
-w.events.append(3);w.step(c,p,n=4);assert w.shared[b.TACTICS]==1 and w.menu[5]==b'TEAM TACTICS: ASSAULT',w.menu
-w.events.append(6);w.step(c,p,n=4);w.shared[b.ESCORT_ON]=1;w.step(c,p,n=4);assert w.menu[5]==b'RECALL TEAM',w.menu
-w.events.append(3);w.step(c,p,n=2);assert w.shared[b.CMD] in (17,0) and any(x[2]==[b.CMD,17] for x in calls(w,0xddc))
-passed('Main menu: one row deploys / recalls the team; SETTINGS switches BODYGUARD / ASSAULT')
+assert w.menu[7]==b'DEPLOY SQUAD',w.menu
+w.events.append(6);w.step(c,p,n=4);assert w.menu[5]==b'SQUAD TACTICS: GUARD',w.menu
+w.events.append(3);w.step(c,p,n=4);assert w.shared[b.TACTICS]==1 and w.menu[5]==b'SQUAD TACTICS: ASSAULT',w.menu
+w.events.append(7);w.step(c,p,n=4);w.shared[b.ESCORT_ON]=1;w.step(c,p,n=4);assert w.menu[7]==b'RECALL SQUAD',w.menu
+w.events.append(5);w.step(c,p,n=2);assert w.shared[b.CMD] in (17,0) and any(x[2]==[b.CMD,17] for x in calls(w,0xddc))
+passed('Main menu: one row deploys / recalls the squad; SETTINGS switches GUARD / ASSAULT')
 w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.shared[b.CMD]=16;w.step(c,n=5);assert 'HCEXIT' in w.messages and w.shared[b.STATE]!=19
 w,c,_=setup();summon(w,c);w.shared[b.ESCORT_ON]=1;w.shared[b.CMD]=16;w.step(c,n=5);assert 'SQALR' in w.messages
 w,c,_=setup();summon(w,c);w.shared[b.CMD]=17;w.step(c,n=5);assert 'SQNONE' in w.messages
