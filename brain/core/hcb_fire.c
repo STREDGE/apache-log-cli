@@ -87,13 +87,14 @@ static int check(hcb_brain *b, const hcb_snapshot *s, const hcb_ped *me, int rol
     float dist = v_dist(from, to), range = hcb_weapon_range(me->weapon) * 1.2f;
     vtrack *car = veh_of(b, t->last.vehicle), *heli = veh_of(b, s->heli);
     losent *l;
-    int i, r, gunner = is_gunner(role);
-    float skip = gunner ? (heli && v_dist(from, heli->last.pos) < 6 ? c->muzzle_m : 0.8f) : 0.3f;
+    int i, r, door = is_gunner(role), gunner = door && c->gunner_weapon < 0.5f;     /* gunner: his rounds are made by the script */
+    float skip = gunner ? (heli && v_dist(from, heli->last.pos) < 6 ? c->muzzle_m : 0.8f) : door ? 0.8f : 0.3f;
+    float cj_skip = door && b->cj_in_heli && heli && v_dist(from, heli->last.pos) < 6 ? c->cabin_skip_m : 0.3f;
 
     *aim_at = HCB_AIM_BODY; *aim = to;
     if (!hcb_is_firearm(me->weapon) || dist > range) return HCB_HOLD_RANGE;
     /* a door gunner does not fire across his own cabin */
-    if (heli && gunner && me->vehicle == 0 && dist > 0.5f) {
+    if (heli && door && me->vehicle == 0 && dist > 0.5f) {
         hcb_vec right, d = v_sub(to, from);
         float side = ((role - HCB_ROLE_GUNNER) & 1) ? -1.0f : 1.0f;
         right.x = heli->last.fwd.y; right.y = -heli->last.fwd.x; right.z = 0;
@@ -101,7 +102,7 @@ static int check(hcb_brain *b, const hcb_snapshot *s, const hcb_ped *me, int rol
     }
     /* CJ first, then everybody who is ours or an ally, then people who have nothing to do with it */
     /* (a gunner's round is checked again when it leaves, on the line it really takes: here only half the allowance for scatter) */
-    r = in_line(from, to, s->player.pos, c->cj_line_m, gunner ? c->line_per_m * 0.5f : c->line_per_m, gunner ? c->round_past_m + c->cj_line_m : c->backstop_m, gunner ? c->cj_line_m : 1.0f, 0.3f);
+    r = in_line(from, to, s->player.pos, c->cj_line_m, gunner ? c->line_per_m * 0.5f : c->line_per_m, gunner ? c->round_past_m + c->cj_line_m : c->backstop_m, gunner ? c->cj_line_m : 1.0f, cj_skip);
     if (r) return r == 1 ? HCB_HOLD_CJ_IN_LINE : HCB_HOLD_CJ_BEHIND;
     for (i = 0; i < HCB_MAX_TRACKS; i++) {
         const track *o = &b->tr[i];
@@ -177,6 +178,7 @@ HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
 
     /* (2) the hard rules for every pair */
     out->n_orders = 0;
+    b->cj_in_heli = (u8)(s->heli && s->player.vehicle == s->heli);
     for (i = 0; i < n_ours; i++) {
         int role = s->our_role[i];
         me[i] = hcb_ped_of(s, s->ours[i]);
@@ -326,10 +328,11 @@ static int shot_check(const hcb_brain *cb, const hcb_shot *q, int as_guard) {
     t = hcb_find(b, q->target);
     if (!t || t->friendly) return HCB_HOLD_NO_TARGET;
     gunner = is_gunner(sh->role) && !as_guard;
-    skip = gunner ? f_max(0.3f, v_dist(q->from, q->muzzle)) : 0.3f;
+    skip = gunner ? f_max(0.3f, v_dist(q->from, q->muzzle)) : is_gunner(sh->role) ? 0.8f : 0.3f;
     past = gunner ? c->round_past_m : c->backstop_m;
     /* the line given is the line the round takes: for a gunner there is no scatter left to allow for */
-    r = in_line(q->from, q->to, q->cj, c->cj_line_m, gunner ? 0 : c->line_per_m, gunner ? past + c->cj_line_m : past, gunner ? c->cj_line_m : 1.0f, 0.3f);
+    r = in_line(q->from, q->to, q->cj, c->cj_line_m, gunner ? 0 : c->line_per_m, gunner ? past + c->cj_line_m : past, gunner ? c->cj_line_m : 1.0f,
+                is_gunner(sh->role) && b->cj_in_heli ? c->cabin_skip_m : 0.3f);
     if (r) return r == 1 ? HCB_HOLD_CJ_IN_LINE : HCB_HOLD_CJ_BEHIND;
     for (i = 0; i < (int)q->n_friends && i < HCB_MAX_OURS; i++)
         if (in_line(q->from, q->to, q->friends[i], c->friend_line_m, c->line_per_m * 0.75f, gunner ? past + c->friend_line_m : 25, gunner ? c->friend_line_m : 0.8f, skip)) return HCB_HOLD_FRIEND;

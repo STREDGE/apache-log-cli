@@ -78,7 +78,7 @@ typedef struct losent {
 struct hcb_brain {
     hcb_cfg cfg;
     u32 time, ticks, rng, seed, alert_since, calm_since, kills;
-    u8 alert, started, reserved0, reserved1;
+    u8 alert, started, cj_in_heli, reserved1;   /* cj_in_heli: CJ sits in our helicopter (this tick) */
     track tr[HCB_MAX_TRACKS];
     vtrack vt[HCB_MAX_VTRACKS];
     shooter sh[HCB_MAX_OURS];

@@ -330,25 +330,35 @@ def gunner_world(npcs,attack=True,typ=7):
   if attack:w.damage.add((1,npc))
  return w,c,f
 def rounds_by(w):
- """Who of the gunners let rounds go at whom."""
- d={}
- for r in w.brain.rounds:
-  if r.verdict==0 and r.ray:d.setdefault(r.who,set()).add(r.target)
+ """Who of the gunners fired his own weapon at whom (the rounds of the game the world saw)."""
+ crew={w.shared[b.PUB+i] for i in range(3,7)};d={}
+ for t_,who,man,_s,_e in w.game_rounds:
+  if who in crew:d.setdefault(who,set()).add(man)
  return d
 # The helicopter hangs south of CJ, nose to the north-west: its right door looks north (towards CJ), its left door south.
+def heli_frame():
+ w,c,f=gunner_world([]);w.step(c,f,n=2);h=w.shared[b.PUB+1];hd=math.radians(w.cars[h].get('heading',0.));return w.cars[h]['pos'],(-math.sin(hd),math.cos(hd))
+HPOS,HFW=heli_frame();HRT=(HFW[1],-HFW[0])
+def around(ahead,right):
+ """A point on the ground in the helicopter's own frame: metres ahead of it and to its right."""
+ return HPOS[0]+HFW[0]*ahead+HRT[0]*right,HPOS[1]+HFW[1]*ahead+HRT[1]*right
 w,c,f=gunner_world([(910,20.,10.),(911,-10.,-95.)]);w.step(c,f,n=25)
 R,L=[w.shared[b.PUB+3],w.shared[b.PUB+5]],[w.shared[b.PUB+4],w.shared[b.PUB+6]];by=rounds_by(w)
-assert all(by.get(x)=={910} for x in R) and all(by.get(x)=={911} for x in L) and hit(w)=={910,911} and not invariants(w),(by,invariants(w))
-passed('Door gunners take a man on their own side - right door right, left door left - and never fire across the cabin')
-w,c,f=gunner_world([(910,20.,10.)]);g3=w.coords(w.shared[b.PUB+3]);w.los_fn=lambda a,z:math.dist(a,g3)>1.;w.step(c,f,n=25);by=rounds_by(w)   # something hides the man from the front seat of the right door
-assert w.shared[b.PUB+3] not in by and by.get(w.shared[b.PUB+5])=={910} and not by.keys()&set([w.shared[b.PUB+4],w.shared[b.PUB+6]]),by
-assert [r for r in w.brain.rounds if r.who==w.shared[b.PUB+3]]==[],'no round is even asked for: the brain knows he cannot see the man'
+assert all(by[x]=={910} for x in R if x in by) and all(by[x]=={911} for x in L if x in by) and set(R)&set(by) and set(L)&set(by) and hit(w)=={910,911} and not invariants(w),(by,invariants(w))
+passed('Door gunners take a man on their own side - right door right, left door left - and never fire across the cabin (1.4: his own weapon; the second man of a door holds while his mate is in his line)')
+w,c,f=gunner_world([]);w.step(c,f,n=2);g3=w.coords(w.shared[b.PUB+3]);g5=w.coords(w.shared[b.PUB+5])
+hd=math.radians(w.cars[w.shared[b.PUB+1]].get('heading',0.));fw_=(-math.sin(hd),math.cos(hd));rt=(fw_[1],-fw_[0])
+man=[g5[0]+(rt[0]*.87-fw_[0]*.5)*25.,g5[1]+(rt[1]*.87-fw_[1]*.5)*25.]   # out of the right door, a little aft (the helicopter's own right)
+w.exists.add(910);w.pos[910]=[man[0],man[1],0.];w.skin[910]=102;w.pedtype[910]=7;w.weapons[910]=30;w.health[910]=100000;w.civilians=[910];w.damage.add((1,910))
+w.los_fn=lambda a,z:math.dist(a,g3)>1.;w.step(c,f,n=25);by=rounds_by(w)   # something hides the man from the front seat of the right door
+assert w.shared[b.PUB+3] not in by and by.get(w.shared[b.PUB+5])=={910} and not invariants(w),by
+assert [x for x in w.game_rounds if x[1]==w.shared[b.PUB+3]]==[],'no round is even asked for: the brain knows he cannot see the man'
 passed('A gunner without a clear line from his seat does not fire; the other gunner in that door does')
-w,c,f=gunner_world([(900,15.,12.),(901,-12.,14.),(902,12.,30.)]);w.step(c,f,n=30);by=rounds_by(w)
+w,c,f=gunner_world([(900,*around(14,25)),(901,*around(0,30)),(902,*around(-14,25))]);w.step(c,f,n=30);by=rounds_by(w)   # all three off the right door: ahead, abeam, aft
 assert set(by)==set(R) and all(len(v)==1 for v in by.values()) and by[R[0]]!=by[R[1]],by
 passed('Three attackers and two gunners who can see them: each gunner stays on a man of his own (no hopping from man to man, no doubling up while there is a man nobody is on)')
-n0={who:len([r for r in w.brain.rounds if r.who==who and r.verdict==0 and r.ray]) for who in R};w.exists.add(903);w.pos[903]=[25.,20.,0.];w.pedtype[903]=7;w.weapons[903]=30;w.health[903]=100000;w.damage.add((1,903));w.step(c,f,n=15)
-later={who:{r.target for r in w.brain.rounds[-200:] if r.who==who and r.verdict==0 and r.ray and r.time>w.now-800} for who in R}
+n0={who:len([x for x in w.game_rounds if x[1]==who]) for who in R};w.exists.add(903);w.pos[903]=[25.,20.,0.];w.pedtype[903]=7;w.weapons[903]=30;w.health[903]=100000;w.damage.add((1,903));w.step(c,f,n=15)
+later={who:{x[2] for x in w.game_rounds[-200:] if x[1]==who and x[0]>w.now-800} for who in R}
 assert all(later[who]==by[who] for who in R),(later,by)
 passed('A gunner finishes the man he started on instead of hopping to a newer one')
 # every round against the hard rules, by the world itself: nothing within 2 m of CJ, nothing within 1 m of ours
@@ -383,7 +393,7 @@ w.shot_at={guard:[30.,10.,0.]};w.shooting_chars={guard};w.step(c,f,n=20);assert 
 passed('WHERE I SHOOT: a guard firing next to CJ (CJ not shooting) does not start the gunners')
 car=777;w,c,f=follow_world([(940,40.,0.)]);w.exists.add(car);w.cars[car]={'pos':[40.,0.,0.],'heading':0.};w.model[car]=400;w.incar[940]=car;w.seats[(car,-1)]=940;w.health[car]=1000
 w.shooting=True;w.cj_aim=[40.,2.,0.];w.step(c,f,n=20);w.shooting=False
-assert {r.target for r in w.brain.rounds if r.verdict==0}=={940} and not invariants(w),'the man at the wheel'
+assert {x[2] for x in w.game_rounds}=={940} and not invariants(w),'the man at the wheel'
 passed('WHERE I SHOOT: CJ fires at a car - the gunners fire at the man in it')
 # ------------------------------------------------------------------ 1.2 helicopter lifecycle
 def spawn_world(visible):
@@ -512,15 +522,15 @@ def car_attack(hp,x=24.):
  w,c,f=gunner_world([]);drv,car=962,963;w.exists.update({drv,car});w.cars[car]={'pos':[x,6.,0.],'heading':90.};w.model[car]=400;w.incar[drv]=car
  w.traffic=[car];w.seats[(car,-1)]=drv;w.pedtype[drv]=7;w.skin[drv]=102;w.weapons[drv]=30;w.health[drv]=100000;w.damage.add((1,drv));w.health[car]=hp;w.calls.clear();w.step(c,f,n=30);return w,c,f,car,drv
 w,c,f,car,drv=car_attack(1000)
-aimed=[(r.to.x,r.to.y,r.to.z) for r in w.brain.rounds if r.verdict==0 and r.ray];assert calls(w,0x6bc) and aimed and all(abs(t[0]-24.)<1.05 and abs(t[1]-6.)<1.05 and abs(t[2]-.2)<1.05 for t in aimed) and {r.target for r in w.brain.rounds}=={drv} and not invariants(w),aimed[-4:]
-passed('A man in a car: every round is aimed at him (scattered by up to a metre at 60 m from a moving helicopter), never at the engine or the tank - the gunners do not blow cars up')
+assert attacks(w) and {x[2] for x in w.game_rounds}=={drv} and all(x[2][1]==drv for x in calls(w,0x713)) and not invariants(w),(len(attacks(w)),{x[2] for x in w.game_rounds})
+passed('A man in a car: the gunners\' fire is at him (the drive-by task names the man, never the car), never at the engine or the tank - the gunners do not blow cars up')
 # a damaged car within 18 m of CJ is left alone: it could blow up beside him
-w,c,f,car,drv=car_attack(1000,x=12.);assert calls(w,0x6bc)
-w.calls.clear();w.health[car]=CFG.car_floor-1;w.step(c,f,n=3);n=len(calls(w,0x6bc));w.step(c,f,n=30)
-assert len(calls(w,0x6bc))==n and n<=2 and aims(w,drv),'no round within 0.3 s of the car dropping below the floor; the weapons stay on the man'
-w,c,f,car,drv=car_attack(CFG.car_floor-1,x=12.);assert not calls(w,0x6bc)
-w.incar.pop(drv);w.pos[drv]=[12.,6.,0.];w.calls.clear();w.step(c,f,n=30);assert calls(w,0x6bc) and hit(w)=={drv},'the same man on foot is a target again'
-w,c,f,car,drv=car_attack(CFG.car_floor-1,x=40.);assert calls(w,0x6bc),'40 m from CJ the same damaged car may be stopped by fire'
+w,c,f,car,drv=car_attack(1000,x=12.);assert attacks(w)
+n0=len(attacks(w));w.calls.clear();w.health[car]=CFG.car_floor-1;w.step(c,f,n=3);n=len(attacks(w));w.step(c,f,n=30)
+assert len(attacks(w))==n and n-n0<=3 and aims(w,drv),('no round later than 0.3 s after the car dropped below the floor; the weapons stay on the man',n-n0)
+w,c,f,car,drv=car_attack(CFG.car_floor-1,x=12.);assert not attacks(w)
+w.incar.pop(drv);w.pos[drv]=[12.,6.,0.];w.calls.clear();w.step(c,f,n=30);assert attacks(w) and hit(w)=={drv},'the same man on foot is a target again'
+w,c,f,car,drv=car_attack(CFG.car_floor-1,x=40.);assert attacks(w),'40 m from CJ the same damaged car may be stopped by fire'
 passed('A car below %d health within 18 m of CJ is not fired at (it burns below 250): no rounds, weapons on the man only - he is engaged again once he is out of it; far from CJ the same car may be fired at'%int(CFG.car_floor))
 # ------------------------------------------------------------------ beta 6: PROTECT CJ is close protection, not a gang war
 def protect(typ=7,weapon=30,x=20.,facing=True,wanted=0,in_car=False,skin=20,hurt=False,frames=30,turn=0.,shoots=False):
@@ -554,8 +564,8 @@ for mode in (0,2,3,4):
 passed('No fire mode makes the gunners hate a ped type any more: the game\'s own AI cannot open fire on a car by itself, every target comes from the rules')
 # an attacker at CJ's elbow: not one round from the helicopter; the moment CJ is clear of him the gunners fire
 w,c,f=fw();w.civilians=[];npc=900;w.exists.add(npc);w.pos[npc]=[0.,1.5,0.];w.skin[npc]=102;w.pedtype[npc]=7;w.health[npc]=100000;w.civilians.append(npc);w.damage.add((1,npc));w.calls.clear();w.step(c,f,n=50)
-assert not calls(w,0x6bc) and aims(w,npc) and not invariants(w),(len(calls(w,0x6bc)),invariants(w))
-w.player=[0.,-25.,0.];w.calls.clear();w.step(c,f,n=40);assert calls(w,0x6bc) and hit(w)=={npc} and not invariants(w),'CJ has stepped away from him: fire'
+assert not attacks(w) and aims(w,npc) and not invariants(w),(len(attacks(w)),invariants(w))
+w.player=[0.,-25.,0.];w.calls.clear();w.step(c,f,n=40);assert attacks(w) and hit(w)=={npc} and not invariants(w),'CJ has stepped away from him: fire'
 passed('An attacker 1.5 m from CJ: no round from the helicopter, the weapons stay on him; they fire once CJ is %.0f m clear of the line'%CFG.cj_line_m)
 # WHERE I SHOOT at an empty car: there is no man to fire at
 w,c,f=gunner_world([]);w.shared[b.FIRE]=2;car=963;w.exists.add(car);w.cars[car]={'pos':[24.,0.,0.],'heading':90.};w.model[car]=400;w.traffic=[car]

@@ -107,6 +107,8 @@ API void hcb_init(hcb_brain *b, u32 seed) {
     b->cfg.scatter_m = 0.1f;
     b->cfg.scatter_per_m = 0.01f;
     b->cfg.scatter_per_ms = 0.02f;
+    b->cfg.gunner_weapon = 1;
+    b->cfg.cabin_skip_m = 1.5f;
 }
 
 HID track *hcb_find(hcb_brain *b, u32 id) {

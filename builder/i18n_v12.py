@@ -187,6 +187,7 @@ MENU={
  'TAC_ASSAULT':('SQUAD TACTICS: ASSAULT','ТАКТИКА: ШТУРМ'),
  'POSE_KNEEL':('GUNNERS: KNEELING','СТРЕЛКИ: С КОЛЕНА'),
  'POSE_STAND':('GUNNERS: STANDING','СТРЕЛКИ: СТОЯ'),
+ 'POSE_SIT':('GUNNERS: SITTING','СТРЕЛКИ: СИДЯ'),
  'MSG_OFF':('MESSAGES: OFF','СООБЩЕНИЯ: ВЫКЛ'),
  'MSG_IMP':('MESSAGES: IMPORTANT','СООБЩЕНИЯ: ВАЖНЫЕ'),
  'MSG_ALL':('MESSAGES: ALL','СООБЩЕНИЯ: ВСЕ'),

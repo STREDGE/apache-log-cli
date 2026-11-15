@@ -18,6 +18,10 @@ class World:
   # 1.3: the brain mod is installed (None = it is not: the scripts must then never run opcode 0E48). Every round the scripts let go is
   # looked at by the world itself: `bullets` = all of them, `bullet_violations` = those that passed within 2 m of CJ or 1 m of one of ours
   self.brain=brain_mock.BrainSim();self.bullets=[];self.bullet_violations=[]
+  # 1.4: a firing task of the game's own weapon (drive-by, shoot at a man, fire while moving) keeps firing until another task takes
+  # its place: `firing` = who is on such a task and at whom; every 150 ms it lets go a round of the game, from his chest at the man
+  # and on 40 m past him (the game's round flies on). The same independent check looks at every such round.
+  self.firing={};self.fire_last={};self.game_rounds=[]
  @property
  def car(self):
   return self.cars[self.current_car]['pos'] if getattr(self,'current_car',None) in getattr(self,'cars',{}) else getattr(self,'fallback_car',[0.,-45.,28.])
@@ -40,6 +44,7 @@ class World:
     if dd<=.4 or self.now>=order['until']:self.walk.pop(ped);continue
     if ped in getattr(self,'blocked',()):continue   # wedged against something: the order runs, the ped does not move
     step=min(dd,order['speed']*delta/1000.);self.pos[ped]=[cur[0]+(to[0]-cur[0])*step/dd,cur[1]+(to[1]-cur[1])*step/dd,cur[2]]
+   self.game_fire()
    if self.brain is not None:self.brain.frame(self)   # the mod's per-frame hook runs before the scripts
    for vm in vms:vm.run()
  @staticmethod
@@ -56,6 +61,37 @@ class World:
   """Position jumps of more than 3 m (SET_CHAR_COORDINATES, WARP..., SET_CAR_COORDINATES): the detector for 'no teleports'."""
   d=math.dist(old,new)
   if d>3.:self.teleports.append({'op':op,'who':who,'dist':d,'visible':self.visible(who),'time':self.now,'from':list(old),'to':list(new)})
+ FIRE_OPS={0x74d:1,0x634:1,0x7a5:1,0x713:1,0x637:7}
+ TASK_OPS=(0x667,0x687,0x5d3,0x5f5,0x5ca,0x633,0x792,0x5c5,0x173,0x78f,0x464,0x465,0x5d4,0x6e1)
+ def task_op(self,op,vals):
+  """Which task a man is on: a firing task stays until another task replaces it."""
+  if not vals:return
+  if op in self.FIRE_OPS:self.firing[vals[0]]=vals[self.FIRE_OPS[op]]
+  elif op in self.TASK_OPS:self.firing.pop(vals[0],None)
+ def game_fire(self):
+  """The game's own weapon: a round every 150 ms from each man on a firing task, chest to chest and 40 m on."""
+  ours=[self.shared[b.PUB+i] for i in range(2,7)]+[self.shared[b.GROUND_PUB+i] for i in range(5)]+[self.shared[b.LEAVE+i] for i in range(8)]
+  crew={self.shared[b.PUB+i] for i in range(3,7)}
+  for who,man in list(self.firing.items()):
+   if who not in self.exists or who in self.dead or man not in self.exists or man in self.dead:self.firing.pop(who,None);continue
+   last=self.fire_last.get(who,self.now-150)
+   if self.now-last<150:continue
+   self.fire_last[who]=self.now
+   a=self.coords(who);a=[a[0],a[1],a[2]+.6];m=self.coords(man);m=[m[0],m[1],m[2]+.6]
+   d=[m[i]-a[i] for i in range(3)];L=math.sqrt(sum(x*x for x in d)) or 1.;u=[x/L for x in d]
+   start=[a[i]+u[i]*.5 for i in range(3)];end=[m[i]+u[i]*40. for i in range(3)]
+   self.game_rounds.append((self.now,who,man,start,end))
+   if who in crew:self.bullets.append((self.now,start,end,25))
+   cj=self.coords(1);cj=[cj[0],cj[1],cj[2]+.6]
+   along=lambda p:sum((p[i]-start[i])*u[i] for i in range(3))
+   if along(cj)>1.2 and self.seg_dist(start,end,cj)<1.:self.bullet_violations.append((self.now,'CJ',who,self.seg_dist(start,end,cj)))
+   for o in ours:
+    if o!=who and o in self.exists and o not in self.dead and o not in self.cars:
+     p=self.coords(o);p=[p[0],p[1],p[2]+.6]
+     if along(p)>1. and self.seg_dist(start,end,p)<.8:self.bullet_violations.append((self.now,o,who,self.seg_dist(start,end,p)))
+   if who not in crew:continue   # (a guard's round is checked like the rest but hurts nobody here: the squad scenes are about orders)
+   self.health[man]-=25;self.hits=getattr(self,'hits',[])+[(self.now,man,25)]
+   if self.health[man]<=0:self.dead.add(man);self.firing.pop(who,None)
  def bullet(self,start,end,damage):
   """FIRE_SINGLE_BULLET: a round from start to end. The first living person within 0.5 m of it is hit. Independently of whoever let it go,
   the world notes a round that passes within 2 m of CJ, or within 1 m of one of ours further than 1 m from where it starts."""
@@ -99,7 +135,7 @@ class VM:
    op,aa,nxt=self.code[self.ip];self.ip=nxt;vals=[self.v[v] if t==3 else v for t,v in aa]
    def put(i,v):assert aa[i][0]==3;self.v[aa[i][1]]=v
    def cond(val):self.cond=self.cond and (not val if op&0x8000 else val)
-   base=op&0x7fff;w.calls.append((w.now,op,vals.copy()))
+   base=op&0x7fff;w.calls.append((w.now,op,vals.copy()));w.task_op(op,vals)
    if op==0:pass
    elif op==1:self.wake=w.now+max(vals[0],1);return
    elif op==2:self.ip=-vals[0]
@@ -437,12 +473,13 @@ def attacks(w):return w.bullets   # 1.3: the rounds the gunners let go (each one
 def hit(w):return {x[1] for x in getattr(w,'hits',[])}
 def aims(w,at=None):return [x for x in calls(w,0x667) if at is None or math.dist(x[2][1:4],w.coords(at))<.5]
 def no_game_fire(w):
- """A door gunner never gets a task that fires the game's own weapon (nobody could check those rounds)."""
- crew={w.shared[b.PUB+i] for i in range(3,7)};return not [x for x in w.calls if x[1] in (0x74d,0x713,0x668,0x634,0x637,0x7a5) and x[2][0] in crew]
+ """1.4: a door gunner fires his own weapon only through the drive-by task (0713) at the man the brain named, and only with its
+ leave (the invariants check that); never at a place, never another kind of firing task."""
+ crew={w.shared[b.PUB+i] for i in range(3,7)};return not [x for x in w.calls if x[1] in (0x74d,0x668,0x634,0x637,0x7a5,0x6bc) and x[2][0] in crew]
 w,c,f=fire_world();npc=target(w);w.step(c,f,n=7);assert not attacks(w) and not aims(w),'a passer-by is nobody'
 w.damage.add((1,npc));w.step(c,f,n=14);assert attacks(w) and hit(w)=={npc} and aims(w,npc) and no_game_fire(w) and not invariants(w),(len(attacks(w)),hit(w),invariants(w))
-assert all(x[3]==b.ROUND_DAMAGE for x in attacks(w))
-passed('The fire worker asks the brain: a passer-by is left alone; the man who hurts CJ gets the gunners\' weapons on him and their rounds (30 damage each, each one let go by the brain); no gunner is ever given a task that fires the game\'s own weapon')
+assert calls(w,0x713) and all(x[2][1]==npc for x in calls(w,0x713))
+passed('The fire worker asks the brain: a passer-by is left alone; the man who hurts CJ gets the gunners\' weapons on him and then their own fire (the drive-by task, at him only, only with the brain\'s leave); no other kind of firing task, never at a place')
 w,c,f=fire_world();npc=target(w,typ=8,skin=105);threaten(w,npc);w.wanted=6;w.step(c,f,n=14);assert not attacks(w) and not aims(w)
 w,c,f=fire_world();npc=target(w,typ=7,skin=102);threaten(w,npc);w.step(c,f,n=14);assert attacks(w) and hit(w)=={npc}
 passed('Friends come from the game, not from a list of models: an armed Grove man looking at CJ is left alone, an armed Balla looking at CJ is engaged')
@@ -491,8 +528,8 @@ assert w.menu[2:]==[b'FLY TO MAP MARKER',b'FLY TO GROVE STREET',b'EXIT BUTTON: L
 passed('Main menu shows only what fits the moment: call it; on foot - three modes (marked), gunner fire, rope, squad, dismiss; aboard - destinations and the two exit-button switches')
 
 w,c,f=fire_world();n=target(w);w.damage.add((1,n));w.step(c,f,n=12)
-assert calls(w,0x6bc) and hit(w)=={n}
-w.shared[b.FIRE]=0;w.step(c,f,n=5);count=len(calls(w,0x6bc));w.step(c,f,n=6);assert len(calls(w,0x6bc))==count
+assert attacks(w) and hit(w)=={n}
+w.shared[b.FIRE]=0;w.step(c,f,n=5);count=len(attacks(w));w.step(c,f,n=6);assert len(attacks(w))==count
 passed('Protect CJ and cease-fire remain active after aim and takeoff changes')
 
 w,c,p=setup(True);summon(w,c);f=VM('Helicover_Fire',w);w.step(c,p,f,n=3);w.shared[b.FIRE]=3;w.step(c,p,f,n=5)
@@ -834,15 +871,15 @@ else:
 # Four attackers, two on each side of the helicopter: every gunner gets a man of his own (the brain shares them out; a door gunner
 # cannot fire across his own cabin, so the men on the other side are his mates' business).
 w,c,f=fire_world();w.civilians=[]
-for npc,x,y in [(900,-12.,10.),(901,12.,10.),(902,-15.,-85.),(903,15.,-85.)]:
+# (1.4: a gunner fires his own weapon, so the man beside him in the door stops a line that passes him - the four men stand where each
+# gunner has a clean line: abeam ahead of the front pair, abeam behind the rear pair)
+for npc,x,y in [(900,-25.,-25.),(901,25.,-25.),(902,-25.,-65.),(903,25.,-65.)]:
  w.exists.add(npc);w.pos[npc]=[x,y,0.];w.skin[npc]=102;w.pedtype[npc]=7;w.weapons[npc]=30;w.health[npc]=100000;w.civilians.append(npc);w.damage.add((1,npc))
 w.step(c,f,n=25)
 gunners=[w.shared[b.PUB+i] for i in range(3,7)];men={}
-for r in w.brain.rounds:
- if r.verdict==0 and r.ray:men.setdefault(r.who,set()).add(r.target)
+for t_,who,man,_s,_e in w.game_rounds:men.setdefault(who,set()).add(man)
 assert set(men)==set(gunners) and all(len(v)==1 for v in men.values()) and set().union(*men.values())=={900,901,902,903} and hit(w)=={900,901,902,903} and not invariants(w),(men,hit(w),invariants(w))
-assert all(x[3]==b.ROUND_DAMAGE for x in attacks(w))
-passed('Four attackers, two on each side of the helicopter: each of the four gunners has a man of his own and hits him')
+passed('Four attackers, two on each side of the helicopter: each of the four gunners has a man of his own and fires his own weapon at him')
 
 if b.MAP_MARKER:
  # Search a nearby landing candidate when the exact map marker is obstructed.
@@ -886,7 +923,7 @@ w,c,f=fire_world();w.civilians=[]
 for npc,x,y,skin,typ in [(900,15.,10.,102,7),(901,-12.,10.,105,8),(902,12.,-10.,285,8)]:
  w.exists.add(npc);w.pos[npc]=[x,y,0.];w.skin[npc]=skin;w.pedtype[npc]=typ;w.civilians.append(npc)
 threaten(w,900,901,902);w.shared[b.GROUND_PUB]=902;w.step(c,f,n=20)
-assert hit(w)=={900} and not invariants(w) and {r.target for r in w.brain.rounds}=={900},(hit(w),invariants(w))
+assert hit(w)=={900} and not invariants(w) and {x[2] for x in w.game_rounds}=={900},(hit(w),invariants(w))
 passed('Three armed men looking at CJ - a Balla, a Grove man and one of our ground team: only the Balla is engaged')
 
 # Menu dispatch for patrol and map flight.
@@ -941,7 +978,7 @@ def to_destination(w,c,*vms):
 # menu (beta 4): the two EXIT BUTTON rows are switches for the game's own exit button - they start nothing themselves
 w,c,p=setup(True);summon(w,c);w.incar[1]=c.v[5];launch=VM('Helicover',w);w.step(c,p,launch,n=15)
 assert b'EXIT BUTTON: LAND [X]' in w.menu and b'EXIT BUTTON: ROPE' in w.menu and b'GET OUT HERE' not in w.menu,w.menu
-w.events.append(5);w.step(c,p,n=5);assert w.menu==[b'HELICOVER / SETTINGS',b'CLOSE',b'CREW >',b'HELICOPTER MODEL >',b'CREW WEAPON >',b'SQUAD TACTICS: GUARD',b'MESSAGES: ALL',b'GUNNERS: KNEELING',b'< BACK'] and not any(b'EXIT' in r or b'LANGUAGE' in r for r in w.menu),w.menu
+w.events.append(5);w.step(c,p,n=5);assert w.menu==[b'HELICOVER / SETTINGS',b'CLOSE',b'CREW >',b'HELICOPTER MODEL >',b'CREW WEAPON >',b'SQUAD TACTICS: GUARD',b'MESSAGES: ALL',b'GUNNERS: SITTING',b'< BACK'] and not any(b'EXIT' in r or b'LANGUAGE' in r for r in w.menu),w.menu
 w.events.append(6);w.step(c,p,n=5);assert w.menu[0]==b'HELICOVER / FOLLOWING',w.menu
 st=w.shared[b.STATE];pos=list(w.car)
 for idx,mode,row,key in [(3,1,b'EXIT BUTTON: ROPE [X]','HCXBR'),(3,1,b'EXIT BUTTON: ROPE [X]','HCXBR'),(2,0,b'EXIT BUTTON: LAND [X]','HCXBL'),(2,0,b'EXIT BUTTON: LAND [X]','HCXBL'),(3,1,b'EXIT BUTTON: ROPE [X]','HCXBR')]:
@@ -1091,7 +1128,7 @@ w.traffic=[car];w.seats[(car,-1)]=drv;w.pedtype[drv]=4;w.skin[drv]=20;w.weapons[
 while w.cars[car]['pos'][0]>19.:
  w.cars[car]['pos'][0]-=20.*.033;w.step(c,f)
  if first is None and attacks(w):first=w.cars[car]['pos'][0]
-assert first is not None and first>=30. and len(attacks(w))>=6 and {r.target for r in w.brain.rounds}=={drv} and not invariants(w),(first,len(attacks(w)))
+assert first is not None and first>=30. and len(attacks(w))>=6 and {x[2] for x in w.game_rounds}=={drv} and not invariants(w),(first,len(attacks(w)))
 n_ram=len(attacks(w))
 w,c,f=fire_world();w.frame_ms=33;w.exists.update({drv,car});w.cars[car]={'pos':[90.,30.,0.],'heading':90.,'vel':[-20.,0.,0.]};w.model[car]=400;w.incar[drv]=car
 w.traffic=[car];w.seats[(car,-1)]=drv;w.pedtype[drv]=4;w.skin[drv]=20;w.weapons[drv]=0;w.health[drv]=100000;w.health[car]=1000

@@ -300,21 +300,20 @@ passed('CJ\'s line of fire comes from the brain: there in the frame of his shot,
 
 # =================================================================== E4: gunners are not lasers
 fire_world,target=g['fire_world'],g['target']
-def bullet_ends(dist=40.):
- w,c,f=fire_world();npc=target(w);w.pos[npc]=[dist,0.,0.];w.health[npc]=100000;w.damage.add((1,npc));w.speed=0.;w.step(c,f,n=40)
- return [x[2][3:6] for x in calls(w,0x6bc)],w,npc
-def sd(e):
- m=[sum(x[i] for x in e)/len(e) for i in range(3)];return math.sqrt(sum(math.dist(x,m)**2 for x in e)/len(e))
-ends,w,npc=bullet_ends()
-cx=[sum(e[i] for e in ends)/len(ends) for i in range(3)];spread=[math.dist(e,cx) for e in ends]
-rng_=max(math.dist(x[2][0:3],x[2][3:6]) for x in calls(w,0x6bc))                   # the real range, from the door of the helicopter
-assert len(ends)>=10 and max(spread)>.15,('the bullets scatter',len(ends),max(spread))
-r=.1+.01*rng_;assert max(spread)<=r*math.sqrt(3)+.1,('but stay near the man (+-%.2f m per axis at %d m)'%(r,rng_),max(spread))
-assert not invariants(w) and g['hit'](w)=={npc}
-passed('Door gunners scatter their bullets (+-%.1f m at %d m) instead of putting every round on one point; the scatter is the brain\'s and every round is still a checked one'%(r,rng_))
-near,_,_=bullet_ends(dist=10.);far,_,_=bullet_ends(dist=70.)
-assert len(near)>=10 and len(far)>=10 and sd(near)<sd(far),(len(near),len(far),sd(near),sd(far))
-passed('The scatter grows with the distance to the target (%.2f m at 10 m, %.2f m at 70 m)'%(sd(near),sd(far)))
+w,c,f=fire_world();npc=target(w);w.pos[npc]=[30.,0.,0.];w.health[npc]=100000;w.damage.add((1,npc));w.speed=0.;w.frame_ms=33;w.step(c,f,n=200)
+per={}
+for t_,who,man,_s,_e in w.game_rounds:per.setdefault(who,[]).append(t_)
+def bursts(ts):
+ out=[[ts[0]]]
+ for a_,b_ in zip(ts,ts[1:]):
+  if b_-a_>200:out.append([b_])
+  else:out[-1].append(b_)
+ return out
+bs={who:bursts(ts) for who,ts in per.items() if len(ts)>3}
+assert bs and all(len(v)>=3 for v in bs.values()),{k:len(v) for k,v in bs.items()}
+lens=[len(x) for v in bs.values() for x in v[1:-1]]
+assert lens and max(lens)<=10 and not invariants(w) and g['hit'](w)=={npc},(lens,invariants(w))
+passed('Door gunners fire their own weapon in bursts with a breath between them (%d bursts in 6.6 s for each gunner on the man, %d-%d rounds each), not a steady stream like a minigun'%(min(len(v) for v in bs.values()),min(lens),max(lens)))
 
 # =================================================================== E5: decor (model, clothes, weapon) changes at once
 for crew,expect in ((0,[106,107,106,107]),(1,[287]*4),(2,[285]*4)):

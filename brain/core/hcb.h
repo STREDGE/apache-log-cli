@@ -12,7 +12,7 @@
 #define HCB_H
 #include <stdint.h>
 
-#define HCB_VERSION 3          /* layout of the structs below; a black box says which version wrote it */
+#define HCB_VERSION 4          /* layout of the structs below; a black box says which version wrote it */
 
 #define HCB_MAX_PEDS 64        /* peds in one snapshot (nearest to CJ first) */
 #define HCB_MAX_VEHS 40
@@ -305,6 +305,10 @@ typedef struct hcb_cfg {
     float scatter_m;        /* scatter of a round on every axis: this much ... */
     float scatter_per_m;    /* ... plus this per metre of range ... */
     float scatter_per_ms;   /* ... plus this per m/s of the helicopter he fires from */
+    float gunner_weapon;    /* 1 = the door gunners fire their own weapon (1.4: a round of the game, judged like a guard's on foot,
+                               bursts paced by the brain); 0 = the rounds are made by the script along a checked line (1.3) */
+    float cabin_skip_m;     /* a door gunner's own cabin: CJ inside the same helicopter, this close to the gunner's end of the
+                               line, is behind the cabin wall (firing across the cabin is refused anyway) */
 } hcb_cfg;
 
 /* The brain itself is one opaque block of hcb_brain_size() bytes that the caller provides (no allocation). */
