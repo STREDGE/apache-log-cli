@@ -4,6 +4,7 @@ PASS: Helicover.fxt (ASCII) holds the 127 English messages, Helicover_RU.fxt the
 PASS: Every one of the 127 messages reads back as its Russian text in the simulated font, no @ anywhere
 PASS: The language follows the game: its own Russian -> Russian; English, SanLTD (the French slot), German, Italian, Spanish, Japanese -> English; an unknown build -> English
 PASS: Changing the game language while playing changes the mod's language at once (messages: English keys / U keys)
+PASS: The kill counter ("TARGET DOWN n") is printed with the English key or its U key, like every other message
 PASS: With the game in Russian the menu is Russian and reads correctly in the simulated font: main page, state in the title, settings
 PASS: Aboard in Russian: the two exit-button switches; switching shows the Russian hint and starts nothing
 PASS: Every one of the 254 menu pages has an English and a Russian version with the same rows; at most 8 rows, none longer than 26 (RU 30) characters; no language page, no FONT TEST
