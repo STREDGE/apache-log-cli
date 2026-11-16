@@ -4,4 +4,5 @@ PASS: The frame rate does not change the flight: the same trip at 60, 30 and 15 
 PASS: Height: 35 m over the highest roof ahead while travelling, down to 25 m only near the point; a 150 m tower is cleared by 31 m (it brakes and climbs in time), and when it stands just short of the point he comes down before he gets there
 PASS: Below the roofs, or a step refused by the script (something solid in the way): it stops and climbs on the spot, then carries on
 PASS: Nonsense in (a point, a roof height or a frame time that is not a number, a 5 s frame, a negative one): no number that is not a number comes out, and the helicopter does not jump
+PASS: A landing approach (0.8): 300 m to the pad and down to 15 m over it in 25 s - never faster down than 6 m/s, gently in the last metres, never under the height asked for
 The core only. Nothing here has run in the game.

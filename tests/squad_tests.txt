@@ -1,20 +1,23 @@
 PASS: TEAM ON FOOT: four armed guards rope down next to CJ - the commander a soldier (287) with an M4, then agents in black with an MP5, an M4 and an AK (fixed, by role) - then the helicopter resumes FOLLOW
-PASS: Peace: each guard goes to the post the brain gives him - the commander behind CJ on the left, the bodyguard a pace behind on his right, the point man ahead, the rear man behind - sprinting from afar
+PASS: Peace: each guard goes to the post the brain gives him - the commander at CJ's side, two bodyguards a couple of metres behind him, the fourth man out at 10 m - sprinting from afar
 PASS: Running to a post 6 m away, walking to one 2 m away (the pace comes with the post)
 PASS: Move orders are renewed at most every 1.5 s, or when the post moves more than a metre - not every tick
 PASS: At his post in peace each guard stands at ease: no needless orders, no weapon raised at nobody
 PASS: Contact, no cover near: the bodyguard puts himself between CJ and the shooter, the team fights, the commander tells CJ to stay by his guard; the contact call names the side
 PASS: Contact with a pillar 3 m away: the commander tells CJ which way to go ("into cover - left!") and the spot is marked; there: "CJ is in cover, we hold", the bodyguard crouches beside him, the team fights crouched from cover
-PASS: CJ badly hurt under fire: a tight ring round him and "too hot - call ROPE PICKUP", once (not again for 20 s)
+PASS: CJ badly hurt under fire: everybody comes in round him (within 5 m) and "too hot - call ROPE PICKUP", once (not again for 20 s)
 PASS: The shooter down and quiet: "area secure, regrouping on CJ", once
 PASS: No medic for now (the user's decision): nobody patches CJ up
 PASS: Mount up: the guards take CJ's passenger seats
 PASS: CJ gets out: the guards get out of the car too
 PASS: A car driving away is not chased; the guards hold and regroup when CJ stops
 PASS: The commander's words are said once each, when new; a word from before the scripts started is not said
-PASS: Eight on the ground: four more agents in black come down beside the first four (MP5, M4, AK, sniper rifle by role); the brain gives all eight their posts - two bodyguards, the advance and counter-assault pairs, the marksman - and the second squad worker moves them
+PASS: 2.0 the marksman: he does not come down with the others - the brain finds a roof from which CJ is seen, the helicopter goes over it, and when it hangs there steady he goes down its rope onto the roof (the helicopter is held until he stands)
+PASS: 2.0 the drop of eight: the helicopter hangs over the drop until the second four are down its ropes too (nobody comes down from a helicopter that is leaving); with no roof found within 15 s the marksman comes in on the ground, out of view
+PASS: Eight on the ground: four more agents in black come down the same ropes 3 s after the first four (MP5, M4, AK, sniper rifle by role) - nobody appears out of nowhere; the brain gives all eight their posts - the commander and two bodyguards with CJ, four outer men, the marksman - and the second squad worker moves them
+PASS: The second four: a man stuck 45 m or more from CJ for 40 s is deleted out of sight and replaced by a new one that comes in where the screen does not show - never in view, never teleported
 PASS: When the first four go (recalled, stood down) the second four put their weapons away and walk off; nobody is deleted in view
-PASS: Far behind (out of sight or not): the guards sprint along the path network, nobody is teleported
+PASS: 1.5: left behind (22 m+ from CJ, counting height; out of sight or not): the guard follows CJ's own footsteps (the game's follower task) until he is within 10 m, then takes his post again; nobody is teleported
 PASS: A stuck guard (moving, far, not progressing) is sent along the path network again, never teleported
 PASS: MAN DOWN is called once when a guard dies
 PASS: RECALL TEAM: hover, the team ropes back up, then FOLLOW resumes
@@ -23,8 +26,8 @@ PASS: The same in view: nobody vanishes on screen and nobody is handed to the ga
 PASS: ...and they are removed once out of sight
 PASS: Losing the whole team is reported and cleaned up
 PASS: Rope pickup with the team on the ground: the same team covers CJ (only the CJ rope is added)
-PASS: ASSAULT: the fire team pushes towards the shooter (spots 9 m out, not 5), one man bounding while his partner holds and covers; the bodyguard and the commander stay with CJ
-PASS: Leash: a guard more than 40 m from CJ sprints back along the path network (no teleport)
+PASS: A fight (1.5; the old ASSAULT setting is ignored): the outer man runs to a post of his own 8 m or more out, the commander and the two bodyguards stay at CJ's side
+PASS: Leash: a guard more than 22 m from CJ follows CJ's footsteps back (no teleport)
 PASS: HOLD FIRE: nobody of the squad fires, not even at a man who is shooting at CJ or has hurt him
 PASS: PROTECT ME: whoever fires at CJ or has hurt him, and an armed gang member within 40 m who is turned to him; not one looking away, unarmed, or far off
 PASS: Grove Street members are not engaged, armed and looking at CJ or not
@@ -35,11 +38,11 @@ PASS: Teammates, the crew and the pilot are never threats
 PASS: The brain mod gone in mid-game: the squad never runs the opcode and never fires (no "dumb" fallback: the posts are the brain's)
 PASS: Rope evacuation guards are led by the squad while CJ walks to the rope
 PASS: After a crouched fight the guard stands up before moving on
-PASS: CJ inside an interior: the team waits outside instead of teleporting after him
+PASS: CJ inside a building: the detail holds the door he went in by - posts round it, nobody follows him inside or is teleported; the man who was away comes back to the door
 PASS: The squad also engages whatever the door gunners are firing at
 PASS: A fence in the way: the guard turns to it and climbs over
 PASS: Stairs or a slope are walked, not vaulted
-PASS: Main menu: one row deploys / recalls the squad; SETTINGS switches the squad's tactics AUTO / ASSAULT / GUARD
+PASS: Main menu: one row deploys / recalls the squad; SETTINGS has no tactics row any more (1.5: the brain alone decides how the detail fights)
 PASS: TEAM ON FOOT refuses politely: CJ aboard, team already down, nothing to recall, CJ in a car
 PASS: Overwatch: the helicopter circles CJ at 30 m, 24 m above him, instead of hovering on top
 PASS: Overwatch skips stations from which a building hides CJ
@@ -90,6 +93,13 @@ PASS: An alarm on screen: nothing lesser for 1.2 s, then a tactical call or an o
 PASS: MESSAGES: IMPORTANT keeps danger and tactical calls, drops the chatter
 PASS: MESSAGES: OFF is silent in a fight but still explains why a command was refused
 PASS: With the team on the ground only the squad calls the contact (no double "CONTACT!")
+PASS: An unarmed brawler at CJ is taken down by hand (the guard puts his gun away, no shot is fired at the man); when the man draws a weapon the guard has his gun in his hands again
+PASS: The commander's words reach the screen: "grenade - left", "CJ is in the water", "armed men ahead", "sniper - right", "we were attacked here before"
+PASS: "We pull out" is also the order to the pilot: the rope pickup starts by itself (the hot pickup); CJ only has to take the rope
 PASS: SETTINGS: one row cycles MESSAGES: ALL / IMPORTANT / OFF
-PASS: Frame cost in a busy fight at 30 fps (8 attackers, 10 s): fire worker peak 379 / average 254 script instructions a frame (it was up to 3600 when it searched for targets itself), squad worker peak 876 / average 194
+PASS: Frame cost in a busy fight at 30 fps (8 attackers, 10 s): fire worker peak 403 / average 278 script instructions a frame (it was up to 3600 when it searched for targets itself), squad worker peak 1006 / average 208
+PASS: 2.0 the mod walks the guards: the squad worker asks for the post as before and is answered 5 while a man is on his way - it gives him no movement task at all (no go-to, run-and-fire, path-network detour, follower, vault), and the men arrive
+PASS: 2.0 at his post the script is his body again: crouch, aim and fire tasks as before (only the walking moved to the mod)
+PASS: 2.0 fallback: when the mod does not walk the guards (its checks failed, or it was turned off after a crash) the scripts walk them exactly as in 1.5
+PASS: 2.0 ASSAULT: with the mode switched on the menu the squad goes for the man CJ aims at ("target marked - moving up"), closes on him by its own way-finding, and CANCEL: TO ME brings everybody back to CJ ("back to CJ")
 Mocked script execution only: real pathing, cover and gunfire are not tested.

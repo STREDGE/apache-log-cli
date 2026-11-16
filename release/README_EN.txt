@@ -1,10 +1,81 @@
-HELICOVER 1.5 BETA 4 - support helicopter with a smart crew
-GTA San Andreas (Android, 64-bit), a CLEO mod + the Helicover Brain 0.9 mod. They only work together.
+HELICOVER 2.0 BETA 1 - support helicopter with an autonomous protective detail
+GTA San Andreas (Android, 64-bit), a CLEO mod + the Helicover Brain 1.0 mod. They only work together.
 
 WHAT IT IS
 Call a support helicopter: it flies in from far away, follows CJ and covers him with four door
 gunners. Drop a four-man team on foot, get picked up by rope, fly to the map marker or Grove
 Street and get out there by landing or by rope.
+
+NEW IN 2.0 BETA 1 (brain 1.0) - THE DETAIL REBUILT: THE MOD WALKS THE GUARDS, TWO MODES
+IMPORTANT: replace EVERYTHING - the CLEO files and libHelicoverBrain64.so.
+HONESTLY: there is no game and no tablet on my side. Everything below was checked in simulation and on an emulator with your
+libGTASA.so only - NOT in the game. If it goes wrong see ROLLBACK below and send the files named under WHAT TO SEND.
+
+What your 0.9 log showed (5.5 minutes of fighting): a guard was farther than 8 m from his post 65 % of the time, farther than
+20 m 45 %, "stuck" 21 %, sprinting 50 %. The brain decided, the body did not carry it out. The cause is in the game's code: the
+script gave a guard a new "go there" ten times a second and the game began the walk anew each time.
+
+What was done
+- The mod walks the guards itself. The game gets its "go to point and stand" task from the mod ONCE; after that the mod only
+  moves the task's target. The scripts leave a guard's legs alone; at his post (crouch, aim, fire) the script is still his body.
+- A map of its own. The brain asks the game for the height of the ground round CJ (48 x 48 m, metre by metre) and for what
+  stands between cells, and finds the way round walls, fences, ledges and drops. A failure is retried another way, then the
+  place is changed; the reason goes to the log.
+- PROTECT: only three at CJ - the commander at his right shoulder a step behind, one ahead-left at 3-5 m, one behind-left
+  looking back. The other four in cover about 15 m out, in places from which both the attacker and CJ are seen. The marksman
+  goes up high.
+- ASSAULT (a new mode): aim or fire at an enemy and the squad goes for him - gather at the last cover, a fire team of three
+  covers, two pairs come in from the flank in short rushes by turns; lost - search; down - all-round watch and back to you.
+  Three men down - fall back. CJ under 40 health - the two bodyguards return to him.
+- The drop: the helicopter now hangs until the second four are down too. It used to be let go the moment the first four stood
+  - exactly when the second four were put on its ropes, so they fell from a helicopter that was leaving. That was the fall you
+  saw. As a net under it the mod never lets one of ours fall faster than 6 m/s.
+- The marksman on a roof: he does not come down with the others. The brain looks for a flat roof (4-35 m above CJ, 12-70 m
+  away) from which CJ is seen; the helicopter goes there, hovers, and he ropes down onto it. No roof in 15 s, or the helicopter
+  not there in 45 s - he comes in on the ground. Nobody can climb a real roof on foot in this game.
+- The game's own cover table is read now (0.9: "read 0").
+- An old bug of the second four's script is fixed: "left behind" was not measured from CJ.
+
+HOW TO SWITCH MODES
+Menu -> "MODE AND FIRE >" (it was "GUNNER FIRE >"):
+- row one: "MODE: PROTECT" / "MODE: ASSAULT". A tap switches; the commander says what it means. Only you change the mode.
+- row two: "CANCEL: TO ME" - the squad drops the assault and comes back (holds 10 s; the mode stays).
+- below: the four fire rules and POLICE. The MISSIONS switch moved to SETTINGS.
+In ASSAULT the target is the man you aim or fire at; otherwise whoever attacked you. With no target the squad stays with you.
+
+THE MOD'S SETTINGS (configs/net.helicover.brain.ini, plain text)
+  Markers = 0 / 1   marks over people
+  BodyOff = 1       the mod does not walk the guards - the scripts do, as in 1.5
+  MapOff = 1        the mod asks the game nothing about the ground (and then does not walk anybody)
+  FireOff, VoiceOff, WaterOff = 1   as before
+If the game crashes while the mod gives a task or asks about the ground, that part turns itself off from the next start (a line
+in the log says so). To turn it back on delete the line. Tactical numbers are not in the file yet - they are in the code.
+
+ROLLBACK
+Copy every file of the previous archive Helicover_1.5_beta4_Brain0.9_Android.zip over (the CLEO and mods folders).
+The soft way without replacing files: the line BodyOff = 1.
+
+WHAT TO CHECK ON THE TABLET
+1. The game starts, the helicopter comes, the squad ropes down - nobody falls; the helicopter leaves after the second four.
+2. PROTECT, CJ standing: three at CJ, four about 15 m out, nobody running in circles or sprinting.
+3. Walk and stop dead, turn round: nobody overtakes or shoves.
+4. A fence or a wall near: a guard goes round it.
+5. An attack: three shield, four answer from cover.
+6. ASSAULT: aim at an enemy 50-70 m off - the squad goes for him; CANCEL: TO ME brings everybody back.
+7. A building near: does the helicopter go to its roof and does the marksman rope down onto it.
+
+WHAT TO SEND
+mods/hcbrain_log.txt and the new short mods/hcbrain_summary.txt - the same percentages as above for your game.
+In a simulated street (not the game): farther than 8 m 3 %, stuck 1 %, sprint with no threat 0 %, 2.8 men at CJ on average.
+
+NOT DONE FROM THE PLAN (plainly)
+- positions still come from the earlier cover search (with the new checks); no separate weighted evaluation;
+- no stop-and-look at corners and doors, no "tokens" (three shooters per target, staggered reloads);
+- the mod does not clear the game AI's own event responses and does not re-attach ropes: the helicopter is held instead;
+- the map is not saved to disk, no thread of its own, tactical numbers are not in the settings file;
+- no 30-minute random run; the thinking time on the tablet is not measured yet (the summary will show it).
+The tactics come from open material: of about 200 pages found, 54 were read in full (the game's source code), the rest only
+as search excerpts; no video was watched. Details: brain/research/tactics_notes.md in the sources.
 
 NEW IN 1.5 BETA 4 (brain 0.9) - FROM THE FIFTH WHOLE-GAME LOG
 IMPORTANT: replace EVERYTHING - the CLEO files and libHelicoverBrain64.so. None of this has been tried in the game yet.
@@ -307,12 +378,12 @@ Open the CLEO menu and choose Helicover. The menu shows only what makes sense ri
 title says what the helicopter is doing.
 No helicopter: CALL HELICOPTER.
 CJ on foot: FOLLOW ME / HOLD HERE / PATROL AROUND ME (the current one is marked [X]),
-GUNNER FIRE > (protect me / armed only / where I shoot / hold fire; police: fire back / never fire;
-missions: defend only / as usual),
+MODE AND FIRE > (mode: protect / assault; cancel: to me; fire: protect me / armed only / where I shoot /
+hold fire; police: fire back / never fire - the missions switch is under SETTINGS),
 CLIMB ABOARD BY ROPE (CANCEL ROPE PICKUP until the climb starts), DEPLOY SQUAD / RECALL SQUAD
 (a progress row while the squad is on its way), SETTINGS >, DISMISS HELICOPTER.
 CJ aboard: FLY TO MAP MARKER, FLY TO GROVE STREET, EXIT BUTTON: LAND / EXIT BUTTON: ROPE (a switch:
-[X] marks what the vehicle exit button does - the exit itself is that button), GUNNER FIRE >,
+[X] marks what the vehicle exit button does - the exit itself is that button), MODE AND FIRE >,
 SETTINGS >.
 SETTINGS: crew, helicopter model, crew weapon, squad tactics (GUARD / ASSAULT),
 messages (ALL / IMPORTANT / OFF), gunners' pose (KNEELING / STANDING).

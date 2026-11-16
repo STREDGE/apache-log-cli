@@ -20,7 +20,7 @@ PASS: WHERE I SHOOT: the man CJ has locked on and is firing at is the gunners' m
 PASS: Main menu shows only what fits the moment: call it; on foot - three modes (marked), gunner fire, rope, squad, dismiss; aboard - destinations and the two exit-button switches
 PASS: Protect CJ and cease-fire remain active after aim and takeoff changes
 PASS: 1.4.1: the crews are fixed - no crew or crew weapon pages; the SWAT door gunners carry M4s
-PASS: SQUAD TACTICS: one tap moves AUTO (the brain picks) -> ASSAULT -> GUARD -> AUTO
+PASS: 1.5: no SQUAD TACTICS row (how the detail fights is the brain's business alone); the second row is MESSAGES and a tap changes it
 PASS: Gesture activation is removed; CLEO menu invocation still opens the panel
 PASS: Rope insertion creates four additional guards while aircraft guards remain attached
 PASS: With CJ on foot and the rope out the rope row is the cancel, and there are no destinations
@@ -71,7 +71,7 @@ PASS: Map marker is read from libGTASA memory with 0DD8, never 0AB6
 PASS: Repeated map flight with delayed teleports keeps a steady cruise height
 PASS: Off-map or NaN marker coordinates are rejected
 PASS: Release build shows no DBG breadcrumbs
-PASS: Four attackers, two on each side of the helicopter: each of the four gunners has a man of his own and fires his own weapon at him
+PASS: Four attackers, two on each side of the helicopter: the gunners share them out and fire their own weapons - all four men are hit, by at least three different gunners
 PASS: Map destination searches a nearby clear landing footprint
 PASS: Blocked descent shaft leaves CJ aboard with control enabled
 PASS: Patrol changes position around CJ and can return to follow
@@ -82,9 +82,10 @@ PASS: Three armed men looking at CJ - a Balla, a Grove man and one of our ground
 PASS: Three explicit mode rows: FOLLOW ME / HOLD HERE / PATROL AROUND ME - one tap each, the active one marked [X]
 PASS: CLEO evacuation menu starts the marked route
 PASS: Blocked cruise segment climbs in place instead of passing through
-PASS: Destination: scripted cruise to overhead, then native vertical descent to 18 m
+PASS: Destination: the brain's pilot flies to overhead and comes down on the way in (a landing approach, to about 15 m over the pad); the game's pilot takes the last metres to 18 m and the landing
 PASS: A stalled native descent still offers LAND / ROPE after 25 s
-PASS: Pilot can reposition to keep an active threat in view
+PASS: A fight on (alert COMBAT) with no team out: the helicopter sends the team down the ropes by itself (once in 45 s, never while a team is out); the log says who gave the order (CMD_SRC 3)
+PASS: Pilot repositions to keep an active threat in view (the brain's own pilot when the brain gives a spot)
 PASS: New hold command stops the scripted cruise without ejecting CJ
 PASS: Aboard, the two EXIT BUTTON rows only switch what the exit button does (hint shown, [X] moves): no order, no exit; settings has no exit or language row
 PASS: Doors lock while CJ is aboard so the native exit cannot drop him
@@ -100,11 +101,12 @@ PASS: LAND mode falls back to the rope when there is no place to land
 PASS: No flat pad near the marker: hover over it for a rope exit instead of giving up
 PASS: Exit works on the first press: per-frame polling of the one-frame widget release, with debounce
 PASS: Rope evacuation lifts CJ only after he walks to the rope (6 m away)
-PASS: GUNNER FIRE page: four rules - PROTECT ME (default), ARMED ONLY, WHERE I SHOOT, HOLD FIRE (the old FIRE AT ALL is gone) - and two switches: POLICE fire back / never fire, MISSIONS defend only / as usual; BACK returns to the main page
+PASS: MODE AND FIRE page (2.0): MODE: PROTECT / ASSAULT (a switch; the commander says what it means) and CANCEL: TO ME first, then the four fire rules - PROTECT ME (default), ARMED ONLY, WHERE I SHOOT, HOLD FIRE - and the POLICE switch; BACK returns to the main page; eight rows
+PASS: SETTINGS page (2.0): HELICOPTER MODEL, MESSAGES, MISSIONS defend only / as usual (moved here from the fire page), BACK
 PASS: DISMISS HELICOPTER asks for confirmation; NO keeps it, YES sends it away
 PASS: ARMED ONLY: an armed gang member is engaged even with his back to CJ (PROTECT ME only covers him); unarmed gang members and armed civilians are not targets
 PASS: From a stranger's first round at CJ to the gunners' first round at 30 fps: 198-297 ms for a man they already had a weapon on, 198-297 ms for a man who was nobody until he fired
-PASS: A car driven straight at CJ at 72 km/h: the gunners fire at the driver from 35 m on (2 s before it would hit), 11 rounds before it is close; a car driving past is left alone
+PASS: A car driven straight at CJ at 72 km/h: the gunners fire at the driver from 35 m on (2 s before it would hit), 12 rounds before it is close; a car driving past is left alone
 PASS: Door gunners are given no hatred of anybody: they fire only the rounds the brain lets go
 PASS: HOLD FIRE: no rounds, weapons down, and the pilot is told of no fight; back on PROTECT ME the most dangerous man is his business again
 PASS: No helicopter any more in the middle of a fight: the gunners' fight is over at once (no stale "engaged" flag or pilot target for the next call)
@@ -114,6 +116,7 @@ PASS: Police: without stars a policeman is nobody; with stars he is covered and 
 PASS: Gunner callouts: CONTACT once when somebody attacks, TARGET DOWN with the kill count when a man dies under their fire, AREA CLEAR 3 s after the last dangerous man is gone, and a report for each fire rule
 PASS: Callouts stay silent when STATUS MESSAGES is disabled
 PASS: A stranger's round that passes within 6 m of the helicopter stamps the time the pilot's evasion looks at (it used to be read from the bullet traces); rounds elsewhere and our own fire do not
-PASS: In a fight the pilot holds the brain's spot: 28 m from CJ on the far side from the threat, 24 m up, where the gunners see the man (the old orbit round the threat only until the brain has the spot)
+PASS: 1.5: in a fight the brain's own pilot flies the helicopter to the brain's spot (20 m from CJ, 16 m up) frame by frame and holds it there side-on to the threat - 160 of 160 looks on its own pilot, the game's pilot not asked again; when the fight is over the helicopter is given back to the game's follow
+PASS: An order in the middle of a fight (HOLD HERE) takes the helicopter from the brain's pilot cleanly - the flag is dropped and the escort's follow is not issued over the new order; back on FOLLOW ME its own pilot takes it again
 PASS: All on-screen texts: radio style (coloured source or alert, then the message), at most 66 characters, no removed buttons
 Mocked script execution only: actual GTA flight, collisions, gunfire, animations and Android behavior are not tested.

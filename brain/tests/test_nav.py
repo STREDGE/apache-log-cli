@@ -178,6 +178,45 @@ for k in range(300):
 ts.sort()
 passed('Cost on this computer (the whole step of the test scene, Python included): median %.2f ms, worst %.2f ms a look - the phone has its own counters in the log' % (ts[len(ts) // 2] * 1e3, ts[-1] * 1e3))
 
+# ------------------------------------------------------------------ heights: a ledge is not walked up, a drop is not walked off; arriving; "stuck"
+def ground_blocks(blocks):
+    return lambda x, y: max([h for x1, y1, x2, y2, h in blocks if x1 <= x <= x2 and y1 <= y <= y2] + [0.])
+sc = Scene(); BOX = (-6., -16., 6., -8., 1.6); sc.ground_fn = ground_blocks([BOX]); team = team_at(sc, ((0., -30.),))
+on_box = 0
+for k in range(400):
+    sc.step(1); x, y, _ = sc.peds[team[0]]['pos']
+    on_box += BOX[0] + .2 < x < BOX[2] - .2 and BOX[1] + .2 < y < BOX[3] - .2
+    if arrived(sc, team): break
+assert arrived(sc, team) and on_box == 0, ('he goes round the block 1.6 m high, never over it', on_box, sc.peds[team[0]]['pos'])
+sc.step(60)                                                        # (the whole map is known now)
+way = hcb_py.nav_way(sc.brain, (0., -22., 1.), (0., -3., 1.), sc.time)
+def crosses(p, q):
+    return any(BOX[0] + .3 < p[0] + (q[0] - p[0]) * t / 20. < BOX[2] - .3 and BOX[1] + .3 < p[1] + (q[1] - p[1]) * t / 20. < BOX[3] - .3 for t in range(21))
+assert way and not any(crosses(a_, b_) for a_, b_ in zip([(0., -22., 1.)] + way, way)), ('the map\'s own way from one side of the block to the other goes round it', way)
+passed('Heights: a ledge 1.6 m high is not a step - the way goes round the block (the man never stands on it) and he arrives')
+sc = Scene(); ROOF = (-4., -34., 4., -26., 5.); sc.ground_fn = ground_blocks([ROOF]); team = team_at(sc, ((0., -30.),)); sc.peds[team[0]]['pos'][2] = 6.
+left = 0
+for k in range(250):
+    sc.step(1); x, y, _ = sc.peds[team[0]]['pos']
+    left += not (ROOF[0] - .1 <= x <= ROOF[2] + .1 and ROOF[1] - .1 <= y <= ROOF[3] + .1)
+p_ = sc.posts[team[0]]
+assert left == 0 and (p_.phase == HCB_PH_FAILED or p_.stuck or p_.act in (HCB_ACT_HOLD, HCB_ACT_OVERWATCH)), ('a man on a roof 5 m up does not walk off its edge', left, p_.phase, p_.act)
+passed('Heights: a drop of 5 m is not a way - a man on a roof stays on it (his post on the ground is given up, he is not walked off the edge)')
+sc = Scene(); team = team_at(sc, ((3., -9.),)); ph = []
+for k in range(120):
+    sc.step(1); ph.append((sc.posts[team[0]].phase, sc.posts[team[0]].act))
+assert 0.3 < d2(sc.peds[team[0]]['pos'], (sc.posts[team[0]].at.x, sc.posts[team[0]].at.y)) < 0.95   # (within a step: he is not walked on to the centimetre)
+assert ph[-1][0] in (HCB_PH_ARRIVED, HCB_PH_ACTING) and ph[-1][1] not in (HCB_ACT_WALK, HCB_ACT_FASTWALK, HCB_ACT_RUN, HCB_ACT_SPRINT), ('at his post he has arrived and stands', ph[-1])
+passed('Arriving: within a step of his post the man has ARRIVED and stands - he is not sent on for the last centimetres for ever')
+sc = Scene(); team = team_at(sc, ((0., -12.),)); sc.step(20); sc.stuck_men = {team[0]}
+told = None
+for k in range(200):
+    sc.step(1); p_ = sc.posts[team[0]]
+    if p_.stuck and p_.phase != HCB_PH_FAILED and told is None: told = k / 10.
+    if p_.phase == HCB_PH_FAILED: break
+assert told is not None and p_.phase == HCB_PH_FAILED, ('a man who cannot move is reported STUCK first, then his post is given up', told, p_.phase)
+passed('Stuck: a man who does not move is reported STUCK after four failed tries (%.1f s) - before his post is given up for a while' % told)
+
 text = '\n'.join(results) + '\nThe core only. Nothing here has run in the game.\n'
 (hcb_py.OUT / 'brain_nav_tests.txt').write_text(text)
 print(text)

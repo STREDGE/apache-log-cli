@@ -1,0 +1,14 @@
+PASS: PROTECT, a fight: exactly THREE at CJ the whole time (the commander and two bodyguards); the other four on posts 12-28 m out, 4 of 4 behind low cover; standing there a man sees both CJ and the attacker 100 % of his time on the post
+PASS: The marksman: of the high places the adapter has found the squad takes the one that sees CJ, 4-35 m up and 12-70 m off; the helicopter is sent to hang 11 m over it, and only when it hangs there steady may the rope go down; on the roof he stays, watches, and in a fight keeps his eyes on the attacker
+PASS: No high place near, or the helicopter does not get there in 40 s: the squad does not wait - the marksman comes down with the others
+PASS: ASSAULT with nobody pointed out and no threat: the squad stays with CJ (task REGROUP), a passer-by 70 m off is not a target
+PASS: ASSAULT on a man CJ points out 70 m off: APPROACH -> GATHER -> BOUND by itself (CJ did not move); the assault four close in pairs on the two flanks to 9-14 m, one pair at a time (both moving in 25 of 430 looks), the fire team holds 30-46 m back; nobody on the same spot
+PASS: ASSAULT on a confirmed threat 60 m off (it fires at CJ): the first man stands in a place within 45 m of it after 9.9 s (criterion: 20 s)
+PASS: The target is down: CONSOLIDATE - eight seconds of all-round watch beside the spot (nobody on it) - then REGROUP: back to CJ, three at his side again; the mode stays ASSAULT and waits for the next target
+PASS: The target goes out of sight: after 6 s the squad SEARCHES - towards the place where he was last seen (his real position is not known to it); 20 s without sight and the task is over, back to CJ
+PASS: Switching on the move: ASSAULT -> PROTECT gives every man his place round CJ at once (nobody is re-created); "to me" drops the task and keeps the mode
+PASS: CJ badly hurt during an assault: the two bodyguards come back to him while that lasts, the rest go on; the mode stays what the player chose
+PASS: Three of ours down since the task began: WITHDRAW - the squad goes back to CJ and protects him
+PASS: The commander falls during an assault: the next man takes command, the task goes on
+PASS: Overwatch: a high place counts from 4 m above CJ's feet - a wall top 2 m up is not offered to the marksman
+The core only. Nothing here has run in the game.

@@ -1,24 +1,43 @@
-PASS: Peace: a diamond round CJ - the bodyguard a pace behind on his right, the commander behind on the left, the point man 4.5 m ahead, the rear man 5 m behind; each watches his own sector outwards, standing
-PASS: The formation turns with the way CJ goes (after 1.5 s on a new course, not on a sidestep), and whoever has fallen back runs to his slot
+PASS: Peace, eight men (1.0): THREE at CJ - the commander at his right shoulder, one bodyguard ahead on the left, one behind on the left watching the rear, nobody on the line he walks; four 14-15 m out, one at each corner, each watching outwards; the marksman furthest out
+PASS: Four men: the commander, two bodyguards and one man out
+PASS: The formation turns with the way CJ goes (after 1.5 s on a new course, not on a sidestep), and whoever has fallen back runs to his place
 PASS: CJ shooting: nobody stands in front of his gun - a man within 2 m of his line steps out sideways (the bodyguard 1.2 m), and goes back once CJ has stopped for 1.2 s
-PASS: A suspect (armed and near, has done nothing yet): the bodyguard steps between him and CJ, the others put their eyes on him, the rear man keeps watching the rear
+PASS: A suspect (armed and near, has done nothing yet): the first bodyguard steps between him and CJ, the commander, the bodyguards and the two front men put their eyes on him, the two rear men keep the rear
 PASS: Contact with a wall 3 m away on the side away from the shooter: within a second the commander tells CJ where to go ("into cover - on your left"), the bodyguard puts himself between CJ and the shooter
-PASS: CJ goes to the spot: "CJ is in cover, we hold", the mark goes away; the bodyguard crouches at his side, the commander takes cover next to him, the fire team fights from the shooter's side, within 12 m of CJ
+PASS: CJ goes to the spot: "CJ is in cover, we hold"; the bodyguards crouch at his sides, the commander crouches next to him, the outer man holds a post of his own
 PASS: No cover within 8 m: the commander tells CJ to stay with the bodyguard, who keeps his body between CJ and the shooter
 PASS: CJ is never sent towards the shooter for cover, nor to a hidden spot with no ground under it (water, a drop)
-PASS: Bounding overwatch: when both men of the fire team have to move, one runs to his spot while the other holds where he is, crouched, covering him; then they change
+PASS: A fight, eight men: the commander at CJ's side, three bodyguards between CJ and the shooter, the other four each on a post of his own in his sector 8-26 m out, behind something solid (4 of 4 found cover here), with CJ's ground in sight, crouched once there; the posts are kept for the next 10 s
+PASS: On the way to a post a man runs upright; when CJ has moved far the outer men take new posts near him and the inner four are at his side
+PASS: Rotation: an outer man who is badly hurt changes places with the fittest bodyguard - the wounded man comes in to CJ's side, a fresh one takes his post
 PASS: The commander falls: the next man takes command and says so; the three left share the roles (bodyguard and fire team)
-PASS: Too hot (CJ badly hurt under fire): the detail pulls out - a tight ring round him, nobody further than 2 m, the bodyguard towards the shooter, the commander 2.5 m ahead leading him away from the shooter; "we pull out - call the pickup", not repeated for 20 s
+PASS: Too hot (CJ badly hurt under fire): the detail pulls out - the commander and the bodyguards come in (5 m at most), the outer man holds 8-12 m off, the bodyguards towards the shooter, the commander at CJ's side a step away from the shooter, taking him out; "we pull out - call the pickup", not repeated for 20 s
 PASS: The shooter is down and it stays quiet: "clear - regroup on CJ", once, and the detail is back in its formation
 PASS: Cover questions: at most 8 a look (two rays each in the game), and a spot already answered is not asked about again while the answer is fresh
 PASS: CJ in a vehicle: the detail gives no posts on foot (the scripts take the free seats or follow)
-PASS: Eight men: the commander, two bodyguards either side of CJ, the advance pair (ahead and the right flank), the counter-assault pair (behind and the left flank) and the marksman further back; when CJ stands a while the outer men stand off on the approaches
-PASS: Under fire the commander leads CJ to the cover himself: he walks 2-3 m ahead of CJ on the way, staying ahead as CJ follows
-PASS: CJ decides: if he does not follow, the commander goes back to his side after 3 s and offers the way again a few seconds later
+PASS: Under fire the commander takes CJ to the cover like by the hand: at CJ's side, a step towards the cover, all the way, crouching next to him there; if CJ stays where he is, so does the commander
 PASS: The threat is remembered (the attacker 20 s, his place 12 s more): between bursts the detail does not stand down; then it does
-PASS: A man who does not get nearer to his post for 1.5 s is given another way round (the post turned round CJ), then the path network
-PASS: The brain picks how to fight: 5 stars (or too many / too strong, CJ badly hurt) -> pull out; one weak shooter and CJ safe in cover -> assault
-PASS: The helicopter gets a spot 28 m from CJ on the far side, where the gunners see the shooter; the gunners sit on the skid when all is quiet and kneel at the door over a fight
-PASS: SQUAD TACTICS: GUARD keeps the fire team within 12 m of CJ (6 m here), ASSAULT pushes it towards the shooter (10 m, never beyond 18 m)
+PASS: Script body (fallback): a man who does not get nearer to his post for 1.5 s is given another way round (the post turned round CJ), then the path network
+PASS: 1.0, a man who cannot get on: after 1.5 s with no progress he steps round it and a new way is planned (the reason is given: "no progress"); the fourth time the game's path network is asked ("no route"); the sixth time his action has failed and the squad may give him another place
+PASS: The brain picks how to fight by itself: 5 stars (or too many / too strong, CJ badly hurt) -> pull out; else hold. There is no ASSAULT / GUARD setting any more (the old menu value is ignored)
+PASS: The helicopter gets a spot 20 m from CJ and 16 m up, abeam of the line to the shooter on the side it is already, where the gunners see him; it is kept for 10 s of a fight with shooters moving and firing in turn and replaced only when CJ has gone far; the gunners sit on the skid when all is quiet and kneel at the door over a fight
 PASS: The same fight twice gives the same posts, the same words and the same questions (a recorded fight replays exactly)
+PASS: A car at speed coming at a guard: he sprints out of its path (never within 2 m of it as it passes; closest 3.0 m) and returns to his post after
+PASS: A post on the other side of a road with a car coming: the man waits for it to pass (closest 3.3 m to its path) and crosses after
+PASS: 30 s with the shooter circling CJ, a second one firing in turn and CJ shifting about: the commander says 5 things, never two within 2.5 s, "into cover" 6 s apart at least; he starts or stops leading 8 times
+PASS: Two shooters on opposite sides firing in turn: the detail keeps the one it fights (3 s at least, then until another is half again as dangerous) - it turned round 0 times in 2.5 s
+PASS: No cover anywhere: each outer man still takes a place of his own and keeps it while the shooter shifts about for 10 s (all four are on their posts, none is running after a moving corner)
+PASS: A shooter 70 m off who has fired at CJ: the commander calls "sniper" with the direction, once in 20 s
+PASS: Memory of places: the spot of a fight is remembered (handed to the adapter to save); back within 45 m of one in peace the commander says "we were attacked here before", once; far from any - nothing
+PASS: Stealth: CJ crouches and creeps while all is quiet - everybody goes down and moves at a walk
+PASS: A burning vehicle: no outer man is posted within 12 m of it (his post is moved straight out)
+PASS: A grenade among the detail: every man within 10 m of it sprints straight out (13 m clear), the commander calls "grenade" with the side; when it is gone they come back
+PASS: CJ in the water: nobody follows him in (each man holds where he stands), the helicopter is sent over him 12 m up for the rope, the commander says so
+PASS: CJ goes into a building: the detail holds the door he went in by (the commander at the door, the outer men at the corners round it) until he is out again
+PASS: CJ drives: the helicopter's spot is 50 m ahead of him along his way (it scouts the road), and armed men ahead on his way are called once
+PASS: The game's own cover points (walls, corners, cars it marks near CJ) are tried first: CJ is taken behind one the brain's rings had not reached yet
+PASS: A blast in the game's table: every man within its radius (kept between 6 and 14 m; a radius that is not believable counts as 10) sprints out of it - the old rule let blasts go as "gone off already"
+PASS: A car on a collision course with CJ is called with the side it comes from ("car - left!"); one that drives past is not
+PASS: "Into cover" is not repeated every 6 s at a CJ who does not move (a second time only after 15 s or when he has moved)
+PASS: A man 30 m or more from his post who gets no nearer goes by the path network after the first 1.5 s (not after the third try)
 The core only. Nothing here has run in the game.

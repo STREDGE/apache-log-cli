@@ -1,9 +1,9 @@
-Helicover_Core.csa: PASS, 6790 instructions, 1508 jumps, 0 menu pointers, 62637 bytes.
-Helicover_Panel.csa: PASS, 4261 instructions, 1442 jumps, 517 menu pointers, 111658 bytes.
+Helicover_Core.csa: PASS, 6872 instructions, 1526 jumps, 0 menu pointers, 63387 bytes.
+Helicover_Panel.csa: PASS, 4277 instructions, 1432 jumps, 511 menu pointers, 111907 bytes.
 Helicover.csi: PASS, 43 instructions, 9 jumps, 0 menu pointers, 357 bytes.
-Helicover_Fire.csa: PASS, 2461 instructions, 516 jumps, 0 menu pointers, 21990 bytes.
+Helicover_Fire.csa: PASS, 2698 instructions, 564 jumps, 0 menu pointers, 24170 bytes.
 Android runtime: NOT TESTED.
-Helicover_Ground.csa: PASS, 3064 instructions, 679 jumps, 0 menu pointers, 27061 bytes.
-Helicover_Squad.csa: PASS, 5404 instructions, 1026 jumps, 0 menu pointers, 47234 bytes.
-Helicover_Squad2.csa: PASS, 5405 instructions, 1026 jumps, 0 menu pointers, 47244 bytes.
-Helicover_Team2.csa: PASS, 452 instructions, 91 jumps, 0 menu pointers, 3974 bytes.
+Helicover_Ground.csa: PASS, 3155 instructions, 700 jumps, 0 menu pointers, 27770 bytes.
+Helicover_Squad.csa: PASS, 6519 instructions, 1249 jumps, 0 menu pointers, 56690 bytes.
+Helicover_Squad2.csa: PASS, 6245 instructions, 1199 jumps, 0 menu pointers, 54351 bytes.
+Helicover_Team2.csa: PASS, 1133 instructions, 229 jumps, 0 menu pointers, 10327 bytes.

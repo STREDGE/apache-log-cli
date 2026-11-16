@@ -256,6 +256,14 @@ o = sc.step(3)
 assert o.lead == team[1] and o.task in (HCB_TASK_GATHER, HCB_TASK_BOUND, HCB_TASK_APPROACH), (o.lead, TASK[o.task])
 passed('The commander falls during an assault: the next man takes command, the task goes on')
 
+# ------------------------------------------------------------------ a "roof" must be a roof: 4 m up or more
+sc = Scene(); team = squad(sc, 7); sc.heli = sc.veh(0, 30, z=30., cls=HCB_VC_HELI)
+sc.high = [(25., 5., 3.2, 1)]; sc.step(40)
+assert sc.last_out.ow_ok == 0, 'a place 2-3 m above CJ is no place for the marksman'
+sc.high = [(25., 5., 9., 1)]; sc.step(10)
+assert sc.last_out.ow_ok == 1, sc.last_out.ow_ok
+passed('Overwatch: a high place counts from 4 m above CJ\'s feet - a wall top 2 m up is not offered to the marksman')
+
 text = '\n'.join(results) + '\nThe core only. Nothing here has run in the game.\n'
 (hcb_py.OUT / 'brain_squad_tests.txt').write_text(text)
 print(text)
