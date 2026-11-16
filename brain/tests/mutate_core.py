@@ -266,6 +266,14 @@ M = [
  (Q, 'if (p->job == HCB_ROLE_CLOSE || p->job == HCB_ROLE_CLOSE2 || p->job == HCB_ROLE_MARKSMAN) continue;', 'if (p->job == HCB_ROLE_MARKSMAN) continue;', '1.3 assault: the two bodyguards stay with CJ'),
  (L, '    if (!in->keep && seg_dist(cj2, a2, th2, &t) < 1.8f && t > 0.02f && t < 0.98f) return -1.0f;\n', '', '1.3 places: CJ in the line'),
  (L, ' || (!in->keep && seg_dist(tk, a2, th2, &t) < 1.0f && t > 0.05f && t < 0.95f)', '', '1.3 places: one of ours in the line'),
+ (Q, 'if (best >= 0) { q->mk_at = s->high[best].at; how = MK_HELI; }', '', 'b5 marksman: the helicopter picks him up'),
+ (Q, 'if (hv && d2(hv->last.pos, me->pos) < 4.0f && v_len(hv->last.vel) < 1.5f && f_abs(hv->last.pos.z - out->heli_at.z) < 5.0f) out->ow_ready = 1;', 'out->ow_ready = 1;', 'b5 pickup: only when the helicopter hangs over him'),
+ (Q, 'q->ow_done_for = 0;                                        /* (the drop over the roof is a new try) */', '', 'b5 pickup: the drop on the roof is a new try'),
+ (Q, 'if (best < 0 && s->heli && b->alert < HCB_ALERT_COMBAT', 'if (best < 0 && b->alert < HCB_ALERT_COMBAT', 'b5 pickup: only with our helicopter'),
+ (A, 'if (blocked && in3 && now - a->line_since >= 700', 'if (0 && in3 && now - a->line_since >= 700', "b5 the three: a step to CJ's flank"),
+ (A, '(!in3 && (od->hold == HCB_HOLD_CJ_BEHIND || od->hold == HCB_HOLD_FRIEND))', '((od->hold == HCB_HOLD_CJ_BEHIND || od->hold == HCB_HOLD_FRIEND))', 'b5 the three: one in front of another is the shield'),
+ (A, '        if (follow && p->move == 0) p->move = 1;\n        if ((p->move == 0 || d < ra) && !follow) {', '        if (p->move == 0 || d < ra) {', 'b5 by a moving CJ he walks on'),
+ (A, 'else if (a->arrived_since && now - a->arrived_since < 1500', 'else if (0 && a->arrived_since && now - a->arrived_since < 1500', 'b5 arrived: a small shift does not move him for 1.5 s'),
 ]
 only = sys.argv[1:]
 missed = 0

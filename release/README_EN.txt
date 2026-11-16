@@ -1,10 +1,26 @@
-HELICOVER 2.0 BETA 4 - support helicopter with an autonomous protective detail
-GTA San Andreas (Android, 64-bit), a CLEO mod + the Helicover Brain 1.3 mod. They only work together.
+HELICOVER 2.0 BETA 5 - support helicopter with an autonomous protective detail
+GTA San Andreas (Android, 64-bit), a CLEO mod + the Helicover Brain 1.4 mod. They only work together.
 
 WHAT IT IS
 Call a support helicopter: it flies in from far away, follows CJ and covers him with four door
 gunners. Drop a four-man team on foot, get picked up by rope, fly to the map marker or Grove
 Street and get out there by landing or by rope.
+
+NEW IN 2.0 BETA 5 (brain 1.4) - WHAT BETA 4 LEFT, DONE
+IMPORTANT: replace EVERYTHING - the CLEO files and libHelicoverBrain64.so.
+Beta 4 came with a "not in this release" list - against your rule. All of it is done here:
+- The helicopter picks the marksman up. A good roof (4 m up or more, CJ seen from it) he can neither climb nor reach by
+  a car, and the helicopter is free (no fight, CJ on foot): it hangs over him, he goes up its rope (as the four go up),
+  it flies over the roof and puts him on it by the rope. 40 s and no helicopter - the next place.
+- The three at CJ's side step out from behind him. When CJ himself blocks the commander's or a bodyguard's line, after
+  0.7 s he goes round CJ to his flank (1.7 m beside him, half a step forward) - still next to him, with a line. Two never
+  take one spot; not in cover with CJ, not while the commander leads CJ to cover; a bodyguard in front of another is the
+  shield and stays.
+- The "think 3-6 ms" peaks of your log were the file of earlier fights' places written in the game's own thread (all
+  four peaks fell on it). The mod's own thread writes it now, as it writes the map.
+- Less jerking: next to a CJ on the move a man no longer runs-stops-runs, he walks at CJ's pace; a man at his place does
+  not start off at once for a shift of under a metre. A steady walk with CJ: about one change of action a minute; in the
+  30-minute simulation, nearly all of it fights, a third fewer quick back-and-forths within 3 s.
 
 NEW IN 2.0 BETA 4 (brain 1.3) - EVERYTHING FROM THE SECOND 2.0 LOG AND YOUR REQUESTS, IN ONE RELEASE
 IMPORTANT: replace EVERYTHING - the CLEO files and libHelicoverBrain64.so.
@@ -43,9 +59,6 @@ Both of your black boxes (5472 looks) replayed here bit for bit; 16 causes found
   "CLEO UI" and "4-Finger Touch" are other mods, left alone.
 - An honest summary: "standing though on his way" by real movement, "bodyguards within 2.5 m", "fire at the uninvolved",
   "new tasks a minute", how long HOLD FIRE was on.
-NOT in this release (honestly): the helicopter does not pick up a marksman who could not climb - he takes the next place
-at once; the three at CJ (the commander and the bodyguards) do not step out from behind CJ - they shield him; one peak
-"think 6 ms" at the moment of the drop is left (a game frame is 33 ms; the game does not freeze on it).
 Checked: simulation (new scenes: climbing, coming down, a car as a step, kerbs), three windows of your black boxes on the
 new core, mutants, an emulator with your libGTASA.so. Not in the game. In the next summary look at the lines with "1.3".
 

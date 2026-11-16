@@ -55,7 +55,7 @@ extern void *memset(void *d, int c, u64 n);
 
 #define HIDDEN __attribute__((visibility("hidden")))
 #define EXPORT __attribute__((visibility("default")))
-#define VERSION "1.3 (the commander leads to cover, fire on the move at any pace, cars that pass are traffic, HOLD FIRE answers attackers, the marksman climbs, the medic aboard)"
+#define VERSION "1.4 (the helicopter picks the marksman up, the bodyguards step round CJ, files written off the game's thread, less stop-and-go; 1.3: the commander leads to cover, fire on the move, HOLD FIRE answers attackers, the medic aboard)"
 #define GAME_DIR "/storage/emulated/0/Android_unprotected/data/com.rockstargames.gtasa/"
 
 /* ---------- the game (offsets from libGTASA base; see brain/research/game_facts.md) ---------- */
@@ -1150,6 +1150,8 @@ static hcb_pathq g_pq[HCB_MAX_PATHQ];
 static hcb_patha g_pa[HCB_MAX_PATHQ];
 static u32 g_pq_n, g_pq_now, g_pa_n, g_paths_asked, g_paths_found, g_paths_dropped, g_path_us_max;
 static int g_path_thread;
+static u32 g_pl_save;                   /* 2.0 beta 5: the places of earlier fights wait to be written by the thread */
+static void places_write(void);
 static u32 mc_slot(int x, int y) { return ((u32)x * 73856093U ^ (u32)y * 19349663U) & (MCACHE - 1); }
 static struct mcell *mc_find(int x, int y) {
     u32 h = mc_slot(x, y), k;
@@ -1203,6 +1205,7 @@ EXPORT void hcb_path_work(void) {
         __atomic_store_n(&g_path_job, 2, __ATOMIC_RELEASE);
     }
     if (__atomic_exchange_n(&g_map_save, 0, __ATOMIC_ACQ_REL)) map_write();
+    if (__atomic_load_n(&g_pl_save, __ATOMIC_ACQUIRE)) { places_write(); __atomic_store_n(&g_pl_save, 0, __ATOMIC_RELEASE); }
 }
 static void *path_thread(void *arg) {
     (void)arg;
@@ -1671,13 +1674,23 @@ static void places_load(void) {
     hcb_places_set(BRAIN, at, cnt, (int)k);
     lg("places of earlier attacks remembered: "); tu(&g_log, k); lg("\n");
 }
-static void places_save(void) {
-    struct place_rec r[HCB_MAX_PLACES]; hcb_vec at[HCB_MAX_PLACES]; u16 cnt[HCB_MAX_PLACES];
-    u32 n = (u32)hcb_places_get(BRAIN, at, cnt), i; int fd;
-    for (i = 0; i < n; i++) { r[i].x = at[i].x; r[i].y = at[i].y; r[i].z = at[i].z; r[i].n = cnt[i]; }
-    fd = open(PLACES_FILE, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+/* 2.0 beta 5 (the second 2.0 log: the four longest looks - 6.2, 3.4, 3.3 and 2.8 ms - were each the look that wrote this file): the
+   game's thread only copies the list; the mod's own thread writes the file (as it writes the map) */
+static struct place_rec g_pl_copy[HCB_MAX_PLACES];
+static u32 g_pl_n;
+static void places_write(void) {                                        /* (the thread's) */
+    u32 n = g_pl_n; int fd = open(PLACES_FILE, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd < 0) return;
-    write(fd, &n, 4); write(fd, r, (u64)n * sizeof r[0]); close(fd);
+    write(fd, &n, 4); write(fd, g_pl_copy, (u64)n * sizeof g_pl_copy[0]); close(fd);
+}
+static void places_save(void) {
+    hcb_vec at[HCB_MAX_PLACES]; u16 cnt[HCB_MAX_PLACES];
+    u32 n = (u32)hcb_places_get(BRAIN, at, cnt), i;
+    if (__atomic_load_n(&g_pl_save, __ATOMIC_ACQUIRE)) return;          /* (the last one is still being written: the next change saves it) */
+    for (i = 0; i < n && i < HCB_MAX_PLACES; i++) { g_pl_copy[i].x = at[i].x; g_pl_copy[i].y = at[i].y; g_pl_copy[i].z = at[i].z; g_pl_copy[i].n = cnt[i]; }
+    g_pl_n = i;
+    __atomic_store_n(&g_pl_save, 1, __ATOMIC_RELEASE);
+    if (!g_path_thread) { places_write(); __atomic_store_n(&g_pl_save, 0, __ATOMIC_RELEASE); }
     log_begin(); stamp(&g_log, RD(u32, G + TIME_MS)); lg("a fight here: the place is remembered ("); tu(&g_log, n); lg(" places in all)\n"); log_end();
 }
 
@@ -2975,7 +2988,7 @@ static void *watchdog(void *arg) {
 }
 
 struct ModInfo { char guid[48]; char name[48]; char version[24]; char author[48]; u16 ver[4]; u8 reserved[336]; };
-static struct ModInfo g_info __attribute__((aligned(16))) = {"net.helicover.brain", "Helicover Brain", "1.3", "Helicover", {1, 3, 0, 0}, {0}};
+static struct ModInfo g_info __attribute__((aligned(16))) = {"net.helicover.brain", "Helicover Brain", "1.4", "Helicover", {1, 4, 0, 0}, {0}};
 static int g_done;
 EXPORT struct ModInfo *__GetModInfo(void) { return &g_info; }
 EXPORT void OnModPreLoad(void) {}

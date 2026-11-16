@@ -146,6 +146,33 @@ assert left_at is not None and left_at - at_wall < 160, ('three tries of 3.5 s a
 assert feet(sc, mk) < 0.5 and d2(pos(sc, mk), (18., 12.)) > 6. and pos(sc, mk)[1] < -12., ('gave up the shed, a long look towards the fire instead', pos(sc, mk), getattr(sc, 'climbs', 0))
 passed('A wall the game will not let him climb: three tries (3.5 s each), then the shed is marked no good for a minute and he takes the next place - in a fight a long look towards the fire - instead of standing at the wall')
 
+# ------------------------------------------------------------------ a good roof 7 m up, no way to climb it, nothing to step on: the helicopter picks him up
+sc = Scene(); team = squad(sc, 7)
+heli = sc.veh(0., -40., z=30., cls=HCB_VC_HELI); sc.heli = heli
+sc.blocks = [(18., 8., 26., 16., 7.0)]
+sc.high = [(22., 12., 8.0, True)]
+for k in range(460): o = sc.step(1)                             # (the first drop over the roof: the helicopter never got there - its try is used up)
+assert not o.ow_ok, 'the first try of 40 s is over'
+mk = sc.our(-3., -6., SQ + 7, weapon=SNIPER); team.append(mk)  # (he came down with the others)
+o = None
+for k in range(80):
+    o = sc.step(1)
+    if o.ow_ok == 2: break
+assert o.ow_ok == 2 and d2((o.ow_at.x, o.ow_at.y), pos(sc, mk)) < 0.5 and o.heli_ok and d2((o.heli_at.x, o.heli_at.y), pos(sc, mk)) < 0.5 and abs(o.heli_at.z - pos(sc, mk)[2] - 12.) < 0.1, ('the helicopter is sent over him, 12 m up', o.ow_ok)
+assert sc.posts[mk].move == 0 and not o.ow_ready, 'he waits where he stands; the helicopter is not there yet'
+mp = pos(sc, mk); sc.vehs[heli]['pos'] = [mp[0] + 1., mp[1], mp[2] + 12.]; sc.vehs[heli]['vel'] = [0., 0., 0.]
+o = sc.step(2)
+assert o.ow_ok == 2 and o.ow_ready, 'it hangs over him steady: the rope may go up'
+del sc.ours[mk]; del sc.peds[mk]                                   # (the squad worker takes him up the rope: he is aboard)
+for k in range(10): o = sc.step(1)
+assert o.ow_ok == 1 and d2((o.ow_at.x, o.ow_at.y), (22., 12.)) < 0.1 and abs(o.heli_at.z - 19.) < 0.1, ('aboard: the helicopter is sent over the roof to put him on it', o.ow_ok, o.ow_at.x, o.ow_at.y)
+passed('A good roof 7 m up (CJ seen from it), no way to climb it and nothing to step on, the first drop over it having failed: the helicopter is sent over the marksman (12 m up), he waits where he stands; when it hangs there steady the rope may go up; once he is aboard it is sent over the roof to put him on it - a new try')
+# ... and in a fight, or with no helicopter, no pickup: the next place
+sc = Scene(); team = squad(sc); mk = team[7]
+sc.blocks = [(18., 8., 26., 16., 7.0)]; sc.high = [(22., 12., 8.0, True)]
+for k in range(60): o = sc.step(1); assert o.ow_ok != 2, 'no helicopter: no pickup'
+passed('No helicopter: no pickup is asked for (the marksman takes the next place)')
+
 # ------------------------------------------------------------------ "to me": he comes down at once
 sc = Scene(); team = squad(sc); mk = team[7]
 sc.blocks = [(18., 8., 26., 16., 2.5)]
@@ -218,6 +245,20 @@ assert blocked_t is not None and fired_t is not None and 1.8 < d2(p1, p0) < 3.2,
 assert d2(p1, sc.cj['pos']) > d2(p0, sc.cj['pos']), 'the step is away from CJ'
 passed('One of ours in his line to the man he is to fire at (the second 2.0 log: "one of ours in the line" in one order of five, and the man stood): after 0.7 s he steps 2.5 m aside, away from CJ, and fires %.1f s after he was first held' % ((fired_t - blocked_t) / 10.))
 
+# ------------------------------------------------------------------ the three at CJ's side: CJ in the line - a step round him to his flank, still at his side
+sc = Scene(roe=HCB_ROE_ARMED); team = squad(sc); sc.step(30)
+g = sc.ped(0., 30., pedtype=GANG, weapon=AK, face=(0., 1.))
+in3 = [w for w in team if sc.posts[w].job in (HCB_ROLE_LEAD, HCB_ROLE_CLOSE2)]
+before, after, far = 0, 0, 0
+for k in range(60):
+    sc.step(1)
+    for w in in3:
+        o = sc.orders.get(w)
+        if o and o.target == g and o.hold == HCB_HOLD_CJ_IN_LINE: before += k < 5; after += k >= 20
+        far = max(far, d2(pos(sc, w), sc.cj['pos']))
+assert before == 10 and after == 0 and far < 3.0, ('the commander and the second bodyguard behind CJ: CJ in their line, then out of it for good, never more than 3 m from him', before, after, far)
+passed('An armed man ahead and the commander and a bodyguard behind CJ, CJ in their line (1.2: they stood like that): after 0.7 s each steps round CJ to his flank, 1.7 m beside him and half a metre forward - CJ is out of their line from then on (whether they fire is the usual three-on-a-man and friends-in-line rules), never more than %.1f m from CJ' % far)
+
 # ================================================================== movement (plan items V, I, K)
 # ------------------------------------------------------------------ no fight: nobody "waits his turn" - the turn to move is a firefight rule only
 sc = Scene(); team = squad(sc); sc.step(20)
@@ -248,6 +289,25 @@ assert steady <= 6, ('CJ walks steadily round a square: a man changes his action
 busy, cj_n = pace_run(lambda k: [(0., 1.4, 0.), (0., 3.0, 0.), (0., 0., 0.), (0., 5.5, 0.)][(k // 25) % 4])
 assert busy <= 1.25 * cj_n, ('CJ changes his pace %d times a minute: a man follows each change once, no flicker in between' % cj_n, busy)
 passed('Pace without flicker: CJ walking round a square - a man changes his action %.1f times a minute (the second 2.0 log: 18.9); CJ changing pace %d times a minute - %.1f, once for each of CJ\'s changes and no more' % (steady, cj_n, busy))
+
+# ------------------------------------------------------------------ beta 5: a shooter running round CJ (his places shift with every look): no back-and-forth at the place
+LOW6 = [(10., -13., 10., -9.), (10., 9., 10., 13.), (-6., -14., -6., -10.), (-6., 10., -6., 14.), (13., -5., 13., -3.), (13., 3., 13., 5.)]
+aba = 0
+for seed in range(3):
+    sc = Scene(); sc.low_walls = list(LOW6); team = squad(sc); sc.step(20)
+    g = sc.ped(26., 0., pedtype=GANG, weapon=AK, face=(-1., 0.))
+    hist = {}
+    for k in range(400):
+        a_ = k * 0.03 + seed
+        sc.peds[g]['pos'] = [26. * math.cos(a_), 26. * math.sin(a_), 1.]
+        if k % 8 == 0: sc.shot(g, (0., 0., 1.), dst=1)
+        sc.step(1)
+        for w, p_ in sc.posts.items():
+            h = hist.setdefault(w, [])
+            if not h or h[-1][1] != p_.act: h.append((k, p_.act))
+    aba += sum(1 for h in hist.values() for i in range(2, len(h)) if h[i][1] == h[i - 2][1] and h[i][0] - h[i - 2][0] <= 30)
+assert aba <= 470, ('back and forth within 3 s, three fights of 40 s with a shooter running round CJ (530 without the 1.5 s at the place)', aba)
+passed('A shooter running round CJ for 40 s, three times (every man\'s place shifts with every look): %d back-and-forth changes within 3 s for the whole detail - a man at his place is not off again for a shift of under a metre for 1.5 s (530 without that rule)' % aba)
 
 # ------------------------------------------------------------------ a man who has somewhere to go is never told to stand where he is (the map said "blocked")
 sc = Scene(); team = squad(sc); sc.step(10)
