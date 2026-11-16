@@ -73,11 +73,12 @@ API void hcb_pilot_step(hcb_pilot *p, const hcb_pilot_in *in, hcb_pilot_out *out
     dist = f_sqrt(d.x * d.x + d.y * d.y);
     dir = flat_unit(d, p->head);
 
+    /* (0.9, fifth log: a landing approach reached the pad's last 4 m at 4.6-5.2 m/s: it brakes more gently, from further out) */
     /* the speed he wants: the top speed; braking in good time for the point (v^2 = 2 a d); slower for a sharp turn */
     err = f_atan2(p->head.x * dir.y - p->head.y * dir.x, p->head.x * dir.x + p->head.y * dir.y);   /* + = the point is to the left */
     vdes = cruise;
     /* (the speed follows the wish TAU_V late: the braking point is moved forward by the way he covers meanwhile) */
-    if (in->stop) vdes = f_min(vdes, f_max(f_sqrt(2.0f * BRAKE * f_max(0.0f, dist - 0.9f * TAU_V * f_sqrt(p->vel.x * p->vel.x + p->vel.y * p->vel.y))), f_min(2.0f, 0.5f * dist)));
+    if (in->stop) vdes = f_min(vdes, f_max(f_sqrt(2.0f * (in->land ? 1.1f : BRAKE) * f_max(0.0f, dist - 0.9f * TAU_V * f_sqrt(p->vel.x * p->vel.x + p->vel.y * p->vel.y))), f_min(2.0f, 0.5f * dist)));
     if (dist > 20.0f) vdes *= f_clamp(1.0f - f_abs(err) / 1.7f, 0.25f, 1.0f);
     clear = hover + (CLEAR - hover) * f_clamp((dist - 60.0f) / 200.0f, 0.0f, 1.0f);
     if (!in->stop) clear = CLEAR;

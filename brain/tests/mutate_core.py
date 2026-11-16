@@ -182,7 +182,7 @@ M += [
  (D, "(!dt->evac_said || now - dt->evac_said >= SAY_EVAC_MS)", "(1)", 'detail: "we pull out" not repeated for 20 s'),
  (D, "if (dt->lead && n) say = HCB_SAY_TAKE_OVER;", "", 'detail: the new commander says he has taken over'),
  (D, "if (dt->cj_shot_t && now - dt->cj_shot_t < 1200) {", "if (0) {", 'detail: nobody stands in front of CJ\'s gun'),
- (D, "if (dt->cj_cover_ok && !cj_in && (!dt->cover_said || now - dt->cover_said >= SAY_COVER_MS))", "if (dt->cj_cover_ok && !cj_in)", 'detail: "into cover" not said every look'),
+ (D, "if (dt->cj_cover_ok && !cj_in && (!dt->cover_said || (now - dt->cover_said >= SAY_COVER_MS && (dist2d(cjp, dt->cover_said_at) >= 3.0f || now - dt->cover_said >= 15000))))", "if (dt->cj_cover_ok && !cj_in)", 'detail: "into cover" not said every look'),
  (D, "for (i = 0; i < n; i++) if (i != lead) { if (close < 0) close = i;", "for (i = 0; i < n; i++) if (1) { if (close < 0) close = i;", 'detail: the commander is not also the bodyguard'),
  (P, "    if (in->stop) vdes = f_min(vdes, f_max(f_sqrt(2.0f * BRAKE * f_max(0.0f, dist - 0.9f * TAU_V * f_sqrt(p->vel.x * p->vel.x + p->vel.y * p->vel.y))), f_min(2.0f, 0.5f * dist)));", "    if (in->stop) vdes = f_min(vdes, f_max(f_sqrt(2.0f * BRAKE * dist), f_min(2.0f, 0.5f * dist)));", 'pilot: braking starts early enough not to overshoot'),
  (P, "if (dist > 20.0f) vdes *= f_clamp(1.0f - f_abs(err) / 1.7f, 0.25f, 1.0f);", "", 'pilot: slower for a sharp turn'),
@@ -195,6 +195,14 @@ M += [
  (P, "    if (dt > 0.1f) dt = 0.1f;", "", 'pilot: a long frame is flown as a short one'),
  (P, "clear = hover + (CLEAR - hover) * f_clamp((dist - 60.0f) / 200.0f, 0.0f, 1.0f);", "clear = hover;", 'pilot: high while travelling, low only near the point'),
  (P, "    if (in->stop && p->pos.z - (ground + clear) > 3.0f) {", "    if (0) {", 'pilot: down in time after a tall roof'),
+ (F, "return s->player.health < 40.0f && t->cls == HCB_CLS_WATCH && t->why == HCB_WHY_ARMED_NEAR && v_dist(t->last.pos, s->player.pos) < 20.0f;", "return 0;", 'fire: under 40 health an armed man aiming at CJ is a target'),
+ (F, "&& !(s->player.health < 40.0f && t->cls >= HCB_CLS_THREAT)) fire = 0;", ") fire = 0;", 'fire: "answer" does not wait for the first shot at low health'),
+ (D, "if (g->kind == HCB_DG_BLAST) R = R < 6.0f ? 6.0f : R > 14.0f ? 14.0f : R;", "if (g->kind == HCB_DG_BLAST) continue;", 'detail: a blast is avoided'),
+ (D, "R < 6.0f ? 6.0f : R > 14.0f ? 14.0f : R;", "R;", 'detail: a blast radius is kept between 6 and 14 m'),
+ (D, "float R = ring ? 8.0f + 1.3f * (float)c : fight", "float R = ring ? 5.0f : fight", 'detail: the outer men hold 8-12 m off in a pull-out'),
+ (D, "if (closing < 4.0f || d / closing > 3.0f) continue;", "if (1) continue;", 'detail: a car on a collision course is called'),
+ (P, "2.0f * (in->land ? 1.1f : BRAKE)", "2.0f * BRAKE", 'pilot: a landing approach brakes gently'),
+ (D, "if (a_ >= 3 || d > 20.0f) p->move = 4;", "if (a_ >= 3) p->move = 4;", 'detail: a man far from his post goes by the path network'),
 ]
 only = sys.argv[1:]
 missed = 0

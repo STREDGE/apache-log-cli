@@ -144,6 +144,12 @@ static int check(hcb_brain *b, const hcb_snapshot *s, const hcb_ped *me, int rol
     return HCB_HOLD_NONE;
 }
 
+
+/* 0.9: with CJ under 40 health an armed hostile man within 20 m is a target already, turned to CJ or not - the first shot of a
+   pistol takes 8 of the little that is left (one who is turned to CJ is a threat anyway) */
+static int low_hp_aim(const hcb_snapshot *s, const track *t) {
+    return s->player.health < 40.0f && t->cls == HCB_CLS_WATCH && t->why == HCB_WHY_ARMED_NEAR && v_dist(t->last.pos, s->player.pos) < 20.0f;
+}
 HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
     const hcb_cfg *c = &b->cfg;
     cand cs[MAX_CAND];
@@ -164,7 +170,7 @@ HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         if (!t->used || !t->seen || t->friendly || (t->last.flags & HCB_PF_DEAD)) continue;
         armed_hostile = t->cls == HCB_CLS_WATCH && (t->why == HCB_WHY_ARMED_NEAR || t->why == HCB_WHY_ARMED_FACING);
         switch (s->roe) {
-        case HCB_ROE_DEFEND: fire = t->cls >= HCB_CLS_THREAT; break;
+        case HCB_ROE_DEFEND: fire = t->cls >= HCB_CLS_THREAT || low_hp_aim(s, t); break;
         case HCB_ROE_ARMED: case HCB_ROE_LEGACY_ALL: fire = t->cls >= HCB_CLS_THREAT || armed_hostile; break;
         case HCB_ROE_FOLLOW: fire = t->cj_marked && now - t->cj_marked < (u32)c->follow_ms; break;
         default: fire = 0;
@@ -172,7 +178,9 @@ HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         /* "evade": the police are never fired at, whatever they do */
         if (fire && s->police == HCB_POLICE_EVADE && t->last.pedtype == 6) fire = 0;
         /* "answer": a policeman is fired at only once he has attacked */
-        if (fire && s->police == HCB_POLICE_ANSWER && t->last.pedtype == 6 && t->cls < HCB_CLS_ATTACKER && s->roe != HCB_ROE_FOLLOW) fire = 0;
+        /* 0.9 (fifth log: CJ at 17 HP, a policeman aimed at him for 0.8 s and was fired at only after his shot, which took half the
+           rest): with CJ under 40 health "answer" no longer waits for the first shot from a man who has his weapon on CJ */
+        if (fire && s->police == HCB_POLICE_ANSWER && t->last.pedtype == 6 && t->cls < HCB_CLS_ATTACKER && s->roe != HCB_ROE_FOLLOW && !(s->player.health < 40.0f && t->cls >= HCB_CLS_THREAT)) fire = 0;
         if (!fire && t->cls < HCB_CLS_WATCH) continue;
         /* kept sorted, most dangerous first and those that may be fired at before the rest: when the questions about
            lines of sight do not all fit into one tick, the ones that matter most are asked */

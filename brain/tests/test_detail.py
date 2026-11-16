@@ -272,12 +272,15 @@ sc.cj['health'] = 20.
 sc.step(6)
 o = sc.last_out
 lead_p = sc.posts[o.lead]
-assert o.duty == HCB_DUTY_RING and o.mode == HCB_MODE_PULLOUT and all(d2(at(p), sc.cj['pos']) <= 5.1 for w_, p in sc.posts.items()), [at(p) for p in sc.posts.values()]
+assert o.duty == HCB_DUTY_RING and o.mode == HCB_MODE_PULLOUT, o.duty
+dists = sorted(d2(at(p), sc.cj['pos']) for p in sc.posts.values())
+# 0.9 (fifth log: six men of eight stood within 2-6 m of CJ): commander and bodyguards at his side, the outer men 7.5-12.5 m off
+assert all(x <= 5.1 for x in dists[:-1]) and 7.5 <= dists[-1] <= 12.5, dists
 assert o.leading and d2(at(lead_p), sc.cj['pos']) <= 1.7 and at(lead_p)[0] < sc.cj['pos'][0], ('the commander at CJ\'s side, a step away from the shooter: he takes CJ out', at(lead_p))
 evac = [s_ for s_ in sc.said if s_[1] == HCB_SAY_EVAC]
 sc.step(60)
 assert len(evac) == 1 and len([s_ for s_ in sc.said if s_[1] == HCB_SAY_EVAC]) == 1, 'said once, then not again for 20 s'
-passed('Too hot (CJ badly hurt under fire): the detail pulls out - everybody comes in (nobody further than 5 m), the bodyguards towards the shooter, the commander at CJ\'s side a step away from the shooter, taking him out; "we pull out - call the pickup", not repeated for 20 s')
+passed('Too hot (CJ badly hurt under fire): the detail pulls out - the commander and the bodyguards come in (5 m at most), the outer man holds 8-12 m off, the bodyguards towards the shooter, the commander at CJ\'s side a step away from the shooter, taking him out; "we pull out - call the pickup", not repeated for 20 s')
 
 # ------------------------------------------------------------------ all clear: once
 sc, team, g = contact(walls=[(-3., -2.5, -3., 2.5)])
@@ -569,6 +572,52 @@ sc.step(12)
 o = sc.last_out
 assert o.cover_ok and -11.5 < o.cover_at.x < -9 and abs(o.cover_at.y) < 2.6, ('the spot behind the thing the game calls cover', o.cover_ok, o.cover_at.x, o.cover_at.y)
 passed('The game\'s own cover points (walls, corners, cars it marks near CJ) are tried first: CJ is taken behind one the brain\'s rings had not reached yet')
+
+
+# ---- 0.9: the fifth whole-game log ----
+# a blast still in the game's table: avoided like a grenade (the table's radius is not trusted: 6 to 14 m)
+sc = Scene(); team = detail8(sc); sc.step(20)
+sc.dangers = [((3., -1., 1.), HCB_DG_BLAST, 62.)]
+sc.step(1)
+near = [w_ for w_ in team if d2(sc.peds[w_]['pos'], (3., -1.)) < 10.]
+assert near and all(d2(at(sc.posts[w_]), (3., -1.)) >= 12.9 and sc.posts[w_].move == 3 for w_ in near), [(d2(at(sc.posts[w_]), (3., -1.)), sc.posts[w_].move) for w_ in near]
+sc = Scene(); team = detail8(sc); sc.step(20)
+sc.dangers = [((3., -1., 1.), HCB_DG_BLAST, 1.5)]
+sc.step(1)
+near = [w_ for w_ in team if d2(sc.peds[w_]['pos'], (3., -1.)) < 6.]
+assert near and all(d2(at(sc.posts[w_]), (3., -1.)) >= 8.9 for w_ in near), 'a small or unknown radius still means 6 m clear'
+passed('A blast in the game\'s table: every man within its radius (kept between 6 and 14 m; a radius that is not believable counts as 10) sprints out of it - the old rule let blasts go as "gone off already"')
+
+# a car on a collision course: called with its side, once in 2.5 s
+sc = Scene(); team = detail8(sc); sc.step(20)
+drv = sc.ped(-40., 0., pedtype=GANG, weapon=0)
+sc.veh(-35., 0., vel=(14., 0., 0.), driver=drv)
+for _ in range(8): sc.step(1)
+cars = [s_ for s_ in sc.said if s_[1] == HCB_SAY_CAR]
+assert cars and cars[0][2] == 3, ('"car - left!" (it comes from the west, CJ faces north)', sc.said)
+assert len(cars) <= 2, 'not every look'
+sc = Scene(); team = detail8(sc); sc.step(20)
+drv = sc.ped(-40., 0., pedtype=GANG, weapon=0)
+sc.veh(-35., 0., vel=(0., 14., 0.), driver=drv)            # it drives past, not at CJ
+sc.step(8)
+assert not [s_ for s_ in sc.said if s_[1] == HCB_SAY_CAR], sc.said
+passed('A car on a collision course with CJ is called with the side it comes from ("car - left!"); one that drives past is not')
+
+# "into cover" is not repeated while CJ stands still: only if he has moved 3 m or after 15 s
+sc, team, g = contact(walls=[(-3., -2.5, -3., 2.5)])
+sc.step(60)
+n1 = len([s_ for s_ in sc.said if s_[1] == HCB_SAY_TAKE_COVER])
+assert n1 <= 2, ('CJ stands still: 6 s of fight say it at most twice', n1)
+passed('"Into cover" is not repeated every 6 s at a CJ who does not move (a second time only after 15 s or when he has moved)')
+
+# a man far from his post who does not get nearer (fifth log: two men stood 57 s, 37 and 58 m off): by the path network at once
+sc = Scene(); team = detail8(sc); sc.step(20)
+j = by_job(sc); far = [w_ for w_, p in sc.posts.items() if p.job == HCB_ROLE_POINT][0]
+sc.walk_posts = False
+sc.peds[far]['pos'] = [35., 35., 1.]
+sc.step(30)
+assert sc.posts[far].move == 4 and sc.posts[far].stuck, (sc.posts[far].move, sc.posts[far].stuck)
+passed('A man 30 m or more from his post who gets no nearer goes by the path network after the first 1.5 s (not after the third try)')
 
 text = '\n'.join(results) + '\nThe core only. Nothing here has run in the game.\n'
 (hcb_py.OUT / 'brain_detail_tests.txt').write_text(text)

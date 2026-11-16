@@ -884,6 +884,25 @@ for seed in range(1, 61):
 assert total > 3000, total
 passed('60 random fights (25 s each, guards and CJ running about, cars, police, every fire rule): %d orders to fire, checked one by one by an independent calculation - none with CJ or one of ours in the line, at a friend, against the fire rule, or at a car that could blow up beside CJ' % total)
 
+# 0.9 (fifth log): CJ at 17 health, a policeman 10 m off with his pistol on him fired at CJ first and was answered only after his shot
+for hp, policy, fires in ((17., HCB_POLICE_ANSWER, True), (90., HCB_POLICE_ANSWER, False), (17., HCB_POLICE_EVADE, False)):
+    sc = rule(HCB_ROE_DEFEND, wanted=2)
+    sc.police = policy
+    sc.cj['health'] = hp
+    cop = sc.ped(10, 0, pedtype=COP, weapon=PISTOL, face=(-1., 0., 0.), flags=HCB_PF_AIMING)
+    fired = run(sc, 25)
+    assert bool(fired) == fires, (hp, policy, fired, holds(sc), [(m.cls, m.why) for m in sc.marks()] if hasattr(sc, 'marks') else '')
+passed('CJ under 40 health: a policeman who has his weapon on him is fired at at once ("answer" does not wait for his first shot); with more health, or "evade", as before')
+
+# ... and a gang man with a rifle 18 m off who is not (yet) turned to CJ: left alone with health, a target under 40
+for hp, fires in ((17., True), (90., False)):
+    sc = rule(HCB_ROE_DEFEND)
+    sc.cj['health'] = hp
+    g_ = sc.ped(0, 18, pedtype=GANG, weapon=AK, face=(0., 1., 0.))      # his back to CJ
+    fired = run(sc, 25)
+    assert bool(fired) == fires, (hp, fired, holds(sc))
+passed('CJ under 40 health: an armed gang man 18 m off, turned away, is fired at (with more health he is only watched)')
+
 # 0.8, proportionate force: a brawler with nothing in his hands is not shot - he is taken down by hand
 sc = rule(HCB_ROE_DEFEND)
 br = sc.ped(9, 0, pedtype=GANG, weapon=0)

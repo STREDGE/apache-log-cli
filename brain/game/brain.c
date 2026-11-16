@@ -55,7 +55,7 @@ extern void *memset(void *d, int c, u64 n);
 
 #define HIDDEN __attribute__((visibility("hidden")))
 #define EXPORT __attribute__((visibility("default")))
-#define VERSION "0.8 (grenades, water, buildings, scouting ahead, by hand against the unarmed, the game's cover points, voice, landing approach)"
+#define VERSION "0.9 (fifth log: armed men at low health, cars, blasts, the ring, stuck men, counters)"
 #define GAME_DIR "/storage/emulated/0/Android_unprotected/data/com.rockstargames.gtasa/"
 
 /* ---------- the game (offsets from libGTASA base; see brain/research/game_facts.md) ---------- */
@@ -583,6 +583,7 @@ typedef void (*say_fn)(void *ped, u32 context, u32 delay, float probability, u32
 static int g_tables_ok, g_water_ok, g_say_ok;
 static hcb_vec g_hints[HCB_MAX_HINTS];
 static u32 g_n_hints, g_hints_at, g_said_voice;
+static u32 g_water_calls, g_water_yes, g_cover_live, g_cover_ok;   /* 0.9: counters for the log: the water question asked / answered "in water"; cover points in the game's table / of them read */
 static void more_setup(void) {
     u32 i;
     g_tables_ok = RD(u64, G + GOT_PROJ_INFO) == G + PROJ_INFO;
@@ -601,7 +602,8 @@ static void fill_more(hcb_snapshot *s, const float *cjp) {
     if (g_water_ok && !s->player.vehicle) {
         float level = -10000.0f;
         g_where = 22;
-        if (((water_fn)(G + WATER_LEVEL))(cjp[0], cjp[1], cjp[2], &level, 1, 0) && level == level && level > cjp[2] - 0.2f && level < cjp[2] + 30.0f) s->in_water = 1;
+        g_water_calls++;
+        if (((water_fn)(G + WATER_LEVEL))(cjp[0], cjp[1], cjp[2], &level, 1, 0) && level == level && level > cjp[2] - 0.2f && level < cjp[2] + 30.0f) { s->in_water = 1; g_water_yes++; }
         g_where = 1;
     }
     if (!g_tables_ok) return;
@@ -632,18 +634,21 @@ static void fill_more(hcb_snapshot *s, const float *cjp) {
     /* the game's cover points near CJ: looked up twice a second (a point on a car or an object is that thing's place - read
        through the kernel, so a pointer that has gone stale is an error, never a crash) */
     if (!g_hints_at || s->time - g_hints_at >= 500 || s->time < g_hints_at) {
-        g_hints_at = s->time ? s->time : 1; g_n_hints = 0;
+        g_hints_at = s->time ? s->time : 1; g_n_hints = 0; g_cover_live = 0; g_cover_ok = 0;
         for (i = 0; i < 100 && g_n_hints < HCB_MAX_HINTS; i++) {
             const u8 *c = (const u8 *)(G + COVER_POINTS + (u64)i * 0x28);
             u64 ent = RD(u64, c + 0x10), m = 0;
             float p[3];
             if (!RD(signed char, c)) continue;
+            g_cover_live++;
             memcpy(p, c + 4, 12);
             if (ent) {
                 if (!safe_read(&m, ent + 0x18, 8)) continue;
                 if (m ? !safe_read(p, m + 0x30, 12) : !safe_read(p, ent + 8, 12)) continue;
             }
-            if (!sane(p) || dist2(p, cjp) > 30.0f * 30.0f) continue;
+            if (!sane(p)) continue;
+            g_cover_ok++;
+            if (dist2(p, cjp) > 30.0f * 30.0f) continue;
             g_hints[g_n_hints].x = p[0]; g_hints[g_n_hints].y = p[1]; g_hints[g_n_hints].z = p[2]; g_n_hints++;
         }
     }
@@ -652,11 +657,11 @@ static void fill_more(hcb_snapshot *s, const float *cjp) {
 }
 /* the commander says it aloud too: a line of the game's own that fits (the model has it or stays silent) */
 static void speak(u8 say, u32 lead) {
-    static const u16 CTX[12] = {0, 144 /* MOVE_IN */, 159 /* ORDER_WAIT_MANY */, 153 /* ORDER_FOLLOW_NEAR_MANY */, 44 /* CHASED */, 148 /* ORDER_ATTACK_SINGLE */,
-                                258 /* ENEMY_GANG_WASTED */, 85 /* DUCK */, 220 /* TARGET */, 85 /* DUCK */, 40 /* CAR_WAIT_FOR_ME */, 220 /* TARGET */};
+    static const u16 CTX[13] = {0, 144 /* MOVE_IN */, 159 /* ORDER_WAIT_MANY */, 153 /* ORDER_FOLLOW_NEAR_MANY */, 44 /* CHASED */, 148 /* ORDER_ATTACK_SINGLE */,
+                                258 /* ENEMY_GANG_WASTED */, 85 /* DUCK */, 220 /* TARGET */, 85 /* DUCK */, 40 /* CAR_WAIT_FOR_ME */, 220 /* TARGET */, 85 /* DUCK: a car is coming */};
     struct pool pp;
     u8 *ped;
-    if (!g_say_ok || say >= 12 || !CTX[say] || !lead || !get_pool(PED_POOL, &pp) || !(ped = obj_of(&pp, lead, PED_STRIDE)) || is_dead(ped)) return;
+    if (!g_say_ok || say >= 13 || !CTX[say] || !lead || !get_pool(PED_POOL, &pp) || !(ped = obj_of(&pp, lead, PED_STRIDE)) || is_dead(ped)) return;
     g_where = 21;
     ((say_fn)(G + PED_SAY))(ped, CTX[say], 0, 1.0f, 0, 0, 0);
     g_where = 1;
@@ -1444,7 +1449,7 @@ static void session_second(u32 now) {
     if (g_out.heli_ok) { ts(D, " spot "); tvec(D, g_out.heli_at.x, g_out.heli_at.y, g_out.heli_at.z); }
     ts(D, " gunners' pose "); tu(D, g_out.gunner_pose);
     ts(D, "\n  seen: peds "); tu(D, g_snap.n_peds); ts(D, " (+"); tu(D, g_snap.peds_lost); ts(D, " left out) vehicles "); tu(D, g_snap.n_vehs);
-    ts(D, " ours "); tu(D, g_snap.n_ours); ts(D, " game cover points "); tu(D, g_snap.n_hints); ts(D, " voice lines "); tu(D, g_said_voice); ts(D, " | shots: ours "); tu(D, s_shots_ours); ts(D, " others "); tu(D, s_shots_other); ts(D, " at us "); tu(D, s_shots_at_us);
+    ts(D, " ours "); tu(D, g_snap.n_ours); ts(D, " game cover points "); tu(D, g_snap.n_hints); ts(D, " (table: live "); tu(D, g_cover_live); ts(D, " read "); tu(D, g_cover_ok); ts(D, ") water asked "); tu(D, g_water_calls); ts(D, " in water "); tu(D, g_water_yes); ts(D, " voice lines "); tu(D, g_said_voice); ts(D, " | shots: ours "); tu(D, s_shots_ours); ts(D, " others "); tu(D, s_shots_other); ts(D, " at us "); tu(D, s_shots_at_us);
     if (s_ev_cut) { ts(D, " | event lines cut "); tu(D, s_ev_cut); }
     ts(D, "\n  time: looks "); tu(D, s_looks); ts(D, " think avg "); tu(D, s_looks ? s_think_us / s_looks : 0); ts(D, " max "); tu(D, s_think_max);
     ts(D, " us, this log "); tu(D, s_log_us); ts(D, " us | frames "); tu(D, s_frames); ts(D, " longest "); tu(D, s_gap_max / 1000); ts(D, " ms | rays "); tu(D, rays); ts(D, " left for later "); tu(D, g_rays_skipped - s_skip0);
@@ -1936,7 +1941,7 @@ static void *watchdog(void *arg) {
 }
 
 struct ModInfo { char guid[48]; char name[48]; char version[24]; char author[48]; u16 ver[4]; u8 reserved[336]; };
-static struct ModInfo g_info __attribute__((aligned(16))) = {"net.helicover.brain", "Helicover Brain", "0.8", "Helicover", {0, 8, 0, 0}, {0}};
+static struct ModInfo g_info __attribute__((aligned(16))) = {"net.helicover.brain", "Helicover Brain", "0.9", "Helicover", {0, 9, 0, 0}, {0}};
 static int g_done;
 EXPORT struct ModInfo *__GetModInfo(void) { return &g_info; }
 EXPORT void OnModPreLoad(void) {}

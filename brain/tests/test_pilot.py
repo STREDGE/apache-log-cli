@@ -115,7 +115,7 @@ def approach():
     out = []
     for k in range(30 * 60):
         LIB.hcb_pilot_step(ctypes.byref(p), ctypes.byref(i), ctypes.byref(o))
-        out.append((k / 30., o.pos.x, o.pos.z, p.vel.z, o.dist))
+        out.append((k / 30., o.pos.x, o.pos.z, p.vel.z, o.dist, math.hypot(p.vel.x, p.vel.y)))
         if o.arrived and abs(o.pos.z - 15.) < 1.5: break
     return out
 ap = approach()
@@ -123,6 +123,7 @@ end = ap[-1]
 assert abs(end[1] - 300.) < 3 and abs(end[2] - 15.) < 1.5 and end[0] < 45., end
 near_ = [f for f in ap if f[4] < 25.]
 assert min(f[3] for f in near_) > -6.6 and all(f[3] > -3.0 for f in near_ if f[2] < 26.), ('within 25 m of the pad never faster down than 6 m/s, 2.5 m/s in the last metres', min(f[3] for f in near_))
+assert max(f[5] for f in ap if f[4] < 5.) < 3.3, ('0.9: the last 5 m of the approach are flown at 3 m/s at most', max(f[5] for f in ap if f[4] < 5.))
 assert all(f[2] > 13.4 for f in ap), 'never under the height asked for (the roofs on the way are in `ground`)'
 passed('A landing approach (0.8): 300 m to the pad and down to 15 m over it in %.0f s - never faster down than 6 m/s, gently in the last metres, never under the height asked for' % end[0])
 

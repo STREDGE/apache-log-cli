@@ -1190,7 +1190,7 @@ dg = {(d.kind, round(d.at.x), round(d.radius)) for d in sn.dangers[:sn.n_dangers
 assert dg == {(h.HCB_DG_GRENADE, 6, 10), (h.HCB_DG_BLAST, -8, 9)}, dg
 e.frame(ms=100, n=35, hud=False)                                      # (the log is written out)
 lg_ = e.log()
-assert 'IN-WATER' in lg_ and 'danger: GRENADE at (6.0 2.0 1.0)' in lg_ and 'game cover points 1' in lg_, [l_ for l_ in lg_.splitlines() if 'danger' in l_][:3]
+assert 'IN-WATER' in lg_ and 'danger: GRENADE at (6.0 2.0 1.0)' in lg_ and 'game cover points 1' in lg_ and '(table: live ' in lg_ and ') water asked ' in lg_ and ' in water ' in lg_, [l_ for l_ in lg_.splitlines() if 'danger' in l_][:3]
 assert e.say_calls and all(c_[0] == s1 and c_[3] == 1.0 and 0 < c_[1] < 361 for c_ in e.say_calls), e.say_calls   # the commander (the only guard here) speaks
 passed('0.8 the game\'s own knowledge: CJ swimming (the game\'s water level asked every look), live grenades and fresh explosions near CJ, the game\'s cover points (one on a thing that is gone is left out, never read) - all in the brain\'s picture, in the log and in the report, which replays exactly; the commander\'s words are also spoken with the game\'s own voice lines (CPed::Say) - %d lines here' % len(e.say_calls))
 # the words differ / it crashed there once: that part is left out and said so

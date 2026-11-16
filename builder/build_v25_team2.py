@@ -42,6 +42,32 @@ for i in range(4):
  s.label(live);a(6,V(14+i),I(0));s.go(nx)
  s.label('KEEP_OLD_%d'%i);a(0x0085,V(8),V(13));a(0x0062,V(8),V(14+i));s.check(0x0019,[V(8),I(10000)],nx);s.set(b.GROUND_PUB2+i,-1)
  s.label(nx)
+# 1.5.4 (fifth log: two of the second four stood 57 s on a slope, 37 and 58 m from their posts, and the catch-up by footsteps
+# did not get them off it): a man 45 m or more from CJ for 40 s who is not on the screen is deleted and a new one comes in
+# where the screen does not show (14 m round the first living guard, like the second four when the helicopter has gone)
+for i in range(4):
+ var=2+i;nx='LAG_NEXT_%d'%i;clr='LAG_CLR_%d'%i;run='LAG_RUN_%d'%i
+ alive(var,nx)
+ a(0x00a0,V(0),V(10),V(11),V(6));a(0x00a0,V(var),V(8),V(9),V(6));a(0x0509,V(10),V(11),V(8),V(9),V(12));s.check(0x0021,[V(12),F(45)],clr)
+ s.get(9,b.TEAM2_LAG+i);s.eq(9,0,run);a(0xddc,I(b.TEAM2_LAG+i),V(13));s.go(nx)
+ s.label(run);a(0x0085,V(10),V(13));a(0x0062,V(10),V(9));s.check(0x0019,[V(10),I(40000)],nx)
+ s.check(0x82cb,[V(var)],nx)                                          # (on the screen: wait until nobody sees him)
+ a(0x009b,V(var));a(6,V(var),I(-1));s.set(b.GROUND_PUB2+i,-1);s.set(b.TEAM2_LAG+i,0);a(6,V(14+i),I(0))
+ a(0x0247,I(MODELS[i]));a(0x0247,I(WEAPONS[i][1]));a(0x038b);a(1,I(0));s.check(0x0248,[I(MODELS[i])],nx);s.check(0x0248,[I(WEAPONS[i][1])],nx)
+ s.check(0x056d,[V(1)],nx)
+ for n_,(ox,oy) in enumerate([(-14.,-14.),(14.,-14.),(-14.,14.),(14.,14.)]):
+  cand='LAG_CAND_%d_%d'%(i,n_);ok='LAG_OK_%d'%i
+  a(0x00a0,V(1),V(10),V(11),V(12));a(0x000b,V(10),F(ox));a(0x000b,V(11),F(oy));a(0x000b,V(12),F(30));a(0x02ce,V(10),V(11),V(12),V(12))
+  if n_<3:s.check(0x80c2,[V(10),V(11),V(12),F(3.0)],cand);s.go(ok);s.label(cand)
+ s.label('LAG_OK_%d'%i);a(0x0172,V(1),V(9))
+ a(0x0087,V(8),V(10));a(0x000b,V(8),F(SPOTS[i][0]));a(0x0087,V(6),V(11));a(0x000b,V(6),F(SPOTS[i][1]))
+ a(0x009a,I(8),I(MODELS[i]),V(8),V(6),V(12),V(var));s.check(0x056d,[V(var)],nx)
+ a(0x0173,V(var),V(9));a(0x0085,V(7),V(var));s.call('SETUP')
+ wpn,_=WEAPONS[i];a(0x01b2,V(var),I(wpn),I(30000));a(0x01b9,V(var),I(wpn));a(0x0223,V(var),I(250));a(0x035f,V(var),I(100))
+ a(0xddc,I(b.GROUND_PUB2+i),V(var))
+ a(0x0249,I(MODELS[i]));a(0x0249,I(WEAPONS[i][1]));s.go(nx)
+ s.label(clr);s.set(b.TEAM2_LAG+i,0)
+ s.label(nx)
 s.go('LOOP')
 # ---- come down beside the first four
 s.label('SPAWN')
