@@ -69,8 +69,8 @@ HCDSQ ~b~PILOT:~w~ picking the squad up first, then we leave.
 HCBURN ~r~CAR ON FIRE!~w~ Get away from it.
 HCEVADE ~r~TAKING HITS!~w~ Pilot breaking away.
 HCSHOT ~r~TAKING FIRE!~w~ Pilot breaking away.
-HCHELLO ~b~HELICOVER 1.5 BETA 1~w~ ready. CLEO menu > Helicover.
-HCHELLV ~b~HELICOVER 1.5 BETA 1~w~ ready. Map marker is off here.
+HCHELLO ~b~HELICOVER 1.5 BETA 2~w~ ready. CLEO menu > Helicover.
+HCHELLV ~b~HELICOVER 1.5 BETA 2~w~ ready. Map marker is off here.
 RGDEP ~b~PILOT:~w~ team going down the ropes.
 RGDONE ~g~SQUAD:~w~ team back aboard.
 RGFAIL ~r~HELICOVER:~w~ could not load the team.
@@ -127,4 +127,5 @@ SQMER ~g~ALPHA:~w~ no cover here - stay by your guard, move right!
 SQMEB ~g~ALPHA:~w~ no cover here - stay by your guard, fall back!
 SQMEL ~g~ALPHA:~w~ no cover here - stay by your guard, move left!
 SQSAFE ~g~ALPHA:~w~ CJ is in cover. Stay there, we work.
+SQMEM ~y~ALPHA:~w~ we were attacked here before. Eyes open.
 SQCMD ~r~ALPHA DOWN!~w~ BRAVO: I have command.

@@ -182,8 +182,8 @@ MESSAGES={'HCLOAD': '~b~PILOT:~w~ inbound to your position.',
  'HCBURN': '~r~CAR ON FIRE!~w~ Get away from it.',
  'HCEVADE': '~r~TAKING HITS!~w~ Pilot breaking away.',
  'HCSHOT': '~r~TAKING FIRE!~w~ Pilot breaking away.',
- 'HCHELLO': '~b~HELICOVER 1.5 BETA 1~w~ ready. CLEO menu > Helicover.',
- 'HCHELLV': '~b~HELICOVER 1.5 BETA 1~w~ ready. Map marker is off here.'}
+ 'HCHELLO': '~b~HELICOVER 1.5 BETA 2~w~ ready. CLEO menu > Helicover.',
+ 'HCHELLV': '~b~HELICOVER 1.5 BETA 2~w~ ready. Map marker is off here.'}
 # Generate state updates; panel prints messages when the state changes.
 # beta 6: our people do not cower. CREATE_CHAR gives a mission ped the built-in "normal" decision maker (m_norm.ped): punched, shot at or
 # aimed at, it picks "duck and cover" / "flee" like any passer-by. 65542 is the game's built-in EMPTY decision maker (slot 6 | 1<<16, loaded
@@ -859,7 +859,8 @@ c.label('CR_RUN');c.set(DBG_CODE,1);a(0x00aa,V(5),V(9),V(10),V(11));a(0xddc,I(CR
 a(0x02ce,V(9),V(10),F(1000),V(29));a(0x0087,V(17),V(26));a(0x0063,V(17),V(9));a(0x0087,V(30),V(27));a(0x0063,V(30),V(10));a(0x0509,F(0),F(0),V(17),V(30),V(19))
 c.check(0x0021,[V(19),F(1)],'CR_ROOFS_DONE');a(0x0073,V(17),V(19));a(0x0073,V(30),V(19))
 for ahead in [30,80,150,250]:
- nxt='CR_ROOF_'+str(ahead);a(0x0087,V(28),V(17));a(0x0013,V(28),F(ahead));a(0x005b,V(28),V(9));a(0x0087,V(31),V(30));a(0x0013,V(31),F(ahead));a(0x005b,V(31),V(10))
+ nxt='CR_ROOF_'+str(ahead);c.check(0x0021,[V(19),F(ahead-12)],'CR_ROOFS_DONE')   # 1.5.2: not beyond the point (a tower 250 m on, behind a spot 30 m away, sent it up to 90 m: the fourth log)
+ a(0x0087,V(28),V(17));a(0x0013,V(28),F(ahead));a(0x005b,V(28),V(9));a(0x0087,V(31),V(30));a(0x0013,V(31),F(ahead));a(0x005b,V(31),V(10))
  a(0x02ce,V(28),V(31),F(1000),V(28));c.check(0x0025,[V(28),V(29)],nxt);a(0x0087,V(29),V(28));c.label(nxt)
 c.label('CR_ROOFS_DONE')
 # ask the pilot: 26@ helicopter, 27/28@ the point, 29@ the roofs, 30@ 1 = stop there (+2: the last step was refused) ->
@@ -1209,7 +1210,7 @@ p.label('CLOSE');p.call('UNLOAD');a(0xdf3);p.set(OPEN,0);p.set(0,0);a(6,V(10),I(
 VERSION='1.4'
 for st,sit,x in MAIN_VARIANTS:
  for prof,suf in zip(PROFILES,SUFFIX):
-  title=(i18n.encode('HELICOVER 1.5 BETA 1','en') if prof=='en' else i18n.menu_text('TITLE_READY',prof)) if st==0 else i18n.state_title(st,STATES[st],prof)
+  title=(i18n.encode('HELICOVER 1.5 BETA 2','en') if prof=='en' else i18n.menu_text('TITLE_READY',prof)) if st==0 else i18n.state_title(st,STATES[st],prof)
   p.blob('MAIN_%d_%d_%d'%(st,sit,x)+suf,title,main_rows(st,sit,x,prof))
 for prof,suf in zip(PROFILES,SUFFIX):
  if prof=='en':p.blob('OFFLINE_MENU',i18n.menu_text('OFFLINE_TITLE',prof),[i18n.menu_text('OFFLINE_ROW',prof)])   # the core is missing, so the language is unknown: English only

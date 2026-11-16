@@ -461,6 +461,61 @@ for k in range(25):
 assert turned <= 2, ('the commander\'s weapon does not swing from one shooter to the other every look', turned)
 passed('Two shooters on opposite sides firing in turn: the detail keeps the one it fights (3 s at least, then until another is half again as dangerous) - it turned round %d times in 2.5 s' % turned)
 
+# ---- 0.7 ----
+import ctypes
+# an open post is kept too: no cover anywhere - the outer men still take a place each and stay on it (they ran after a moving corner)
+sc, team, g = fight8([])
+sc.step(40)
+j = by_job(sc); kept = {k: at(j[k]) for k in OUTER}; changed = 0
+for k_ in range(100):
+    sc.peds[g]['pos'] = [30. + 5. * math.sin(k_ * 0.2), 6. * math.sin(k_ * 0.13), 1.]      # the shooter shifts about
+    if k_ % 9 == 0: sc.shot(g, (0., 0., 1.), dst=1)
+    sc.step(1)
+    j = by_job(sc); changed += sum(d2(at(j[k]), kept[k]) > 0.5 for k in OUTER)
+there = sum(d2(sc.peds[j[k].who]['pos'], at(j[k])) < 1.5 for k in OUTER)
+assert changed == 0 and there == 4 and all(8 <= d2(kept[k], sc.cj['pos']) <= 26 for k in OUTER), (changed, there, kept)
+passed('No cover anywhere: each outer man still takes a place of his own and keeps it while the shooter shifts about for 10 s (all four are on their posts, none is running after a moving corner)')
+
+# a man far off who has fired at CJ: "sniper - <dir>!"
+sc, team, g = contact(threat=(0., 70.))
+sc.peds[g]['weapon'] = 34
+sc.step(30)
+sn = [s_ for s_ in sc.said if s_[1] == HCB_SAY_SNIPER]
+assert len(sn) == 1 and sn[0][2] == 0, ('"sniper - ahead" (he is 70 m north, CJ faces north), once', sc.said)
+passed('A shooter 70 m off who has fired at CJ: the commander calls "sniper" with the direction, once in 20 s')
+
+# the brain remembers where the detail was attacked: back there in peace the commander says so; the adapter can save and load the list
+sc, team, g = contact(walls=[(-3., -2.5, -3., 2.5)])
+sc.step(10)
+at_, cnt_ = (hcb_vec * 16)(), (ctypes.c_uint16 * 16)()
+assert hcb_py.LIB.hcb_places_changed(sc.brain.mem) == 1 and hcb_py.LIB.hcb_places_changed(sc.brain.mem) == 0
+assert hcb_py.LIB.hcb_places_get(sc.brain.mem, at_, cnt_) == 1 and abs(at_[0].x) < 1 and cnt_[0] == 1
+sc2 = Scene(); detail(sc2)
+at_[0].x, at_[0].y = 20., 10.
+hcb_py.LIB.hcb_places_set(sc2.brain.mem, at_, cnt_, 1)
+sc2.step(30)
+been = [s_ for s_ in sc2.said if s_[1] == HCB_SAY_BEEN_HERE]
+assert len(been) == 1, sc2.said
+sc3 = Scene(); detail(sc3); at_[0].x = 500.
+hcb_py.LIB.hcb_places_set(sc3.brain.mem, at_, cnt_, 1); sc3.step(30)
+assert not [s_ for s_ in sc3.said if s_[1] == HCB_SAY_BEEN_HERE]
+passed('Memory of places: the spot of a fight is remembered (handed to the adapter to save); back within 45 m of one in peace the commander says "we were attacked here before", once; far from any - nothing')
+
+# stealth: CJ creeps crouched in peace - so does the detail
+sc = Scene(); team = detail8(sc); sc.step(20)
+sc.cj['flags'] |= HCB_PF_DUCKING; sc.cj['vel'] = [0., 1.0, 0.]
+sc.step(5)
+assert all(p.crouch and p.move <= 1 for p in sc.posts.values()), [(p.crouch, p.move) for p in sc.posts.values()]
+passed('Stealth: CJ crouches and creeps while all is quiet - everybody goes down and moves at a walk')
+
+# a burning car: nobody is posted within 12 m of it
+sc = Scene(); team = detail8(sc); sc.step(20)
+j = by_job(sc); px, py = at(j['point'])
+wreck = sc.veh(px + 2., py, flags=HCB_VF_BURNING, health=200.)
+sc.step(3)
+assert all(d2(at(p), (px + 2., py)) >= 12.0 for p in sc.posts.values() if p.job != HCB_ROLE_LEAD and d2(at(p), sc.cj['pos']) > 4), [at(p) for p in sc.posts.values()]
+passed('A burning vehicle: no outer man is posted within 12 m of it (his post is moved straight out)')
+
 text = '\n'.join(results) + '\nThe core only. Nothing here has run in the game.\n'
 (hcb_py.OUT / 'brain_detail_tests.txt').write_text(text)
 print(text)

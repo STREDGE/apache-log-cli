@@ -55,7 +55,7 @@ extern void *memset(void *d, int c, u64 n);
 
 #define HIDDEN __attribute__((visibility("hidden")))
 #define EXPORT __attribute__((visibility("default")))
-#define VERSION "0.6 (its own pilot in a fight, the commander at CJ's side, three bodyguards, four men out on posts behind cover)"
+#define VERSION "0.7 (posts that are kept, sniper call, memory of places, stealth, clear of burning cars; its own pilot in a fight)"
 #define GAME_DIR "/storage/emulated/0/Android_unprotected/data/com.rockstargames.gtasa/"
 
 /* ---------- the game (offsets from libGTASA base; see brain/research/game_facts.md) ---------- */
@@ -775,6 +775,35 @@ static void save_report(const char *why) {
     if (write_file4(name, &head, sizeof head, g_box[g_cur ^ 1] + old->start, old->end - old->start, g_box[g_cur] + cur->start, cur->end - cur->start, g_note.buf, g_note.len)) g_dumps++;
 }
 
+/* ---------- 0.7: the places where the detail was attacked, kept between games ----------
+   configs/net.helicover.brain.places: a count and up to 16 entries of x, y, z, how many times. The core owns the list. */
+#define PLACES_FILE GAME_DIR "configs/net.helicover.brain.places"
+struct place_rec { float x, y, z; u32 n; };
+static void places_load(void) {
+    struct place_rec r[HCB_MAX_PLACES]; hcb_vec at[HCB_MAX_PLACES]; u16 cnt[HCB_MAX_PLACES];
+    u32 n = 0, i, k = 0; long got; int fd = open(PLACES_FILE, O_RDONLY);
+    if (fd < 0) { lg("places of earlier attacks: none remembered yet\n"); return; }
+    got = read(fd, &n, 4);
+    if (got == 4 && n <= HCB_MAX_PLACES && read(fd, r, (u64)n * sizeof r[0]) == (long)(n * sizeof r[0]))
+        for (i = 0; i < n; i++) {
+            float p[3]; p[0] = r[i].x; p[1] = r[i].y; p[2] = r[i].z;
+            if (!sane(p)) continue;                                     /* (a damaged file: such an entry is left out) */
+            at[k].x = r[i].x; at[k].y = r[i].y; at[k].z = r[i].z; cnt[k] = (u16)(r[i].n > 60000 ? 60000 : r[i].n); k++;
+        }
+    close(fd);
+    hcb_places_set(BRAIN, at, cnt, (int)k);
+    lg("places of earlier attacks remembered: "); tu(&g_log, k); lg("\n");
+}
+static void places_save(void) {
+    struct place_rec r[HCB_MAX_PLACES]; hcb_vec at[HCB_MAX_PLACES]; u16 cnt[HCB_MAX_PLACES];
+    u32 n = (u32)hcb_places_get(BRAIN, at, cnt), i; int fd;
+    for (i = 0; i < n; i++) { r[i].x = at[i].x; r[i].y = at[i].y; r[i].z = at[i].z; r[i].n = cnt[i]; }
+    fd = open(PLACES_FILE, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd < 0) return;
+    write(fd, &n, 4); write(fd, r, (u64)n * sizeof r[0]); close(fd);
+    log_begin(); stamp(&g_log, RD(u32, G + TIME_MS)); lg("a fight here: the place is remembered ("); tu(&g_log, n); lg(" places in all)\n"); log_end();
+}
+
 /* ---------- the two per-frame entries ---------- */
 typedef void (*void_fn)(void);
 static void_fn g_scripts_orig, g_hud_orig;
@@ -798,6 +827,7 @@ static void think(void) {
     if (fresh || g_ticks % 50 == 0) hcb_rec_push_state(&g_rec[g_cur], g_box[g_cur], BRAIN);
     hcb_think(BRAIN, &g_snap, &g_out);
     if (g_out.say) { g_say_seq = g_out.say_seq; g_say = g_out.say; g_say_dir = g_out.say_dir; }
+    if (hcb_places_changed(BRAIN)) places_save();
     journal(now);
     hcb_rec_push(&g_rec[g_cur], g_box[g_cur], &g_snap, g_out.digest);
     memcpy(&g_shown, &g_out, sizeof g_shown);
@@ -892,7 +922,7 @@ static const char *const WHY_NAME[] = {"-", "ours", "ally", "hurt-CJ", "hurt-our
 static const char *const MODE_NAME[] = {"HOLD", "PULLOUT", "ASSAULT"};
 static const char *const MOVE_NAME[] = {"stay", "walk", "run", "sprint", "path"};
 static const char *const ALERT_NAME[] = {"calm", "wary", "threat", "COMBAT", "EVACUATE"};
-static const char *const SAY_NAME[] = {"", "into cover", "CJ is in cover", "stay with me", "we pull out", "I have command", "clear"};
+static const char *const SAY_NAME[] = {"", "into cover", "CJ is in cover", "stay with me", "we pull out", "I have command", "clear", "sniper", "we were attacked here before"};
 static const char *const AIM_NAME[] = {"body", "driver", "tyre"};
 #define NAME(arr, i) ((u32)(i) < sizeof arr / sizeof arr[0] ? arr[i] : "?")
 /* ---------- the journal (1.4.1): what the brain decided, in plain words, for the diagnosis from the log ----------
@@ -924,7 +954,7 @@ static void journal(u32 now) {
     log_begin();
     if (g_out.alert != j_alert && g_out.alert < 5) { jline(now); lg("alert "); lg(ALERT_NAME[g_out.alert]); lg(", CJ health "); ti(&g_log, (long)g_snap.player.health); lg("\n"); j_alert = g_out.alert; }
     if (g_out.duty != j_duty && g_out.duty < 7) { jline(now); lg("detail: "); lg(DUTY_NAME[g_out.duty]); lg(", mode "); tu(&g_log, g_out.mode); lg(", "); tu(&g_log, g_out.n_posts); lg(" posts\n"); j_duty = g_out.duty; }
-    if (g_out.say && g_out.say < 7) { jline(now); lg("commander: \""); lg(SAY_NAME[g_out.say]); lg("\" (direction "); tu(&g_log, g_out.say_dir); lg(")\n"); }
+    if (g_out.say && g_out.say < 9) { jline(now); lg("commander: \""); lg(SAY_NAME[g_out.say]); lg("\" (direction "); tu(&g_log, g_out.say_dir); lg(")\n"); }
     if (g_out.leading != j_lead) { jline(now); lg(g_out.leading ? "commander leads CJ to cover\n" : "commander stops leading\n"); j_lead = g_out.leading; }
     log_end();
 summary:
@@ -1589,6 +1619,7 @@ static int try_install(void) {
     lg("libGTASA.so base "); tx(&g_log, G); lg("\n"); tu(&g_log, sizeof GTA_WORDS / sizeof GTA_WORDS[0]); lg(" instruction words match; GOT slots pointing at the brain: "); tu(&g_log, (u64)g_slots); lg(" of 3 (no code changed)\nthe brain is running\n");
     log_begin(); lg("libraries in the game:"); dl_iterate_phdr(list_libs, 0); lg("\n"); log_end();
     fire_setup();
+    places_load();
     return 1;
 }
 static void *waiter(void *arg) {
@@ -1787,7 +1818,7 @@ static void *watchdog(void *arg) {
 }
 
 struct ModInfo { char guid[48]; char name[48]; char version[24]; char author[48]; u16 ver[4]; u8 reserved[336]; };
-static struct ModInfo g_info __attribute__((aligned(16))) = {"net.helicover.brain", "Helicover Brain", "0.6", "Helicover", {0, 6, 0, 0}, {0}};
+static struct ModInfo g_info __attribute__((aligned(16))) = {"net.helicover.brain", "Helicover Brain", "0.7", "Helicover", {0, 7, 0, 0}, {0}};
 static int g_done;
 EXPORT struct ModInfo *__GetModInfo(void) { return &g_info; }
 EXPORT void OnModPreLoad(void) {}

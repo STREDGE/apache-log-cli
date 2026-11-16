@@ -1,10 +1,25 @@
-HELICOVER 1.5 BETA 1 - support helicopter with a smart crew
-GTA San Andreas (Android, 64-bit), a CLEO mod + the Helicover Brain 0.6 mod. They only work together.
+HELICOVER 1.5 BETA 2 - support helicopter with a smart crew
+GTA San Andreas (Android, 64-bit), a CLEO mod + the Helicover Brain 0.7 mod. They only work together.
 
 WHAT IT IS
 Call a support helicopter: it flies in from far away, follows CJ and covers him with four door
 gunners. Drop a four-man team on foot, get picked up by rope, fly to the map marker or Grove
 Street and get out there by landing or by rope.
+
+NEW IN 1.5 BETA 2 (brain 0.7) - FROM THE FOURTH LOG + PART OF THE REST OF THE PLAN
+IMPORTANT: replace EVERYTHING - the CLEO files and libHelicoverBrain64.so.
+Fixed from the log
+- Its own pilot worked in a fight but sometimes climbed to 90 m: the script measured roofs 250 m ahead even for a spot
+  30 m away and found a tower behind it. Roofs are now measured only as far as the spot.
+- The outer men were running two thirds of a fight: with no cover near they chased a "corner" that moved with every
+  look. With no cover a man now takes the place as it is, keeps it, and goes on looking for cover near it.
+New from the plan
+- Sniper: fire at CJ from 45 m or more - the commander calls the side ("SNIPER - LEFT!").
+- Memory of places: the brain remembers where CJ was attacked (kept between games); back there the commander warns.
+- Stealth: CJ creeps crouched while it is quiet - the detail goes down and walks too.
+- A burning vehicle: nobody is posted within 12 m of it.
+Still not done from the plan: water, buildings, landing and hot pickup by the brain's pilot, route recon, voice, fists
+against the unarmed, grenades, the game's own cover points (they need the game file studied first).
 
 NEW IN 1.5 BETA 1 (brain 0.6) - FROM THE THIRD LOG AND YOUR REMARKS
 IMPORTANT: replace EVERYTHING - the CLEO files and libHelicoverBrain64.so.
