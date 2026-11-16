@@ -1,10 +1,24 @@
 HELICOVER 1.4 BETA 2 - support helicopter with a smart crew
-GTA San Andreas (Android, 64-bit), a CLEO mod + the Helicover Brain 0.4 mod. They only work together.
+GTA San Andreas (Android, 64-bit), a CLEO mod + the Helicover Brain 0.4.1 mod. They only work together.
 
 WHAT IT IS
 Call a support helicopter: it flies in from far away, follows CJ and covers him with four door
 gunners. Drop a four-man team on foot, get picked up by rope, fly to the map marker or Grove
 Street and get out there by landing or by rope.
+
+NEW IN BRAIN 0.4.1 - ONE LOG FOR THE WHOLE GAME
+- Everything needed for a diagnosis goes into ONE file: mods/hcbrain_log.txt. It is added to as the game goes (twice a
+  second) until the game is closed (swiped away), crashes or hangs; swiped away, at most the last half second is lost.
+  A crash or a hang is written into it at once. There is no hcbrain_crash.txt any more.
+- Every second: CJ (where, health, car, weapon, stars), the alert and the danger, the detail's mode and commander,
+  cover, the helicopter's spot, each guard and gunner (where, health, weapon, his post and how far, whom he fires at
+  and why he holds), each threat (why, distance, where, weapon), the pilot, Helicover's values that changed, the
+  scripts' calls to the brain and the timing. Hits on CJ and ours, and our hits, line by line. Every 5 s where each
+  CLEO script stands, every 30 s all of Helicover's values. The pause menu and the game going to the background too.
+- A new start of the game is added below in the same file (the game before, a crash included, stays above). Over
+  24 MB, the file is renamed hcbrain_log_old.txt at the next start and a new one begun.
+- What to send after a game: mods/hcbrain_log.txt (and the newest hcbrain_report_NN.bin, if there is one).
+  The scripts did not change: this is the same 1.4 beta 2, only libHelicoverBrain64.so is new (the zip has both).
 
 NEW IN 1.4 BETA 2 (brain 0.4) - AFTER YOUR 1.4 CHECK
 The detail on the ground
@@ -27,8 +41,8 @@ The helicopter
   at the door over a fight. The pose, crew and crew weapon settings are gone.
 - In a fight the helicopter holds a spot 28 m from CJ on the far side from the shooter, 24 m up, where the gunners see him.
 Diagnostics
-- A game crash is written down: mods/hcbrain_log.txt and mods/hcbrain_crash.txt say where it happened and what the
-  brain was doing, and a report is saved. Should a gunner's shot through the game's code ever crash the game, from the
+- A game crash is written down: mods/hcbrain_log.txt says where it happened and what the brain was doing, and a
+  report is saved. Should a gunner's shot through the game's code ever crash the game, from the
   next start the gunners go back to the old way by themselves (it is in the log).
 - The log has the brain's journal: alert and detail changes, the commander's words, "leading CJ to cover", and every
   30 s a summary (how much the gunners and the guards fired, what held them, posts not reached).

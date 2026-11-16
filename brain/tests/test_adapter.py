@@ -119,7 +119,7 @@ class Emu:
         self.mod_path = mod or MOD
         self.uc = uc = Uc(UC_ARCH_ARM64, UC_MODE_ARM)
         self.imports, self.fs, self.fds, self.polys, self.items, self.prot, self.los_calls, self.threads = {}, {}, {}, [], [], [], [], []
-        self.signals, self.sigactions, self.clock_step, self.deliver = [], [], 5, None
+        self.signals, self.sigactions, self.clock_step, self.deliver, self.opens = [], [], 5, None, []
         self.clock, self.sautils, self.walls, self.orig_calls = 1000, sautils, False, {'scripts': 0, 'hud': 0, 'gunshot': 0}
         uc.mem_map(GTA, GTA_SIZE); uc.mem_write(GTA, GTA_IMAGE)
         for slot, target in ((GOT_SCRIPTS, F_SCRIPTS), (GOT_HUD, F_HUD), (GOT_GUNSHOT, F_GUNSHOT)):      # what the linker binds at load
@@ -325,8 +325,9 @@ class Emu:
             path = self.cstr(x[0])
             if x[1] & 3 == 0:
                 ret = (1 << 64) - 1 if path not in self.fs else self._fd(path)
-            else:
-                self.fs[path] = b''; ret = self._fd(path)
+            else:                                            # O_TRUNC (01000) empties it; O_APPEND (02000) keeps it (writes always go to the end)
+                if x[1] & 0o1000 or path not in self.fs: self.fs[path] = b''
+                self.opens.append((path, x[1])); ret = self._fd(path)
         elif n == 'read':
             path, pos = self.fds[x[0]]; d = self.fs[path][pos:pos + x[2]]; uc.mem_write(x[1], d); self.fds[x[0]][1] = pos + len(d); ret = len(d)
         elif n == 'write':
@@ -355,6 +356,12 @@ class Emu:
                 if self.deliver:
                     uc.reg_write(X[0], x[3]); uc.reg_write(X[1], 0); uc.reg_write(X[2], self.deliver[1])
                     uc.reg_write(UC_ARM64_REG_PC, self.deliver[0]); return
+            elif x[0] == 62:                                 # lseek(fd, 0, SEEK_END): the size
+                ret = len(self.fs[self.fds[x[1]][0]]) if x[1] in self.fds and x[3] == 2 else (1 << 64) - 22
+            elif x[0] == 38:                                 # renameat(AT_FDCWD, old, AT_FDCWD, new)
+                o, nw = self.cstr(x[2]), self.cstr(x[4])
+                if o in self.fs: self.fs[nw] = self.fs.pop(o); ret = 0
+                else: ret = (1 << 64) - 2
             elif x[0] == 270:                                # process_vm_readv: a bad address is an error, not a fault
                 lb, ln = struct.unpack('<QQ', bytes(uc.mem_read(x[2], 16))); rb, rn = struct.unpack('<QQ', bytes(uc.mem_read(x[4], 16)))
                 try:
@@ -997,7 +1004,7 @@ e.fs['/proc/self/task/4243/syscall'] = ('98 0x1 0x2 0x3 0x4 0x5 0x6 0x%x 0x%x\n'
 reports0 = len(e.reports())
 e.call(recorder[0], x=(recorder[1],), count=3000000)
 log = e.log()
-assert 'HANG: no new frame for 6 s' in log and 'asleep' in log and 'look 6' in log and '+0=10' in log, log[-900:]
+assert 'no new frame for 1 s: the game went to the background' in log and 'HANG: no new frame for 6 s' in log and 'asleep' in log and 'look 6' in log and '+0=10' in log, log[-900:]
 assert ('pc 0x%016x' % (GTA + 0x228714)) in log and ('on the stack 0x%016x' % CODE) in log and not e.signals, log[-600:]
 assert len(e.reports()) == reports0 + 1 and b'the game hung' in e.report()
 # the same, but the thread is running round a loop: it is asked for its registers with a signal (and the old handler is put back)
@@ -1047,13 +1054,58 @@ e.w64(ucx + 440, GTA + F_LOS + 8); e.w64(ucx + 424, GTA + F_SCRIPTS); e.w64(ucx 
 e.sigactions.clear()
 e.call(acts[11][2], x=(11, info, ucx), count=3000000)
 lg_ = e.log()
-crash = [v for k, v in e.fs.items() if k.endswith('hcbrain_crash.txt')]
 cfg = [v for k, v in e.fs.items() if k.endswith('net.helicover.brain.ini')]
 assert 'CRASH: signal 11 (bad memory access)' in lg_ and '0x00000000deadbeef' in lg_ and 'pc 0x%016x' % (GTA + F_LOS + 8) in lg_ and 'lr 0x%016x' % (GTA + F_SCRIPTS) in lg_, lg_[-800:]   # (names come from dladdr in the game)
-assert crash and b'CRASH: signal 11' in crash[-1] and cfg and b'LastCrash = 99' in cfg[-1], (bool(crash), cfg)
+assert lg_.rstrip().endswith('(the game ends here: its own crash handler takes over)') and 'brain: 3 of 3' in lg_, 'the block is in the file at once, after everything before it'
+assert not [k for k in e.fs if k.endswith('hcbrain_crash.txt')] and cfg and b'LastCrash = 99' in cfg[-1], cfg
 assert [a for a in e.sigactions if a[0] == 11], 'and the previous handler is put back (it gets the crash next)'
 assert any(k.startswith('hcbrain_report_') or 'hcbrain_report_' in k for k in e.fs), 'a report is saved too'
-passed('Crash recorder: on a crash (bad memory, bus error, illegal instruction, arithmetic, abort) the log gets where it happened (pc and lr with the names in libGTASA, the fault address), what the brain was doing and Helicover\'s state; a copy is kept in hcbrain_crash.txt (the next start writes a new log), a report is saved, and the game\'s own handler is put back to take the crash')
+# the next start of the game adds to the same file: the crash stays above, and the new game says where the last one crashed
+e2 = Emu(); e2.fs.update({k: v for k, v in e.fs.items() if k.endswith(('hcbrain_log.txt', 'net.helicover.brain.ini'))})
+lg2 = e2.load()
+assert lg2.startswith(lg_) and lg2.count('a new game: Helicover Brain') == 2 and 'the last game crashed outside the brain (its CRASH block is above' in lg2[len(lg_):], lg2[len(lg_):][:600]
+passed('Crash recorder: on a crash (bad memory, bus error, illegal instruction, arithmetic, abort) the log gets where it happened (pc and lr with the names in libGTASA, the fault address), what the brain was doing, Helicover\'s state and where each CLEO script stands - written into the one log file at once, after everything before it; a report is saved, the game\'s own handler is put back to take the crash, and the next start of the game adds to the same file below the crash')
+
+# 0.4.1: one log for the whole game - added to as it goes, every second the full picture
+e = Emu(); lg0 = e.load()
+assert lg0.count('a new game: Helicover Brain') == 1 and 'libraries in the game:' in lg0 and 'settings: markers 0' in lg0, lg0
+gang = e.ped(20, 0, pedtype=7, weapon=30, face=(-1., 0.))
+pilot, g1, s1, s2 = e.ped(0, 8, 25., pedtype=8), e.ped(1.4, 9, 25., pedtype=8, weapon=31), e.ped(4, 2, pedtype=8, weapon=31), e.ped(4, -2, pedtype=8, weapon=31)
+heli = e.veh(0, 8, 25., vtype=3, driver=pilot)
+e.share(HC_STATE + 7, 3); e.share(HC_STATE + 21, e.handle(heli) & 0x7fffffff); e.share(HC_STATE + 22, e.handle(pilot)); e.share(HC_STATE + 23, e.handle(g1))
+e.share(HC_STATE + 71, e.handle(s1)); e.share(HC_STATE + 72, e.handle(s2)); e.share(HC_HELLO, 0)
+e.frame(n=3)
+e.gunshot(gang, (0., 0.5, 1.))
+for k in range(45):
+    e.frame(ms=100, hud=False)
+    e.opcode(10, 10, CMD_POST, handle=e.handle(s1)); e.opcode(3, 9, CMD_GUNNER, handle=e.handle(g1))
+    if k == 20: e.share(HC_STATE + 27, 2)
+lg1 = e.log()
+if os.environ.get('HCB_LOG_SAMPLE'): Path(os.environ['HCB_LOG_SAMPLE']).write_text(lg1)     # (to read what the log looks like)
+H_ = e.handle
+secs = re.findall(r'^\[(\d+)\.\ds\] \[up [\d.]+s\] CJ \(', lg1, re.M)
+assert len(secs) >= 3 and all(int(b_) - int(a_) == 1 for a_, b_ in zip(secs, secs[1:])), secs
+assert re.search(r'brain: alert (COMBAT|threat|EVACUATE)', lg1) and 'contact #%d ' % H_(gang) in lg1 and re.search(r'contact #%d (THREAT|ATTACKER) ' % H_(gang), lg1), lg1[-3000:]
+assert re.search(r'^  guard1#%d hp 100\.0/0\.0 \(4\.0 2\.0 1\.0\) w 31 .*\| post \w+ \w+ \(.*\| order ' % H_(s1), lg1, re.M), lg1[-3000:]
+assert re.search(r'^  gunner1#%d .*\| order ' % H_(g1), lg1, re.M) and re.search(r'^  pilot#%d ' % H_(pilot), lg1, re.M)
+assert re.search(r'0E48: gunner [1-9]\d* squad 0 status 0 post [1-9]', lg1) and re.search(r'shots: ours 0 others [1-9]', lg1)
+assert 'Helicover (all): ' in lg1 and ' +7=3' in lg1 and re.search(r'Helicover changed:.* \+27=2', lg1), [l_ for l_ in lg1.splitlines() if 'Helicover' in l_]
+assert 'detail: ' in lg1 and 'helicopter our-heli' in lg1 and 'time: looks ' in lg1
+opens = [o for o in e.opens if o[0].endswith('hcbrain_log.txt')]
+assert opens and all(f & 0o2000 and not f & 0o1000 for _, f in opens), 'the log file is only ever added to'
+# the writer thread (the hang recorder's) adds the new text twice a second; the pause menu and stopped frames are noted
+before = len(e.log()); e.frame(ms=100, n=3, hud=False)
+assert len(e.log()) == before, '(the game thread writes only when the writer thread has been silent for 3 s)'
+e.uc.mem_write(GTA + USER_PAUSE, b'\1')
+rec = e.threads[-1]; e.call(rec[0], x=(rec[1],), count=300000)
+lg3 = e.log()
+assert len(lg3) > before and 'the game is paused (menu)' in lg3[before:] and 'HANG' not in lg3, lg3[before:][-500:]
+e.uc.mem_write(GTA + USER_PAUSE, b'\0')
+# the file grew over 24 MB: the next start renames it hcbrain_log_old.txt and begins a new one
+e3 = Emu(); big = b'x' * (25 << 20); e3.fs[MODS + 'hcbrain_log.txt'] = big
+lg4 = e3.load()
+assert e3.fs.get(MODS + 'hcbrain_log_old.txt') == big and lg4.startswith('\n\n========== a new game') and len(lg4) < 20000
+passed('One log for the whole game (0.4.1): every start of the game adds to the same hcbrain_log.txt (never rewritten; over 24 MB it becomes hcbrain_log_old.txt); every second CJ, the brain\'s alert, the detail\'s duty, mode and commander, the helicopter\'s spot, each of ours (where, health, weapon, post and how far, order and why he holds), each contact (class, why, distance, where, weapon), the pilot, Helicover\'s shared values that changed, the 0E48 calls and the timing - %d seconds of a fight written; the writer thread adds the text twice a second and notes the pause menu' % len(secs))
 
 text = '\n'.join(results) + '\nThe phone build on an emulated CPU with the real libGTASA.so and the real code of the CLEO library; the world in memory is laid out by the test. Not run in the game.\n'
 (h.OUT / 'brain_adapter_tests.txt').write_text(text)
