@@ -88,6 +88,9 @@ HID void hcb_nav_update(hcb_brain *b, const hcb_snapshot *s, hcb_out *out, hcb_v
         }
     }
     for (i = 0; i < NAV_SEGS; i++) if (n->sg[i].used && now - (n->sg[i].answered ? n->sg[i].answered : n->sg[i].asked) > 4000) n->sg[i].used = 0;
+    /* (the map is only built while the mod walks somebody of the detail: every question costs the game a ray or three) */
+    for (k = 0, r = 0; k < (int)s->n_ours && k < HCB_MAX_OURS; k++) if (s->our_role[k] >= HCB_ROLE_SQUAD && s->our_role[k] <= HCB_ROLE_SQUAD + 7) r = 1;
+    if (!s->body || !r) return;
     /* the questions: the cells nearest the focus first, each asked from just above a neighbour that is known */
     fi = ci(n, focus.x); fj = cj_(n, focus.y);
     for (r = 0; r < NAV_N && out->n_ground_q < HCB_MAX_GROUND; r++) {
