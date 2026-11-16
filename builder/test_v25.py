@@ -534,21 +534,13 @@ w.shared[b.FIRE]=0;w.step(c,f,n=5);count=len(attacks(w));w.step(c,f,n=6);assert 
 passed('Protect CJ and cease-fire remain active after aim and takeoff changes')
 
 w,c,p=setup(True);summon(w,c);f=VM('Helicover_Fire',w);w.step(c,p,f,n=3);w.shared[b.FIRE]=3;w.step(c,p,f,n=5)
-launch=VM('Helicover',w);w.step(c,p,f,launch,n=15);w.events.append(6);w.step(c,p,f,n=4);w.events.append(2);w.step(c,p,f,n=4)
-assert w.menu[0]==b'HELICOVER / CREW WEAPON' and b'MP5' in w.menu,w.menu
-w.events.append(1);w.step(c,p,f,n=12)
-assert w.shared[b.WEAPON_SETTING]==29 and w.shared[b.WPN]==29
-assert all(w.weapons[c.v[v]]==29 for v in [13,14,15,16]) and b'MP5 [X]' in w.menu
-passed('Weapon menu changes all four live guards to MP5')
-w.events.append(0);w.step(c,p,f,n=12)
-assert w.shared[b.WEAPON_SETTING]==0 and w.shared[b.WPN]==31
-assert all(w.weapons[c.v[v]]==31 for v in [13,14,15,16])
-passed('Crew-based automatic weapon selection can be restored')
-for index, weapon in [(1,29),(2,30),(3,31),(4,34),(0,31)]:
- w.events.append(index);w.step(c,p,f,n=12)
- assert w.shared[b.WPN]==weapon
- assert all(w.weapons[c.v[v]]==weapon for v in [13,14,15,16])
-passed('All weapon selections update the four guards in the mock')
+launch=VM('Helicover',w);w.step(c,p,f,launch,n=15);w.events.append(6);w.step(c,p,f,n=4)
+assert w.menu==[b'HELICOVER / SETTINGS',b'CLOSE',b'HELICOPTER MODEL >',b'SQUAD TACTICS: AUTO',b'MESSAGES: ALL',b'< BACK'],w.menu
+assert w.shared[b.WPN]==31 and all(w.weapons[c.v[v]]==31 for v in [13,14,15,16])
+passed('1.4.1: the crews are fixed - no crew or crew weapon pages; the SWAT door gunners carry M4s')
+for tap,val,row in [(1,1,b'SQUAD TACTICS: ASSAULT'),(1,2,b'SQUAD TACTICS: GUARD'),(1,0,b'SQUAD TACTICS: AUTO')]:
+ w.now+=1100;w.events.append(tap);w.step(c,p,f,n=12);assert w.shared[b.TACTICS]==val and row in w.menu,(val,w.menu)
+passed('SQUAD TACTICS: one tap moves AUTO (the brain picks) -> ASSAULT -> GUARD -> AUTO')
 
 w,c,p=setup(True);w.touches[7]=0;w.step(c,p,n=15);w.touches[5]=w.now;w.step(c,p,n=8)
 assert w.menu is None and not calls(w,0xde0)
@@ -979,8 +971,8 @@ def to_destination(w,c,*vms):
 # menu (beta 4): the two EXIT BUTTON rows are switches for the game's own exit button - they start nothing themselves
 w,c,p=setup(True);summon(w,c);w.incar[1]=c.v[5];launch=VM('Helicover',w);w.step(c,p,launch,n=15)
 assert b'EXIT BUTTON: LAND [X]' in w.menu and b'EXIT BUTTON: ROPE' in w.menu and b'GET OUT HERE' not in w.menu,w.menu
-w.events.append(5);w.step(c,p,n=5);assert w.menu==[b'HELICOVER / SETTINGS',b'CLOSE',b'CREW >',b'HELICOPTER MODEL >',b'CREW WEAPON >',b'SQUAD TACTICS: GUARD',b'MESSAGES: ALL',b'GUNNERS: SITTING',b'< BACK'] and not any(b'EXIT' in r or b'LANGUAGE' in r for r in w.menu),w.menu
-w.events.append(6);w.step(c,p,n=5);assert w.menu[0]==b'HELICOVER / FOLLOWING',w.menu
+w.events.append(5);w.step(c,p,n=5);assert w.menu==[b'HELICOVER / SETTINGS',b'CLOSE',b'HELICOPTER MODEL >',b'SQUAD TACTICS: AUTO',b'MESSAGES: ALL',b'< BACK'] and not any(b'EXIT' in r or b'LANGUAGE' in r for r in w.menu),w.menu
+w.events.append(3);w.step(c,p,n=5);assert w.menu[0]==b'HELICOVER / FOLLOWING',w.menu
 st=w.shared[b.STATE];pos=list(w.car)
 for idx,mode,row,key in [(3,1,b'EXIT BUTTON: ROPE [X]','HCXBR'),(3,1,b'EXIT BUTTON: ROPE [X]','HCXBR'),(2,0,b'EXIT BUTTON: LAND [X]','HCXBL'),(2,0,b'EXIT BUTTON: LAND [X]','HCXBL'),(3,1,b'EXIT BUTTON: ROPE [X]','HCXBR')]:
  w.calls.clear();w.messages.clear();w.shared[b.MSG_UNTIL]=0;w.events.append(idx);w.step(c,p,n=12)
@@ -1204,12 +1196,15 @@ w,c,f=fire_world();g0=w.shared[b.PUB+3];at_heli(w,g0);w.step(c,f,n=4);assert w.n
 passed('A stranger\'s round that passes within 6 m of the helicopter stamps the time the pilot\'s evasion looks at (it used to be read from the bullet traces); rounds elsewhere and our own fire do not')
 # combat orbit around the threat at 28 m, 25 m above it, moving between points
 w,c,f=fire_world();w.speed=18.;npc=target(w,typ=7,skin=20);w.damage.add((1,npc));w.step(c,f,n=10)   # an orbiting helicopter is moving (not 'wedged')
-pts=set()
+brain_spots=0
 for _ in range(80):
- w.step(c,f);m=calls(w,0x4a2)[-1][2];pts.add((round(m[1],1),round(m[2],1)))
- assert abs(math.dist(m[1:3],w.pos[npc][:2])-b.ORBIT_RADIUS)<.5 and abs(m[3]-(w.pos[npc][2]+25.))<.01,m
-assert len(pts)>=3,pts
-passed('Combat orbit circles the threat at 28 m and 25 m above it')
+ w.step(c,f);m=calls(w,0x4a2)[-1][2];cj=w.coords(1)
+ if w.shared[b.HELI_SPOT_Z]>1:
+  brain_spots+=1
+  assert abs(math.dist(m[1:3],cj[:2])-28.)<.5 and abs(m[3]-(cj[2]+24.))<.01 and math.dist(m[1:3],w.pos[npc][:2])>math.dist(cj[:2],w.pos[npc][:2]),m   # on the far side of CJ from the man
+ else:assert abs(math.dist(m[1:3],w.pos[npc][:2])-b.ORBIT_RADIUS)<.5 and abs(m[3]-(w.pos[npc][2]+25.))<.01,m
+assert brain_spots>=60,brain_spots
+passed('In a fight the pilot holds the brain\'s spot: 28 m from CJ on the far side from the threat, 24 m up, where the gunners see the man (the old orbit round the threat only until the brain has the spot)')
 # 1.1: every on-screen text is short, coloured consistently and names no removed button
 import re as _re
 _old=['BOARD CJ','LEAVE HELICOPTER','CALL SUPPORT','TAKE OFF','SETUP','SWAT:','TEAM ON FOOT >','EXIT NOW','LAND AT DESTINATION','DESCEND BY ROPE']

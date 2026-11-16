@@ -19,7 +19,7 @@ for _m in re.finditer(r'^def [a-z_0-9]+\(.*?(?=^\S)',_src,re.S|re.M):exec(compil
 World,VM,b,setup,summon,calls,command,invariants=g['World'],g['VM'],g['b'],g['setup'],g['summon'],g['calls'],g['command'],g['invariants']
 def one(seed):
  rnd=random.Random(seed);w,c,p=setup(True);w.rng=random.Random(seed);w.jitter=rnd.random()<.5
- vms=[c,p,VM('Helicover_Ground',w),VM('Helicover_Squad',w),VM('Helicover_Fire',w),VM('Helicover',w)]
+ vms=[c,p,VM('Helicover_Ground',w),VM('Helicover_Squad',w),VM('Helicover_Fire',w),VM('Helicover',w),VM('Helicover_Team2',w),VM('Helicover_Squad2',w)]   # 1.4.1: eight on the ground
  w.step(*vms,n=10);w.teleports.clear();car=None;log=[];broken=[]
  def run(n):
   for _ in range(n):

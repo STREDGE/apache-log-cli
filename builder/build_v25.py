@@ -66,6 +66,10 @@ G_AIM=STATE+443;G_AIM_T=STATE+447        # per gunner: the man his weapon is on 
 BR_ALERT=STATE+451;BR_TOP=STATE+452;BR_KILLS=STATE+453;BR_THREATS=STATE+454;BR_ATTACKERS=STATE+455
 SQ_BR_ST=STATE+456;SQ_BR_TG=STATE+460    # per guard of the squad: the brain's state (0 nothing, 1 cover, 2 fire, 3 cease fire) and man
 SQ_TICK=STATE+464
+# 1.4.1: the second four of the ground team (guards 5-8) and their own squad worker (Helicover_Squad2) and lifecycle (Helicover_Team2)
+GROUND_PUB2=STATE+480;SQ_SLOT2=STATE+500;SQ_BR_ST2=STATE+540;SQ_BR_TG2=STATE+544;SQ_PACE2=STATE+548;SQ_T2=STATE+552
+SQ_HEART2=STATE+556;SQ_GROUP2=STATE+557;SQ_TICK2=STATE+558;TEAM2_STATE=STATE+559
+HELI_SPOT_X=STATE+561;HELI_SPOT_Y=STATE+562;HELI_SPOT_Z=STATE+563   # 1.4.1: the brain's spot for the helicopter in a fight (floats; x = 0 none)
 SQ_PACE=STATE+230   # 1.4, per guard: the pace of his last move order (a new pace renews the order)
 G_FIRE=STATE+465;G_FIRE_T=STATE+469;SQ_SAY_SEQ=STATE+473   # SQ_SAY_SEQ: the number of the commander's last words the squad has said (-1 = take the next number without saying it)   # 1.4, per gunner: the man his own weapon is firing at (-1 = not firing), when the firing order is renewed
 BURN_NEXT=STATE+433;BURN_SAID=STATE+434;POSE=STATE+435;POSE_DONE=STATE+436   # beta 6: burning-car watch; gunners sit on the skid (2, 1.4) / kneel (1) / stand (0)
@@ -176,8 +180,8 @@ MESSAGES={'HCLOAD': '~b~PILOT:~w~ inbound to your position.',
  'HCBURN': '~r~CAR ON FIRE!~w~ Get away from it.',
  'HCEVADE': '~r~TAKING HITS!~w~ Pilot breaking away.',
  'HCSHOT': '~r~TAKING FIRE!~w~ Pilot breaking away.',
- 'HCHELLO': '~b~HELICOVER 1.4 BETA~w~ ready. CLEO menu > Helicover.',
- 'HCHELLV': '~b~HELICOVER 1.4 BETA~w~ ready. Map marker is off here.'}
+ 'HCHELLO': '~b~HELICOVER 1.4 BETA 2~w~ ready. CLEO menu > Helicover.',
+ 'HCHELLV': '~b~HELICOVER 1.4 BETA 2~w~ ready. Map marker is off here.'}
 # Generate state updates; panel prints messages when the state changes.
 # beta 6: our people do not cower. CREATE_CHAR gives a mission ped the built-in "normal" decision maker (m_norm.ped): punched, shot at or
 # aimed at, it picks "duck and cover" / "flee" like any passer-by. 65542 is the game's built-in EMPTY decision maker (slot 6 | 1<<16, loaded
@@ -649,7 +653,13 @@ for var in [13,14,15,16]:
  skip='ARM_CREW_SKIP_'+str(var);alive(c,var,skip);a(0x0470,V(var),V(17));c.check(0x803b,[V(17),V(19)],skip);a(0x01b2,V(var),V(19),I(30000));a(0x01b9,V(var),V(19));a(0x02e2,V(var),I(100));a(0x07dd,V(var),I(100));c.label(skip)
 c.label('ARM_CREW_RET');c.ret()
 c.label('CHANGE_POSE');c.get(19,POSE);c.get(17,POSE_DONE);c.check(0x003b,[V(19),V(17)],'CHANGE_POSE_GO');c.ret()
-c.label('CHANGE_POSE_GO');a(0xddc,I(POSE_DONE),V(19));c.call('REATTACH_TEAM');c.call('ARM_CREW');c.ret()   # (the attach strips the weapons)
+c.label('CHANGE_POSE_GO');a(0xddc,I(POSE_DONE),V(19));c.call('RESEAT_MOUNTED');c.call('ARM_CREW');c.ret()   # (the attach strips the weapons)
+# 1.4.1: the brain changes the gunners' pose in flight: only the men who are in their doors are re-seated (a crewman who has got
+# out after a landing stays on his feet)
+c.label('RESEAT_MOUNTED')
+for var in (13,14,15,16):
+ skip='RESEAT_SKIP_'+str(var);alive(c,var,skip);c.check(0x0a32,[V(var)],skip);c.call('ATTACH_'+str(var));c.label(skip)
+c.ret()
 c.label('REATTACH_TEAM')
 for var,x,y,direction in [(13,1.4,1.3,3),(14,-1.4,1.3,1),(15,1.4,-.8,3),(16,-1.4,-.8,1)]:
  skip='ATTACH_SKIP_'+str(var);alive(c,var,skip)
@@ -714,7 +724,11 @@ c.eq(30,5,'ORBIT_PT_5');a(0x0007,V(9),F(-19.8));a(0x0007,V(10),F(-19.8));c.go('T
 c.eq(30,6,'ORBIT_PT_6');a(0x0007,V(9),F(0.0));a(0x0007,V(10),F(-28.0));c.go('TRACK_GOTO');c.label('ORBIT_PT_6')
 c.eq(30,7,'ORBIT_PT_7');a(0x0007,V(9),F(19.8));a(0x0007,V(10),F(-19.8));c.go('TRACK_GOTO');c.label('ORBIT_PT_7')
 a(0x0007,V(9),F(ORBIT_RADIUS));a(0x0007,V(10),F(0))
-c.label('TRACK_GOTO');c.get(30,EVADE_UNTIL);c.check(0x001d,[V(30),V(20)],'TRACK_NORMAL');a(0x0013,V(9),F(1.6));a(0x0013,V(10),F(1.6));a(0x0087,V(11),V(31));a(0x000b,V(11),F(40));c.go('TRACK_POS')
+c.label('TRACK_GOTO');c.get(30,EVADE_UNTIL);c.check(0x001d,[V(30),V(20)],'TRACK_BRAIN')
+a(0x0013,V(9),F(1.6));a(0x0013,V(10),F(1.6));a(0x0087,V(11),V(31));a(0x000b,V(11),F(40));c.go('TRACK_POS')   # (evading: wider and higher)
+# 1.4.1: the brain's spot - 28 m from CJ on the far side from the threat, 24 m up, where the threat is seen from (the game's own
+# line of sight, asked by the brain): the pilot goes there instead of round the orbit while it is given (z 0 = none)
+c.label('TRACK_BRAIN');c.get(30,HELI_SPOT_Z);c.check(0x0021,[V(30),F(1)],'TRACK_NORMAL');c.get(9,HELI_SPOT_X);c.get(10,HELI_SPOT_Y);a(0x0087,V(11),V(30));c.go('TRACK_ISSUE')
 c.label('TRACK_NORMAL');a(0x0087,V(11),V(31));a(0x000b,V(11),F(25));a(0x0087,V(8),V(31));a(0x0063,V(8),V(28));c.check(0x0021,[V(8),F(6)],'TRACK_POS');a(0x000b,V(11),F(15))
 c.label('TRACK_POS');a(0x005b,V(9),V(26));a(0x005b,V(10),V(27))
 # v40: an orbit point without a clear view of the threat is flown 15 m higher, and the next tick
@@ -1017,13 +1031,15 @@ def main_rows(st,sit,x,prof='en'):
  return [Tx('MAP',prof,st in MAP_STATES and not exiting),Tx('GROVE',prof,st in GROVE_STATES),Tx('EXIT_LAND',prof,mode==0),Tx('EXIT_ROPE',prof,mode==1),Tx('GUNFIRE',prof),Tx('SETTINGS',prof)]
 MAIN_VARIANTS=[(st,0,0) for st in NONE_STATES]+[(st,1,0) for st in BUSY_STATES]+[(st,2,x) for st in GROUND_STATES for x in range(8)]+[(st,3,x) for st in GROUND_STATES for x in range(4)]
 def main_key(st,sit,x):return st*1000+sit*100+x
-def setup_rows(tac,hud,prof,pose=1):
- return [Tx('SET_CREW',prof),Tx('SET_MODEL',prof),Tx('SET_WEAPON',prof),Tx('TAC_ASSAULT' if tac else 'TAC_GUARD',prof),Tx(('MSG_OFF','MSG_IMP','MSG_ALL')[hud],prof),Tx(('POSE_STAND','POSE_KNEEL','POSE_SIT')[pose],prof),Tx('BACK',prof)]
+def setup_rows(tac,hud,prof):
+ """1.4.1: the crews are fixed (SWAT in the helicopter; on the ground a soldier in command and seven agents in black) and the
+ gunners' pose is the brain's - the settings keep the helicopter, the squad's tactics (AUTO = the brain picks) and the messages."""
+ return [Tx('SET_MODEL',prof),Tx(('TAC_AUTO','TAC_ASSAULT','TAC_GUARD')[tac],prof),Tx(('MSG_OFF','MSG_IMP','MSG_ALL')[hud],prof),Tx('BACK',prof)]
 def fire_rows(val,pol,mis,prof):
  """GUNNER FIRE: the four rules (the one in force is marked), then two switches: what to do about policemen, and about the people of a mission."""
  return [Tx('FIRE%d'%v,prof,v==val) for v in FIRE_VALUES]+[Tx('POL_NEVER' if pol else 'POL_ANSWER',prof),Tx('MIS_FREE' if mis else 'MIS_DEF',prof),Tx('BACK',prof)]
-PREF_PAGES=[(3,CREW,CREW_VALUES,'CREW_TITLE','CREW%d'),(4,MODEL,MODEL_VALUES,'MODEL_TITLE','MODEL%d'),(5,WEAPON_SETTING,WEAPON_VALUES,'WEAPON_TITLE','WEAPON%d')]
-for page,label in [(0,'PICK_MAIN'),(1,'PICK_FIRE'),(2,'PICK_SETUP'),(3,'PICK_CREW'),(4,'PICK_MODEL'),(5,'PICK_WEAPON'),(6,'PICK_DISMISS')]:
+PREF_PAGES=[(4,MODEL,MODEL_VALUES,'MODEL_TITLE','MODEL%d')]   # 1.4.1: no crew / weapon pages (fixed)
+for page,label in [(0,'PICK_MAIN'),(1,'PICK_FIRE'),(2,'PICK_SETUP'),(4,'PICK_MODEL'),(6,'PICK_DISMISS')]:
  nxt='PAGE_PICK_NEXT_'+str(page);p.eq(2,page,nxt);p.go(label);p.label(nxt)
 p.go('MENU_POLL')
 def page(n):
@@ -1079,14 +1095,12 @@ p.label('DT_GO');p.set(DISMISS_T,0);p.set(CMD,4)
 p.label('DT_RET');p.ret()
 # settings: three sub-pages and two one-tap switches
 p.label('PICK_SETUP')
-for index,label in [(0,'OPEN_CREW'),(1,'OPEN_MODEL'),(2,'OPEN_WEAPON'),(3,'TOGGLE_TACTICS'),(4,'TOGGLE_HUD'),(5,'TOGGLE_POSE'),(6,'LEAVE_SETUP')]:pick(index,label)
+for index,label in [(0,'OPEN_MODEL'),(1,'TOGGLE_TACTICS'),(2,'TOGGLE_HUD'),(3,'LEAVE_SETUP')]:pick(index,label)
 p.go('MENU_POLL')
 p.label('LEAVE_SETUP');p.call('UNLOAD');p.go('OPEN_MAIN')
-for label,key in [('TOGGLE_TACTICS',TACTICS)]:
- p.label(label);p.get(9,key);p.eq(9,0,label+'_OFF');p.set(key,1);p.go('FORCE_REFRESH');p.label(label+'_OFF');p.set(key,0);p.go('FORCE_REFRESH')
-# 1.4: three poses, one tap moves on: sitting on the skid (2) -> kneeling (1) -> standing (0) -> sitting
-p.label('TOGGLE_POSE');p.get(9,POSE);a(0x000a,V(9),I(-1));p.check(0x0019,[V(9),I(-1)],'TOGGLE_POSE_WRAP');a(0xddc,I(POSE),V(9));p.go('FORCE_REFRESH')
-p.label('TOGGLE_POSE_WRAP');p.set(POSE,2);p.go('FORCE_REFRESH')
+# 1.4.1: tactics AUTO (0, the brain picks) -> ASSAULT (1) -> GUARD (2) -> AUTO
+p.label('TOGGLE_TACTICS');p.get(9,TACTICS);a(0x000a,V(9),I(1));p.check(0x8019,[V(9),I(2)],'TOGGLE_TACTICS_WRAP');a(0xddc,I(TACTICS),V(9));p.go('FORCE_REFRESH')
+p.label('TOGGLE_TACTICS_WRAP');p.set(TACTICS,0);p.go('FORCE_REFRESH')
 p.label('TOGGLE_HUD');p.get(9,HUD);a(0x000a,V(9),I(-1));p.check(0x0019,[V(9),I(-1)],'TOGGLE_HUD_WRAP');a(0xddc,I(HUD),V(9));p.go('FORCE_REFRESH')
 p.label('TOGGLE_HUD_WRAP');p.set(HUD,2);p.go('FORCE_REFRESH')
 p.label('PICK_FIRE')
@@ -1096,8 +1110,8 @@ for idx,key in [(len(FIRE_VALUES),POLICE),(len(FIRE_VALUES)+1,MISSIONS)]:
  nxt='FIRE_SWITCH_NEXT_'+str(idx);off='FIRE_SWITCH_OFF_'+str(idx);p.eq(1,idx,nxt);p.get(9,key);p.eq(9,0,off);p.set(key,1);p.go('FORCE_REFRESH');p.label(off);p.set(key,0);p.go('FORCE_REFRESH');p.label(nxt)
 p.go('OPEN_MAIN')
 p.label('FIRE_KEY');p.get(6,FIRE);a(0x0012,V(6),I(10));p.get(11,POLICE);a(0x005a,V(6),V(11));a(0x0012,V(6),I(10));p.get(11,MISSIONS);a(0x005a,V(6),V(11));p.ret()
-for key,pag,choices,back in [(CREW,3,[(0,0),(1,1),(2,2)],'OPEN_SETUP'),(MODEL,4,[(0,487),(1,497),(2,425)],'OPEN_SETUP'),(WEAPON_SETTING,5,[(i,v) for i,v in enumerate(WEAPON_VALUES)],'OPEN_SETUP')]:
- label={3:'PICK_CREW',4:'PICK_MODEL',5:'PICK_WEAPON'}[pag];p.label(label)
+for key,pag,choices,back in [(MODEL,4,[(0,487),(1,497),(2,425)],'OPEN_SETUP')]:
+ label={4:'PICK_MODEL'}[pag];p.label(label)
  for idx,val in choices:
   nxt='OPTION_NEXT_'+str(pag)+'_'+str(idx);p.eq(1,idx,nxt);p.set(key,val);p.go('FORCE_REFRESH');p.label(nxt)
  p.go(back)
@@ -1133,7 +1147,7 @@ emit_team_phase('DT_PHASE',22,23,24)   # the same for DISMISS_TICK, which runs b
 # 15@ = 1 while a rope pickup of CJ is under way: the helicopter is coming in for it, or the rope hangs waiting for him. Uses 11@.
 p.label('ROPE_PHASE');p.get(15,ROPE_WAIT);p.eq(15,1,'RP_APPROACH');p.ret()
 p.label('RP_APPROACH');a(6,V(15),I(0));p.get(11,STATE);p.eq(11,19,'RP_RET');p.get(11,ESCORT_PENDING);p.eq(11,0,'RP_RET');a(6,V(15),I(1));p.label('RP_RET');p.ret()
-p.label('SETUP_KEY');p.get(6,POSE);a(0x0012,V(6),I(10));p.get(11,TACTICS);a(0x005a,V(6),V(11));a(0x0012,V(6),I(10));p.get(11,HUD);a(0x005a,V(6),V(11));p.ret()
+p.label('SETUP_KEY');p.get(6,TACTICS);a(0x0012,V(6),I(10));p.get(11,HUD);a(0x005a,V(6),V(11));p.ret()
 p.label('CHECK_MENU_STATUS');p.eq(2,0,'CMS_FIRE');p.call('MAIN_KEY');p.go('CMS_COMPARE')
 p.label('CMS_FIRE');p.eq(2,1,'CMS_SETUP');p.call('FIRE_KEY');p.go('CMS_COMPARE')
 p.label('CMS_SETUP');p.eq(2,2,'CMS_CREW');p.call('SETUP_KEY');p.go('CMS_COMPARE')
@@ -1142,7 +1156,7 @@ p.label('CMS_MODEL');p.eq(2,4,'CMS_WEAPON');p.get(6,MODEL);p.go('CMS_COMPARE')
 p.label('CMS_WEAPON');p.eq(2,5,'MENU_POLL');p.get(6,WEAPON_SETTING)
 p.label('CMS_COMPARE');p.check(0x803b,[V(6),V(3)],'MENU_POLL');a(0x01bd,V(16));p.go('REFRESH')   # 16@ = when the page last changed under the player's finger
 p.label('REFRESH');a(0x0df3)
-for pageid in range(7):
+for pageid in (0,1,2,4,6):   # (1.4.1: pages 3 and 5 - crew and crew weapon - are gone)
  nxt='DRAW_NEXT_'+str(pageid);p.eq(2,pageid,nxt);p.go('DRAW_'+str(pageid));p.label(nxt)
 p.go('CLOSE')
 _draw=[0]
@@ -1156,11 +1170,10 @@ for st,sit,x in MAIN_VARIANTS:
  nxt='DRAW_MAIN_NEXT_%d_%d_%d'%(st,sit,x);p.eq(6,main_key(st,sit,x),nxt);draw('MAIN_%d_%d_%d'%(st,sit,x),len(main_rows(st,sit,x)));p.label(nxt)
 a(6,V(7),I(0));draw('MAIN_0_0_0',2)
 p.label('DRAW_2');p.call('SETUP_KEY');a(0x0085,V(3),V(6))
-for pose in (0,1,2):
- for tac in (0,1):
-  for hud in (0,1,2):
-   nxt='DRAW_SETUP_NEXT_%d%d%d'%(pose,tac,hud);p.eq(6,pose*100+tac*10+hud,nxt);draw('SETUP_%d%d%d'%(pose,tac,hud),7);p.label(nxt)
-draw('SETUP_102',7)
+for tac in (0,1,2):
+ for hud in (0,1,2):
+  nxt='DRAW_SETUP_NEXT_%d%d'%(tac,hud);p.eq(6,tac*10+hud,nxt);draw('SETUP_%d%d'%(tac,hud),4);p.label(nxt)
+draw('SETUP_02',4)
 p.label('DRAW_1');p.call('FIRE_KEY');a(0x0085,V(3),V(6))
 for val in FIRE_VALUES:
  for pol in (0,1):
@@ -1181,15 +1194,14 @@ p.label('CLOSE');p.call('UNLOAD');a(0xdf3);p.set(OPEN,0);p.set(0,0);a(6,V(10),I(
 VERSION='1.4'
 for st,sit,x in MAIN_VARIANTS:
  for prof,suf in zip(PROFILES,SUFFIX):
-  title=(i18n.encode('HELICOVER 1.4 BETA','en') if prof=='en' else i18n.menu_text('TITLE_READY',prof)) if st==0 else i18n.state_title(st,STATES[st],prof)
+  title=(i18n.encode('HELICOVER 1.4 BETA 2','en') if prof=='en' else i18n.menu_text('TITLE_READY',prof)) if st==0 else i18n.state_title(st,STATES[st],prof)
   p.blob('MAIN_%d_%d_%d'%(st,sit,x)+suf,title,main_rows(st,sit,x,prof))
 for prof,suf in zip(PROFILES,SUFFIX):
  if prof=='en':p.blob('OFFLINE_MENU',i18n.menu_text('OFFLINE_TITLE',prof),[i18n.menu_text('OFFLINE_ROW',prof)])   # the core is missing, so the language is unknown: English only
  p.blob('DISMISS_MENU'+suf,i18n.menu_text('DISMISS_TITLE',prof),[Tx('DISMISS_YES',prof),Tx('DISMISS_NO',prof)])
  p.blob('DISMISS_MENU_T'+suf,i18n.menu_text('DISMISS_TITLE',prof),[Tx('DISMISS_YES_TEAM',prof),Tx('DISMISS_NO',prof)])
- for pose in (0,1,2):
-  for tac in (0,1):
-   for hud in (0,1,2):p.blob('SETUP_%d%d%d'%(pose,tac,hud)+suf,i18n.menu_text('SET_TITLE',prof),setup_rows(tac,hud,prof,pose))
+ for tac in (0,1,2):
+  for hud in (0,1,2):p.blob('SETUP_%d%d'%(tac,hud)+suf,i18n.menu_text('SET_TITLE',prof),setup_rows(tac,hud,prof))
  for val in FIRE_VALUES:
   for pol in (0,1):
    for mis in (0,1):p.blob('FIRE_%d%d%d'%(val,pol,mis)+suf,i18n.menu_text('FIRE_TITLE',prof),fire_rows(val,pol,mis,prof))
@@ -1255,7 +1267,11 @@ for var in [3,4,5,6]:
  skip='ARM_SKIP_'+str(var);alive(f,var,skip);a(0x0470,V(var),V(30));f.check(0x803b,[V(30),V(7)],skip);a(0x01b2,V(var),V(7),I(30000));a(0x01b9,V(var),V(7));a(0x02e2,V(var),I(100));a(0x07dd,V(var),I(100));f.label(skip)
 # ---- the brain
 f.label('BRAIN');f.get(30,BRAIN_HELLO);f.check(0x0039,[V(30),I(BRAIN_MAGIC)],'NO_BRAIN')
-a(0x0e48,V(8),I(9),I(3))   # 8@ alert, 9@ threats, 10@ attackers, 11@ kills, 12@ the most dangerous man, 13-15@ CJ's own fire (the squad's business), 16@ ms since a stranger fired at the helicopter
+a(0x0e48,V(8),I(13),I(3))   # 8@ alert, 9@ threats, 10@ attackers, 11@ kills, 12@ the most dangerous man, 13-15@ CJ's own fire (the squad's business), 16@ ms since a stranger fired at the helicopter
+# 1.4.1: 17@ the gunners' pose (the brain's: seated on the skid, kneeling at the door over a fight) - the core re-seats them when it
+# changes; 18-20@ the spot where the helicopter's gunners see the threat (0 0 0 = none), for the pilot
+f.get(30,POSE);f.check(0x803b,[V(30),V(17)],'POSE_SAME');f.check(0x8019,[V(17),I(2)],'POSE_SAME');f.check(0x0019,[V(17),I(-1)],'POSE_SAME');a(0xddc,I(POSE),V(17));f.label('POSE_SAME')   # (check jumps when false: same, above 2 or negative -> unchanged)
+a(0xddc,I(HELI_SPOT_X),V(18));a(0xddc,I(HELI_SPOT_Y),V(19));a(0xddc,I(HELI_SPOT_Z),V(20))
 a(0xddc,I(BR_ALERT),V(8));a(0xddc,I(BR_THREATS),V(9));a(0xddc,I(BR_ATTACKERS),V(10))
 # fire at the helicopter: the stamp the pilot's evasion looks at (it used to come from the bullet traces)
 f.check(0x0019,[V(16),I(-1)],'HELI_SHOT_DONE');f.check(0x8019,[V(16),I(600)],'HELI_SHOT_DONE');a(0x01bd,V(31));a(0x0062,V(31),V(16));a(0xddc,I(HELI_SHOT_T),V(31));f.label('HELI_SHOT_DONE')

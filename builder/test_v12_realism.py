@@ -215,7 +215,7 @@ w,c,V,team=anchor_scene()
 w.velocity[1]=[3.,0.,0.];w.char_speed={1:3.};steps(w,V,20)
 pt=[p for p in w.brain.posts().values() if p.job==3]   # 3 = HCB_ROLE_POINT
 assert pt and pt[0].at.x-w.coords(1)[0]>3.,("the point man goes ahead of CJ in the east",pt and (pt[0].at.x,pt[0].at.y),w.coords(1))
-w.velocity.pop(1,None);w.char_speed={};w.calls.clear();steps(w,V,6)
+w.velocity.pop(1,None);w.char_speed={};w.calls.clear();steps(w,V,20)   # (a move order is renewed within 1.5 s when the post moved)
 for t_ in team:
  p=post_of(w,t_);o=sent_to(w,t_)
  assert p is not None and (o is None and math.dist(w.pos[t_][:2],[p.at.x,p.at.y])<1.0 or o is not None and math.dist(o,[p.at.x,p.at.y])<1.0),(t_,o,p and (p.at.x,p.at.y),w.pos[t_])
@@ -290,37 +290,16 @@ assert lens and max(lens)<=10 and not invariants(w) and g['hit'](w)=={npc},(lens
 passed('Door gunners fire their own weapon in bursts with a breath between them (%d bursts in 6.6 s for each gunner on the man, %d-%d rounds each), not a steady stream like a minigun'%(min(len(v) for v in bs.values()),min(lens),max(lens)))
 
 # =================================================================== E5: decor (model, clothes, weapon) changes at once
-for crew,expect in ((0,[106,107,106,107]),(1,[287]*4),(2,[285]*4)):
+import build_v25_ground as gb
+for crew in (0,1,2):
  w,c,ground,sq,team=escort_world(crew=crew)
- assert [w.skin[t_] for t_ in team]==expect,(crew,[w.skin[t_] for t_ in team])
-passed('The team that ropes down wears the crew setting: Grove 106/107, Army 287, SWAT 285 (it was always SWAT)')
-w,c,ground,sq,team=escort_world();V=(c,ground,sq)
-for k,t_ in enumerate(team):w.pos[t_]=[BG[k][0],BG[k][1],0.];w.health[t_]=130;w.armor[t_]=40;w.actor_heading[t_]=33.
-class _NoWalk(dict):
- def __setitem__(self,k,v):pass
-w.walk=_NoWalk()   # 1.4: they would walk to the brain's posts meanwhile; here only the swap is checked
-w.teleports.clear();old=list(team);w.shared[b.CREW]=1;steps(w,V,12)
-new=[w.shared[b.GROUND_PUB+i] for i in range(4)]
-assert all(n_ not in old and w.skin[n_]==287 for n_ in new) and all(o_ not in w.exists for o_ in old),(old,new,[w.skin.get(n_) for n_ in new])
-assert all(w.pos[n_][:2]==[BG[i][0],BG[i][1]] and w.health[n_]==130 and w.armor[n_]==40 and w.actor_heading[n_]==33. for i,n_ in enumerate(new)),[(w.pos[n_],w.health[n_],w.armor[n_]) for n_ in new]
-assert all(abs(w.pos[n_][2])<.01 for n_ in new),('the same height too: CREATE_CHAR adds 1 m to the z it is given, the new guard must not appear in the air and drop',[w.pos[n_][2] for n_ in new])
-assert w.shared[b.TEAM_CREW]==1 and w.shared[b.ESCORT_ON]==1 and not w.teleports,(w.shared[b.TEAM_CREW],w.shared[b.ESCORT_ON],w.teleports)
-passed('Changing the crew on the menu re-dresses the team on the ground at once: same spot, heading, health and armour, nobody teleports')
-w.shared[b.CREW]=0;steps(w,V,12);new2=[w.shared[b.GROUND_PUB+i] for i in range(4)]
-assert [w.skin[n_] for n_ in new2]==[106,107,106,107] and w.shared[b.TEAM_CREW]==0
-passed('Grove clothes alternate between the two Families skins')
-# a guard riding in a car is re-dressed as soon as he gets out
-w,c,ground,sq,team=escort_world();V=(c,ground,sq)
-car=777;w.exists.add(car);w.cars[car]={'pos':[0.,0.,0.],'heading':0.};w.model[car]=400;w.incar[1]=car;w.incar[team[1]]=car;w.shared[b.CREW]=1;steps(w,V,10)   # CJ drives, one guard rides with him
-assert w.skin[team[1]]==285 and team[1] in w.exists and w.shared[b.TEAM_CREW]==2,'the passenger keeps his clothes while he rides'
-hs=[w.shared[b.GROUND_PUB+i] for i in range(4)];riders=[h for h in hs if h in w.incar];walkers=[h for h in hs if h not in w.incar]
-assert team[1] in riders and walkers and all(w.skin[h]==285 for h in riders) and all(w.skin[h]==287 for h in walkers),(hs,riders,[w.skin[h] for h in hs])
-w.incar.pop(1);[w.incar.pop(h,None) for h in riders];steps(w,V,8);assert all(w.skin[w.shared[b.GROUND_PUB+i]]==287 for i in range(4)) and w.shared[b.TEAM_CREW]==1,[w.skin[w.shared[b.GROUND_PUB+i]] for i in range(4)]
-passed('A guard in a car keeps the old clothes until he steps out, then changes in place')
-# the weapon is live as well
-w,c,ground,sq,team=escort_world();V=(c,ground,sq);w.calls.clear();w.shared[b.WEAPON_SETTING]=29;steps(w,V,8)
-assert all(any(x[1]==0x1b2 and x[2][0]==t_ and x[2][1]==29 for x in w.calls) for t_ in team),'every guard gets the new weapon at once'
-passed('Changing the crew weapon arms the team on the ground at once')
+ assert [w.skin[t_] for t_ in team]==gb.TEAM_MODELS,(crew,[w.skin[t_] for t_ in team])
+passed('1.4.1: the team that ropes down is fixed whatever the crew setting: the commander a soldier (287), then agents in black (164 / 165)')
+w,c,ground,sq,team=escort_world();V=(c,ground,sq);w.teleports.clear();w.calls.clear()
+w.shared[b.CREW]=1;w.shared[b.WEAPON_SETTING]=29;steps(w,V,12)
+assert [w.shared[b.GROUND_PUB+i] for i in range(4)]==team and [w.skin[t_] for t_ in team]==gb.TEAM_MODELS and not w.teleports,'nobody is re-dressed or swapped'
+assert not [x for x in w.calls if x[1]==0x1b2 and x[2][0] in team and x[2][1]==29],'and nobody gets the crew weapon: each keeps his role\'s'
+passed('The ground team is never re-dressed or re-armed by the crew settings (they only concern the helicopter\'s crew)')
 # new heli crew members are armed the moment they are created (not at the next Fire pass)
 w,c,_=setup();summon(w,c);w.calls.clear();w.shared[b.CREW]=1;w.step(c,n=10)
 fresh=[c.v[v] for v in (13,14,15,16)]

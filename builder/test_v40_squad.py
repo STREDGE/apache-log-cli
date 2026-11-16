@@ -35,8 +35,9 @@ assert len(set(team))==4 and all(t in w.exists for t in team),(team,w.messages)
 assert w.shared[b.ESCORT_ON]==1 and w.shared[b.SQ_ROPE]==1 and 'SQIN' in w.messages
 assert w.shared[b.GROUND_PUB+4]==-1 and len(calls(w,0x503))==4
 assert w.shared[b.STATE]==2 and not w.frozen.get(c.v[5]) and w.shared[b.FROZEN]==0
-assert all(last(w,0x1b2,t)[1]==w.shared[b.WPN] for t in team)
-passed('TEAM ON FOOT: four armed guards rope down next to CJ, then the helicopter resumes FOLLOW')
+import build_v25_ground as gb
+assert [last(w,0x1b2,t)[1] for t in team]==[wp for wp,_ in gb.TEAM_WEAPONS] and [w.skin.get(t) for t in team]==gb.TEAM_MODELS,([last(w,0x1b2,t) for t in team],[w.skin.get(t) for t in team])
+passed('TEAM ON FOOT: four armed guards rope down next to CJ - the commander a soldier (287) with an M4, then agents in black with an MP5, an M4 and an AK (fixed, by role) - then the helicopter resumes FOLLOW')
 # ------------------------------------------------------------------ 1.4: the protective detail. The brain gives every guard his post
 # (where, how fast, standing or crouched, where to look); the squad worker is the body: it goes there, crouches, aims and fires.
 BG=[(0,3.2),(-2.4,.6),(2.4,.6),(0,-2.8)]   # where the team stands after the drop
@@ -55,7 +56,7 @@ for t in team:w.pos[t]=[0.,-20.,0.]
 w.walk.clear();w.calls.clear();steps(w,V,3)
 P_=posts(w);assert set(P_)==set(team),(P_.keys(),team)
 for t in team:
- o=last(w,0x5d3,t);assert math.dist(o[1:3],spot(P_[t]))<.6 and o[4]==7,(t,o,spot(P_[t]))
+ o=last(w,0x5d3,t);assert math.dist(o[1:3],spot(P_[t]))<.6 and o[4] in (6,7),(t,o,spot(P_[t]))   # running or sprinting from afar
 jobs={H.HCB_ROLE_LEAD:'lead',H.HCB_ROLE_CLOSE:'close',H.HCB_ROLE_POINT:'point',H.HCB_ROLE_REAR:'rear'}
 J={jobs[p.job]:p for p in P_.values()}
 assert J['lead'].who==team[0] and J['close'].who==team[1] and spot(J['point'])[1]>3 and spot(J['rear'])[1]<-3,{k:spot(v) for k,v in J.items()}
@@ -70,6 +71,7 @@ passed('Running to a post 6 m away, walking to one 2 m away (the pace comes with
 w.calls.clear();steps(w,V,20)
 assert all(len(orders(w,0x5d3,t))<=4 for t in team),[len(orders(w,0x5d3,t)) for t in team]
 passed('Move orders are renewed at most every 1.5 s, or when the post moves more than a metre - not every tick')
+w.now+=5000;steps(w,V,3)   # (CJ has stood still a while: the outer men have their posts on the approaches)
 for t in team:w.pos[t]=[spot(posts(w)[t])[0],spot(posts(w)[t])[1],0.]
 for k in range(4):w.shared[sqb.fk(k,'TASK')]=16   # standing at ease already (no walk order of his own left to keep)
 w.walk.clear();w.calls.clear();w.now+=1600;steps(w,V,3)
@@ -106,7 +108,8 @@ assert crouched and not invariants(w2),'from cover they fight crouched (the game
 passed('Contact with a pillar 3 m away: the commander tells CJ which way to go ("into cover - left!") and the spot is marked; there: "CJ is in cover, we hold", the bodyguard crouches beside him, the team fights crouched from cover')
 # ------------------------------------------------------------------ too hot: a ring and the pickup call
 w2.health[1]=20;w2.messages.clear();steps(w2,V2,8)
-P2=posts(w2);assert all(math.dist(spot(p),w2.coords(1)[:2])<=2. for p in P2.values()) and w2.messages.count('SQEVAC')==1,([spot(p) for p in P2.values()],w2.messages)
+P2=posts(w2);lead_=w2.brain.out.lead
+assert all(math.dist(spot(p),w2.coords(1)[:2])<=(2.6 if who_==lead_ else 2.) for who_,p in P2.items()) and w2.messages.count('SQEVAC')==1,([spot(p) for p in P2.values()],w2.messages)   # (the commander 2.5 m ahead: he leads CJ out)
 steps(w2,V2,60);assert w2.messages.count('SQEVAC')==1
 passed('CJ badly hurt under fire: a tight ring round him and "too hot - call ROPE PICKUP", once (not again for 20 s)')
 w2.health[1]=100;w2.dead.add(h2);w2.messages.clear();w2.now+=30000;steps(w2,V2,6);w2.now+=30000;steps(w2,V2,6);w2.now+=30000;steps(w2,V2,6)
@@ -139,6 +142,27 @@ assert w.shared[b.SQ_SAY_SEQ]==7 and not [m_ for m_ in w.messages if m_.startswi
 w.brain.say=(8,1,1);steps(w,V,3);assert w.messages.count('SQGOR')==1,w.messages
 steps(w,V,10);assert w.messages.count('SQGOR')==1,'said once'
 passed('The commander\'s words are said once each, when new; a word from before the scripts started is not said')
+# ------------------------------------------------------------------ 1.4.1: eight on the ground
+w8,c8,ground8,sq8,team8=escort_world();t2=VM('Helicover_Team2',w8);sq2=VM('Helicover_Squad2',w8);V8=(c8,ground8,sq8,t2,sq2)
+steps(w8,V8,6)
+extra=[w8.shared[b.GROUND_PUB2+i] for i in range(4)]
+import build_v25_team2 as t2b
+assert all(x in w8.exists for x in extra) and len(set(extra))==4 and [w8.skin[x] for x in extra]==t2b.MODELS,(extra,[w8.skin.get(x) for x in extra])
+assert [last(w8,0x1b2,x)[1] for x in extra]==[wp for wp,_ in t2b.WEAPONS],[last(w8,0x1b2,x) for x in extra]
+assert all(math.dist(w8.pos[x][:2],w8.pos[team8[0]][:2])<5 for x in extra),'they come down beside the first four'
+steps(w8,V8,20)
+P8=posts(w8);jobs8={P8[x].job for x in team8+extra if x in P8}
+assert set(team8+extra)<=set(P8) and jobs8=={H.HCB_ROLE_LEAD,H.HCB_ROLE_CLOSE,H.HCB_ROLE_POINT,H.HCB_ROLE_REAR,H.HCB_ROLE_CLOSE2,H.HCB_ROLE_POINT2,H.HCB_ROLE_REAR2,H.HCB_ROLE_MARKSMAN},jobs8
+assert any(orders(w8,0x5d3,x) or orders(w8,0x637,x) for x in extra),'the second squad worker moves the second four to their posts'
+passed('Eight on the ground: four more agents in black come down beside the first four (MP5, M4, AK, sniper rifle by role); the brain gives all eight their posts - two bodyguards, the advance and counter-assault pairs, the marksman - and the second squad worker moves them')
+w8.offscreen=set(extra[:2])
+for t_ in team8:w8.exists.discard(t_)                     # the first four are gone (fallen / recalled)
+steps(w8,V8,8)
+assert all(w8.shared[b.GROUND_PUB2+i]==-1 for i in range(4)) and not (set(extra[:2])&w8.exists),'stood down: off screen they are gone at once'
+assert all(x in w8.exists and w8.weapons[x]==0 and orders(w8,0x5d3,x) for x in extra[2:]),'in view they put their weapons away and walk off'
+w8.offscreen=set(extra);steps(w8,V8,8);assert not (set(extra)&w8.exists),'and are deleted the moment they are out of view'
+passed('When the first four go (recalled, stood down) the second four put their weapons away and walk off; nobody is deleted in view')
+
 # ------------------------------------------------------------------ catch-up / stuck / casualty
 w.pos[team[0]]=[0.,-120.,0.];w.offscreen={team[0]};w.calls.clear();w.teleports.clear();steps(w,V,2)
 o=last(w,0x5f5,team[0]);assert o[4]==7 and not orders(w,0xa1,team[0]),o
@@ -274,11 +298,11 @@ passed('Stairs or a slope are walked, not vaulted')
 # ------------------------------------------------------------------ menu
 w,c,p=setup(True);launch=VM('Helicover',w);summon(w,c);w.step(c,p,launch,n=15)
 assert w.menu[7]==b'DEPLOY SQUAD',w.menu
-w.events.append(6);w.step(c,p,n=4);assert w.menu[5]==b'SQUAD TACTICS: GUARD',w.menu
-w.events.append(3);w.step(c,p,n=4);assert w.shared[b.TACTICS]==1 and w.menu[5]==b'SQUAD TACTICS: ASSAULT',w.menu
-w.events.append(6);w.step(c,p,n=4);w.shared[b.ESCORT_ON]=1;w.step(c,p,n=4);assert w.menu[7]==b'RECALL SQUAD',w.menu
+w.events.append(6);w.step(c,p,n=4);assert w.menu[3]==b'SQUAD TACTICS: AUTO',w.menu
+w.events.append(1);w.step(c,p,n=4);assert w.shared[b.TACTICS]==1 and w.menu[3]==b'SQUAD TACTICS: ASSAULT',w.menu
+w.events.append(3);w.step(c,p,n=4);w.shared[b.ESCORT_ON]=1;w.step(c,p,n=4);assert w.menu[7]==b'RECALL SQUAD',w.menu   # (BACK is row 3 now)
 w.step(c,p,n=6);w.events.append(5);w.step(c,p,n=2);assert w.shared[b.CMD] in (17,0) and any(x[2]==[b.CMD,17] for x in calls(w,0xddc))
-passed('Main menu: one row deploys / recalls the squad; SETTINGS switches GUARD / ASSAULT')
+passed('Main menu: one row deploys / recalls the squad; SETTINGS switches the squad\'s tactics AUTO / ASSAULT / GUARD')
 w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.shared[b.CMD]=16;w.step(c,n=5);assert 'HCEXIT' in w.messages and w.shared[b.STATE]!=19
 w,c,_=setup();summon(w,c);w.shared[b.ESCORT_ON]=1;w.shared[b.CMD]=16;w.step(c,n=5);assert 'SQALR' in w.messages
 w,c,_=setup();summon(w,c);w.shared[b.CMD]=17;w.step(c,n=5);assert 'SQNONE' in w.messages
@@ -343,7 +367,7 @@ w,c,f=gunner_world([]);w.step(c,f,n=2);g3=w.coords(w.shared[b.PUB+3]);g5=w.coord
 hd=math.radians(w.cars[w.shared[b.PUB+1]].get('heading',0.));fw_=(-math.sin(hd),math.cos(hd));rt=(fw_[1],-fw_[0])
 man=[g5[0]+(rt[0]*.87-fw_[0]*.5)*25.,g5[1]+(rt[1]*.87-fw_[1]*.5)*25.]   # out of the right door, a little aft (the helicopter's own right)
 w.exists.add(910);w.pos[910]=[man[0],man[1],0.];w.skin[910]=102;w.pedtype[910]=7;w.weapons[910]=30;w.health[910]=100000;w.civilians=[910];w.damage.add((1,910))
-w.los_fn=lambda a,z:math.dist(a,g3)>1.;w.step(c,f,n=25);by=rounds_by(w)   # something hides the man from the front seat of the right door
+w.los_fn=lambda a,z:math.dist(a,w.coords(w.shared[b.PUB+3]))>1.6;w.step(c,f,n=25);by=rounds_by(w)   # something hides the man from the front seat of the right door (wherever the brain has him sit or kneel)
 assert w.shared[b.PUB+3] not in by and by.get(w.shared[b.PUB+5])=={910} and not invariants(w),by
 assert [x for x in w.game_rounds if x[1]==w.shared[b.PUB+3]]==[],'no round is even asked for: the brain knows he cannot see the man'
 passed('A gunner without a clear line from his seat does not fire; the other gunner in that door does')
@@ -444,8 +468,9 @@ up=orbit_steps(False);down=orbit_steps(True)
 assert all((y-x)%8==1 for x,y in zip(up,up[1:])) and all((x-y)%8==1 for x,y in zip(down,down[1:])) and len(down)>=3,(up,down)
 passed('Combat orbit direction keeps the door with more living gunners towards the threat (left door by default, right when the left gunners are down)')
 w,c,f=fire_world();npc=target(w,typ=7,skin=20);w.pos[npc][2]=10.;w.damage.add((1,npc));w.step(c,f,n=12)
-m=calls(w,0x4a2)[-1][2];assert abs(m[3]-(10.+25.+15.))<.01,m
-passed('A shooter on a roof is circled 15 m higher')
+m=calls(w,0x4a2)[-1][2];spot_z=w.shared[b.HELI_SPOT_Z]
+assert abs(m[3]-(10.+25.+15.))<.01 or (spot_z>1 and abs(m[3]-spot_z)<.01 and spot_z>=10.+12.),(m,spot_z)
+passed('A shooter on a roof: the helicopter stays well above him (the brain\'s spot where the gunners see him, or the old orbit 15 m higher)')
 # CJ steps into a guard's line of fire between two looks of the squad (it thinks ten times a second): the guard is told in that very frame
 for offset in range(7):
  w,c,ground,sq,team=escort_world();V=(c,ground,sq);w.frame_ms=16
@@ -471,7 +496,7 @@ w,V,team=squad_scene([(980,20.,0.,30,True),(981,-40.,0.,22,False)]);w.weapons[98
 assert w.shared[b.SQ_T]==980 and 981 not in [w.shared[b.SQ_T+i] for i in range(4)] and 'SQXR' in w.messages,([w.shared[b.SQ_T+i] for i in range(4)],w.messages)
 w.shot_at={981:[1.5,-1.,.5]};w.shooting_chars={981};w.calls.clear();steps(w,V,45);w.shooting_chars=set()
 men=[w.shared[b.SQ_T+i] for i in range(4)];on=w.brain.orders()
-assert set(men)=={980} and any(fights(w,t,980) for t in team),('the guards who are firing keep their man',men)
+assert men.count(980)>=3 and set(men)<={980,981} and any(fights(w,t,980) for t in team),('the guards who are firing keep their man (a free fourth may take the second)',men)
 assert [k for k,o in on.items() if o[0]==981 and o[1]] and 981 in {x[1] for x in getattr(w,'hits',[])} and not invariants(w),('the second man is taken by the door gunners who have him in their arc',on,invariants(w))
 passed('A second man opens fire on CJ from 40 m on the other side: the brain gives him to the door gunners who can reach him, the guards keep the man they are firing at - both are fought, nobody flips')
 w,V,team=squad_scene([(982,0.,-25.,34,True)]);w.messages.clear();steps(w,V,8)
@@ -546,13 +571,14 @@ n,w,c,f=burning(b.BURN_HP-50,-5.);w.step(c,f,n=30);assert w.messages.count('HCBU
 passed('A burning car within %d m of CJ is called out ("CAR ON FIRE! Get away from it."), whoever set it on fire; repeated every 4 s, not for wrecks'%b.BURN_WARN_M)
 w,c,f=fire_world();npc=target(w,typ=7,skin=20);w.pos[npc]=[40.,0.,0.];w.damage.add((1,npc));w.step(c,f,n=12)
 for _ in range(20):
- w.step(c,f);m=calls(w,0x4a2)[-1][2];assert abs(math.dist(m[1:3],[28.,0.])-b.ORBIT_RADIUS)<.5,m
-passed('Threat 40 m from CJ: the orbit centre moves 30% towards CJ so the gunners cover both')
+ w.step(c,f);m=calls(w,0x4a2)[-1][2];cj=w.coords(1)
+ assert abs(math.dist(m[1:3],[28.,0.])-b.ORBIT_RADIUS)<.5 or (w.shared[b.HELI_SPOT_Z]>1 and abs(math.dist(m[1:3],cj[:2])-28.)<.5 and m[1]<cj[0]),m
+passed('Threat 40 m from CJ: the helicopter covers both - the brain\'s spot 28 m from CJ on the far side (or the old orbit centre 30% towards CJ)')
 w,V,team=squad_scene([(997,0.,20.,30,True)]);steps(w,V,10)
 assert sum(1 for t in team if firing(w,t))>=2
 w.los_fn=lambda a,z:False;w.calls.clear();steps(w,V,30)        # he slips out of everybody's sight
 assert not [x for x in w.calls if x[1] in FIRING and x[0]>w.now-2800] and not calls(w,0x668) and any(orders(w,0x667,t) for t in team) and not invariants(w)
-w.los_fn=lambda a,z:True;w.calls.clear();steps(w,V,12);assert firing(w,team[0]) and not invariants(w),'the front guard has a clear line again (the shields behind him and the rear guard have a mate or CJ in theirs: they hold)'
+w.los_fn=lambda a,z:True;w.calls.clear();steps(w,V,12);assert any(firing(w,t) for t in team) and not invariants(w),'the fight goes on as soon as he shows himself (whoever has a clear line)'
 passed('A man who slips out of sight: within 0.2 s nobody fires at him or at the place he was (nobody checks a line to a place) - weapons stay up - and the fight goes on when he shows himself')
 # ------------------------------------------------------------------ 1.1 messages
 w,c,_=setup();w.step(c,n=80)
@@ -594,7 +620,7 @@ assert 'SQXR' in w.messages and 'HCCONT' not in w.messages,w.messages
 passed('With the team on the ground only the squad calls the contact (no double "CONTACT!")')
 w,c,p=setup(True);launch=VM('Helicover',w);w.step(c,p,launch,n=15);w.events.append(1);w.step(c,p,n=4)
 rows=[]
-for _ in range(4):rows.append(w.menu[6]);w.events.append(4);w.step(c,p,n=4)
+for _ in range(4):rows.append(w.menu[4]);w.events.append(2);w.step(c,p,n=4)   # (1.4.1: MESSAGES is row 2 of the settings)
 assert rows==[b'MESSAGES: ALL',b'MESSAGES: IMPORTANT',b'MESSAGES: OFF',b'MESSAGES: ALL'],rows
 passed('SETTINGS: one row cycles MESSAGES: ALL / IMPORTANT / OFF')
 # ------------------------------------------------------------------ v41 frame cost

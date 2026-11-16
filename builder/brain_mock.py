@@ -60,14 +60,15 @@ class BrainSim:
 
     def ours(self, w):
         out = []
-        for k in range(18):
-            v = w.shared[b.PUB + 2 + k] if k < 5 else w.shared[b.GROUND_PUB + k - 5] if k < 10 else w.shared[b.LEAVE + k - 10]
+        # (k: 0 pilot, 1-4 the crew, 5-8 guards 1-4, 9-12 guards 5-8, 13 the rope actor, 14-21 guards let go - as the adapter)
+        for k in range(22):
+            v = w.shared[b.PUB + 2 + k] if k < 5 else w.shared[b.GROUND_PUB + k - 5] if k < 9 else w.shared[b.GROUND_PUB2 + k - 9] if k < 13 else w.shared[b.GROUND_PUB + 4] if k == 13 else w.shared[b.LEAVE + k - 14]
             if len(out) == h.HCB_MAX_OURS:
                 break
             if v > 1 and v in w.exists and v not in w.cars and all(v != o for o, _ in out):
                 # (the crew are door gunners while mounted; after a landing - PHASE 1 - they are guards on foot like the ground team)
                 crew = h.HCB_ROLE_SQUAD if w.shared[b.PHASE] == 1 else h.HCB_ROLE_GUNNER
-                out.append((v, h.HCB_ROLE_PILOT if k == 0 else crew + k - 1 if k < 5 else h.HCB_ROLE_SQUAD + min(k - 5, 3) if k < 10 else h.HCB_ROLE_NONE))
+                out.append((v, h.HCB_ROLE_PILOT if k == 0 else crew + k - 1 if k < 5 else h.HCB_ROLE_SQUAD + (k - 5) if k < 13 else h.HCB_ROLE_NONE))
         return out
 
     def fill(self, w, o, who, cj=False):
@@ -147,7 +148,7 @@ class BrainSim:
         s.roe = roe if 0 <= roe <= 4 else h.HCB_ROE_DEFEND
         s.police = h.HCB_POLICE_EVADE if w.shared[b.POLICE] == 1 else h.HCB_POLICE_ANSWER
         s.mission_free = int(w.shared[b.MISSIONS] == 1)
-        s.tactics = int(w.shared[b.TACTICS] == 1)
+        s.tactics = w.shared[b.TACTICS] if 0 <= w.shared[b.TACTICS] <= 2 else 0   # 0 AUTO, 1 ASSAULT, 2 GUARD
         # the cover questions: is a man crouching at `at` hidden from the threat's chest, is there ground under it
         s.n_probes = len(self.probe_q)
         for o, (at, frm) in zip(s.probes, self.probe_q):
@@ -342,6 +343,10 @@ class BrainSim:
                 v[f + 5], v[f + 6], v[f + 7] = -1, 0., 0.
         if count >= 9:
             v[f + 8] = w.now - self.heli_shot if self.heli_shot is not None and w.now - self.heli_shot < 60000 else -1
+        if count >= 10:
+            v[f + 9] = o.gunner_pose if o is not None else 2
+        if count >= 13:
+            v[f + 10], v[f + 11], v[f + 12] = (o.heli_at.x, o.heli_at.y, o.heli_at.z) if o is not None and o.heli_ok else (0., 0., 0.)
 
     # ------------------------------------------------------------ for the tests
     def marks(self):

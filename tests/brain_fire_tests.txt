@@ -28,5 +28,5 @@ PASS: CJ crosses the line of fire: the guard holds with his weapon still on the 
 PASS: A man who ducks out of sight while CJ is in the line is not fired at when the line clears: his sight is asked all the time the rule holds, an old "clear" is never used
 PASS: A pair that was not asked about for a while (hold fire, out of range) needs a fresh answer before anybody fires: a "clear" from before the break is never used
 PASS: His man falls: he takes the other attacker at once (the sight of everybody in range is asked again on every look)
-PASS: 60 random fights (25 s each, guards and CJ running about, cars, police, every fire rule): 35109 orders to fire, checked one by one by an independent calculation - none with CJ or one of ours in the line, at a friend, against the fire rule, or at a car that could blow up beside CJ
+PASS: 60 random fights (25 s each, guards and CJ running about, cars, police, every fire rule): 34802 orders to fire, checked one by one by an independent calculation - none with CJ or one of ours in the line, at a friend, against the fire rule, or at a car that could blow up beside CJ
 The core only. Nothing here has run in the game.

@@ -406,10 +406,10 @@ class Scene:
                 self.said.append((self.time, out.say, out.say_dir))
             if self.walk_posts:
                 for who, p_ in self.posts.items():
-                    if who in self.peds and p_.move:
+                    if who in self.peds and p_.move and who not in getattr(self, 'stuck_men', ()):
                         me, to = self.peds[who]['pos'], [p_.at.x, p_.at.y, me_z] if (me_z := self.peds[who]['pos'][2]) is not None else None
                         d = math.dist(me[:2], to[:2])
-                        step = min(d, (1.4, 3.5, 5.5)[p_.move - 1] * ms / 1000.)
+                        step = min(d, (1.4, 3.5, 5.5, 3.5)[min(p_.move, 4) - 1] * ms / 1000.)   # 4: by the path network
                         if d > 1e-6:
                             self.peds[who]['pos'] = [me[0] + (to[0] - me[0]) * step / d, me[1] + (to[1] - me[1]) * step / d, me[2]]
             for p in list(self.peds.values()) + [self.cj]:

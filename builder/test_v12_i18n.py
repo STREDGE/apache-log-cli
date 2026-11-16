@@ -94,7 +94,7 @@ MAIN_RU=('ЛЕТЕТЬ ЗА МНОЙ [X]','ЖДАТЬ ЗДЕСЬ','ПАТРУЛ�
 w,c,p=open_menu(True)
 assert rows_of(w)==[i18n.encode(x,'game') for x in MAIN_RU],rows_of(w)
 assert [draw_game(r_) for r_ in rows_of(w)]==list(MAIN_RU) and draw_game(w.menu[0])=='HELICOVER / ЛЕТИТ ЗА ВАМИ',[draw_game(r_) for r_ in w.menu]
-press(w,(c,p),6,5);assert [draw_game(r_) for r_ in w.menu]==['HELICOVER / НАСТРОЙКИ','CLOSE','ЭКИПАЖ >','МОДЕЛЬ ВЕРТОЛЕТА >','ОРУЖИЕ ЭКИПАЖА >','ТАКТИКА: ОХРАНА','СООБЩЕНИЯ: ВСЕ','СТРЕЛКИ: СИДЯ','< НАЗАД'],[draw_game(r_) for r_ in w.menu]
+press(w,(c,p),6,5);assert [draw_game(r_) for r_ in w.menu]==['HELICOVER / НАСТРОЙКИ','CLOSE','МОДЕЛЬ ВЕРТОЛЕТА >','ТАКТИКА: АВТО','СООБЩЕНИЯ: ВСЕ','< НАЗАД'],[draw_game(r_) for r_ in w.menu]
 passed('With the game in Russian the menu is Russian and reads correctly in the simulated font: main page, state in the title, settings')
 w,c,p=open_menu(True);press(w,(c,p),3,5)
 assert [draw_game(r_) for r_ in w.menu]==['HELICOVER / ОГОНЬ СТРЕЛКОВ','CLOSE','ЗАЩИЩАТЬ МЕНЯ [X]','ТОЛЬКО ВООРУЖЕННЫЕ','ТАМ, ГДЕ СТРЕЛЯЮ Я','НЕ СТРЕЛЯТЬ','ПОЛИЦИЯ: ОТВЕЧАТЬ','МИССИИ: ОБОРОНА','< НАЗАД'],[draw_game(r_) for r_ in w.menu]
@@ -118,7 +118,7 @@ for label,data in b.p.data.items():
 bases=[l_ for l_ in b.p.data if l_.startswith(('MAIN_','SETUP_','PREF_','DISMISS_')) and not l_.endswith('_U')]
 for base in bases:
  assert base+'_U' in b.p.data and len(b.p.data[base].split(b'\0'))==len(b.p.data[base+'_U'].split(b'\0')),base
-assert all(len([f_ for f_ in b.p.data[l_][4:].split(b'\0')[2:] if f_])==7 for l_ in b.p.data if l_.startswith('SETUP_')),'settings: three sub-pages, three switches, BACK'
+assert all(len([f_ for f_ in b.p.data[l_][4:].split(b'\0')[2:] if f_])==4 for l_ in b.p.data if l_.startswith('SETUP_')),'settings (1.4.1): helicopter model, tactics, messages, BACK - the crews and the gunners\' pose are fixed / the brain\'s'
 passed('Every one of the %d menu pages has an English and a Russian version with the same rows; at most 8 rows, none longer than 26 (RU 30) characters; no language page, no FONT TEST'%len(bases))
 # the launcher's "files missing" message follows the same rule
 def missing_key(russian,game_lang):
@@ -193,10 +193,8 @@ assert not orders_given(w) and w.shared[b.STATE]==4
 passed('DISMISS: the page becomes "HELICOPTER LEAVING..." and nothing can be ordered until it is gone')
 
 # =================================================================== taps that must not count (beta 4)
-w,c,p=open_menu();press(w,(c,p),6,5);assert w.menu[0]==b'HELICOVER / SETTINGS' and w.shared[b.CREW]==2
-w.events.append(0);w.step(c,p);w.events.append(0);w.step(c,p,n=5)   # a double tap on "CREW >"
-assert w.menu[0]==b'HELICOVER / CREW' and w.shared[b.CREW]==2 and rows_of(w)[2]==b'SWAT [X]','the second tap of a double tap must not pick the first row of the page that opened (it used to change the crew to GROVE STREET)'
-press(w,(c,p),3,5);w.events.append(1);w.step(c,p);w.events.append(1);w.step(c,p,n=5)   # back, then a double tap on "HELICOPTER MODEL >"
+w,c,p=open_menu();press(w,(c,p),6,5);assert w.menu[0]==b'HELICOVER / SETTINGS'
+w.events.append(0);w.step(c,p);w.events.append(0);w.step(c,p,n=5)   # a double tap on "HELICOPTER MODEL >"
 assert w.menu[0]==b'HELICOVER / HELICOPTER' and w.shared[b.MODEL]==487,(w.menu,w.shared[b.MODEL])
 w,c,p=open_menu();w.events.append(3);w.step(c,p);w.events.append(3);w.step(c,p,n=5)   # a double tap on "GUNNER FIRE >"
 assert w.menu[0]==b'HELICOVER / GUNNER FIRE' and w.shared[b.FIRE]==3,(w.menu,w.shared[b.FIRE])
@@ -234,13 +232,11 @@ w,c,p=open_menu();press(w,(c,p),7,4);assert rows_of(w)==[b'YES, DISMISS IT',b'NO
 w,c,p=open_menu();press(w,(c,p),7,4);press(w,(c,p),1,5);assert w.shared[b.STATE]==2 and w.menu[0]==b'HELICOVER / FOLLOWING' and w.shared[b.DISMISS_T]==0
 passed('DISMISS without a squad is immediate after the confirmation; "NO, KEEP IT" changes nothing')
 
-# models for the CREW and HELICOPTER pages are requested while the page is open and released after
+# models for the HELICOPTER page are requested while the page is open and released after
 w,c,p=open_menu();w.calls.clear();press(w,(c,p),6,4);press(w,(c,p),0,4)
-assert w.menu[0]==b'HELICOVER / CREW' and {x[2][0] for x in calls(w,0x247)}=={105,106,107,285,287},'only the crew skins are requested when the CREW page opens (not three helicopter models)'
-w.calls.clear();press(w,(c,p),3,4);press(w,(c,p),1,4)
 assert w.menu[0]==b'HELICOVER / HELICOPTER' and {x[2][0] for x in calls(w,0x247)}=={487,497,425},'the helicopter models when the HELICOPTER page opens'
-w.calls.clear();press(w,(c,p),3,4);press(w,(c,p),6,4);assert w.menu[0]==b'HELICOVER / FOLLOWING' and {x[2][0] for x in calls(w,0x249)}>={285,287,487,497,425},'and released when the pages are left'
-passed('Crew and helicopter models are pre-requested while their pages are open, so choosing one does not stall a frame')
+w.calls.clear();press(w,(c,p),3,4);press(w,(c,p),3,4);assert w.menu[0]==b'HELICOVER / FOLLOWING' and {x[2][0] for x in calls(w,0x249)}>={487,497,425},('and released when the pages are left',w.menu)
+passed('The helicopter models are pre-requested while their page is open, so choosing one does not stall a frame')
 
 # =================================================================== beta 5: the menu opens at once
 def frames_until(w,vms,cond,limit=60):
@@ -394,7 +390,7 @@ assert sorted(x[0] for x in dm)==sorted(crew) and all(x[1]==b.EMPTY_DM for x in 
 w,c,p,V=squad_menu();w.calls.clear();press(w,V,5);hover(w,c);w.step(*V,n=40);team=[w.shared[b.GROUND_PUB+i] for i in range(4)]
 assert all(t in w.exists for t in team) and sorted(x[2][0] for x in calls(w,0x60b))==sorted(team),(team,[x[2] for x in calls(w,0x60b)])
 before=set(w.exists);w.calls.clear();w.shared[b.CREW]=(w.shared[b.CREW]+1)%3;w.step(*V,n=40);fresh={x[2][0] for x in calls(w,0x60b)};made={x[5] if False else x for x in set(w.exists)-before}
-assert len(made)>=9 and made<=fresh and all(x[2][1]==b.EMPTY_DM for x in calls(w,0x60b)),('everybody created for the change of clothes - pilot, four gunners, four squad members - gets it again',sorted(made),sorted(fresh))
+assert len(made)>=5 and made<=fresh and all(x[2][1]==b.EMPTY_DM for x in calls(w,0x60b)) and all(t in w.exists for t in team),('everybody created for the change of the helicopter crew - pilot, four gunners - gets it again (1.4.1: the ground team is not re-dressed)',sorted(made),sorted(fresh))
 w2,c2,p2=setup(True);w2.empty_dm=False;summon(w2,c2);assert not calls(w2,0x60b),'no such decision maker in this game build: nothing is set (they behave as before)'
 for name in ('Helicover_Core','Helicover_Ground','Helicover_Squad','Helicover_Fire'):
  ins,order=cw.parse(name);assert not [a_ for a_ in order if (ins[a_][0]&0x7fff)==0x5c5],name
@@ -407,14 +403,13 @@ w,c,p=open_menu();pc=pose_calls(w,c);assert all(v and v[-1]==1 for v in pc.value
 att={x[2][0]:x[0] for x in calls(w,0x464)};assert all([x[0] for x in calls(w,0x4eb) if x[2]==[g_,1]][-1]>=att[g_] for g_ in att),'the crouch is asked for after the attach'
 sit=seats(w,c);assert all(abs(o[2]-(-.1-b.SEAT_DROP))<.01 and abs(abs(o[0])-(1.4+b.SEAT_OUT))<.01 for o in sit.values()),sit
 passed('Door gunners sit on the skids by default (mounted %.2f m lower and %.2f m further out than kneeling, crouched right after they are mounted)'%(b.SEAT_DROP,b.SEAT_OUT))
-press(w,(c,p),6,4);assert rows_of(w)[5]==b'GUNNERS: SITTING';w.calls.clear();press(w,(c,p),5,6)
-assert rows_of(w)[5]==b'GUNNERS: KNEELING' and w.shared[b.POSE]==1 and len(calls(w,0x464))==4 and all(v and v[-1]==1 for v in pose_calls(w,c).values()),(rows_of(w),pose_calls(w,c))
+press(w,(c,p),6,4);assert not [r_ for r_ in rows_of(w) if b'GUNNERS' in r_],'no pose setting: the brain seats the gunners'
+w.calls.clear();w.shared[b.POSE]=1;w.step(c,p,n=6)                       # the brain: kneel at the door over a fight
+assert w.shared[b.POSE_DONE]==1 and len(calls(w,0x464))==4 and all(v and v[-1]==1 for v in pose_calls(w,c).values()),pose_calls(w,c)
 assert all(abs(o[2]+.1)<.01 and abs(abs(o[0])-1.4)<.01 for o in seats(w,c).values()),seats(w,c)
 assert all(w.weapons[c.v[v]]!=0 for v in (13,14,15,16)),'re-mounting strips the weapons: they are handed back at once'
-w.calls.clear();w.now+=1100;press(w,(c,p),5,6);assert rows_of(w)[5]==b'GUNNERS: STANDING' and w.shared[b.POSE]==0 and all(v and v[-1]==0 for v in pose_calls(w,c).values())
-w.calls.clear();w.now+=1100;press(w,(c,p),5,6);assert rows_of(w)[5]==b'GUNNERS: SITTING' and w.shared[b.POSE]==2 and all(v and v[-1]==1 for v in pose_calls(w,c).values())
 w.calls.clear();w.step(c,p,n=20);assert not calls(w,0x464),'the crew is re-mounted once per change, not every pass'
-passed('SETTINGS > "GUNNERS: SITTING / KNEELING / STANDING" goes round with each tap and switches the pose at once (crew re-mounted once, weapons back in their hands)')
+passed('The gunners\' pose is the brain\'s (no setting): when it changes they are re-seated once at once (seated on the skid -> kneeling at the door), weapons back in their hands')
 w,c,f=g['fire_world']();npc=g['target'](w);w.damage.add((1,npc));w.step(c,f,n=14);w.calls.clear();w.exists.discard(npc);w.step(c,f,n=20)
 gun=[c.v[v] for v in (13,14,15,16)];assert calls(w,0x687) and all([x[0] for x in calls(w,0x4eb) if x[2]==[g_,1]] for g_ in gun if g_ in w.attach),(len(calls(w,0x687)),[x[2] for x in calls(w,0x4eb)])
 passed('After a fight the gunners go back to one knee (clearing their fire task would leave them standing)')

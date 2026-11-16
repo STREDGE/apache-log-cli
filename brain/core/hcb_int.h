@@ -91,6 +91,16 @@ typedef struct detail {
     u32 threat_id, contact_since, cover_said, evac_said, safe_said, lead, mover, clear_said;
     u32 cj_shot_t;          /* when CJ last fired, and which way (unit, flat): nobody of ours stands in his line of fire */
     hcb_vec cj_shot_dir;
+    hcb_vec threat_mem;     /* 1.4.1: where the last threat was, and when (the detail does not stand down between shots) */
+    u32 threat_mem_t;
+    hcb_vec lead_to;        /* where the commander leads CJ, since when, and the nearest CJ has come to it */
+    u32 lead_since, lead_gave_up;
+    float lead_best;
+    hcb_vec heli_at;        /* the helicopter's spot for the gunners, the candidate being asked about */
+    u32 heli_t;
+    u8 heli_ok, heli_k, mode, leading, pose, pad_[3];
+    u32 mode_since;
+    struct { hcb_vec post; float best; u32 since; u8 alt, stuck, pad[2]; } man[8];   /* each man's progress to his post */
     u16 say_seq;
     u8 cj_cover_ok, duty, last_say, say_dir;
 } detail;

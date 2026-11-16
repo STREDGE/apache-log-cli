@@ -1,10 +1,37 @@
-HELICOVER 1.4 BETA 1 - support helicopter with a smart crew
-GTA San Andreas (Android, 64-bit), a CLEO mod + the Helicover Brain 0.3 mod. They only work together.
+HELICOVER 1.4 BETA 2 - support helicopter with a smart crew
+GTA San Andreas (Android, 64-bit), a CLEO mod + the Helicover Brain 0.4 mod. They only work together.
 
 WHAT IT IS
 Call a support helicopter: it flies in from far away, follows CJ and covers him with four door
 gunners. Drop a four-man team on foot, get picked up by rope, fly to the map marker or Grove
 Street and get out there by landing or by rope.
+
+NEW IN 1.4 BETA 2 (brain 0.4) - AFTER YOUR 1.4 CHECK
+The detail on the ground
+- Eight men instead of four: the commander is a soldier, the other seven are agents in black suits; the helicopter crew
+  stays SWAT. Fixed, not on the menu. The brain gives the roles: commander, two bodyguards (either side of CJ), the
+  advance pair, the counter-assault pair (flanks), a marksman further back. Weapons by role.
+- The commander walks CJ to cover himself: 2-3 m ahead on the way, between CJ and the shooter, the bodyguards at CJ's
+  sides. No more mark on the ground. CJ decides: if he does not come, after 3 s the commander goes back to his side and
+  offers the way again a few seconds later. Already in cover: CJ stays.
+- The formation is chosen by the brain (diamond walking, narrower running, posts on the approaches when CJ stands a
+  while, a spot behind a wall comes in). The threat is remembered for 12 s: no standing down between shots.
+- The brain picks how to fight: HOLD (cover, bounding), PULL OUT (ring, the commander leads CJ away, call the pickup -
+  at 5 stars, against many or when CJ is badly hurt), ASSAULT (few enemies, CJ in cover - the pairs push and flank).
+  Menu SQUAD TACTICS: AUTO (default) / ASSAULT / GUARD.
+- A man who does not get nearer to his post for 1.5 s is given another way round, then the game's path network.
+- Targets are shared: the men on the ground take those close to CJ, the door gunners those further off.
+The helicopter
+- The door gunners fire their own weapons through the game's weapon code: real sound, muzzle flash, tracer and hit;
+  every round is still checked by the brain first. Their pose is the brain's: seated on the skids in flight, kneeling
+  at the door over a fight. The pose, crew and crew weapon settings are gone.
+- In a fight the helicopter holds a spot 28 m from CJ on the far side from the shooter, 24 m up, where the gunners see him.
+Diagnostics
+- A game crash is written down: mods/hcbrain_log.txt and mods/hcbrain_crash.txt say where it happened and what the
+  brain was doing, and a report is saved. Should a gunner's shot through the game's code ever crash the game, from the
+  next start the gunners go back to the old way by themselves (it is in the log).
+- The log has the brain's journal: alert and detail changes, the commander's words, "leading CJ to cover", and every
+  30 s a summary (how much the gunners and the guards fired, what held them, posts not reached).
 
 NEW IN 1.4 BETA 1 (brain 0.3)
 Door gunners

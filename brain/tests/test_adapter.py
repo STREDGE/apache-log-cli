@@ -46,6 +46,7 @@ PED_POOL, VEH_POOL, PED_STRIDE, VEH_STRIDE = 0xbc3bb8, 0xbc3bc0, 0x9c8, 0xc68
 PLAYERS, PLAYER_FOCUS, TIME_MS, USER_PAUSE, CUTSCENE, MISSION_FLAG, SCRIPT_SPACE, GROUPS, RSGLOBAL = 0xbdc738, 0xbdcae8, 0xbdc558, 0xbdc594, 0xba8925, 0x9f83f8, 0x9a2038, 0xc89c20, 0xc9b320
 VT_USE_GUN, VT_KILL = 0x8338c8 + 0x10, 0x833c80 + 0x10
 F_SCRIPTS, F_HUD, F_GUNSHOT, F_LOS, F_POLY, F_SCREEN = 0x3f3ad8, 0x51f6f0, 0x442854, 0x5075a4, 0x6ee4a4, 0x6e9df8
+F_FIRE, F_FLASH = 0x700c64, 0x59bcb0   # CWeapon::Fire, CPed::DoGunFlash (1.4.1: the gunners' own weapon fire)
 GOT_SCRIPTS, GOT_HUD, GOT_GUNSHOT = 0x845438, 0x845ec8, 0x843f10
 GOT_IGNORE, IGNORE_ENTITY, F_COLLECT, F_VARPTR, SCRIPT_PARAMS = 0x84b180, 0xbdcaf8, 0x3f1fcc, 0x3f2654, 0xa001ac
 HC_STATE = 0x48456A00
@@ -139,7 +140,8 @@ class Emu:
         uc.mem_map(STUB, 0x10000); uc.mem_write(UNDEF, RET); uc.mem_map(STACK, 0x100000); uc.mem_map(DATA, 0x10000); uc.mem_map(SENT, 0x1000); uc.mem_write(SENT, RET * 4)
         uc.mem_map(WORLD, 0x400000)
         uc.hook_add(UC_HOOK_CODE, self.on_stub, begin=STUB, end=STUB + 0xffff)
-        for addr, fn in ((F_SCRIPTS, self.g_scripts), (F_HUD, self.g_hud), (F_GUNSHOT, self.g_gunshot), (F_LOS, self.g_los), (F_POLY, self.g_poly), (F_SCREEN, self.g_screen)):
+        self.fire_calls, self.flash_calls = [], []
+        for addr, fn in ((F_SCRIPTS, self.g_scripts), (F_HUD, self.g_hud), (F_GUNSHOT, self.g_gunshot), (F_LOS, self.g_los), (F_POLY, self.g_poly), (F_SCREEN, self.g_screen), (F_FIRE, self.g_fire), (F_FLASH, self.g_flash)):
             uc.hook_add(UC_HOOK_CODE, fn, begin=GTA + addr, end=GTA + addr)
         names = [b'/data/app/x/lib/arm64/libGTASA.so\0', b'/data/app/x/lib/arm64/libSAcleo64.so\0']
         ph = lambda va, sz: struct.pack('<IIQQQQQQ', 1, 6, va, va, va, sz, sz, 0x1000)
@@ -375,6 +377,15 @@ class Emu:
     def g_scripts(self, uc, *_): self.orig_calls['scripts'] += 1; self._ret(uc)
     def g_hud(self, uc, *_): self.orig_calls['hud'] += 1; self._ret(uc)
     def g_gunshot(self, uc, *_): self.orig_calls['gunshot'] += 1; self._ret(uc)
+    def g_fire(self, uc, *_):
+        w, ped = uc.reg_read(X[0]), uc.reg_read(X[1])
+        v3 = lambda r: struct.unpack('<3f', bytes(uc.mem_read(uc.reg_read(r), 12))) if uc.reg_read(r) else None
+        self.fire_calls.append(dict(w=w, ped=ped, start=v3(X[2]), barrel=v3(X[3]), ent=uc.reg_read(X[4]), target=v3(X[5]), alt=uc.reg_read(X[6]),
+                                    ik=self.r32(ped + 0x698), clip=self.r32(w + 8), total=self.r32(w + 0xc), state=self.r32(w + 4), acc=bytes(uc.mem_read(ped + 0x8de, 1))[0]))
+        self.w32(w + 4, 1)                                             # the game's Fire leaves the weapon "firing"
+        self._ret(uc, 1)
+    def g_flash(self, uc, *_):
+        self.flash_calls.append((uc.reg_read(X[0]), uc.reg_read(X[1]) & 0xffffffff, uc.reg_read(X[2]) & 0xff)); self._ret(uc, 1)
     def g_los(self, uc, *_):
         a = struct.unpack('<3f', bytes(uc.mem_read(uc.reg_read(X[0]), 12))); b = struct.unpack('<3f', bytes(uc.mem_read(uc.reg_read(X[1]), 12)))
         flags = [uc.reg_read(r) & 0xff for r in X[2:8]] + [bytes(uc.mem_read(uc.reg_read(UC_ARM64_REG_SP), 1))[0]]
@@ -672,6 +683,26 @@ for r in rounds:
     assert len(r['ray']) == 1 and r['ray'][0][2] == [1, 1, 0, 1, 0, 0, 0] and math.dist(r['ray'][0][0], r['muzzle']) < .01 and math.dist(r['ray'][0][1], aim) < .01, 'one ray along the very line of the round'
 assert len({tuple(round(x, 2) for x in r['end']) for r in rounds}) == len(rounds), 'no two rounds on the same line'
 passed('A door gunner asks every frame (0E48, 9 variables): weapon on the man, then rounds - each with its own line from 5.5 m outside the helicopter to a point scattered round the man and 0.6 m past it, checked by one ray along that very line; %d rounds in 3 s, never closer than 130 ms, with pauses between bursts; the gunner in the other door does not fire across the cabin' % len(rounds))
+
+
+# 1.4.1: the gunners fire their own weapons through the game's weapon code - the brain checks the round, then calls
+# CWeapon::Fire with the gunner's current weapon, aimed (IK bit) at the checked point, and the gun flash, as the game's task does
+assert 'the gunners fire their own weapons through the game' in e.log(), e.log()
+e.share(HC_STATE + 27, 2); e.fire_calls.clear(); e.flash_calls.clear()
+e.w32(g1 + 0x730 + 8, 0); e.w32(g1 + 0x730 + 0xc, 5); e.w32(g1 + 0x730 + 4, 2)   # an empty clip, reloading
+for k in range(40):
+    e.frame(ms=50, hud=False)
+    e.gunshot(gang, (0., 0.5, 1.)) if k % 8 == 0 else None
+fc = [c for c in e.fire_calls if c['ped'] == g1]
+assert fc and not [c for c in e.fire_calls if c['ped'] == g2], 'the right-door gunner fires; the left one does not fire across the cabin'
+for c in fc:
+    assert c['w'] == g1 + 0x730 and c['ent'] == 0 and c['alt'] == 0 and c['start'] == c['barrel'] and c['ik'] & 1 and c['clip'] >= 2 and c['total'] >= 25000 and c['state'] <= 1 and c['acc'] == 100, c
+    assert math.dist(c['start'], (1.4, 9., 25.5)) < 1.0 and math.dist(c['target'][:2], (20., 0.)) < 1.0, (c['start'], c['target'])
+assert e.r32(g1 + 0x698) & 1 == 0, 'the IK bit is put back after the shot'
+assert [f for f in e.flash_calls if f[0] == g1] and all(f[1:] == (250, 0) for f in e.flash_calls), e.flash_calls
+assert e.opcode(3, 3, CMD_SQUAD, handle=H_(g1))[1][1] in (0, 1, 3, 4) and e.opcode(3, 3, CMD_SQUAD, handle=H_(g1))[1][1] != 2, 'the gunner\'s script only aims (4): the brain fires'
+e.share(HC_STATE + 27, 0)
+passed('1.4.1 gunners fire their own weapons: %d rounds through CWeapon::Fire - the current weapon of the gunner, from 0.8 m in front of him to the checked point (IK bit set for the shot and put back, clip and ammo topped up, no reload stall, no extra spread), the gun flash as the game\'s own task does; the script only keeps his weapon on the man' % len(fc))
 
 
 def until_round(who=None, frames=40):
@@ -1004,6 +1035,25 @@ for k in range(14):
     assert ticks[-1]['snapshot'].time == e.r32(GTA + TIME_MS), 'the newest look is always in the report'
 assert max(s_[0] for s_ in sizes) <= 2 * 262144 + 4096 and len({s_[1] for s_ in sizes[6:]}) > 1 and min(s_[1] for s_ in sizes[6:]) >= 0.4 * max(s_[1] for s_ in sizes), sizes
 passed('Black box: two halves take turns (nothing is ever moved, so no pause); a report is the older half followed by the current one, it never loses the newest look, always starts from a stored memory of the brain and replays exactly - %d reports while the halves changed over several times, %d to %d looks in each' % (len(sizes), min(s_[1] for s_ in sizes[6:]), max(s_[1] for s_ in sizes)))
+
+# 1.4.1: the crash recorder - a crash of the game is written down before the game's own handler gets it
+e = Emu(); e.load()
+acts = {a[0]: a[1] for a in e.sigactions if a[1]}
+assert all(sg in acts and acts[sg][0] & 4 and acts[sg][2] == acts[11][2] for sg in (11, 7, 4, 8, 6)), acts
+e.frame(n=3)
+info, ucx = e.alloc(128), e.alloc(1024)
+e.w64(info + 16, 0xdeadbeef)                                         # the fault address
+e.w64(ucx + 440, GTA + F_LOS + 8); e.w64(ucx + 424, GTA + F_SCRIPTS); e.w64(ucx + 432, ucx + 600); e.w64(ucx + 416, 0)
+e.sigactions.clear()
+e.call(acts[11][2], x=(11, info, ucx), count=3000000)
+lg_ = e.log()
+crash = [v for k, v in e.fs.items() if k.endswith('hcbrain_crash.txt')]
+cfg = [v for k, v in e.fs.items() if k.endswith('net.helicover.brain.ini')]
+assert 'CRASH: signal 11 (bad memory access)' in lg_ and '0x00000000deadbeef' in lg_ and 'pc 0x%016x' % (GTA + F_LOS + 8) in lg_ and 'lr 0x%016x' % (GTA + F_SCRIPTS) in lg_, lg_[-800:]   # (names come from dladdr in the game)
+assert crash and b'CRASH: signal 11' in crash[-1] and cfg and b'LastCrash = 99' in cfg[-1], (bool(crash), cfg)
+assert [a for a in e.sigactions if a[0] == 11], 'and the previous handler is put back (it gets the crash next)'
+assert any(k.startswith('hcbrain_report_') or 'hcbrain_report_' in k for k in e.fs), 'a report is saved too'
+passed('Crash recorder: on a crash (bad memory, bus error, illegal instruction, arithmetic, abort) the log gets where it happened (pc and lr with the names in libGTASA, the fault address), what the brain was doing and Helicover\'s state; a copy is kept in hcbrain_crash.txt (the next start writes a new log), a report is saved, and the game\'s own handler is put back to take the crash')
 
 text = '\n'.join(results) + '\nThe phone build on an emulated CPU with the real libGTASA.so and the real code of the CLEO library; the world in memory is laid out by the test. Not run in the game.\n'
 (h.OUT / 'brain_adapter_tests.txt').write_text(text)

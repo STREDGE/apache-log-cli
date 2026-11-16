@@ -22,7 +22,15 @@ Registers: 0 CJ, 1 heli, 2-5 guards, 6 CJ car/-1, 7 tactics, 8 attackers (brain)
 20 move speed, 21-23 guard xyz, 24 guard-CJ distance, 25 target, 26-31 scratch.
 """
 from asm_v25 import *
+import os
 import build_v25 as b
+# 1.4.1: the same worker is built twice - TEAM 0 (Helicover_Squad: guards 1-4, the commander's words and the radio calls) and
+# TEAM 1 (Helicover_Squad2: guards 5-8 of the ground team, with their own shared slots; no speech)
+TEAM=int(os.environ.get('HC_SQUAD_TEAM','0'))
+if TEAM:
+ SLOT,BR_ST,BR_TG,PACE,SQT,HEART,GROUP,TICK=b.SQ_SLOT2,b.SQ_BR_ST2,b.SQ_BR_TG2,b.SQ_PACE2,b.SQ_T2,b.SQ_HEART2,b.SQ_GROUP2,b.SQ_TICK2
+else:
+ SLOT,BR_ST,BR_TG,PACE,SQT,HEART,GROUP,TICK=b.SQ_SLOT,b.SQ_BR_ST,b.SQ_BR_TG,b.SQ_PACE,b.SQ_T,b.SQ_HEART,b.SQ_GROUP,b.SQ_TICK
 from msg_v42 import say
 s=Script();a=s.add
 FIELDS={'TASK':0,'NEXT':1,'TX':2,'TY':3,'LX':4,'LY':5,'LT':6,'DEAD':7,'TGT':8,'COVER':9}
@@ -30,7 +38,7 @@ FIELDS={'TASK':0,'NEXT':1,'TX':2,'TY':3,'LX':4,'LY':5,'LT':6,'DEAD':7,'TGT':8,'C
 # 5 riding, 6 leaving car, 7 path-node move, 8 crouched assault, 9 medic, 10 timed attack,
 # 11 climbing an obstacle, 12 moving while shooting, 13 turning to the sector (assault),
 # 15 reload drill, 16 relaxed (quiet), 18 weapon on the man but no fire (the brain said cease fire)
-def fk(k,f):return b.SQ_SLOT+k*b.SQ_SLOT_SIZE+FIELDS[f]
+def fk(k,f):return SLOT+k*b.SQ_SLOT_SIZE+FIELDS[f]
 _n=[0]
 def uid(p):_n[0]+=1;return p+'_'+str(_n[0])
 def alive(var,fail):s.check(0x056d,[V(var)],fail);s.check(0x8118,[V(var)],fail)
@@ -47,7 +55,7 @@ def reset_slots():
  for k in range(4):
   setk_lit(k,'TASK',-1);setk_lit(k,'NEXT',0);setk_lit(k,'DEAD',0);setk_lit(k,'TGT',-1);setk_lit(k,'LT',0);setk_lit(k,'COVER',0)
 def reset_threats():
- for i in range(4):s.set(b.SQ_PACE+i,-1);s.set(b.SQ_T+i,-1)
+ for i in range(4):s.set(PACE+i,-1);s.set(SQT+i,-1)
  s.set(b.SQ_THREATS,0);s.set(b.SQ_CONTACT,0);s.set(b.SQ_CLEAR_AT,0);s.set(b.SQ_CALLED,-1);a(0xddc,I(b.SQ_QUIET_T),V(12))
 
 BG_AIM=[(0,15),(-15,3),(15,3),(0,-15)]
@@ -56,11 +64,11 @@ NEAR=[-6.,-3.,0.,3.,6.]
 MID=[-27.,-18.,-9.,0.,9.,18.,27.]
 
 s.label('INIT');a(0)
-s.set(b.SQ_GROUP,0);s.set(b.SQ_TICK,0);s.set(b.SQ_MSG_NEXT,0);reset_threats();reset_slots()
-s.label('LOOP');a(1,I(0));a(0x01bd,V(12));a(0xddc,I(b.SQ_HEART),V(12))
+s.set(GROUP,0);s.set(TICK,0);s.set(b.SQ_MSG_NEXT,0);reset_threats();reset_slots()
+s.label('LOOP');a(1,I(0));a(0x01bd,V(12));a(0xddc,I(HEART),V(12))
 s.call('BRAIN_FRAME')                                    # every frame: the brain's word for each guard
-s.get(19,b.SQ_TICK);s.check(0x801d,[V(19),V(12)],'LOOP')   # everything else ten times a second (due when the time HAS come: at 10 fps that is every frame)
-a(0x0085,V(19),V(12));a(0x000a,V(19),I(100));a(0xddc,I(b.SQ_TICK),V(19))
+s.get(19,TICK);s.check(0x801d,[V(19),V(12)],'LOOP')   # everything else ten times a second (due when the time HAS come: at 10 fps that is every frame)
+a(0x0085,V(19),V(12));a(0x000a,V(19),I(100));a(0xddc,I(TICK),V(19))
 s.check(0x0256,[I(0)],'RELEASE');s.get(19,b.STATE)
 for st in [0,1,4,5,6,13]:
  nxt='STATE_OK_'+str(st);s.eq(19,st,nxt);s.go('RELEASE');s.label(nxt)
@@ -68,14 +76,16 @@ for st in [0,1,4,5,6,13]:
 s.eq(19,16,'STATE_OK_16');s.get(19,b.SQ_ROPE);s.eq(19,1,'RELEASE');s.label('STATE_OK_16')
 s.get(0,b.PUB);alive(0,'RELEASE');s.get(1,b.PUB+1)
 s.get(19,b.SQ_ROPE);s.eq(19,1,'GROUP_NOT_ROPE');a(6,V(17),I(2))
-for i in range(4):s.get(2+i,b.GROUND_PUB+i)
+for i in range(4):s.get(2+i,(b.GROUND_PUB2 if TEAM else b.GROUND_PUB)+i)
 s.go('GROUP_SET')
-s.label('GROUP_NOT_ROPE');s.get(19,b.PHASE);s.eq(19,1,'RELEASE');a(6,V(17),I(1))
+s.label('GROUP_NOT_ROPE')
+if TEAM:s.go('RELEASE')   # (the landed crew is four men: the first worker has them)
+s.get(19,b.PHASE);s.eq(19,1,'RELEASE');a(6,V(17),I(1))
 for i in range(4):s.get(2+i,b.PUB+3+i)
 s.go('GROUP_SET')
 s.label('RELEASE');a(6,V(17),I(0))
-s.label('GROUP_SET');s.get(19,b.SQ_GROUP);s.check(0x803b,[V(17),V(19)],'GROUP_SAME')
-a(0xddc,I(b.SQ_GROUP),V(17));reset_slots();reset_threats()
+s.label('GROUP_SET');s.get(19,GROUP);s.check(0x803b,[V(17),V(19)],'GROUP_SAME')
+a(0xddc,I(GROUP),V(17));reset_slots();reset_threats()
 s.label('GROUP_SAME');s.eq(17,0,'GROUP_ACTIVE');s.go('LOOP')
 s.label('GROUP_ACTIVE');a(0x00a0,V(0),V(9),V(10),V(11));a(6,V(6),I(-1));s.check(0x00df,[V(0)],'CJ_ON_FOOT');a(0x03c0,V(0),V(6));s.label('CJ_ON_FOOT')
 # 1.2: CJ drives when the driver of his car (046C: the vehicle's driver pointer as a ped handle, the player included) is CJ himself.
@@ -87,11 +97,11 @@ s.label('DRV_DONE')
 s.get(7,b.TACTICS)
 # CJ inside an interior: the team waits outside (no teleport into interior coordinates)
 a(0x077e,V(19));s.eq(19,0,'LOOP')
-s.call('PERCEIVE')
+(s.call('PERCEIVE') if not TEAM else a(6,V(18),I(0)))   # (the second four: no speech, no radio calls)
 # each guard's man: the one the brain has him firing at (or holding fire on). A suspect he is only told to cover does not take him out
 # of the formation.
 for k in range(4):
- nx=uid('MAN');a(6,V(13+k),I(-1));s.get(19,b.SQ_BR_ST+k);s.check(0x0019,[V(19),I(1)],nx);s.get(13+k,b.SQ_BR_TG+k);s.label(nx);a(0xddc,I(b.SQ_T+k),V(13+k))
+ nx=uid('MAN');a(6,V(13+k),I(-1));s.get(19,BR_ST+k);s.check(0x0019,[V(19),I(1)],nx);s.get(13+k,BR_TG+k);s.label(nx);a(0xddc,I(SQT+k),V(13+k))
 a(0x06ac,V(0),V(18))
 for k in range(4):s.call('GUARD_%d'%k)
 s.go('LOOP')
@@ -103,7 +113,7 @@ s.label('BRAIN_FRAME');s.eq(17,0,'BF_GO');s.ret()
 s.label('BF_GO');s.get(26,b.BRAIN_HELLO);s.check(0x0039,[V(26),I(b.BRAIN_MAGIC)],'BF_NONE')
 for k in range(4):
  G=2+k;nxt=uid('BF_NEXT');hold=uid('BF_HOLD')
- a(0x0085,V(26),V(G));a(0x0e48,V(26),I(3),I(2));a(0xddc,I(b.SQ_BR_ST+k),V(27));a(0xddc,I(b.SQ_BR_TG+k),V(28))
+ a(0x0085,V(26),V(G));a(0x0e48,V(26),I(3),I(2));a(0xddc,I(BR_ST+k),V(27));a(0xddc,I(BR_TG+k),V(28))
  s.eq(27,3,nxt);s.get(29,fk(k,'TASK'))
  for task in (3,8,10,12):s.check(0x8039,[V(29),I(task)],hold)
  s.go(nxt)
@@ -111,7 +121,7 @@ for k in range(4):
  s.label(nxt)
 s.ret()
 s.label('BF_NONE')
-for k in range(4):s.set(b.SQ_BR_ST+k,0);s.set(b.SQ_BR_TG+k,-1)
+for k in range(4):s.set(BR_ST+k,0);s.set(BR_TG+k,-1)
 s.ret()
 
 # ---------------------------------------------------------------- the brain's picture, ten times a second
@@ -191,7 +201,7 @@ def same_post(k,task,issue):
  """1.4: return from the guard routine while he already runs `task` at the man in 21@ towards the spot 23/24@ (within a metre) and
  the order has not run out; otherwise continue at `issue` (placed right after this call)."""
  drift=uid('POST_DRIFT')
- s.get(31,fk(k,'TASK'));s.eq(31,task,issue);s.get(31,fk(k,'TGT'));s.check(0x003b,[V(31),V(21)],issue);s.get(31,b.SQ_PACE+k);s.check(0x003b,[V(31),V(22)],issue)
+ s.get(31,fk(k,'TASK'));s.eq(31,task,issue);s.get(31,fk(k,'TGT'));s.check(0x003b,[V(31),V(21)],issue);s.get(31,PACE+k);s.check(0x003b,[V(31),V(22)],issue)
  s.get(31,fk(k,'NEXT'));s.check(0x001d,[V(12),V(31)],drift);s.go(issue)
  s.label(drift);s.get(19,fk(k,'TX'));s.get(31,fk(k,'TY'));a(0x0509,V(23),V(24),V(19),V(31),V(19));s.check(0x0021,[V(19),F(1.0)],'G%d_RET'%k)
  s.label(issue)
@@ -250,16 +260,20 @@ def guard(k):
  a(0x0085,V(21),V(G));a(0x0e48,V(21),I(10),I(4))   # 22@ move (-1 no post, 0 stay, 1 walk, 2 run, 3 sprint), 23-25@ the spot, 26@ crouch, 27-29@ look, 30@ duty
  s.check(0x8039,[V(22),I(-1)],R)                     # no post (the brain does not have him): nothing new
  a(0x00a0,V(G),V(19),V(20),V(31));a(0x0509,V(19),V(20),V(23),V(24),V(19))   # 19@ how far he is from his spot
- s.get(20,b.SQ_BR_ST+k);s.get(21,b.SQ_BR_TG+k)       # 20@ 0 nothing / 1 cover / 2 fire / 3 his man, no fire; 21@ the man (-1 none)
+ s.get(20,BR_ST+k);s.get(21,BR_TG+k)       # 20@ 0 nothing / 1 cover / 2 fire / 3 his man, no fire; 21@ the man (-1 none)
  s.eq(22,0,P+'GO');s.go(P+'AT')
  s.label(P+'GO');s.check(0x0021,[V(19),F(.9)],P+'AT')
+ # 1.4.1: the brain says he has not got nearer for a while (move 4): the game's path network takes him round
+ nopath=uid(P+'NOPATH');s.eq(22,4,nopath);issue=uid(P+'PATH');same_post(k,7,issue)   # (same_post places the label)
+ a(0x05f5,V(G),V(23),V(24),V(25),I(6),I(15000));setk(k,'TX',23);setk(k,'TY',24);setk_lit(k,'COVER',0);a(0xddc,I(PACE+k),V(22));order(k,7,21,3000)
+ s.label(nopath)
  # ---- on his way: run (walk, sprint) to the spot; with the brain's leave he fires as he goes
  run=P+'RUN';walk=P+'WALK'
  s.check(0x0039,[V(20),I(2)],walk);alive(21,walk)
  same_post(k,12,run);a(0x04eb,V(G),I(0));pace(31)
- a(0x0637,V(G),V(23),V(24),V(25),V(31),F(.5),F(1.0),V(21));setk(k,'TX',23);setk(k,'TY',24);setk_lit(k,'COVER',0);a(0xddc,I(b.SQ_PACE+k),V(22));order(k,12,21,1200)
+ a(0x0637,V(G),V(23),V(24),V(25),V(31),F(.5),F(1.0),V(21));setk(k,'TX',23);setk(k,'TY',24);setk_lit(k,'COVER',0);a(0xddc,I(PACE+k),V(22));order(k,12,21,1200)
  s.label(walk);same_post(k,1,P+'WALK_GO');a(0x04eb,V(G),I(0));pace(31)
- a(0x05d3,V(G),V(23),V(24),V(25),V(31),I(20000));setk(k,'TX',23);setk(k,'TY',24);setk_lit(k,'COVER',0);a(0xddc,I(b.SQ_PACE+k),V(22));order(k,1,21,1500)
+ a(0x05d3,V(G),V(23),V(24),V(25),V(31),I(20000));setk(k,'TX',23);setk(k,'TY',24);setk_lit(k,'COVER',0);a(0xddc,I(PACE+k),V(22));order(k,1,21,1500)
  # ---- at his spot: crouched or standing as the post says (crouched in cover the game's own duck-and-fire takes over)
  s.label(P+'AT');s.get(31,fk(k,'COVER'));s.check(0x003b,[V(31),V(26)],P+'CR_SET');s.go(P+'CR_OK')
  s.label(P+'CR_SET');a(0x04eb,V(G),V(26));setk(k,'COVER',26)
@@ -321,6 +335,7 @@ TEXTS={'SQXF': '~r~SHOTS AT CJ - FRONT!~w~ Covering him.',
  'SQSAFE': '~g~ALPHA:~w~ CJ is in cover. Stay there, we work.',
  'SQCMD': '~r~ALPHA DOWN!~w~ BRAVO: I have command.'}
 if __name__=='__main__':
- report=s.build('Helicover_Squad','csa');print(report)
+ report=s.build('Helicover_Squad2' if TEAM else 'Helicover_Squad','csa');print(report)
  with (OUT/'validation.txt').open('a') as validation:validation.write(report+'\n')
- with (OUT/'Helicover.fxt').open('a') as f:f.write(''.join(k+' '+v+'\n' for k,v in TEXTS.items()))
+ if not TEAM:
+  with (OUT/'Helicover.fxt').open('a') as f:f.write(''.join(k+' '+v+'\n' for k,v in TEXTS.items()))

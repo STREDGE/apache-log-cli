@@ -10,6 +10,10 @@ s=Script();a=s.add
 # moves. CPedGeometryAnalyser::IsInAir looks 1.5 m below the ped centre for buildings, vehicles
 # or objects; with the platform there the game never switches CJ into the free-fall task.
 PLATFORM_MODEL=3095
+# 1.4.1: the ground team is fixed (no crew setting): the commander is a soldier (287), the others agents in black (164 / 165);
+# weapons by role - commander M4, bodyguard MP5, Bravo M4, Charlie AK. The second four are Helicover_Team2's.
+TEAM_MODELS=[287,164,165,164]
+TEAM_WEAPONS=[(31,356),(29,353),(31,356),(30,355)]
 _plat=[0]
 def plat_create():
  _plat[0]+=1;k=str(_plat[0]);skip='PLAT_CREATE_SKIP_'+k
@@ -54,10 +58,14 @@ for x,y in [(-1.5,1.2),(1.5,1.2),(-1.5,-1.2),(1.5,-1.2)]:
  a(0x0407,V(1),F(x),F(y),F(-1),V(10),V(11),V(12));a(0x02ce,V(10),V(11),V(12),V(13));a(0x0087,V(15),V(13));a(0x0063,V(15),V(8));s.check(0x0023,[F(3),V(15)],'BLOCKED');s.check(0x0021,[V(15),F(-3)],'BLOCKED');a(0x000b,V(13),F(1));s.check(0x06bd,[V(10),V(11),V(13),V(10),V(11),V(12),I(1),I(0),I(0),I(1),I(0)],'BLOCKED')
 # 1.2: the team wears the crew setting (Grove 106/107 alternating, Army 287, SWAT 285); 285 stays loaded for the invisible rope actor
 s.call('GROUND_MODELS');a(0xddc,I(b.TEAM_CREW),V(19))
-a(0x0247,I(285));a(0x0247,V(2));a(0x0247,V(3));a(0x038b);a(1,I(0));s.check(0x0248,[I(285)],'LOAD_FAILED');s.check(0x0248,[V(2)],'LOAD_FAILED');s.check(0x0248,[V(3)],'LOAD_FAILED');s.check(0x056e,[V(1)],'LOAD_FAILED');s.get(19,b.STATE);s.eq(19,3,'LOAD_FAILED');a(0x02e3,V(1),V(8));s.check(0x0023,[F(1.5),V(8)],'LOAD_FAILED')
+a(0x0247,I(285));a(0x0247,V(2));a(0x0247,V(3));a(0x0247,I(287))
+for _w,_m in TEAM_WEAPONS:a(0x0247,I(_m))
+a(0x038b);a(1,I(0));s.check(0x0248,[I(285)],'LOAD_FAILED');s.check(0x0248,[V(2)],'LOAD_FAILED');s.check(0x0248,[V(3)],'LOAD_FAILED');s.check(0x0248,[I(287)],'LOAD_FAILED')
+for _w,_m in TEAM_WEAPONS:s.check(0x0248,[I(_m)],'LOAD_FAILED')
+s.check(0x056e,[V(1)],'LOAD_FAILED');s.get(19,b.STATE);s.eq(19,3,'LOAD_FAILED');a(0x02e3,V(1),V(8));s.check(0x0023,[F(1.5),V(8)],'LOAD_FAILED')
 a(0x0574,V(1),I(1));s.set(b.FROZEN,1)
 for i,(var,x,y) in enumerate([(20,-1.5,1.2),(21,1.5,1.2),(22,-1.5,-1.2),(23,1.5,-1.2)]):
- a(0x0407,V(1),F(x),F(y),F(-1),V(10),V(11),V(12));a(0x0503,I(8),V(2 if i%2==0 else 3),V(10),V(11),V(12),V(var));s.check(0x056d,[V(var)],'CLEANUP');a(0xddc,I(b.GROUND_PUB+i),V(var));a(0x0085,V(7),V(var));s.call('GSETUP');a(0x0223,V(var),I(150));a(0x035f,V(var),I(50))
+ a(0x0407,V(1),F(x),F(y),F(-1),V(10),V(11),V(12));a(0x0503,I(8),I(TEAM_MODELS[i]),V(10),V(11),V(12),V(var));s.check(0x056d,[V(var)],'CLEANUP');a(0xddc,I(b.GROUND_PUB+i),V(var));a(0x0085,V(7),V(var));s.call('GSETUP');a(0x0223,V(var),I(150));a(0x035f,V(var),I(50))
 s.get(19,b.ESCORT_ON);s.eq(19,2,'PICKUP_DEPLOYED');s.go('ESCORT_LAND')
 s.label('PICKUP_DEPLOYED');s.set(b.ROPE_BUSY,1);a(0x01bd,V(19));a(0xddc,I(b.ROPE_T0),V(19));say(s,'RGDEP');a(0x01bd,V(27));a(0x000a,V(27),I(5000));a(6,V(25),I(-1));a(6,V(26),I(0));a(6,V(30),I(0));a(6,V(18),I(0))
 s.label('ACTIVE');a(1,I(500));s.get(19,b.BUSY);s.eq(19,1,'ACT_NOT_BUSY');s.go('ACTIVE')   # 1.2: the core is swapping the model / crew (states 16 / 17): sit this cycle out
@@ -205,9 +213,7 @@ s.get(19,b.ROPE_PENDING);s.eq(19,1,'DROP_FAIL_SAY');s.go('WAIT');s.label('DROP_F
 
 # ---------------------------------------------------------------- 1.2 decor: the team follows the settings at once
 # GROUND_MODELS: V19 = crew setting, V2 / V3 = models of the even / odd guards (Grove 106 / 107, Army 287, SWAT 285).
-s.label('GROUND_MODELS');s.get(19,b.CREW);a(6,V(2),I(106));a(6,V(3),I(107));s.eq(19,0,'GM_NOT_GROVE');s.ret()
-s.label('GM_NOT_GROVE');a(6,V(2),I(287));a(6,V(3),I(287));s.eq(19,1,'GM_SWAT');s.ret()
-s.label('GM_SWAT');a(6,V(2),I(285));a(6,V(3),I(285));s.ret()
+s.label('GROUND_MODELS');a(6,V(19),I(2));a(6,V(2),I(164));a(6,V(3),I(165));s.ret()   # 1.4.1: fixed (V19 kept for TEAM_CREW)
 # GSETUP: V7 = a new team member: mine, friendly to everybody, accurate.
 s.label('GSETUP');a(0x01c5,V(7));a(0x08af,V(7),I(150));a(0x02e2,V(7),I(100))
 for typ in range(32):a(0x077a,V(7),I(2),I(typ))
@@ -216,9 +222,10 @@ a(0x077a,V(7),I(0),I(0));a(0x077a,V(7),I(0),I(8));b.brave(s,7,'GSETUP_BRAVE');s.
 # replaced in place (new one created at his spot with his heading / health / armour, then the old one is removed in the same
 # tick; a guard in a car or a model that is not resident yet waits for the next cycle). Uses V2-V5, V7-V9-V16, V19 (never V6: the
 # platform handle, nor V30: the fire task timer).
-s.label('TEAM_DECOR');s.get(4,b.WPN);s.call('GROUND_MODELS');s.get(15,b.TEAM_CREW);a(6,V(16),I(1))
+s.label('TEAM_DECOR');s.call('GROUND_MODELS');s.get(15,b.TEAM_CREW);a(6,V(16),I(1))
 for i,var in enumerate([20,21,22,23]):
  skip='TD_SKIP_'+str(i);need='TD_NEED_'+str(i);mdl=2 if i%2==0 else 3;foot='TD_FOOT_'+str(i);load='TD_LOAD_'+str(i);noarm='TD_MODEL_'+str(i);noarm2='TD_NOARM_'+str(i)
+ a(6,V(mdl),I(TEAM_MODELS[i]));a(6,V(4),I(TEAM_WEAPONS[i][0]))   # (his model and his role's weapon)
  gr_alive(var,skip)
  s.check(0x0019,[V(4),I(0)],noarm);a(0x0470,V(var),V(5));s.check(0x803b,[V(5),V(4)],noarm);a(0x01b2,V(var),V(4),I(30000));a(0x01b9,V(var),V(4));a(0x02e2,V(var),I(100));s.label(noarm)
  s.check(0x02f2,[V(var),V(mdl)],need);s.go(skip)
@@ -248,8 +255,8 @@ s.eq(19,1,'ESCORT_LAND_TIMER');s.go('ESCORT_READY')
 s.label('ESCORT_LAND_TIMER');a(0x01bd,V(15));s.check(0x001d,[V(15),V(27)],'ESCORT_LAND_WAIT')
 s.label('ESCORT_READY');s.get(29,b.WPN);s.set(b.ESC_LAGGED,0)
 for i in range(4):s.set(b.SQ_LAG+i,0)
-for var in [20,21,22,23]:
- skip='ESCORT_ARM_'+str(var);gr_alive(var,skip);a(0x01b2,V(var),V(29),I(30000));a(0x01b9,V(var),V(29));s.label(skip)
+for i,var in enumerate([20,21,22,23]):
+ skip='ESCORT_ARM_'+str(var);gr_alive(var,skip);a(0x01b2,V(var),I(TEAM_WEAPONS[i][0]),I(30000));a(0x01b9,V(var),I(TEAM_WEAPONS[i][0]));s.label(skip)
 s.set(b.SQ_ROPE,1);s.set(b.ESCORT_ON,1);s.set(b.ROPE_BUSY,0);a(0x0574,V(1),I(0));s.set(b.FROZEN,0);say(s,'SQIN');s.set(b.NOTICE_SKIP,2);s.set(b.CMD,2)
 s.label('ESCORT_LOOP');a(1,I(250));s.get(19,b.BUSY);s.eq(19,1,'ESC_NOT_BUSY');s.go('ESCORT_LOOP')
 s.label('ESC_NOT_BUSY');s.call('LEAVERS_TICK');s.set(b.SQ_ROPE,1);s.check(0x0256,[I(0)],'CLEANUP');s.check(0x056d,[V(0)],'CLEANUP');s.check(0x8118,[V(0)],'CLEANUP')
