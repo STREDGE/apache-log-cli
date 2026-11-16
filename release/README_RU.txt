@@ -424,9 +424,9 @@ mods/hcbrain_log.txt и новый короткий mods/hcbrain_summary.txt —
 1. Закройте игру.
 2. Файл mods/libHelicoverBrain64.so из архива — в папку mods игры
    (Android_unprotected/data/com.rockstargames.gtasa/mods/), с заменой прежнего.
-3. Скопируйте все 8 файлов из папки CLEO архива в папку CLEO игры:
+3. Скопируйте все 10 файлов из папки CLEO архива в папку CLEO игры:
    Helicover.csi, Helicover.fxt, Helicover_RU.fxt, Helicover_Core.csa, Helicover_Panel.csa,
-   Helicover_Fire.csa, Helicover_Ground.csa, Helicover_Squad.csa
+   Helicover_Fire.csa, Helicover_Ground.csa, Helicover_Squad.csa, Helicover_Squad2.csa, Helicover_Team2.csa
    Helicover_RU.fxt — двоичный файл с русскими буквами: копируйте как есть, не открывайте и не
    пересохраняйте в текстовом редакторе (английский Helicover.fxt обычный).
 4. Если раньше стояла другая версия Helicover — замените файлы, дубликатов быть не должно.

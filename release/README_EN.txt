@@ -404,8 +404,8 @@ INSTALLATION
 1. Close the game.
 2. Put mods/libHelicoverBrain64.so from the archive into the game's mods folder
    (Android_unprotected/data/com.rockstargames.gtasa/mods/), replacing an older one.
-3. Copy all 8 files from the CLEO folder of the archive into the game's CLEO folder
-   (Helicover.csi, Helicover.fxt, Helicover_RU.fxt and the five Helicover_*.csa).
+3. Copy all 10 files from the CLEO folder of the archive into the game's CLEO folder
+   (Helicover.csi, Helicover.fxt, Helicover_RU.fxt and the seven Helicover_*.csa).
    Helicover_RU.fxt is a binary file with Russian letters: copy it as it is, do not open or re-save
    it in a text editor (the English Helicover.fxt is plain text).
 4. Replace any older Helicover files; keep no duplicates.
