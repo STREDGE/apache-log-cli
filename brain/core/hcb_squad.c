@@ -345,12 +345,12 @@ static int big_vehicle(int model) {
 }
 static int mk_is_bad(const squad *q, hcb_vec at, u32 now) {
     int i;
-    for (i = 0; i < 4 && i < q->mk_n_bad; i++) if (q->mk_bad_t[i] && now - q->mk_bad_t[i] < 60000 && d2(q->mk_bad[i], at) < 4.0f) return 1;
+    for (i = 0; i < 8 && i < q->mk_n_bad; i++) if (q->mk_bad_t[i] && now - q->mk_bad_t[i] < 60000 && d2(q->mk_bad[i], at) < (q->mk_bad_r[i] > 4.0f ? q->mk_bad_r[i] : 4.0f)) return 1;
     return 0;
 }
 static void mk_mark_bad(squad *q, hcb_vec at, u32 now) {
-    int i = q->mk_n_bad < 4 ? q->mk_n_bad++ : (int)(now / 1000 % 4);
-    q->mk_bad[i] = at; q->mk_bad_t[i] = now ? now : 1;
+    int i = q->mk_n_bad < 8 ? q->mk_n_bad++ : (int)(now / 1000 % 8);
+    q->mk_bad[i] = at; q->mk_bad_t[i] = now ? now : 1; q->mk_bad_r[i] = 4.0f;
 }
 HID void hcb_marksman_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
     squad *q = &b->sq;
@@ -446,7 +446,10 @@ plan:
                 if (dc < 12.0f || dc > 45.0f || mk_is_bad(q, at, now)) continue;
                 if (c->z - feet - dc * 0.02f > bh) { bh = c->z - feet - dc * 0.02f; q->mk_at = at; best = 1; }
             }
-            if (best >= 0) how = MK_HIGHGROUND;
+            /* (1.5, the fifth 2.0 log: the "high ground" chosen 8 times was always a roof - 4.7-12 m up, no way up on foot - and he
+               stood "no route" there: a cell he can climb (2.8 m over his feet at most) is a roof to climb; higher ground is walked to
+               and dropped the moment the way says there is none) */
+            if (best >= 0) how = q->mk_at.z - 1.0f - here <= 2.8f ? MK_ROOF : MK_HIGHGROUND;
         }
         /* (3) the roof of a big vehicle */
         if (best < 0)
@@ -466,6 +469,19 @@ plan:
             how = MK_LONG;
         }
         if (how != q->mk_state) { q->mk_state = how; q->mk_since = now ? now : 1; q->mk_tries = 0; q->mk_climb_t = 0; q->mk_z0 = here; q->mk_best_d = 1e9f; q->mk_prog_t = now ? now : 1; }
+        /* 1.5 (the fifth 2.0 log: no route to a roof - he stood where the way gave out, 8 m from the wall, and "climbed" there): the foot of
+           the wall on his side, from the brain's map - the first ground at his own level on the line from the roof to him. He walks
+           there (there is a way: it is his level), and climbs from there facing the roof */
+        q->mk_foot_ok = 0;
+        if (q->mk_state == MK_ROOF) {
+            hcb_vec dir = unit2(v_sub(me->pos, q->mk_at), (hcb_vec){1, 0, 0}), pt;
+            float gz;
+            int k_;
+            for (k_ = 1; k_ <= 24; k_++) {
+                pt = v_add(q->mk_at, v_mul(dir, 0.5f * (float)k_));
+                if (hcb_nav_ground(b, pt, &gz) && gz <= here + 0.75f) { q->mk_foot = v_add(pt, v_mul(dir, 0.1f)); q->mk_foot.z = gz + 1.0f; q->mk_foot_ok = 1; break; }
+            }
+        }
         if (how == MK_NONE) return;                                /* (nothing better: the squad's / the detail's place stands) */
     }
     /* the way there */
@@ -489,11 +505,14 @@ plan:
     }
     if (q->mk_state == MK_HIGHGROUND) {
         p->at = q->mk_at; p->duty = HCB_DUTY_HOLD; p->crouch = 0; if (p->move == 0 && d2(me->pos, q->mk_at) > 1.3f) p->move = 2;
-        if (now - q->mk_since > 20000 && here < q->mk_at.z - 2.0f) { mk_mark_bad(q, q->mk_at, now); q->mk_state = MK_NONE; }
+        if ((now - q->mk_since > 20000 || (now - q->mk_since > 2500 && hcb_agent_why(b, p->who) == HCB_WHY2_NO_ROUTE)) && here < q->mk_at.z - 2.0f) {
+            mk_mark_bad(q, q->mk_at, now); q->mk_state = MK_NONE;
+            q->mk_bad_r[q->mk_n_bad < 8 ? q->mk_n_bad - 1 : (int)(now / 1000 % 8)] = 10.0f;   /* (no way up there: the rest of that roof neither) */
+        }
         return;
     }
     {   /* ROOF, STEP, VROOF: walk to the wall (or the car), then climb */
-        hcb_vec wall = q->mk_state == MK_STEP && here < q->mk_step.z ? q->mk_step : q->mk_at;   /* (feet below the car's middle: not on it yet) */
+        hcb_vec wall = q->mk_state == MK_STEP && here < q->mk_step.z ? q->mk_step : q->mk_foot_ok && q->mk_state == MK_ROOF ? q->mk_foot : q->mk_at;   /* (feet below the car's middle: not on it yet; 1.5: the foot of the wall) */
         float dh = d2(me->pos, wall);
         int stalled;
         /* (no nearer to the wall by 0.3 m in a second: he is at it - walking along it, as the game's walk-round makes him, is no progress) */
@@ -505,12 +524,14 @@ plan:
             else if (now - q->mk_climb_t > 3500) {
                 q->mk_climb_t = 0;
                 if (++q->mk_tries >= 3) { mk_mark_bad(q, q->mk_at, now); q->mk_state = MK_NONE; return; }
-            } else { p->climb = 1; return; }
+            } else { p->climb = 1; if (q->mk_foot_ok && q->mk_state == MK_ROOF) p->at = q->mk_at; return; }
         }
-        /* at the wall: within 2.2 m of a car, or blocked within 9 m of the roof (the wall is between him and it) */
+        /* at the wall: within 2.2 m of a car, or blocked within 9 m of the roof (the wall is between him and it); 1.5: at the foot of
+           the wall (0.9 m, or 2 m and no nearer), facing the roof */
         if ((wall.x == q->mk_step.x && wall.y == q->mk_step.y && q->mk_state == MK_STEP && dh < 2.2f) || (q->mk_state == MK_VROOF && dh < 2.4f)
-            || (dh < 9.0f && stalled)) {
+            || (q->mk_foot_ok && q->mk_state == MK_ROOF && (dh < 0.9f || (dh < 2.0f && stalled))) || (dh < 9.0f && stalled && !(q->mk_foot_ok && q->mk_state == MK_ROOF && dh > 3.0f))) {
             q->mk_climb_t = now ? now : 1; q->mk_z0 = here; p->climb = 1;
+            if (q->mk_foot_ok && q->mk_state == MK_ROOF) p->at = q->mk_at;
         }
         if (now - q->mk_since > 20000 && !q->mk_climb_t && here < q->mk_at.z - 2.0f) { mk_mark_bad(q, q->mk_at, now); q->mk_state = MK_NONE; }
     }

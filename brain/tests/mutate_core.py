@@ -257,7 +257,7 @@ M = [
  (Q, 'if (!q->mk_far_since || now - q->mk_far_since < 10000) {', 'if (0) {', '1.3 marksman: stays up while CJ is near'),
  (Q, '            q->mk_climb_t = now ? now : 1; q->mk_z0 = here; p->climb = 1;\n        }', '        }', '1.3 marksman: climbs at the wall'),
  (Q, '                    k = MK_STEP; st = v->pos; break;', '                    continue;', '1.3 marksman: a car for a step'),
- (Q, 'if (best >= 0) how = MK_HIGHGROUND;', '', '1.3 marksman: high ground'),
+ (Q, 'if (best >= 0) how = q->mk_at.z - 1.0f - here <= 2.8f ? MK_ROOF : MK_HIGHGROUND;', '', '1.3 marksman: high ground'),
  (Q, 'if (dc < bd) { bd = dc; q->mk_at = v->pos; q->mk_at.z += 2.6f; best = j; how = MK_VROOF; }', '', '1.3 marksman: a bus roof'),
  (Q, '            how = MK_LONG;\n', '', '1.3 marksman: a long look'),
  (Q, 'if (++q->mk_tries >= 3) { mk_mark_bad(q, q->mk_at, now); q->mk_state = MK_NONE; return; }', '', '1.3 marksman: three tries, then the next place'),
@@ -289,6 +289,13 @@ M = [
  (A, 'if (p->crouch && !fight && !urgent && !follow) act = HCB_ACT_WALK;', '', '1.5 down in peace: nobody runs'),
  (Q, 'if (best < 0 && s->heli && b->alert < HCB_ALERT_EVACUATE', 'if (best < 0 && s->heli && b->alert < HCB_ALERT_COMBAT', '1.5 marksman: the helicopter in a fight too'),
  (Q, 'n_ground < 3 || s->interior || s->player.vehicle || b->alert >= HCB_ALERT_EVACUATE) { q->ow_ok = 0;', 'n_ground < 3 || s->interior || s->player.vehicle || b->alert >= HCB_ALERT_COMBAT) { q->ow_ok = 0;', '1.5 marksman: the drop on the roof in a fight too'),
+ (Q, 'if (best >= 0) how = q->mk_at.z - 1.0f - here <= 2.8f ? MK_ROOF : MK_HIGHGROUND;', 'if (best >= 0) how = MK_HIGHGROUND;', '1.5 marksman: a high cell he can climb is a roof to climb'),
+ (Q, '|| (now - q->mk_since > 2500 && hcb_agent_why(b, p->who) == HCB_WHY2_NO_ROUTE)', '', '1.5 marksman: high ground with no way to it is dropped at once'),
+ (Q, 'q->mk_bad_r[q->mk_n_bad < 8 ? q->mk_n_bad - 1 : (int)(now / 1000 % 8)] = 10.0f;', '', '1.5 marksman: the whole roof with it'),
+ (A, 'if (l_ >= 1.1f) continue;', 'if (l_ >= 0.8f) continue;', '1.5 agent: places 1.1 m apart'),
+ (D, 'at = v_sub(dt->cj_cover, v_mul(u, 1.3f)); crouch = 1;', 'at = v_add(v_sub(dt->cj_cover, v_mul(u, 0.9f)), v_mul(pr, -0.9f)); crouch = 1;', '1.5 commander in cover right behind CJ'),
+ (C, 'b->cfg.pause_min_ms = 700;', 'b->cfg.pause_min_ms = 200;', '1.5 gunners: a real breath between bursts'),
+ (F, 'if (tt && tt->used && (tt->last.flags & HCB_PF_DUCKING)) q.to.z -= 0.45f;', '', '1.5 gunners: a man who ducks is aimed at lower'),
 ]
 only = sys.argv[1:]
 missed = 0

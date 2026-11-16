@@ -410,7 +410,7 @@ def burst_of_rounds(sc, who, target, ms, heli_speed=0., near_heli=True, cj=None,
 
 rounds = burst_of_rounds(sc, front, g, 4000)
 ok = [r for r in rounds if r.verdict == HCB_HOLD_NONE]
-assert len(ok) >= 10 and len(ok) == len(rounds) and all(r.note for r in ok), len(rounds)
+assert len(ok) >= 7 and len(ok) == len(rounds) and all(r.note for r in ok), len(rounds)   # (1.5: bursts of three to six with a real breath - about nine rounds in 4 s)
 gaps = [b_.time - a_.time for a_, b_ in zip(ok, ok[1:])]
 cfg = sc.brain.cfg
 assert min(gaps) >= cfg.round_min_ms and sorted(gaps)[len(gaps) // 2] <= cfg.round_max_ms + 10 and max(gaps) >= 300 and len(set(gaps)) >= 3, sorted(set(gaps))
@@ -428,14 +428,21 @@ for r in ok:
 assert worst > 0.5 * (cfg.scatter_m + cfg.scatter_per_m * dist) and len({round(r.to.x, 2) for r in ok}) > len(ok) // 2, worst
 fast = burst_of_rounds(sc, front, g, 1500, heli_speed=25.)
 assert max(max(abs(v_ - h_) for v_, h_ in zip([r.to.x, r.to.y, r.to.z], him)) for r in fast) > cfg.scatter_m + cfg.scatter_per_m * dist + .02, 'a fast helicopter scatters more'
-foot = burst_of_rounds(sc, front, g, 800, near_heli=False)
+foot = burst_of_rounds(sc, front, g, 2500, near_heli=False)   # (1.5: a breath between bursts is up to 1.5 s)
 assert foot and all(abs(math.dist([r.muzzle.x, r.muzzle.y, r.muzzle.z], me) - 0.8) < .01 for r in foot), 'dismounted: the round starts 0.8 m from him'
+# 1.5 (the fifth 2.0 log: 93 rounds at a policeman down on one knee did nothing - they went over him): a man who ducks is aimed at lower
+up_ = burst_of_rounds(sc, front, g, 3000)
+sc.peds[g]['flags'] |= HCB_PF_DUCKING
+down_ = burst_of_rounds(sc, front, g, 3000)
+sc.peds[g]['flags'] &= ~HCB_PF_DUCKING
+mz = lambda rs: sum(r.to.z for r in rs) / len(rs)
+assert up_ and down_ and 0.3 < mz(up_) - mz(down_) < 0.6, ('a man down on one knee: the rounds go 0.45 m lower', mz(up_), mz(down_))
 passed('A door gunner\'s rounds (the script asks every frame): never closer together than 130 ms, usually within 180 ms, with the pauses of his bursts; each on its own line - from 5.5 m outside the helicopter (0.8 m when dismounted), scattered round the man by up to 0.1 m + 1 % of the range (more from a fast helicopter), ending 0.6 m past the point aimed at')
 
 mid = [(me[i] + him[i]) / 2 for i in range(3)]
 t = sc.time
 tries, notes = [], []
-for k in range(100):                                   # CJ stands in the line for a second: the script keeps asking every 10 ms
+for k in range(250):                                   # CJ stands in the line 2.5 s (1.5: a burst and a breath): the script keeps asking every 10 ms
     t += 10
     if t - sc.time >= 100:
         sc.shot(g, sc.cj['pos'], dst=1)
@@ -447,7 +454,7 @@ for k in range(100):                                   # CJ stands in the line f
         assert r.verdict == HCB_HOLD_CJ_IN_LINE
         tries.append(t)
         notes.append(t) if r.note else None
-assert len(tries) >= 6 and min(b_ - a_ for a_, b_ in zip(tries, tries[1:])) >= 60 and 2 <= len(notes) <= 5, (tries, notes)
+assert len(tries) >= 6 and min(b_ - a_ for a_, b_ in zip(tries, tries[1:])) >= 60 and 2 <= len(notes) <= 10 and min(b_ - a_ for a_, b_ in zip(notes, notes[1:])) >= 250, (tries, notes)
 for _ in range(15):
     sc.shot(g, sc.cj['pos'], dst=1)
     sc.step(1)
@@ -730,9 +737,9 @@ bursts = [len(x) * 100 for x in pattern.strip('.').split('.') if x][:-1]      # 
 pauses = [len(x) * 100 for x in pattern.strip('.').strip('F').split('F') if x]
 cfg = sc.brain.cfg
 assert len(bursts) > 10 and cfg.burst_min_ms - 100 <= min(bursts) and max(bursts) <= cfg.burst_max_ms + 100 and len(set(bursts)) >= 4, sorted(set(bursts))
-assert cfg.pause_min_ms <= min(pauses) and max(pauses) <= cfg.pause_max_ms + 200, sorted(set(pauses))
+assert cfg.pause_min_ms <= min(pauses) and max(pauses) <= cfg.pause_max_ms + 200 and min(pauses) >= 700 and max(bursts) <= 1000, sorted(set(pauses))   # (1.5: three to six rounds, then a real breath of 0.7 s at least)
 share = pattern.count('F') / 300.
-assert .55 <= share <= .9, share
+assert .25 <= share <= .6, share   # (1.5: a burst of three to six rounds and a real breath - the gunners killed in 0.4 s in the fifth 2.0 log)
 passed('A door gunner fires in bursts of %.1f-%.1f s with %.1f-%.1f s between them (on the trigger %d%% of the time), never one endless stream; a guard on foot gets a plain fire / cease fire - his bursts are the game\'s own weapon handling' % (min(bursts) / 1000., max(bursts) / 1000., min(pauses) / 1000., max(pauses) / 1000., share * 100))
 
 delays = []

@@ -446,6 +446,11 @@ API int hcb_gunner_round(hcb_brain *b, const hcb_shot *in, float heli_speed, int
     if (!(len >= out + 1.0f && len < 500.0f) || !(q.cj.x - q.cj.x == 0.0f && q.cj.y - q.cj.y == 0.0f && q.cj.z - q.cj.z == 0.0f)) { sh->next_round = in->time + 100; return 0; }
     if (!(heli_speed >= 0.0f && heli_speed < 150.0f)) heli_speed = 0.0f;
     spread = c->scatter_m + c->scatter_per_m * len + c->scatter_per_ms * (near_heli ? heli_speed : 0);
+    {   /* (1.5, the fifth 2.0 log: 93 rounds at a policeman down on one knee did nothing - they went over him: a man who ducks is aimed
+           at lower) */
+        const track *tt = hcb_find(b, in->target);
+        if (tt && tt->used && (tt->last.flags & HCB_PF_DUCKING)) q.to.z -= 0.45f;
+    }
     q.to.x += dice(sh) * spread; q.to.y += dice(sh) * spread; q.to.z += dice(sh) * spread;
     d = v_sub(q.to, q.from); len = v_len(d);
     q.muzzle = v_add(q.from, v_mul(d, out / len));

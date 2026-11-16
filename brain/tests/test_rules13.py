@@ -103,6 +103,37 @@ for k in range(600):
 assert feet(sc, mk) > 2.0, ('he went up the ramp onto the terrace', pos(sc, mk))
 passed('No roof, but the brain\'s map knows ground 3 m above CJ 25 m off, with a ramp: the marksman walks up the ramp and watches from the terrace (up after %.1f s)' % (k / 10.))
 
+# 1.5 (the fifth 2.0 log: the "high ground" chosen 8 times was always a roof 4.7-12 m up with no way up on foot, and he stood "no route"
+# 61 of 107 looks): a high cell with no way to it is given up as soon as the way says so - he does not stand at the wall 20 s
+sc = Scene(); team = squad(sc); mk = team[7]
+def roof6(x, y):                                              # a flat roof 6 m up, and in front of it steps a man cannot walk (1.5 m each) - the map
+    if 18. <= x <= 30. and 8. <= y <= 20.: return 6.0       #  learns the roof over them, the way finds no way up
+    if 10. <= x < 18. and 8. <= y <= 20.: return 1.5 * int((x - 10.) / 2.)
+    return 0.
+sc.ground_fn = roof6
+first, held = None, 0
+for k in range(450):
+    sc.step(1)
+    a_ = sc.posts[mk].at
+    if a_.z > 5.:
+        held += 1
+        if first is None: first = (a_.x, a_.y)
+assert first is not None and held <= 100, ('a roof with no way up: given up within seconds, the whole roof, not cell after cell for ever', first, held)
+passed('1.5: a roof on the brain\'s map with no way up on foot (6 m, steps a man cannot walk): the marksman gives it up - the whole roof - as soon as his way says "no route" (%.1f s of 45 spent on it) instead of standing at the wall for 20 s' % (held / 10.))
+
+# 1.5: a shed the brain's map knows (2.5 m over his feet, no ramp - a step of 1.25 m in front of it): not "high ground" to walk to,
+# a roof to climb - he walks to it and climbs it (the game's own jump-and-climb)
+def shed(x, y):
+    if 20. <= x <= 24. and 10. <= y <= 14.: return 2.5
+    if 19. <= x < 20. and 10. <= y <= 14.: return 1.25
+    return 0.
+sc = Scene(); team = squad(sc); mk = team[7]; sc.ground_fn = shed
+for k in range(600):
+    sc.step(1)
+    if feet(sc, mk) > 2.0: break
+assert feet(sc, mk) > 2.0 and getattr(sc, 'climbs', 0) >= 1, ('he climbed the shed the map knows', pos(sc, mk), getattr(sc, 'climbs', 0))
+passed('1.5: a shed only the brain\'s map knows (2.5 m up, nothing to walk up): the marksman takes it for a roof to climb, walks to it and climbs it (up after %.1f s)' % (k / 10.))
+
 # ------------------------------------------------------------------ CJ goes away: 10 s beyond 60 m and he comes down (steps off the edge) and follows
 sc = Scene(); team = squad(sc); mk = team[7]
 sc.blocks = [(18., 8., 26., 16., 2.5)]

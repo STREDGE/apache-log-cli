@@ -183,7 +183,11 @@ j = by_job(sc)
 assert any(s_[1] == HCB_SAY_IN_COVER for s_ in sc.said) and not o.cover_ok, ('"CJ is in cover - we hold"; the mark goes away', sc.said)
 assert j['close'].crouch and d2(at(j['close']), sc.cj['pos']) < 1.2, 'the bodyguard crouches beside him'
 assert j['lead'].crouch and d2(at(j['lead']), sc.cj['pos']) < 4.5, 'the commander takes cover next to him'
-assert 4 <= d2(at(j['point']), sc.cj['pos']) <= 26, ('the outer man: on a post of his own, 4-26 m from CJ', at(j['point']))
+# 1.5 (the fifth 2.0 log: the commander and a bodyguard within a metre of each other in cover, jostling): right behind CJ, a metre and more from each
+assert at(j['lead'])[0] < sc.cj['pos'][0] - 1.0 and all(d2(at(j['lead']), at(j[k])) >= 1.09 for k in ('close', 'close2')), ('1.5: the commander right behind CJ, clear of both bodyguards', at(j['lead']), at(j['close']), at(j['close2']))
+pp_ = [at(p_) for p_ in sc.posts.values()]
+assert all(d2(pp_[a_], pp_[b_]) >= 1.09 for a_ in range(len(pp_)) for b_ in range(a_)), ('1.5: no two places nearer than 1.1 m', pp_)
+assert 4 <= d2(at(j['point']), sc.cj['pos']) <= 35, ('the outer man: on a post of his own, 4-35 m from CJ', at(j['point']))
 passed('CJ goes to the spot: "CJ is in cover, we hold"; the bodyguards crouch at his sides, the commander crouches next to him, the outer man holds a post of his own')
 
 # ------------------------------------------------------------------ no cover near: stay with the bodyguard
@@ -374,9 +378,10 @@ passed('The threat is remembered (the attacker 20 s, his place 12 s more): betwe
 sc, team, g = contact(walls=[(-3., -2.5, -3., 2.5)])
 sc.stuck_men = {team[2]}                                   # the point man cannot move (a fence)
 sc.body = 0                                                # the script body (the fallback): the old way
-sc.step(70)
-pp = sc.posts[team[2]]
-assert pp.stuck and pp.move == 4, ('he gets another way round, then the path network', pp.stuck, pp.move)
+seen_ = set()
+for k_ in range(80):
+    sc.step(1); pp = sc.posts[team[2]]; seen_.add((pp.stuck, pp.move))
+assert (1, 4) in seen_, ('he gets another way round, then the path network', seen_)
 passed('Script body (fallback): a man who does not get nearer to his post for 1.5 s is given another way round (the post turned round CJ), then the path network')
 sc, team, g = contact(walls=[(-3., -2.5, -3., 2.5)])
 sc.stuck_men = {team[2]}
@@ -540,6 +545,55 @@ sc.cj['vel'] = [0., 0., 0.]; sc.step(100); j = by_job(sc)
 there = [k for k in OUTER if d2(sc.peds[j[k].who]['pos'], at(j[k])) < 1.5]
 assert len(there) >= 3 and all(j[k].crouch for k in there), ('CJ has stood 10 s: down at their places', there)
 passed('1.5: CJ walks - the outer four walk beside him in their quarters (%.1f changes of action a minute, nobody down, nobody within 12 m); he stands - after 4 s each takes a place in his quarter and gets down' % changes)
+
+# the quarters are dealt out with the way past CJ counted: here the least way puts the man at (-17, 1) across CJ's ground to the
+# north-east quarter - he takes the north-west one, and the man at (-20, 6) the north-east one (his way stays 12 m off CJ)
+PL5 = ((-1.3, -0.5), (1.9, -1.0), (-20., 6.), (-2.2, -1.6), (-8., -22.), (-17., 1.), (-17., -11.), (4.6, -11.))
+sc = Scene(); team = detail(sc, places=PL5)
+g = sc.ped(30., 0., pedtype=GANG, weapon=AK, face=(-1., 0.)); sc.shot(g, (0., 0., 1.), dst=1)
+for k_ in range(200):
+    if k_ % 9 == 0: sc.shot(g, (0., 0., 1.), dst=1)
+    sc.step(1)
+pa, pc_ = sc.peds[team[2]]['pos'], sc.peds[team[5]]['pos']
+assert pa[0] > 3 and pa[1] > 3 and pc_[0] < -3 and pc_[1] > 3, ('the man nearer the line goes to the quarter on his own side', pa, pc_)
+passed('1.5: the quarters are dealt out by the least way with the way past CJ counted - nobody is sent across CJ\'s ground when another quarter is near')
+
+# one outer man, a shooter behind CJ: he has to get to the other side - round CJ on an arc, never across his ground
+sc = Scene(); team = detail(sc, places=((-1.3, -0.5), (1.9, -1.0), (0., 21.), (-2.2, -1.6)))
+sc.step(5)
+g = sc.ped(0., -30., pedtype=GANG, weapon=AK, face=(0., 1.)); sc.shot(g, (0., 0., 1.), dst=1)
+closest = 99.
+for k_ in range(250):
+    if k_ % 9 == 0: sc.shot(g, (0., 0., 1.), dst=1)
+    sc.step(1); closest = min(closest, d2(sc.peds[team[2]]['pos'], sc.cj['pos']))
+assert closest >= 12. and sc.peds[team[2]]['pos'][1] < -3, ('round CJ to the quarter towards the shooter', closest, sc.peds[team[2]]['pos'])
+passed('1.5: the only outer man is on the far side when the shooter appears behind CJ: he goes round CJ on an arc to the quarter towards the shooter (never nearer than %.0f m)' % closest)
+
+# two outer men holding places in the north, the shooter in the south: the quarters towards him are manned - their old places are left
+sc = Scene(); team = detail(sc, places=((-1.3, -0.5), (1.9, -1.0), (-8., 12.), (-2.2, -1.6), (8., 12.)))
+sc.step(150)
+assert all(sc.peds[team[k]]['pos'][1] > 3 for k in (2, 4)), 'both out in the north first'
+g = sc.ped(0., -30., pedtype=GANG, weapon=AK, face=(0., 1.)); sc.shot(g, (0., 0., 1.), dst=1)
+for k_ in range(300):
+    if k_ % 9 == 0: sc.shot(g, (0., 0., 1.), dst=1)
+    sc.step(1)
+assert all(sc.peds[team[k]]['pos'][1] < -3 for k in (2, 4)), ('a place outside his quarter is left - both go to the quarters towards the shooter', [sc.peds[team[k]]['pos'] for k in (2, 4)])
+passed('1.5: two outer men in the north and a shooter in the south - the quarters towards him are manned and the places in the north are left (a place counts only in his own quarter)')
+
+# CJ moves up to a man's place in a fight: within 13 m of it the place goes - a new one out of CJ's sight
+sc, team, g = fight8([])
+for k_ in range(80):
+    if k_ % 9 == 0: sc.shot(g, (0., 0., 1.), dst=1)
+    sc.step(1)
+j = by_job(sc); man = j['point']; p0 = at(man)
+dx, dy = p0[0] - sc.cj['pos'][0], p0[1] - sc.cj['pos'][1]; l = math.hypot(dx, dy)
+sc.cj['pos'] = [sc.cj['pos'][0] + dx / l * (l - 9.), sc.cj['pos'][1] + dy / l * (l - 9.), 1.]
+for k_ in range(80):
+    if k_ % 9 == 0: sc.shot(g, (0., 0., 1.), dst=1)
+    sc.step(1)
+p1 = at(by_job(sc)['point'])
+assert d2(p1, sc.cj['pos']) >= 13., ('CJ came within 9 m of his place: he takes another, out of CJ\'s sight', p0, p1, sc.cj['pos'])
+passed('1.5: CJ moves up to an outer man\'s place in a fight (9 m off it): the place goes and he takes another 13 m or more from CJ')
 
 # ---- 0.7 ----
 import ctypes

@@ -130,6 +130,10 @@ crowded = hcb_py.place_value(*args, taken=[(p3[0] - _dy / _l * 2.0, p3[1] + _dx 
 assert abs((alone - crowded) - sc.brain.cfg.place_w_crowd) < 0.01, ('another of ours 2 m off: worth place_w_crowd less', alone, crowded)
 assert hcb_py.place_value(*args, taken=[(p3[0] + _dx / _l * 2.0, p3[1] + _dy / _l * 2.0, p3[2])]) < 0, '1.3: one of ours 2 m in front of him, in his line to the shooter: no place'
 assert hcb_py.place_value(sc.brain, p3, tuple(man), (p3[0] + _dx / _l * 5.0, p3[1] + _dy / _l * 5.0, cjp[2]), tuple(a_), p3, sc.time) < 0, '1.3: CJ in his line to the shooter: no place'
+# 1.5: CJ 2.3 m beside that line (5 m out): inside the corridor a NEW place needs (2.4 m + 2 cm a metre), outside the one a place he HOLDS
+#      goes with (2 m + 2 cm a metre) - no flapping between the two
+_cj23 = (p3[0] + _dx / _l * 5.0 - _dy / _l * 2.3, p3[1] + _dy / _l * 5.0 + _dx / _l * 2.3, cjp[2])
+assert hcb_py.place_value(sc.brain, p3, tuple(man), _cj23, tuple(a_), p3, sc.time) < 0 and hcb_py.place_value(sc.brain, p3, tuple(man), _cj23, tuple(a_), p3, sc.time, keep=1) >= 0, '1.5: a new place keeps 0.4 m more off the line of CJ than a place he holds'
 on_top = hcb_py.place_value(*args, taken=[(p3[0] + 0.8, p3[1], p3[2])])
 assert on_top < 0, 'and within 1.2 m of his place it is no place at all'
 dx, dy = p3[0] - cjp[0], p3[1] - cjp[1]; l_ = math.hypot(dx, dy)

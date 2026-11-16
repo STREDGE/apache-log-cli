@@ -59,6 +59,12 @@ HID int hcb_agent_failed(const hcb_brain *b, u32 id, u32 now) {
     for (i = 0; i < 8; i++) if (b->ag[i].used && b->ag[i].id == id) return b->ag[i].failed_at && now - b->ag[i].failed_at >= 1500;
     return 0;
 }
+/* 1.5: why this man did what he did at his last look (HCB_WHY2_*; 0 = not known) */
+HID int hcb_agent_why(const hcb_brain *b, u32 id) {
+    int i;
+    for (i = 0; i < 8; i++) if (b->ag[i].used && b->ag[i].id == id) return b->ag[i].why;
+    return 0;
+}
 HID void hcb_agent_forgive(hcb_brain *b, u32 id) {
     int i;
     for (i = 0; i < 8; i++) if (b->ag[i].used && b->ag[i].id == id) { b->ag[i].fails = 0; b->ag[i].n_path = 0; b->ag[i].failed_at = 0; }
@@ -83,15 +89,16 @@ HID void hcb_agent_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
     }
     for (i = 0; i < 8; i++) if (b->ag[i].used && now - b->ag[i].last_seen > 3000 && b->ag[i].last_seen) b->ag[i].used = 0;
     /* 1.1 (the half-hour run: two bodyguards' places came out 0.8 m apart beside a wall and the men stood shoulder in shoulder):
-       no two places nearer than 0.8 m (shoulder to shoulder) - the later one of a pair is moved off along the line between them */
+       no two places nearer than 0.8 m - the later one of a pair is moved off along the line between them. 1.5 (the fifth 2.0 log:
+       the brain itself put two of the three at CJ's side within a metre of each other in 58 looks, and they jostled): 1.1 m */
     for (i = 1; i < out->n_posts; i++) {
         int j;
         for (j = 0; j < i; j++) {
             hcb_vec dv_ = flat(v_sub(out->posts[i].at, out->posts[j].at));
             float l_ = v_len(dv_);
-            if (l_ >= 0.8f) continue;
+            if (l_ >= 1.1f) continue;
             if (l_ < 0.05f) { dv_.x = 1.0f; dv_.y = 0.0f; l_ = 1.0f; }
-            out->posts[i].at.x = out->posts[j].at.x + dv_.x / l_ * 0.8f; out->posts[i].at.y = out->posts[j].at.y + dv_.y / l_ * 0.8f;
+            out->posts[i].at.x = out->posts[j].at.x + dv_.x / l_ * 1.1f; out->posts[i].at.y = out->posts[j].at.y + dv_.y / l_ * 1.1f;
         }
     }
     for (i = 0; i < out->n_posts; i++) {

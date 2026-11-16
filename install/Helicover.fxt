@@ -78,8 +78,8 @@ HCMED2 ~g~MEDIC:~w~ you are good to go.
 HCBURN ~r~CAR ON FIRE!~w~ Get away from it.
 HCEVADE ~r~TAKING HITS!~w~ Pilot breaking away.
 HCSHOT ~r~TAKING FIRE!~w~ Pilot breaking away.
-HCHELLO ~b~HELICOVER 2.0 BETA 5~w~ ready. CLEO menu > Helicover.
-HCHELLV ~b~HELICOVER 2.0 BETA 5~w~ ready. Map marker is off here.
+HCHELLO ~b~HELICOVER 2.0 BETA 6~w~ ready. CLEO menu > Helicover.
+HCHELLV ~b~HELICOVER 2.0 BETA 6~w~ ready. Map marker is off here.
 RGDEP ~b~PILOT:~w~ team going down the ropes.
 RGDONE ~g~SQUAD:~w~ team back aboard.
 RGFAIL ~r~HELICOVER:~w~ could not load the team.

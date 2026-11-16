@@ -77,10 +77,10 @@ def nav_way(brain, a, b, now, n=10):
     return None if k < 0 else [(wp[i].x, wp[i].y, wp[i].z) for i in range(k)]
 
 
-def place_value(brain, anchor, man, cj, threat, at, now, others=(), taken=(), cj_dir=(1., 0., 0.), cj_fires=0):
+def place_value(brain, anchor, man, cj, threat, at, now, others=(), taken=(), cj_dir=(1., 0., 0.), cj_fires=0, keep=0):
     """What the place `at` is worth to the man (hcb_places.c), with what the brain knows now; < 0 = not a place."""
     oth = (hcb_vec * max(1, len(others)))(*[vec(*o) for o in others]); tk = (hcb_vec * max(1, len(taken)))(*[vec(*t) for t in taken])
-    return LIB.hcb_place_value(brain.mem, vec(*anchor), vec(*man), vec(*cj), vec(*threat), oth, len(others), tk, len(taken), vec(*cj_dir), cj_fires, vec(*at), now)
+    return LIB.hcb_place_value(brain.mem, vec(*anchor), vec(*man), vec(*cj), vec(*threat), oth, len(others), tk, len(taken), vec(*cj_dir), (1 if cj_fires else 0) | (2 if keep else 0), vec(*at), now)
 
 
 def nav_cell(brain, x, y, now):

@@ -146,7 +146,8 @@ API float hcb_place_value(hcb_brain *b, hcb_vec anchor, hcb_vec man, hcb_vec cj,
     place_in in;
     int k, cover;
     zero(&in, sizeof in); zero(&none, sizeof none);
-    in.anchor = anchor; in.man = man; in.cj = cj; in.threat = threat; in.reach = 7.5f; in.cj_dir = cj_dir; in.cj_fires = (u8)(cj_fires != 0);
+    in.anchor = anchor; in.man = man; in.cj = cj; in.threat = threat; in.reach = 7.5f; in.cj_dir = cj_dir; in.cj_fires = (u8)((cj_fires & 1) != 0);
+    in.keep = (u8)((cj_fires & 2) != 0);                               /* (1.5: bit 1 - the place is one he holds) */
     for (k = 0; k < n_others && k < 2; k++) in.other[in.n_other++] = others[k];
     for (k = 0; k < n_taken && k < 8; k++) in.taken[in.n_taken++] = taken[k];
     return hcb_place_score(b, &none, &in, at, now, 0, &cover);

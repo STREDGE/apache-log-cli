@@ -73,7 +73,8 @@ s.label('MK_NOT_HOLD');s.eq(19,1,'MK_DONE')
 a(0x0085,V(8),V(13));a(0x0062,V(8),V(20))                               # 8@ = how long he has waited
 s.get(9,b.BRAIN_HELLO);s.check(0x0039,[V(9),I(b.BRAIN_MAGIC)],'MK_GROUND')
 a(0x0e48,V(21),I(10),I(7))
-s.eq(24,1,'MK_NOT_READY');s.go('MK_ROPE')
+s.eq(24,1,'MK_NOT_READY');s.eq(23,1,'MK_NOT_READY');s.go('MK_ROPE')   # (2.0 beta 6: only over a ROOF the brain chose (ow_ok 1) - the fifth log: the answer about
+#  the pickup over his own head (ow_ok 2) was still standing a pass after he was aboard, and a new marksman went down the rope on the spot)
 s.label('MK_NOT_READY');s.check(0x8019,[V(8),I(45000)],'MK_GROUND');s.eq(23,0,'MK_DONE');s.check(0x8019,[V(8),I(15000)],'MK_GROUND');s.go('MK_DONE')
 s.label('MK_ROPE');s.get(6,b.PUB+1);s.check(0x056e,[V(6)],'MK_GROUND')
 a(0x0247,I(MODELS[3]));a(0x0247,I(WEAPONS[3][1]));a(0x038b);a(1,I(0));s.check(0x0248,[I(MODELS[3])],'MK_DONE');s.check(0x0248,[I(WEAPONS[3][1])],'MK_DONE');s.check(0x056e,[V(6)],'MK_DONE')

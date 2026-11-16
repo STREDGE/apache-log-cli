@@ -217,7 +217,7 @@ static void deal_quarters(detail *dt, hcb_vec cjp, hcb_vec ahead, hcb_vec side, 
             cost += dist2d(men[who[i]]->pos, slot[p_[i]]); used |= 1 << p_[i];
             if (seg_dist(flat(cjp), a_, b2_, &t_) < 12.0f) cost += 25.0f;   /* (a way past CJ: he would be seen - another quarter if one is near) */
         }
-        if (fight) { if (!(used & 1)) cost += 30.0f; if (!(used & 2)) cost += 30.0f; }
+        if (fight) { if (!(used & 1)) cost += 80.0f; if (!(used & 2)) cost += 80.0f; }   /* (the quarters towards the threat are manned first - round CJ if need be) */
         if (cost < best) { best = cost; for (i = 0; i < 4; i++) best_p[i] = p_[i]; }
     }
     for (q = 0; q < 4; q++) dt->q_id[q] = 0;
@@ -538,7 +538,7 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                     if (sign) { lk = cjp; lk.z += 0.8f; dt->lead_wave = 1; }
                     dt->leading = 1; out->leading = (u8)(me_cj <= 8.0f); dt->lead_near = (u8)(me_cj <= 6.0f);
                     d_ = ring ? HCB_DUTY_RING : HCB_DUTY_SHIELD;
-                } else if (fight && cj_in) { at = v_add(v_sub(dt->cj_cover, v_mul(u, 0.9f)), v_mul(pr, -0.9f)); crouch = 1; d_ = HCB_DUTY_COVER; dt->leading = 0; }
+                } else if (fight && cj_in) { at = v_sub(dt->cj_cover, v_mul(u, 1.3f)); crouch = 1; d_ = HCB_DUTY_COVER; dt->leading = 0; }   /* (1.5: right behind CJ, 1.3 m - the bodyguards are a metre to each side; 0.9 m from one of them before) */
                 else if (fight) { at = v_add(v_sub(cjp, v_mul(u, 0.5f)), v_mul(pr, -1.3f)); d_ = HCB_DUTY_SHIELD; dt->leading = 0; }
                 else { at = at_off(cjp, f, -0.8f, r, 1.2f); lk = duty == HCB_DUTY_WATCH ? T : at_off(cjp, f, 10, r, 6); dt->leading = 0; }   /* (1.0: at CJ's right shoulder, a step behind) */
                 mv = pace(dist2d(at, men[i]->pos), fight ? cs : cj_speed);
@@ -589,7 +589,7 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                     if (!fight) lk = duty == HCB_DUTY_WATCH ? T : at_off(cjp, f, 25, r, 0);
                     if (i < MAXD) dt->man[i].hold_ok = 0;
                 } else
-                if (!ring && s->body && i < MAXD && !escort) {
+                if (!ring && i < MAXD && (fight || (s->body && !escort))) {   /* (the scripts' body: places in a fight only, as before 1.5) */
                     int hk;
                     float dm;
                     /* what his place is to hide him from: the threat in a fight (and a suspect for the front two); in peace the far side

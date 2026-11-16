@@ -205,9 +205,13 @@ typedef struct squad {
     float mk_best_d;                          /* 1.3: the nearest he has been to the wall he goes to (sliding along it is no progress) */
     u32 mk_down_until;                        /* 1.3: "to me" - no high place for him until then (he comes down with the others) */
     u32 mk_heli_done;                         /* 1.3 (beta 5): the helicopter's try to pick him up ended (a minute before the next) */
+    hcb_vec mk_foot;                          /* 1.5: the foot of the wall below his roof, on his side (the map's ground) */
+    u8 mk_foot_ok, mk_r_[3];
     float mk_z0;            /* his feet when the climb began */
-    hcb_vec mk_bad[4];      /* places he could not get up to (left alone for a minute) */
-    u32 mk_bad_t[4];
+    hcb_vec mk_bad[8];      /* places he could not get up to (left alone for a minute; 1.5: eight, and a high cell with no way to it
+                               takes its whole roof with it - mk_bad_r) */
+    u32 mk_bad_t[8];
+    float mk_bad_r[8];
 } squad;
 struct hcb_brain {
     hcb_cfg cfg;
@@ -278,6 +282,7 @@ HID int hcb_nav_narrow(const hcb_brain *b, hcb_vec at);                         
 HID int hcb_nav_ground(const hcb_brain *b, hcb_vec at, float *z);                           /* 1 ground known there */
 /* hcb_agent.c */
 HID void hcb_agent_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out);
+HID int hcb_agent_why(const hcb_brain *b, u32 id);   /* 1.5: why he did what he did at his last look (HCB_WHY2_*) */
 /* hcb_squad.c */
 HID void hcb_squad_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out);
 HID int hcb_squad_roping(const hcb_snapshot *s, u32 id);

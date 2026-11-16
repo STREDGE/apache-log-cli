@@ -190,7 +190,7 @@ assert order[:2] == [HCB_TASK_CONSOLIDATE, HCB_TASK_REGROUP], [TASK[t] for t in 
 assert 70 <= tasks.count(HCB_TASK_CONSOLIDATE) <= 90, 'eight seconds of all-round watch'
 assert all(d2(c_, gp) > 3.0 for c_ in cons), ('nobody stands ON the spot', cons)
 assert sc.last_out.umode == HCB_UMODE_ASSAULT, 'the mode is still ASSAULT: it waits for the next target'
-assert sum(1 for w in team if d2(pos(sc, w), sc.cj['pos']) < 5.0) == 3 and all(d2(pos(sc, w), sc.cj['pos']) < 30 for w in team), 'everybody is back with CJ, three at his side'
+assert sum(1 for w in team if d2(pos(sc, w), sc.cj['pos']) < 5.0) == 3 and all(d2(pos(sc, w), sc.cj['pos']) < 34 for w in team), 'everybody is back with CJ, three at his side (1.5: the outer men at their places 15-33 m out)'
 passed('The target is down: CONSOLIDATE - eight seconds of all-round watch beside the spot (nobody on it) - then REGROUP: back to CJ, three at his side again; the mode stays ASSAULT and waits for the next target')
 
 # ------------------------------------------------------------------ the target out of sight: to where it was last SEEN, not to where it is

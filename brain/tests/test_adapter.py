@@ -55,6 +55,8 @@ F_EV_CLEAR, F_SET_SEC, F_GUN_CTOR, F_GUN_CTL, F_RELOAD, ROPES_T = 0x64e734, 0x64
 F_FIRE, F_FLASH = 0x700c64, 0x59bcb0   # CWeapon::Fire, CPed::DoGunFlash (1.4.1: the gunners' own weapon fire)
 F_POINT_ARM, F_ABORT_ARM, F_JUMP = 0x5d3b94, 0x5d3e0c, 0x647668      # 1.3: IKChainManager_c::PointArm / AbortPointArm, CTaskComplexJump ctor
 VT_JUMP = 0x83a5d0 + 0x10
+VT_IK_MAN, VT_IK_ARM, TASK_POOL, IK_MAN = 0x8354b8 + 0x10, 0x835600 + 0x10, 0xbc3be8, 0xc98340   # 1.4.2: the IK task (secondary slot 5), an arm's chain, CPools::ms_pTaskPool, g_ikChainMan
+F_DAMAGE, GOT_DAMAGE, PLT_DAMAGE, F_REGREF = 0x443b74, 0x83eba8, 0x21b5f0, 0x4f3b58   # 1.4.2: ComputeDamageResponse, its GOT slot and PLT stub; CEntity::RegisterReference
 GOT_SCRIPTS, GOT_HUD, GOT_GUNSHOT = 0x845438, 0x845ec8, 0x843f10
 GOT_IGNORE, IGNORE_ENTITY, F_COLLECT, F_VARPTR, SCRIPT_PARAMS = 0x84b180, 0xbdcaf8, 0x3f1fcc, 0x3f2654, 0xa001ac
 HC_STATE = 0x48456A00
@@ -154,9 +156,10 @@ class Emu:
         self.ground = lambda x, y, z: (1, 0.)                                # flat ground at height 0 everywhere
         self.ev_clears, self.sec_tasks, self.gun_cmds, self.reloads, self.gun_fires, self.thread_runs = [], [], [], [], True, True
         self.arm_calls, self.arm_aborts, self.jumps = [], [], []          # 1.3
+        self.real_abort, self.damage_calls, self.damage_crash, self.on_screen = False, [], None, True   # 1.4.2: the game's own AbortPointArm runs; ComputeDamageResponse entries
         for addr, fn in ((F_TASK_NEW, self.g_task_new), (F_GOTO, self.g_goto), (F_SHOOT, self.g_shoot), (F_SET_TASK, self.g_set_task), (F_GROUND, self.g_ground),
                          (F_EV_CLEAR, self.g_ev_clear), (F_SET_SEC, self.g_set_sec), (F_GUN_CTOR, self.g_gun_ctor), (F_GUN_CTL, self.g_gun_ctl), (F_RELOAD, self.g_reload),
-                         (F_POINT_ARM, self.g_point_arm), (F_ABORT_ARM, self.g_abort_arm), (F_JUMP, self.g_jump)):
+                         (F_POINT_ARM, self.g_point_arm), (F_ABORT_ARM, self.g_abort_arm), (F_JUMP, self.g_jump), (F_REGREF, self.g_regref), (F_DAMAGE, self.g_damage)):
             uc.hook_add(UC_HOOK_CODE, fn, begin=GTA + addr, end=GTA + addr)
         # the virtual functions the mod calls on a task: its type (+0x28) and "can you stop now?" (+0x38)
         for vt, typ in ((VT_USE_GUN, 1017), (VT_KILL, 1000), (VT_GOTO, 903), (VT_SHOOT, 911), (VT_ROPE, 1407), (VT_JUMP, 211)):
@@ -192,6 +195,8 @@ class Emu:
         uc.mem_write(GTA + PED_POOL, struct.pack('<Q', WORLD)); uc.mem_write(GTA + VEH_POOL, struct.pack('<Q', WORLD + 0x100))
         uc.mem_write(GTA + RSGLOBAL + 8, struct.pack('<ii', W, H))
         uc.mem_write(GTA + TIME_MS, struct.pack('<I', 500000))
+        self.task_flags = self.alloc(64); uc.mem_write(self.task_flags, b'\x80' * 64)       # 1.4.2: the game's task pool (64 free places)
+        self.task_pool = self.alloc(0x20); uc.mem_write(self.task_pool, struct.pack('<QQi', self.alloc(0x10), self.task_flags, 64)); self.w64(GTA + TASK_POOL, self.task_pool)
         uc.mem_write(GTA + PLAYER_FOCUS, b'\0'); uc.mem_write(GTA + USER_PAUSE, b'\0\0'); uc.mem_write(GTA + CUTSCENE, b'\0'); uc.mem_write(GTA + MISSION_FLAG, struct.pack('<I', 0))
         self.wanted = self.alloc(0x40)
         self.shared = self.alloc(0x2000)
@@ -226,6 +231,8 @@ class Emu:
         self.wf(mat, face[1], -face[0], 0., 0., face[0], face[1], 0., 0., 0., 0., 1., 0., x, y, z, 0.)
         self.w64(p + 0x18, mat); uc.mem_write(p + 0x5a, bytes([3])); uc.mem_write(p + 0x32, struct.pack('<h', model))
         intel = self.alloc(0x440); self.w64(intel, p); self.w64(p + 0x538, intel)
+        stats = self.alloc(0x40); self.wf(stats + 0x2c, 1.); self.w64(p + 0x728, stats)    # (1.4.2: CPedStats: the game's damage code reads +0x2c)
+        self.w64(p + 0x20, self.alloc(0x10))                                               # (1.4.2: his RwObject - a man the game draws; PointArm reads it)
         uc.mem_write(p + 0x548, b'\x01'); self.w32(p + 0x54c, 1); self.wf(p + 0x6ac, health); self.w32(p + 0x720, pedtype)
         uc.mem_write(p + 0x8dc, b'\x00'); self.w32(p + 0x730, weapon); self.w32(p + 0x738, 30); self.w32(p + 0x73c, 500)   # (a full magazine, rounds in reserve)
         return p
@@ -473,11 +480,31 @@ class Emu:
         self._ret(uc, 1)
     def g_point_arm(self, uc, *_):
         pos = struct.unpack('<3f', bytes(uc.mem_read(uc.reg_read(X[6]), 12))) if uc.reg_read(X[6]) else None
-        self.arm_calls.append(dict(self_=uc.reg_read(X[0]), name=self.cstr(uc.reg_read(X[1])), arm=uc.reg_read(X[2]) & 0xffffffff, ped=uc.reg_read(X[3]), ent=uc.reg_read(X[4]),
+        arm, ped = uc.reg_read(X[2]) & 0xffffffff, uc.reg_read(X[3])
+        self.arm_calls.append(dict(self_=uc.reg_read(X[0]), name=self.cstr(uc.reg_read(X[1])), arm=arm, ped=ped, ent=uc.reg_read(X[4]),
                                    bone=uc.reg_read(X[5]) & 0xffffffff, pos=pos, rate=round(fl(uc.reg_read(S[0])), 3), time=uc.reg_read(X[7]) & 0xffffffff, blend=round(fl(uc.reg_read(S[1])), 1)))
+        # (1.4.2: what the game's PointArm leaves behind for a man on the screen: his IK task in secondary slot 5, made when missing,
+        #  and the arm's chain in its slot arm + 1 - as 0x5d3cc8..0x5d3dc8 do it)
+        intel = self.r64(ped + 0x538); ik = self.r64(intel + 0x58)
+        if not self.on_screen:                                          # (off the screen the game's PointArm returns before it looks: 0x5d3bf4)
+            return self._ret(uc)
+        if not ik:
+            ik = self.alloc(0x38); uc.mem_write(ik, bytes(0x38)); self.w64(ik, GTA + VT_IK_MAN); self.w64(intel + 0x58, ik)
+        if not self.r64(ik + 0x10 + 8 * (arm + 1)):
+            ch = self.alloc(0x70); uc.mem_write(ch, bytes(0x70)); self.w64(ch, GTA + VT_IK_ARM); self.w32(ch + 0x10, 0xffffffff); self.w64(ik + 0x10 + 8 * (arm + 1), ch)
         self._ret(uc)
     def g_abort_arm(self, uc, *_):
-        self.arm_aborts.append((uc.reg_read(X[1]) & 0xffffffff, uc.reg_read(X[2]))); self._ret(uc)
+        self.arm_aborts.append((uc.reg_read(X[1]) & 0xffffffff, uc.reg_read(X[2])))
+        if not self.real_abort:                                         # (1.4.2: or the game's own code runs on, with what is in memory)
+            self._ret(uc)
+    def g_regref(self, uc, *_): self._ret(uc)                           # (CEntity::RegisterReference: the game's reference lists are not laid out here)
+    def g_damage(self, uc, *_):
+        calc = uc.reg_read(X[0])
+        self.damage_calls.append(dict(by=self.r64(calc), raw=round(self.rf(calc + 8), 3), zone=self.r32(calc + 0xc), weapon=self.r32(calc + 0x10), ped=uc.reg_read(X[1])))
+        if self.damage_crash:                                           # (a fault in the game's damage code, delivered here: the crash handler runs, then the game's code goes on)
+            handler, info, ucx = self.damage_crash; self.damage_crash = None
+            uc.reg_write(X[0], 11); uc.reg_write(X[1], info); uc.reg_write(X[2], ucx); self.crash_lr = uc.reg_read(UC_ARM64_REG_LR)
+            uc.reg_write(UC_ARM64_REG_PC, handler)
     def g_jump(self, uc, *_):
         t = uc.reg_read(X[0]); self.w64(t, GTA + VT_JUMP); self.w32(t + 0x18, uc.reg_read(X[1]) & 0xffffffff)
         self.new_tasks.append(dict(kind='jump', task=t, force=uc.reg_read(X[1]) & 0xffffffff)); self.jumps.append(t); self._ret(uc, t)
@@ -579,15 +606,15 @@ N_WORDS = len(re.findall(r'^\s+\{0x', (HERE.parent / 'game' / 'gta_words.h').rea
 # ------------------------------------------------------------------ install
 e = Emu()
 log = e.load()
-slots = [e.slot(g) for g in (GOT_SCRIPTS, GOT_HUD, GOT_GUNSHOT)]
-assert all(MODB <= s < MODB + e.mod_size for s in slots) and len(set(slots)) == 3, [hex(s) for s in slots]
-assert 'the brain is running' in log and '%d instruction words match' % N_WORDS in log and 'brain: 3 of 3' in log and 'CLEO recognised' in log, log
-assert sorted(changed_bytes(e)) == sorted([GOT_SCRIPTS, GOT_HUD, GOT_GUNSHOT]), 'exactly three GOT slots of the game differ, nothing else'
+slots = [e.slot(g) for g in (GOT_SCRIPTS, GOT_HUD, GOT_GUNSHOT, GOT_DAMAGE)]
+assert all(MODB <= s < MODB + e.mod_size for s in slots) and len(set(slots)) == 4, [hex(s) for s in slots]
+assert 'the brain is running' in log and '%d instruction words match' % N_WORDS in log and 'brain: 4 of 4' in log and 'CLEO recognised' in log, log
+assert sorted(changed_bytes(e)) == sorted([GOT_SCRIPTS, GOT_HUD, GOT_GUNSHOT, GOT_DAMAGE]), 'exactly four GOT slots of the game differ, nothing else'
 rw = [p for p in e.prot if p[2] == 3]; ro = [p for p in e.prot if p[2] == 1]
-assert len(rw) == len(ro) == 3 and all(p[0] % 0x4000 == 0 and p[1] == 0x4000 for p in e.prot) and not [p for p in e.prot if p[2] & 4], e.prot
+assert len(rw) == len(ro) == 4 and all(p[0] % 0x4000 == 0 and p[1] == 0x4000 for p in e.prot) and not [p for p in e.prot if p[2] & 4], e.prot
 assert e.items == [] and 'Mods Settings: nothing of the brain' in log and len(e.threads) == 2 and 'hang recorder on' in log and 'way-finding thread on' in log, (e.threads, log)   # (1.1: + the way-finding thread)
 assert not e.cleo_changes(), 'CLEO is not touched before the game runs its scripts'
-passed('On the real libGTASA.so the mod finds all %d instruction words, changes exactly three GOT slots (page made writable, then read-only again; never executable) and nothing else in the game; 1.3: nothing of the brain\'s in Mods Settings (the player: "the old markers switch - what do I need it for?")' % N_WORDS)
+passed('On the real libGTASA.so the mod finds all %d instruction words, changes exactly four GOT slots (1.4.2: + the damage slot; page made writable, then read-only again; never executable) and nothing else in the game; 1.3: nothing of the brain\'s in Mods Settings (the player: "the old markers switch - what do I need it for?")' % N_WORDS)
 e.frame(n=3)
 assert e.orig_calls == {'scripts': 3, 'hud': 3, 'gunshot': 0}, e.orig_calls
 passed('The game\'s own CTheScripts::Process and CHud::Draw are still called, once per call of the mod\'s functions')
@@ -600,7 +627,7 @@ assert not e.polys, 'markers are off: nothing is drawn'
 handled, v, used = e.opcode(5, 5, CMD_STATUS)
 assert handled == 1 and used == 7 and v[:4] == [0, 0, 0, 0], (handled, v, used)
 assert e.call(CI + I_DISPATCH, x=(e.script, e.script + 0x20, 0x0E49)) & 0xff == 0, 'only the one number is taken'
-assert sorted(changed_bytes(e)) == sorted([GOT_SCRIPTS, GOT_HUD, GOT_GUNSHOT]), 'the game\'s own parameter readers ran, nothing else of the game changed'
+assert sorted(changed_bytes(e)) == sorted([GOT_SCRIPTS, GOT_HUD, GOT_GUNSHOT, GOT_DAMAGE]), 'the game\'s own parameter readers ran, nothing else of the game changed'
 passed('The bridge is made with CLEO\'s own code: RegisterOpcode(0E48) on the first frame (the only thing that changes inside CLEO is its opcode map), and CLEO\'s dispatcher then calls the brain with a script whose parameters are read by the game\'s own CollectParameters / GetPointerToScriptVariable')
 assert e.shared_value(HC_HELLO) is None and e.shared_n == 0
 e.frame(n=2)
@@ -631,8 +658,8 @@ refuses(lambda e: e.uc.mem_write(GTA + GOT_SCRIPTS, struct.pack('<Q', 0x73000000
 passed('Another game build (one instruction differs, e.g. the health field at another offset or the parameter reader CLEO uses) or the per-frame slot already taken by another mod: nothing is changed, the log says exactly what differed')
 e = Emu(tweak=lambda e: (e.uc.mem_write(GTA + GOT_HUD, struct.pack('<Q', GTA + F_HUD + 0x1000)), e.uc.mem_write(GTA + GOT_GUNSHOT, struct.pack('<Q', GTA + F_GUNSHOT + 0x1000))))
 log = e.load()
-assert 'the brain is running' in log and 'brain: 1 of 3' in log and 'no markers on screen' in log and 'shots will not be seen' in log, log
-assert sorted(changed_bytes(e)) == [GOT_SCRIPTS] and e.slot(GOT_HUD) == GTA + F_HUD + 0x1000
+assert 'the brain is running' in log and 'brain: 2 of 4' in log and 'no markers on screen' in log and 'shots will not be seen' in log, log
+assert sorted(changed_bytes(e)) == sorted([GOT_SCRIPTS, GOT_DAMAGE]) and e.slot(GOT_HUD) == GTA + F_HUD + 0x1000
 gang_ = e.ped(20, 0, pedtype=7, weapon=30, face=(-1., 0.))
 e.frame(n=3, hud=False)
 t_ = replay_tool.replay(e.save(hud=False))[2]
@@ -771,7 +798,7 @@ for k in range(60):                                                  # three sec
     assert left[1] != 2, 'the gunner in the left door does not fire across the cabin'
 assert rounds and all(r['target'] == H_(gang) for r in rounds) and 1 in states, states
 gaps = [b['t'] - a['t'] for a, b in zip(rounds, rounds[1:])]
-assert min(gaps) >= 130 and 6 <= len(rounds) <= 20 and max(gaps) >= 300, (len(rounds), gaps)
+assert min(gaps) >= 130 and 4 <= len(rounds) <= 20 and max(gaps) >= 300, (len(rounds), gaps)   # (1.5: bursts of three to six and a real breath: fewer rounds in 3 s)
 me = (1.4, 9., 25.3)
 for r in rounds:
     d = [r['end'][i] - me[i] for i in range(3)]
@@ -982,7 +1009,7 @@ e.w32(gang + 0x54c, 1)
 e.gunshot(gang, (0., 0.5, 1.)); until_round()
 e.polys.clear(); e.frame(n=1)
 assert not e.polys, 'nothing drawn'
-e2 = Emu(tweak=lambda e: e.fs.__setitem__('/storage/emulated/0/Android_unprotected/data/com.rockstargames.gtasa/configs/net.helicover.brain.ini', b'[Preferences]\nMarkers = 1\n'))
+e2 = Emu(tweak=lambda e: e.fs.__setitem__('/storage/emulated/0/Android_unprotected/data/com.rockstargames.gtasa/configs/net.helicover.brain.ini', b'[Preferences]\nSettingsVersion = 15\nMarkers = 1\n'))
 e2.load(); e2.frame(n=3)
 assert not e2.polys and e2.items == [], 'a settings file of an earlier version with the markers on: still nothing drawn, nothing in Mods Settings'
 passed('1.3: the markers are gone - nothing is drawn, even when the settings file of an earlier version says Markers = 1, and the brain puts nothing in Mods Settings')
@@ -1161,7 +1188,7 @@ e.call(acts[11][2], x=(11, info, ucx), count=3000000)
 lg_ = e.log()
 cfg = [v for k, v in e.fs.items() if k.endswith('net.helicover.brain.ini')]
 assert 'CRASH: signal 11 (bad memory access)' in lg_ and '0x00000000deadbeef' in lg_ and 'pc 0x%016x' % (GTA + F_LOS + 8) in lg_ and 'lr 0x%016x' % (GTA + F_SCRIPTS) in lg_, lg_[-800:]   # (names come from dladdr in the game)
-assert lg_.rstrip().endswith('(the game ends here: its own crash handler takes over)') and 'brain: 3 of 3' in lg_, 'the block is in the file at once, after everything before it'
+assert lg_.rstrip().endswith('(the game ends here: its own crash handler takes over)') and 'brain: 4 of 4' in lg_, 'the block is in the file at once, after everything before it'
 assert not [k for k in e.fs if k.endswith('hcbrain_crash.txt')] and cfg and b'LastCrash = 99' in cfg[-1], cfg
 assert [a for a in e.sigactions if a[0] == 11], 'and the previous handler is put back (it gets the crash next)'
 assert any(k.startswith('hcbrain_report_') or 'hcbrain_report_' in k for k in e.fs), 'a report is saved too'
@@ -1260,9 +1287,15 @@ passed('0.8 the game\'s own knowledge: CJ swimming (the game\'s water level aske
 e = Emu(tweak=lambda e_: e_.uc.mem_write(GTA + F_SAY, b'\0\0\0\0')); lg_ = e.load()
 assert "the commander's voice off (the code differs)" in lg_ and 'the brain is running' in lg_
 CFG_ = '/storage/emulated/0/Android_unprotected/data/com.rockstargames.gtasa/configs/net.helicover.brain.ini'
-e = Emu(); e.fs[CFG_] = b'[Preferences]\nMarkers = 0\nLastCrash = 22\nWaterOff = 1\n'; lg_ = e.load(); e.frame(n=3)
+e = Emu(); e.fs[CFG_] = b'[Preferences]\nSettingsVersion = 15\nMarkers = 0\nLastCrash = 22\nWaterOff = 1\n'; lg_ = e.load(); e.frame(n=3)
 assert 'water level off (the game crashed in it once)' in lg_ and e.water_calls == 0
 passed('0.8 safety: each of those parts is checked against the game\'s code at the start and left out when it differs; a part the game once crashed in (water level, voice) stays off from the next start on')
+# 1.5: a settings file of an older version (the player's after the crash in step 28: RunFireOff = 1, LastCrash = 28, the old numbers) is not read -
+# the new version mends what crashed; the file is written anew with this version's number and its own values
+e = Emu(); e.fs[CFG_] = b'[Preferences]\nLastCrash = 28\nRunFireOff = 1\nWaterOff = 1\n\n[Tactics]\nOuterPeaceM = 15\n'; lg_ = e.load(); e.frame(n=3)
+cfg_ = e.fs[CFG_].decode()
+assert 'written by an older version: not read' in lg_ and 'water level off' not in lg_ and e.water_calls > 0 and 'RunFireOff' not in cfg_ and 'SettingsVersion = 15' in cfg_ and 'OuterPeaceM = 21' in cfg_, (cfg_[:400], [l_ for l_ in lg_.splitlines() if 'settings' in l_])
+passed('1.5: a settings file written by an older version (crash switches of crashes that version had, its built-in numbers) is not read - the new version starts with its own and writes the file anew, numbered')
 
 # ------------------------------------------------------------------ 1.0: the body (the mod walks the guards) and the map
 def detail_world(tweak=None, cfg=None, n=1):
@@ -1316,12 +1349,12 @@ v = post(e, g1)
 assert 'the body: off (the code differs): the scripts walk the guards' in lg_ and v[1] in (1, 2, 3, 4) and not e.new_tasks and 'the brain is running' in lg_, (v, lg_[-300:])
 head, text, ticks = replay_tool.replay(e.save())
 assert ticks[-1]['snapshot'].body == 0 and all(t['match'] for t in ticks)
-e, (g1,), lg_ = detail_world(cfg=b'[Preferences]\nMarkers = 0\nLastCrash = 23\n')
+e, (g1,), lg_ = detail_world(cfg=b'[Preferences]\nSettingsVersion = 15\nMarkers = 0\nLastCrash = 23\n')
 v = post(e, g1)
 assert 'from now on the scripts walk the guards' in lg_ and not e.new_tasks and b'BodyOff = 1' in e.fs[CFG_] and v[1] != 5, (v, e.fs[CFG_])
-e, (g1,), lg_ = detail_world(cfg=b'[Preferences]\nMarkers = 0\nBodyOff = 1\n')
+e, (g1,), lg_ = detail_world(cfg=b'[Preferences]\nSettingsVersion = 15\nMarkers = 0\nBodyOff = 1\n')
 assert 'the body: off (the game crashed in it once)' in lg_ and post(e, g1)[1] != 5 and b'BodyOff = 1' in e.fs[CFG_]
-e, (g1,), lg_ = detail_world(cfg=b'[Preferences]\nMarkers = 0\nLastCrash = 24\n')
+e, (g1,), lg_ = detail_world(cfg=b'[Preferences]\nSettingsVersion = 15\nMarkers = 0\nLastCrash = 24\n')
 assert b'MapOff = 1' in e.fs[CFG_] and e.ground_calls == 0 and post(e, g1)[1] != 5, e.fs[CFG_]
 passed('1.0 the body, safety: every function is checked by its first words - when one differs the mod does not walk anybody and the scripts do it as before; a crash while giving a task (step 23) or in a ground question (step 24) turns that part off for good (BodyOff / MapOff in the settings file)')
 # the map: the ground cell by cell, what stands between cells, straight legs; a high place for the marksman
@@ -1454,6 +1487,80 @@ for k in range(20):
 sh = [t for t in e.new_tasks if t['kind'] == 'shoot']
 assert len(sh) <= 2, ('a go-and-shoot task at the same man is moved on, not made anew', [t['kind'] for t in e.new_tasks])
 passed('1.3 fire on the move: a guard on his way with an attacker near goes facing him - %s; a go-and-shoot task is moved on, not made anew; nothing ever in his attack slot while he walks' % how)
+# 1.4.2 the player's crash: signal 11, pc CTaskSimpleIKManager::GetTaskAtSlot+4, lr IKChainManager_c::AbortPointArm+0x2c, fault
+# address 0x18, inside the brain 28 (the end of a guard's sprint fire). The game's AbortPointArm takes the ped's IK task (CTaskManager
+# secondary slot 5) without looking whether it is there - and the game ends that task by itself once its chains are done, or never
+# makes it for a man off the screen. Here the game's OWN AbortPointArm runs on the emulated memory (GetTaskSecondary, GetTaskAtSlot,
+# CTaskSimpleIKChain::BlendOut are the real code): a call for a man without his IK task faults exactly as on the player's tablet.
+def sprint_world(tweak=None):
+    e, g1, gang, _ = fight_world(far=True); e.real_abort = True
+    if tweak: tweak(e, g1)
+    for k in range(30):
+        if k % 9 == 0: e.gunshot(gang, (0., 0.5, 1.))
+        e.frame(ms=50, hud=False); squad(e, g1); post(e, g1)
+        if [c for c in e.arm_calls if c['ped'] == g1] and k >= 8: break
+    return e, g1, gang
+def quiet(e, n=16):                                                  # (no more post questions: his sprint fire ends 400 ms later)
+    for _ in range(n): e.frame(ms=50, hud=False)
+faults = []
+e, g1, gang = sprint_world()
+intel = e.r64(g1 + 0x538); ik = e.r64(intel + 0x58)
+assert [c for c in e.arm_calls if c['ped'] == g1] and ik and e.r64(ik) == GTA + VT_IK_MAN and e.r64(ik + 0x18) and e.r64(ik + 0x20), 'sprinting at his man: both arms on him, the IK task and two arm chains made by PointArm'
+# the crash, on the game's own code: AbortPointArm for a man whose IK task the game has ended
+e.uc.hook_add(UC_HOOK_MEM_READ_UNMAPPED, lambda uc, acc, addr, size, val, _: faults.append((addr, uc.reg_read(UC_ARM64_REG_PC) - GTA)) and False)
+e.w64(intel + 0x58, 0)
+try:
+    e.call(GTA + F_ABORT_ARM, x=(GTA + IK_MAN, 0, g1, 200)); crashed = False
+except UcError:
+    crashed = True
+assert crashed and faults == [(0x18, 0x5f6ff4)], faults
+# the mod: he runs off the screen (the game's PointArm makes nothing there) and the game ends his IK task; then his sprint fire ends
+e.on_screen = False; n0, na = len(e.arm_aborts), len(e.arm_calls)
+quiet(e)                                                             # (what 1.4 did here: AbortPointArm(0) and (1) -> the same fault)
+assert [c for c in e.arm_calls[na:] if c['ped'] == g1], 'PointArm was still asked while his sprint fire lasted (nothing made: off the screen)'
+assert len(e.arm_aborts) == n0 and faults == [(0x18, 0x5f6ff4)], ('the IK task is gone: the mod does not call AbortPointArm', e.arm_aborts[n0:], faults)
+# the IK task still there: the game's own AbortPointArm runs and blends his arms out
+e, g1, gang = sprint_world()
+ik = e.r64(e.r64(g1 + 0x538) + 0x58); chains = [e.r64(ik + 0x18), e.r64(ik + 0x20)]
+n0 = len(e.arm_aborts); quiet(e)
+ab = [a for a in e.arm_aborts[n0:] if a[1] == g1]
+assert sorted(a[0] for a in ab) == [0, 1] and all(e.r32(c + 0x68) == 1 for c in chains), (ab, [e.r32(c + 0x68) for c in chains])   # (m_isBlendingOut, set by the game's BlendOut)
+assert all(e.r32(GTA + TIME_MS) - 800 <= e.r32(c + 0x5c) - 200 <= e.r32(GTA + TIME_MS) for c in chains), 'blended out over 200 ms from the moment it was asked'
+# the IK task there but one arm's chain gone (that arm's blend-out has ended): only the other arm is asked
+e, g1, gang = sprint_world()
+ik = e.r64(e.r64(g1 + 0x538) + 0x58); e.w64(ik + 0x20, 0); e.on_screen = False     # (off the screen: PointArm does not make it again)
+n0 = len(e.arm_aborts); quiet(e)
+assert [a[0] for a in e.arm_aborts[n0:] if a[1] == g1] == [0]
+# deleted in the middle of his sprint fire: nothing of his is touched
+e, g1, gang = sprint_world()
+na, nb = len(e.arm_calls), len(e.arm_aborts)
+e.uc.mem_write(e.ped_flags + (g1 - e.ped_objs) // PED_STRIDE, b'\x80'); quiet(e)
+assert not [c for c in e.arm_calls[na:] if c['ped'] == g1] and not [a for a in e.arm_aborts[nb:] if a[1] == g1]
+# into a car: no arm-pointing while he sits there; his arms are lowered at the end only if the game still has them
+e, g1, gang = sprint_world()
+car = e.veh(9, 7); e.w64(g1 + 0x708, car); e.uc.mem_write(g1 + 0x585, b'\x01')
+e.w64(e.r64(g1 + 0x538) + 0x58, 0)                                  # (the game ends his IK task as he gets in)
+na, nb = len(e.arm_calls), len(e.arm_aborts)
+for k in range(4): e.frame(ms=50, hud=False); post(e, g1)
+quiet(e)
+assert not [c for c in e.arm_calls[na:] if c['ped'] == g1] and not [a for a in e.arm_aborts[nb:] if a[1] == g1]
+# dead: no arm-pointing at him (and the game's own AbortPointArm, if he still has the task, is safe)
+e, g1, gang = sprint_world()
+na = len(e.arm_calls); e.w32(g1 + 0x54c, 55); quiet(e)
+assert not [c for c in e.arm_calls[na:] if c['ped'] == g1]
+# PointArm would have to make his IK task and the game's task pool is full (its CTask::operator new gives 0 and PointArm does not
+# look): the arms are left alone; another kind of task in his IK slot: nothing of the mod's goes near it
+e, g1, gang = sprint_world(lambda e, g1: e.uc.mem_write(e.task_flags, bytes(64)))
+assert not [c for c in e.arm_calls if c['ped'] == g1] and e.r64(e.r64(g1 + 0x538) + 0x58) == 0, 'no room in the task pool: no PointArm'
+quiet(e, 80)
+assert re.search(r'sprint arms: pointed 0 lowered 0 left alone [1-9]', e.log()), [l_ for l_ in e.log().splitlines() if 'sprint arms' in l_][-2:]
+def foreign(e, g1):                                                  # (a task of another kind in his IK slot: a walk's table)
+    e.other = e.alloc(0x40); e.w64(e.other, GTA + VT_GOTO); e.w64(e.r64(g1 + 0x538) + 0x58, e.other)
+e, g1, gang = sprint_world(foreign)
+quiet(e)
+assert not [c for c in e.arm_calls if c['ped'] == g1] and not [a for a in e.arm_aborts if a[1] == g1] and e.r64(e.r64(g1 + 0x538) + 0x58) == e.other
+assert not faults[1:], faults
+passed('1.4.2 the player\'s crash (signal 11 in CTaskSimpleIKManager::GetTaskAtSlot+4, fault address 0x18, from AbortPointArm at the end of a guard\'s sprint fire): reproduced on the game\'s own code - AbortPointArm for a man whose IK task (secondary slot 5) the game has ended reads 0x18; the mod now reads the same fields first (ped +0x538, +0x58 the IK task with its table, +0x18 / +0x20 the arm chains): no IK task - no call; IK task and chains there - the game\'s own AbortPointArm runs and blends both arms out over 200 ms; one chain gone - only the other arm; the man deleted, in a car, dead - nothing; PointArm only when the game has his IK task or room in its task pool to make it; another kind of task in that slot - left alone')
 # the game AI kept off: the empty decision maker is put back, a flight in his event slot is removed, a walk is left alone
 e, (g1,), _ = detail_world()
 intel = e.r64(g1 + 0x538); e.w32(intel + 0x160, 5); post(e, g1)
@@ -1504,15 +1611,15 @@ e.frame(n=300, ms=100, hud=False)
 assert abs(e.rf(e.cj + 0x6ac) - 160.) < .01 and e.shared_value(HC_STATE + 578) == 2, ('up to HIS maximum, not past it, and "well again"', e.rf(e.cj + 0x6ac))
 passed('1.3 the medic aboard: CJ in our helicopter gets 5 health a second up to his own maximum (the game\'s +0x6b0 - 160 here), ours aboard are healed too, the scripts are told "healing" and "well again"; on foot nothing')
 # the settings file: every tactical number, checked
-e = Emu(); e.fs[CFG_] = b'[Preferences]\nMarkers = 0\n\n[Tactics]\nGatherM = 40\nRiflesPerTarget = 9\nCornerMs = abc\nPlaceFire = 0.55\n'; lg_ = e.load()
+e = Emu(); e.fs[CFG_] = b'[Preferences]\nSettingsVersion = 15\nMarkers = 0\n\n[Tactics]\nGatherM = 40\nRiflesPerTarget = 9\nCornerMs = abc\nPlaceFire = 0.55\n'; lg_ = e.load()
 assert 'tactical numbers from the settings file: 2 changed, 2 ignored' in lg_, [l_ for l_ in lg_.splitlines() if 'tactical' in l_]
 out_ = e.fs[CFG_].decode()
 assert '[Tactics]' in out_ and '\nGatherM = 40 ' in out_ and '\nPlaceFire = 0.55 ' in out_ and '\nRiflesPerTarget = 3 ' in out_ and '\nCornerMs = 800 ' in out_ and out_.count('\n') > 35, out_[:600]
 e2 = Emu(); e2.fs[CFG_] = e.fs[CFG_] + b''; lg2 = e2.load()
 assert 'tactical numbers from the settings file: 2 changed, 0 ignored' in lg2 and e2.fs[CFG_] == e.fs[CFG_], 'the file the mod wrote reads back the same'
-e3 = Emu(gun=True); e3.fs[CFG_] = b'[Preferences]\nMarkers = 0\nLastCrash = 26\n'; lg3 = e3.load()
+e3 = Emu(gun=True); e3.fs[CFG_] = b'[Preferences]\nSettingsVersion = 15\nMarkers = 0\nLastCrash = 26\n'; lg3 = e3.load()
 assert b'GunOff = 1' in e3.fs[CFG_] and 'the scripts fire the guards\' weapons from now on' in lg3
-e3 = Emu(gun=True); e3.fs[CFG_] = b'[Preferences]\nMarkers = 0\nMindOff = 1\nRopeOff = 1\nGunOff = 1\n'; lg3 = e3.load()
+e3 = Emu(gun=True); e3.fs[CFG_] = b'[Preferences]\nSettingsVersion = 15\nMarkers = 0\nMindOff = 1\nRopeOff = 1\nGunOff = 1\n'; lg3 = e3.load()
 assert 'the game AI kept off the guards: off in the settings; their weapons: the scripts (off in the settings); their ropes: the game\'s (off in the settings)' in lg3, lg3[-400:]
 passed('1.1 the settings file: every tactical number is written to configs/net.helicover.brain.ini ([Tactics], with what it means and its limits); a changed value is taken at the next start, one that is not a number or outside its limits is ignored and written back as the built-in one; MindOff / GunOff / RopeOff switch those parts off, and a crash inside one of them (steps 25-27) does it by itself')
 
@@ -1573,6 +1680,77 @@ assert 'the map of earlier games: 1 cells' in lg3 and 'the brain is running' in 
 e4 = Emu(); e4.fs[MAPF] = b'junk' * 10; lg4 = e4.load()
 assert 'the map of earlier games: 0 cells' in lg4 and 'the brain is running' in lg4
 passed('1.1 the map between games: the cells asked about are kept (16384 of them) and written by the thread to configs/net.helicover.brain.map; in the next game the same ground is answered from the file - %d cells in 2.5 s with a quarter of the game\'s ground calls or fewer; the map\'s rays do not count cars; a damaged file or cell is left out' % known)
+
+# ------------------------------------------------------------------ 1.4.2: the damage our men do (the player: "the guards kill too fast -
+# an enemy dies in a fraction of a second; make them kill several times slower, so the fights last and the tactics show")
+def hit(e, by, victim, raw=40., zone=3, weapon=31, done=0):
+    """What CWeapon::GenerateDamageEvent does for a bullet (0x7068c4..0x706a00): a CPedDamageResponseCalculator and the event's
+    empty response, then ComputeDamageResponse through its PLT stub, i.e. through the GOT slot - the game's own code works the
+    hit out (the ped's weakness, armour, the instant kill for a head hit, death)."""
+    calc, resp = e.alloc(0x18), e.alloc(0x10)
+    e.uc.mem_write(calc, struct.pack('<QfiiB3x', by, raw, zone, weapon, 0)); e.uc.mem_write(resp, bytes(10) + bytes([done, 0]))
+    e.call(GTA + PLT_DAMAGE, x=(calc, victim, resp, 1))
+    lost, _, killed, instant = struct.unpack('<ffBB', bytes(e.uc.mem_read(resp, 10)))
+    return dict(lost=round(lost, 2), killed=killed, instant=instant, hp=round(e.rf(victim + 0x6ac), 2), raw=round(e.rf(calc + 8), 2), zone=e.r32(calc + 0xc))
+def damage_world(cfg=None):
+    e = Emu()
+    if cfg is not None: e.fs[CFG_] = cfg
+    lg_ = e.load()
+    pilot = e.ped(0, 8, 25., pedtype=8); heli = e.veh(0, 8, 25., vtype=3, driver=pilot); gn = e.ped(0.5, 8, 25., pedtype=8, weapon=31)
+    g1 = e.ped(3, 2, pedtype=8, weapon=31)
+    e.share(HC_STATE + 21, e.handle(heli) & 0x7fffffff); e.share(HC_STATE + 22, e.handle(pilot)); e.share(HC_STATE + 23, e.handle(gn)); e.share(HC_STATE + 71, e.handle(g1)); e.share(HC_HELLO, 0)
+    foes = [e.ped(20 + k, 4 * (k % 3), pedtype=7, weapon=30) for k in range(10)]
+    stranger = e.ped(-10, 4, pedtype=7, weapon=30)
+    e.frame(n=3, hud=False)
+    return e, lg_, g1, gn, foes, stranger
+e, lgd, g1, gn, foes, stranger = damage_world()
+assert "our damage: 25 % of the game's for every round and blow of our men (an enemy lasts about 4.0 times longer); a head hit by ours is no instant kill" in lgd and 'brain: 4 of 4' in lgd, lgd
+assert e.slot(GOT_DAMAGE) != GTA + F_DAMAGE and MODB <= e.slot(GOT_DAMAGE) < MODB + e.mod_size
+r = hit(e, g1, foes[0])                                              # a guard's M4 round: 40 -> 10
+assert (r['lost'], r['hp'], r['killed'], r['raw'], r['zone']) == (10., 90., 0, 40., 3), r
+assert e.damage_calls[-1]['raw'] == 10. and e.damage_calls[-1]['by'] == g1, 'the game\'s own ComputeDamageResponse got a quarter of the damage'
+r = hit(e, gn, foes[1]); assert r['lost'] == 10., ('a door gunner\'s round: the same slot', r)
+r = hit(e, g1, foes[2], weapon=0, raw=8.); assert r['lost'] == 2., ('a blow', r)
+r = hit(e, stranger, foes[3]); assert (r['lost'], r['hp']) == (40., 60.), ('anybody else\'s round: the game\'s own', r)
+r = hit(e, e.cj, foes[4]); assert (r['lost'], r['hp']) == (40., 60.), ('CJ\'s round: the game\'s own', r)
+r = hit(e, foes[5], g1); assert (r['lost'], r['hp']) == (40., 60.), ('a round at one of ours: the game\'s own', r)
+r = hit(e, g1, foes[5], weapon=51); assert r['lost'] == 40., ('an explosion of ours: the game\'s own', r)
+r = hit(e, g1, foes[6], done=1); assert r['lost'] == 0. and r['hp'] == 100., 'a response already worked out: the game returns at once'
+# a head hit: the game's instant kill (ComputeWillForceDeath; on the tablet a 1 in 8 roll for an M4 - here rand() is not the game's
+# and the roll always comes up) - for a stranger's round; one of ours does his scaled damage instead
+r = hit(e, stranger, foes[7], zone=9); assert r['killed'] and r['instant'] and r['hp'] == 0., ('the game\'s rule, for anybody else', r)
+r = hit(e, g1, foes[8], zone=9); assert not r['killed'] and not r['instant'] and r['hp'] == 90. and (r['zone'], r['raw']) == (9, 40.), ('ours: no instant kill, the true zone put back', r)
+assert e.damage_calls[-1]['zone'] == 3
+def rounds_to_kill(by, victim):
+    for n in range(1, 50):
+        if hit(e, by, victim)['killed']: return n
+n_game, n_ours = rounds_to_kill(stranger, foes[9]), rounds_to_kill(g1, foes[8])
+assert n_game == 3 and n_ours == 9, (n_game, n_ours)                # (foes[8] had 90 left after the head hit: 9 more rounds of 10)
+e.frame(ms=100, n=40, hud=False)
+sc = [(int(a), int(b)) for a, b in re.findall(r'our hits scaled (\d+) \(head (\d+)\)', e.log())]
+assert sum(a for a, b in sc) == 1 + 1 + 1 + 1 + 9 and sum(b for a, b in sc) == 1, sc
+# the settings file: OurDamage (5..100), written back with what is in force; OurDamageOff
+e, lgd, g1, gn, foes, stranger = damage_world(b'[Preferences]\nSettingsVersion = 15\nOurDamage = 50\n')
+assert 'our damage: 50 % ' in lgd and b'\nOurDamage = 50 ' in e.fs[CFG_] and hit(e, g1, foes[0])['lost'] == 20., lgd
+e, lgd, g1, gn, foes, stranger = damage_world(b'[Preferences]\nSettingsVersion = 15\nOurDamage = 3\n')
+assert 'our damage: 25 % ' in lgd and 'OurDamage in the settings file was not a number from 5 to 100: ignored' in lgd and b'\nOurDamage = 25 ' in e.fs[CFG_], lgd
+e, lgd, g1, gn, foes, stranger = damage_world(b'[Preferences]\nSettingsVersion = 15\nOurDamage = 100\n')
+assert "our damage: 100 % - the game's own, nothing changed" in lgd and 'brain: 3 of 3' in lgd and e.slot(GOT_DAMAGE) == GTA + F_DAMAGE and hit(e, g1, foes[0])['lost'] == 40., lgd
+e, lgd, g1, gn, foes, stranger = damage_world(b'[Preferences]\nSettingsVersion = 15\nOurDamageOff = 1\nOurDamage = 40\n')
+assert 'our damage: off in the settings' in lgd and 'brain: 3 of 3' in lgd and e.slot(GOT_DAMAGE) == GTA + F_DAMAGE and hit(e, g1, foes[0])['lost'] == 40., lgd
+assert b'OurDamageOff = 1' in e.fs[CFG_] and b'\nOurDamage = 40 ' in e.fs[CFG_]
+# a crash while one of ours hits somebody (step 31): written down, and the next game leaves the game's damage alone
+e, lgd, g1, gn, foes, stranger = damage_world()
+acts = {a[0]: a[1] for a in e.sigactions if a[1]}
+info, ucx = e.alloc(128), e.alloc(1024)
+e.w64(info + 16, 0x18); e.w64(ucx + 440, GTA + F_DAMAGE + 0xc4); e.w64(ucx + 424, MODB + 0x100); e.w64(ucx + 432, ucx + 600); e.w64(ucx + 416, 0)
+e.damage_crash = (acts[11][2], info, ucx)
+hit(e, g1, foes[0])
+cfg = e.fs[CFG_]
+assert 'inside the brain: 31 ' in e.log() and b'LastCrash = 31' in cfg and b'OurDamageOff = 1' in cfg, (e.log()[-600:], cfg[:200])
+e2 = Emu(); e2.fs.update({k: v for k, v in e.fs.items() if k.endswith(('hcbrain_log.txt', 'net.helicover.brain.ini'))}); lg2 = e2.load()
+assert 'the last game crashed while a hit by one of ours was worked out' in lg2 and 'our damage: off in the settings' in lg2 and e2.slot(GOT_DAMAGE) == GTA + F_DAMAGE, lg2[-1500:]
+passed('1.4.2 our damage: the one function every hurt to a ped goes through (CPedDamageResponseCalculator::ComputeDamageResponse, all 26 callers through its GOT slot 0x83eba8 - bullets by way of GenerateDamageEvent) is the mod\'s slot; the game\'s own code then works the hit out: a round or blow of a guard or a door gunner does 25 %% (an M4 round 40 -> 10; a man falls after %d rounds instead of %d), anybody else\'s - CJ\'s too - and a round at one of ours the game\'s own, explosions the game\'s own; a head hit of ours is no instant kill (the game\'s rule kills the same man in one round from anybody else) and the true hit zone is put back; the log counts the scaled hits every second; OurDamage = 5..100 in the settings file (written back, a bad value ignored), 100 or OurDamageOff = 1 leave the slot alone, a crash in step 31 sets OurDamageOff by itself' % (n_ours + 1, n_game))
 
 text = '\n'.join(results) + '\nThe phone build on an emulated CPU with the real libGTASA.so and the real code of the CLEO library; the world in memory is laid out by the test. Not run in the game.\n'
 (h.OUT / 'brain_adapter_tests.txt').write_text(text)
