@@ -44,6 +44,15 @@ Both black boxes (811 and 1695 ticks) replay bit for bit here. What is done:
 - Log and summary: the table the mod sees hits on ours by no longer fills up (after 8 minutes hits on new guards were
   lost); the summary shows "an outer man within 12 m of CJ", "down at his place", "the commander at CJ", "high places
   known", "our damage".
+- An independent re-check. All the code of this release was read again by a separate reviewer (a subagent not shown my
+  conclusions), and after its findings: the search for roofs runs after the map's questions for the men and does not
+  overwrite a roof already found that sees you (and takes no roof nearer than 15 m); in a fight the helicopter hangs
+  over a roof only for a marksman really waiting aboard (before - for a dead one too); the spare place of an outer man
+  who could not get to his own stays in his quarter; in peace the middle of his quarter is no longer thrown out by the
+  "line of a fight" rule; a man whose fire one of ours blocks steps aside from where he stands (not from his place -
+  that step left him in the line); in an assault the assault man comes in on his flank, not down the middle; with
+  nobody to send on an assault everybody stays with you; the commander's wave is never cut by his weapon, however
+  many men the mod keeps track of.
 
 NEW IN 2.0 BETA 5 (brain 1.4) - WHAT BETA 4 LEFT, DONE
 IMPORTANT: replace EVERYTHING - the CLEO files and libHelicoverBrain64.so.

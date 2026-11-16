@@ -881,7 +881,7 @@ static struct { u32 who, target, at; u8 state; } g_sq[16];             /* each g
 static int g_body_ok, g_map_ok, g_gun_ok;
 static u32 g_shoot_stood, g_shoot_moved, g_shoot_off, g_gun_dropped;
 static u32 g_soft_falls, g_body_new, g_body_turn, g_body_refused, g_body_nomem, g_body_kept, g_recall_until;
-static u32 g_map_ground, g_map_ground_ok, g_map_segs, g_map_left, g_map_us_max, g_high_i;
+static u32 g_map_ground, g_map_ground_ok, g_map_segs, g_map_left, g_map_us_max, g_high_i, g_high_starve;
 static u64 g_map_us;
 static struct { hcb_vec at; float height; u32 time; u8 sees, ok; } g_high[48];
 static void body_setup(void) {
@@ -1272,15 +1272,19 @@ static int body_gun(u32 who, int state, u32 target, int reload) {
     /* 1.2: on his way (the mod's walk asked for within the last 0.4 s) - no gun task of the mod's: it holds him where he
        stands. The one he has is ended at once, the way the game ends a task, and taken out of its slot. (2.0 beta 6: so is it while the
        commander waves CJ on - his arms are the gesture's) */
-    for (i = 0; i < 16; i++) if (g_bod[i].who == who && ((g_bod[i].walk_at && now >= g_bod[i].walk_at && now - g_bod[i].walk_at < 400) || wave_on(who))) {
-        if (t && t == g_gun[old].task && RD(u64, t) == G + VT_USE_GUN) {
-            ((abort_fn)RD(u64, G + VT_USE_GUN + 0x38))(t, me, 2, 0);
-            ((sec_fn)(G + SET_SECONDARY))(mgr, 0, 0);
-            g_gun_dropped++;
+    {
+        int hold = wave_on(who);                                   /* (the review of 1.5: asked first - his walk record may have left g_bod) */
+        for (i = 0; i < 16 && !hold; i++) if (g_bod[i].who == who && g_bod[i].walk_at && now >= g_bod[i].walk_at && now - g_bod[i].walk_at < 400) hold = 1;
+        if (hold) {
+            if (t && t == g_gun[old].task && RD(u64, t) == G + VT_USE_GUN) {
+                ((abort_fn)RD(u64, G + VT_USE_GUN + 0x38))(t, me, 2, 0);
+                ((sec_fn)(G + SET_SECONDARY))(mgr, 0, 0);
+                g_gun_dropped++;
+            }
+            g_gun[old].task = 0; g_gun[old].cmd = 6; g_gun[old].target = 0; g_gun[old].at = now ? now : 1; g_gun[old].fire_ms = 0;
+            g_where = was;
+            return 1;
         }
-        g_gun[old].task = 0; g_gun[old].cmd = 6; g_gun[old].target = 0; g_gun[old].at = now ? now : 1; g_gun[old].fire_ms = 0;
-        g_where = was;
-        return 1;
     }
     /* the self-check: fire ordered, and rounds leaving the weapon? */
     ammo = RD(u32, w + 0xc) + RD(u32, w + 8);
@@ -1610,7 +1614,7 @@ static float ground_z(float x, float y, float z, int *found) {
 }
 static int map_ray(const float *p, const float *q) { u64 t0 = now_us(); int r = ray(p, q, 0); g_map_us += now_us() - t0; return r; }
 /* the map's answers for this look: the straight legs first (a man is waiting for them), then the ground, then one more spot
-   in the search for a high place */
+   in the search for a high place (1.5: after the ground, see there) */
 static void fill_map(hcb_snapshot *s, const hcb_out *prev, const float *cjp) {
     u32 i, n, k;
     g_map_us = 0;
@@ -1628,52 +1632,6 @@ static void fill_map(hcb_snapshot *s, const hcb_out *prev, const float *cjp) {
         g_map_segs++;
     }
     g_map_left += n - i;
-    /* a high place for the marksman: 2-35 m above CJ's feet, flat (the ground a metre to each side is level with it) - whether CJ is
-       seen from it is told with it. (1.3: from 2 m, not 4 - a shed, a container, a kiosk the marksman can climb himself; the helicopter
-       still only takes him to one 4 m up or more, ow_min_h.)
-       1.5 (the fifth 2.0 log: "high places 0" a third of the time, the marksman never up): it was 32 fixed spots, one every other look,
-       each a single point - a roof was found only when a spot fell flat on it AND CJ could be seen from that very point. Now 48 slots on
-       six rings round CJ (12-55 m), a new spot every look, each time somewhere else in its slot (turned up to 20 degrees, moved up to
-       3 m: the slots sweep the ground round CJ instead of asking one point for ever); a spot that is not flat is tried 1.5 m nearer
-       CJ; CJ not seen from it - its edge towards CJ is tried (up to 4.5 m nearer, while the roof goes on). Kept 12 s. */
-    if (g_map_us < MAP_LOOK_US && !s->player.vehicle && !s->interior && s->n_ours) {
-        static const float RING[6] = {12.0f, 18.0f, 25.0f, 33.0f, 42.0f, 55.0f};
-        static const float DIR[8][2] = {{1, 0}, {0.7071f, 0.7071f}, {0, 1}, {-0.7071f, 0.7071f}, {-1, 0}, {-0.7071f, -0.7071f}, {0, -1}, {0.7071f, -0.7071f}};
-        u32 c = g_high_i % 48, h = (g_high_i * 2654435761u) >> 8;
-        float th = ((float)(h & 255) / 255.0f - 0.5f) * 0.70f, r = RING[c / 8] + ((float)((h >> 8) & 255) / 255.0f - 0.5f) * 6.0f;
-        float ux = DIR[c % 8][0] - th * DIR[c % 8][1], uy = DIR[c % 8][1] + th * DIR[c % 8][0], ul = f_sqrt(ux * ux + uy * uy);
-        float x, y, feet = cjp[2] - 1.0f, g = 0, g2, g3, eye[3], cj[3], tx, ty, tl;
-        int f = 0, f2, f3, k, flat = 0, try_;
-        g_high_i++;
-        ux /= ul; uy /= ul;
-        x = cjp[0] + ux * r; y = cjp[1] + uy * r;
-        tx = cjp[0] - x; ty = cjp[1] - y; tl = f_sqrt(tx * tx + ty * ty); tx /= tl; ty /= tl;   /* (towards CJ) */
-        /* (a slot keeps the last roof it found until a new one replaces it or it is 12 s old: one miss does not lose it) */
-        for (try_ = 0; try_ < 2 && !flat; try_++) {
-            if (try_) { x += tx * 1.5f; y += ty * 1.5f; }
-            g = ground_z(x, y, feet + 38.0f, &f);
-            if (!f || g < feet + 2.0f || g > feet + 35.0f) break;
-            g2 = ground_z(x + 1.0f, y, g + 1.5f, &f2); g3 = ground_z(x, y + 1.0f, g + 1.5f, &f3);
-            flat = f2 && f3 && g2 - g < 0.4f && g - g2 < 0.4f && g3 - g < 0.4f && g - g3 < 0.4f;
-        }
-        if (flat) {
-            int seen = 0;
-            cj[0] = cjp[0]; cj[1] = cjp[1]; cj[2] = cjp[2] + 0.3f;
-            for (k = 0; k < 4 && g_map_us < MAP_LOOK_US + 600U; k++) {
-                if (k) {                                                /* (the edge towards CJ, while the roof goes on) */
-                    float gk;
-                    int fk;
-                    gk = ground_z(x + tx * 1.5f, y + ty * 1.5f, g + 1.5f, &fk);
-                    if (!fk || gk - g > 0.4f || g - gk > 0.4f) break;
-                    x += tx * 1.5f; y += ty * 1.5f;
-                }
-                eye[0] = x; eye[1] = y; eye[2] = g + 1.6f;
-                if (map_ray(eye, cj)) { seen = 1; break; }
-            }
-            g_high[c].at.x = x; g_high[c].at.y = y; g_high[c].at.z = g + 1.0f; g_high[c].height = g - feet;
-            g_high[c].sees = (u8)seen; g_high[c].time = s->time; g_high[c].ok = 1;
-        }
-    }
     n = prev->n_ground_q < HCB_MAX_GROUND ? prev->n_ground_q : HCB_MAX_GROUND;
     for (i = 0; i < n; i++) {
         hcb_ground q0 = prev->ground_q[i], *a;
@@ -1709,6 +1667,57 @@ static void fill_map(hcb_snapshot *s, const hcb_out *prev, const float *cjp) {
         g_map_ground_ok++;
         mc_put(cx, cy, g, a->wall);
     }
+    /* a high place for the marksman: 2-35 m above CJ's feet, flat (the ground a metre to each side is level with it) - whether CJ is
+       seen from it is told with it. (1.3: from 2 m, not 4 - a shed, a container, a kiosk the marksman can climb himself; the helicopter
+       still only takes him to one 4 m up or more, ow_min_h.)
+       1.5 (the fifth 2.0 log: "high places 0" a third of the time, the marksman never up): it was 32 fixed spots, one every other look,
+       each a single point - a roof was found only when a spot fell flat on it AND CJ could be seen from that very point. Now 48 slots on
+       six rings round CJ (15-55 m), a new spot every look, each time somewhere else in its slot (turned up to 20 degrees, moved up to
+       3 m: the slots sweep the ground round CJ instead of asking one point for ever); a spot that is not flat is tried 1.5 m nearer
+       CJ; CJ not seen from it - its edge towards CJ is tried (up to 4.5 m nearer, while the roof goes on). Kept 12 s.
+       (The review of 1.5: asked after the ground - the men's cells come first, the spot gets what is left of the look's time and, when
+       nothing is left four looks running, one spot all the same, but no more than its first ray; a slot that sees CJ and is under 12 s
+       old is not replaced by a spot that does not; the inner ring is 15 m - the marksman takes nothing nearer CJ than 10 m.) */
+    if ((g_map_us < MAP_LOOK_US || g_high_starve >= 4) && !s->player.vehicle && !s->interior && s->n_ours) {
+        static const float RING[6] = {15.0f, 20.0f, 26.0f, 33.0f, 42.0f, 55.0f};
+        static const float DIR[8][2] = {{1, 0}, {0.7071f, 0.7071f}, {0, 1}, {-0.7071f, 0.7071f}, {-1, 0}, {-0.7071f, -0.7071f}, {0, -1}, {0.7071f, -0.7071f}};
+        u32 c = g_high_i % 48, h = (g_high_i * 2654435761u) >> 8;
+        float th = ((float)(h & 255) / 255.0f - 0.5f) * 0.70f, r = RING[c / 8] + ((float)((h >> 8) & 255) / 255.0f - 0.5f) * 6.0f;
+        float ux = DIR[c % 8][0] - th * DIR[c % 8][1], uy = DIR[c % 8][1] + th * DIR[c % 8][0], ul = f_sqrt(ux * ux + uy * uy);
+        float x, y, feet = cjp[2] - 1.0f, g = 0, g2, g3, eye[3], cj[3], tx, ty, tl;
+        int f = 0, f2, f3, k, flat = 0, try_;
+        g_high_i++; g_high_starve = 0;
+        ux /= ul; uy /= ul;
+        x = cjp[0] + ux * r; y = cjp[1] + uy * r;
+        tx = cjp[0] - x; ty = cjp[1] - y; tl = f_sqrt(tx * tx + ty * ty); tx /= tl; ty /= tl;   /* (towards CJ) */
+        /* (a slot keeps the last roof it found until a new one replaces it or it is 12 s old: one miss does not lose it) */
+        for (try_ = 0; try_ < 2 && !flat; try_++) {
+            if (try_) { x += tx * 1.5f; y += ty * 1.5f; }
+            g = ground_z(x, y, feet + 38.0f, &f);
+            if (!f || g < feet + 2.0f || g > feet + 35.0f) break;
+            g2 = ground_z(x + 1.0f, y, g + 1.5f, &f2); g3 = ground_z(x, y + 1.0f, g + 1.5f, &f3);
+            flat = f2 && f3 && g2 - g < 0.4f && g - g2 < 0.4f && g3 - g < 0.4f && g - g3 < 0.4f;
+        }
+        if (flat) {
+            int seen = 0;
+            cj[0] = cjp[0]; cj[1] = cjp[1]; cj[2] = cjp[2] + 0.3f;
+            for (k = 0; k < 4 && (!k || g_map_us < MAP_LOOK_US); k++) {
+                if (k) {                                                /* (the edge towards CJ, while the roof goes on) */
+                    float gk;
+                    int fk;
+                    gk = ground_z(x + tx * 1.5f, y + ty * 1.5f, g + 1.5f, &fk);
+                    if (!fk || gk - g > 0.4f || g - gk > 0.4f) break;
+                    x += tx * 1.5f; y += ty * 1.5f;
+                }
+                eye[0] = x; eye[1] = y; eye[2] = g + 1.6f;
+                if (map_ray(eye, cj)) { seen = 1; break; }
+            }
+            if (seen || !(g_high[c].ok && g_high[c].sees && s->time >= g_high[c].time && s->time - g_high[c].time <= 12000)) {
+                g_high[c].at.x = x; g_high[c].at.y = y; g_high[c].at.z = g + 1.0f; g_high[c].height = g - feet;
+                g_high[c].sees = (u8)seen; g_high[c].time = s->time; g_high[c].ok = 1;
+            }
+        }
+    } else if (!s->player.vehicle && !s->interior && s->n_ours) g_high_starve++;
     for (i = 0; i < 48 && s->n_high < HCB_MAX_HIGH; i++) {
         float at[3];
         if (!g_high[i].ok || s->time < g_high[i].time || s->time - g_high[i].time > 12000) continue;
@@ -3279,6 +3288,7 @@ static void dmg_setup(u64 *wanted) {
     if (!why) {
         *wanted = 4;
         g_dmg_k = g_dmg_pct / 100.0f;
+        g_damage_orig = (damage_fn)(G + GOT_DAMAGE_TARGET);   /* (set before the slot changes: a call that comes between finds the game's own) */
         if (got_swap(GOT_DAMAGE, GOT_DAMAGE_TARGET, (u64)&brain_damage, &d)) { g_damage_orig = (damage_fn)d; g_slots++; g_dmg_on = 1; }
         else { g_dmg_k = 1.0f; why = "the game's own (its slot is taken by another mod or could not be changed)"; }
     }

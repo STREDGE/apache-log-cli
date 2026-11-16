@@ -755,7 +755,7 @@ for t in team:w.pos[t]=[0.,-14.,0.]
 w.walk.clear();w.calls.clear();steps(w,V,4)
 assert w.shared[b.NATIVE]==1,'the squad worker has told both fours that the mod walks them'
 MOVES=(0x5d3,0x637,0x5f5,0x850,0x78f)
-steps(w,V,75);P_=posts(w)
+steps(w,V,110);P_=posts(w)   # (1.5: the outer men's places are 21 m out and they walk the last 4 m: 11 s, not 7.5)
 assert not [x for x in w.calls if x[1] in MOVES and x[2][0] in team],('no go-to, run-and-fire, path, follow or vault task from the scripts',[(hex(x[1]),x[2][0]) for x in w.calls if x[1] in MOVES and x[2][0] in team][:4])
 assert all(math.dist(w.pos[t][:2],spot(P_[t]))<1.5 for t in team),{t:(w.pos[t][:2],spot(P_[t])) for t in team}
 assert all(w.brain.walked.get(t,0)>5 for t in team) and all(w.shared[b.SQ_SLOT+k*b.SQ_SLOT_SIZE]!=1 for k in range(4))

@@ -140,7 +140,12 @@ dx, dy = p3[0] - cjp[0], p3[1] - cjp[1]; l_ = math.hypot(dx, dy)
 in_line = hcb_py.place_value(*args, cj_dir=(dx / l_, dy / l_, 0.), cj_fires=1)
 beside = hcb_py.place_value(*args, cj_dir=(-dy / l_, dx / l_, 0.), cj_fires=1)
 assert in_line < 0 and abs(beside - alone) < 0.01, ('in front of CJ\'s weapon it is no place; with CJ firing another way it is worth the same', in_line, beside)
-passed('What a place is worth, weight by weight: hidden from a second shooter +%.2f, another of ours within 3 m -%.2f (within 1.2 m - no place), in front of CJ\'s weapon while he fires - no place; 1.3: CJ or one of ours in his line to the shooter - no place (1.5: a place he holds goes only when CJ comes within 1.5 m of that line, a new one needs 1.8 m - no flapping)' % (sc.brain.cfg.place_w_others, sc.brain.cfg.place_w_crowd))
+# 1.5 (the review): in peace a man's place hides him from a point 30 m beyond his own quarter - that point is no man, and the middle of his
+#      quarter lies right on the line CJ - point: the rules of the line of a fight would throw out the very place he is sent to
+_far = (cjp[0] + dx / l_ * (l_ + 30.0), cjp[1] + dy / l_ * (l_ + 30.0), cjp[2] + 0.6)
+assert hcb_py.place_value(sc.brain, p3, tuple(man), tuple(cjp), _far, p3, sc.time) < 0, 'the same point taken for a man: the line of the fight runs through the place'
+assert hcb_py.place_value(sc.brain, p3, tuple(man), tuple(cjp), _far, p3, sc.time, stand_in=1) >= 0, '1.5: the peace stand-in: the middle of his quarter is a place'
+passed('What a place is worth, weight by weight: hidden from a second shooter +%.2f, another of ours within 3 m -%.2f (within 1.2 m - no place), in front of CJ\'s weapon while he fires - no place; 1.3: CJ or one of ours in his line to the shooter - no place (1.5: a place he holds goes only when CJ comes within 1.5 m of that line, a new one needs 1.8 m - no flapping); in peace the point beyond his quarter is no man - the middle of his quarter is a place' % (sc.brain.cfg.place_w_others, sc.brain.cfg.place_w_crowd))
 
 text = '\n'.join(results) + '\nThe core only. Nothing here has run in the game.\n'
 (hcb_py.OUT / 'brain_places_tests.txt').write_text(text)

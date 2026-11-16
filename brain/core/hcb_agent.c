@@ -153,7 +153,7 @@ HID void hcb_agent_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                 if (l > 0.5f) {
                     side.x = -to.y / l; side.y = to.x / l; side.z = 0;
                     if (side.x * away.x + side.y * away.y < 0) { side.x = -side.x; side.y = -side.y; }
-                    a->step = v_mul(side, w); a->step_until = now + 5000; a->step_at = now ? now : 1; a->why = HCB_WHY2_STEP_OUT; a->flank = 0;
+                    a->step = v_mul(side, w); a->step_from = me->pos; a->step_until = now + 5000; a->step_at = now ? now : 1; a->why = HCB_WHY2_STEP_OUT; a->flank = 0;
                 }
             }
             if (a->step_until && p->crouch && a->flank != 0.0f) a->step_until = 0;   /* (CJ has got into cover and he with him: no flank) */
@@ -185,7 +185,12 @@ HID void hcb_agent_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                     p->at = spot;
                     p->via = p->at; p->via2 = p->at; p->crouch = 0; if (p->move == 0) p->move = 2;
                 }
-            } else if (a->step_until && now < a->step_until && a->flank == 0.0f) { p->at = v_add(p->at, a->step); p->via = p->at; p->via2 = p->at; if (p->move == 0) p->move = 2; }   /* (he was told to stay: the step is a move) */
+            } else if (a->step_until && now < a->step_until && a->flank == 0.0f) {
+                /* (he was told to stay: the step is a move. 1.5: from where he stood, the height of his place - the outer men's places
+                   are taken within 1.5 m now, and a step from the place itself left him in the line) */
+                float z = p->at.z;
+                p->at = v_add(a->step_from, a->step); p->at.z = z; p->via = p->at; p->via2 = p->at; if (p->move == 0) p->move = 2;
+            }
             else { a->step_until = 0; a->flank = 0; }
         flank_done:;
         }

@@ -111,6 +111,21 @@ for k in range(450): o = sc.step(1)
 assert not o.ow_ok, 'the helicopter never got there in 40 s: the squad gives up (he comes down with the others)'
 passed('No high place near, or the helicopter does not get there in 40 s: the squad does not wait - the marksman comes down with the others')
 
+# 1.5 (the review): in a fight the helicopter is sent to hang over a roof only for a marksman who really waits aboard - not for a dead one
+#      (he is "not on the ground" too): it keeps its firing spot
+sc = Scene(); team = squad(sc, 7); sc.step(20)
+heli = sc.veh(0., -30., cls=HCB_VC_HELI, z=30.); sc.heli = heli
+sc.high = [(22., 14., 9., True)]
+g = sc.ped(34, 0, pedtype=GANG, weapon=AK, face=(-1., 0.))
+sc.step(2); sc.shot(g, (0., 0., 1.), dst=1)
+ow_seen = 0
+for k in range(60):
+    if k % 12 == 0: sc.shot(g, (0., 0., 1.), dst=1)
+    o = sc.step(1)
+    ow_seen += bool(o.ow_ok)
+assert ow_seen == 0, ('1.5: a fight, nobody aboard waiting for a roof: the helicopter is not sent over one', ow_seen)
+passed('1.5: in a fight with no marksman waiting aboard (dead, or never picked up) the helicopter is not sent to hang over a roof - it keeps its firing spot')
+
 # ================================================================== ASSAULT
 def assault(target=(0., 70.), n=8, pedtype=CIV, weapon=0, walls=()):
     sc = Scene(); sc.low_walls = list(walls); team = squad(sc, n); sc.step(30)
@@ -125,6 +140,17 @@ sc.step(20)
 assert sc.last_out.umode == HCB_UMODE_ASSAULT and sc.last_out.task == HCB_TASK_REGROUP and sc.last_out.target == 0, TASK[sc.last_out.task]
 assert sum(1 for w in team if d2(pos(sc, w), sc.cj['pos']) < 5.0) == 3, 'nobody has gone anywhere: a passer-by is not a target'
 passed('ASSAULT with nobody pointed out and no threat: the squad stays with CJ (task REGROUP), a passer-by 70 m off is not a target')
+
+# 1.5 (the review): only the commander and a bodyguard left - nobody to send: back with CJ, not an assault nobody makes
+sc, team, g = assault(n=2)
+sc.cj['target'] = g; sc.step(3); sc.cj['target'] = 0
+for k in range(40):
+    if k % 30 == 0: sc.cj['target'] = g
+    elif k % 30 == 3: sc.cj['target'] = 0
+    sc.step(1)
+assert sc.last_out.umode == HCB_UMODE_ASSAULT and sc.last_out.task == HCB_TASK_REGROUP, ('1.5: no outer man left: REGROUP', TASK[sc.last_out.task])
+assert all(d2(pos(sc, w), sc.cj['pos']) < 5.0 for w in team), 'and both stay at CJ'
+passed('1.5: ASSAULT with only the commander and a bodyguard left (nobody to send): the task is REGROUP at CJ, neither leaves him')
 
 # ------------------------------------------------------------------ CJ points a man out: approach, gather, bounds - by itself
 sc, team, g = assault()

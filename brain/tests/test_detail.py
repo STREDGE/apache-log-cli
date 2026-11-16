@@ -754,6 +754,22 @@ sc.step(30)
 assert sc.posts[far].move == 4 and sc.posts[far].stuck, (sc.posts[far].move, sc.posts[far].stuck)
 passed('A man 30 m or more from his post who gets no nearer goes by the path network after the first 1.5 s (not after the third try)')
 
+# 1.5 (the review): an outer man who cannot get to his place is given another - 30 degrees either way round CJ, never further: a turn of
+#      90 degrees and more took the anchor out of his quarter, and every place near it was thrown out at the next look
+worst = 0.0
+for name in ('point', 'point2', 'rear', 'rear2'):
+    sc = Scene(); team = detail8(sc); sc.step(2)
+    m_ = by_job(sc)[name].who
+    sc.stuck_men = {m_}
+    sc.step(60)
+    a0 = math.atan2(sc.posts[m_].at.y, sc.posts[m_].at.x)
+    for k in range(900):
+        sc.step(1)
+        p = sc.posts[m_]
+        worst = max(worst, abs((math.atan2(p.at.y, p.at.x) - a0 + math.pi) % (2 * math.pi) - math.pi) * 180 / math.pi)
+assert worst < 40.0, ('1.5: the places he is given stay in his quarter', worst)
+passed('1.5: an outer man who cannot get to his place for 90 s is given others in his own quarter only (at most %.0f degrees round CJ from the first)' % worst)
+
 text = '\n'.join(results) + '\nThe core only. Nothing here has run in the game.\n'
 (hcb_py.OUT / 'brain_detail_tests.txt').write_text(text)
 print(text)

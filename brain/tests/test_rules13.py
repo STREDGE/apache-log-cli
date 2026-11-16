@@ -284,22 +284,27 @@ assert len(blind) >= 3 and min(gaps) >= 30, ('the gunners have no line for 3 s: 
 passed('The gunners all have a man and none has a line to him (houses in the way) for 3 s: the helicopter moves round the circle to the next spot (%d spots in 15 s, never sooner than 3 s apart); with a line it keeps its spot' % len(blind))
 
 # ------------------------------------------------------------------ one of ours in his line: he steps out of it (2.5 m, away from CJ) and fires
-sc = Scene(roe=HCB_ROE_ARMED); team = squad(sc, 5); sc.step(100)        # (1.5: the outer men take their places once CJ has stood 4 s)
-g = sc.ped(0., 30., pedtype=GANG, weapon=AK, face=(0., 1.))
-front = {w for w in team if sc.posts[w].job in (HCB_ROLE_POINT, HCB_ROLE_CLOSE)}
-sc.los_fn = lambda a, b_: a not in front                       # (the two in front have a wall in their way: the rear man is the one to fire)
-rear = [w for w in team if sc.posts[w].job == HCB_ROLE_REAR][0]
-p0 = list(pos(sc, rear)); blocked_t, fired_t = None, None
-gp_ = pos(sc, g)
-friend = sc.our(p0[0] + 0.3 * (gp_[0] - p0[0]), p0[1] + 0.3 * (gp_[1] - p0[1]), HCB_ROLE_NONE)   # one of ours standing in his line (1.5: wherever his place is)
-for k in range(60):
-    sc.step(1)
-    o = sc.orders.get(rear)
-    if o and o.hold == HCB_HOLD_FRIEND and blocked_t is None: blocked_t = k
-    if o and o.fire and fired_t is None: fired_t = k; p1 = list(pos(sc, rear))
-assert blocked_t is not None and fired_t is not None and 1.8 < d2(p1, p0) < 3.2, ('a man in his line: a step aside, then fire', blocked_t, fired_t, p0, pos(sc, rear))
-assert d2(p1, sc.cj['pos']) > d2(p0, sc.cj['pos']), 'the step is away from CJ'
-passed('One of ours in his line to the man he is to fire at (the second 2.0 log: "one of ours in the line" in one order of five, and the man stood): after 0.7 s he steps 2.5 m aside, away from CJ, and fires %.1f s after he was first held' % ((fired_t - blocked_t) / 10.))
+def step_out(on_place):
+    sc = Scene(roe=HCB_ROE_ARMED); team = squad(sc, 5); sc.step(100)        # (1.5: the outer men take their places once CJ has stood 4 s)
+    g = sc.ped(0., 30., pedtype=GANG, weapon=AK, face=(0., 1.))
+    front = {w for w in team if sc.posts[w].job in (HCB_ROLE_POINT, HCB_ROLE_CLOSE)}
+    sc.los_fn = lambda a, b_: a not in front                   # (the two in front have a wall in their way: the rear man is the one to fire)
+    rear = [w for w in team if sc.posts[w].job == HCB_ROLE_REAR][0]
+    if on_place: sc.peds[rear]['pos'] = [sc.posts[rear].at.x, sc.posts[rear].at.y, sc.peds[rear]['pos'][2]]   # (right on his place: he is told to stay - the step must be a move)
+    p0 = list(pos(sc, rear)); blocked_t, fired_t, p1 = None, None, None
+    gp_ = pos(sc, g)
+    sc.our(p0[0] + 0.3 * (gp_[0] - p0[0]), p0[1] + 0.3 * (gp_[1] - p0[1]), HCB_ROLE_NONE)   # one of ours standing in his line (1.5: wherever his place is)
+    for k in range(60):
+        sc.step(1)
+        o = sc.orders.get(rear)
+        if o and o.hold == HCB_HOLD_FRIEND and blocked_t is None: blocked_t = k
+        if o and o.fire and fired_t is None: fired_t = k; p1 = list(pos(sc, rear))
+    # (1.5: off his place by a metre - where a man the brain has walked there stands - the step is made from where he stands, not from the place)
+    assert blocked_t is not None and fired_t is not None and 1.8 < d2(p1, p0) < 3.2, ('a man in his line: a step aside, then fire', on_place, blocked_t, fired_t, p0, pos(sc, rear))
+    assert d2(p1, sc.cj['pos']) > d2(p0, sc.cj['pos']), 'the step is away from CJ'
+    return (fired_t - blocked_t) / 10.
+t_on, t_off = step_out(True), step_out(False)
+passed('One of ours in his line to the man he is to fire at (the second 2.0 log: "one of ours in the line" in one order of five, and the man stood): after 0.7 s he steps 2.5 m aside, away from CJ, and fires %.1f s after he was first held (1.5: the same from a metre off his place - %.1f s - the step is made from where he stands)' % (t_on, t_off))
 
 # ------------------------------------------------------------------ the three at CJ's side: CJ in the line - a step round him to his flank, still at his side
 sc = Scene(roe=HCB_ROE_ARMED); team = squad(sc); sc.step(30)

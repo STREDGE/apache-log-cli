@@ -580,7 +580,9 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                 /* (1.0: a man whose place could not be reached is given the next one round CJ - 30 degrees on, then the other way) */
                 if (s->body && i < MAXD && !fight && hcb_agent_failed(b, ids[i], now)) { hcb_agent_forgive(b, ids[i]); if (dt->man[i].alt < 250) dt->man[i].alt++; dt->man[i].hold_ok = 0; }
                 off0 = v_mul(sd, R);
-                if (s->body && i < MAXD && dt->man[i].alt) off0 = rot(off0, dt->man[i].alt % 12);
+                /* (1.5, the review: only 30 degrees either way - a turn of 90 degrees and more took the anchor out of his quarter, and every
+                   place near it was dropped on the next look) */
+                if (s->body && i < MAXD && dt->man[i].alt) off0 = rot(off0, dt->man[i].alt % 3);
                 if (!ring && cj_speed > 1.2f && !indoor) { hcb_vec cv_ = unit2(cj->vel, f); float lead_ = cj_speed * 3.0f; off0 = v_add(off0, v_mul(cv_, lead_ > 9.0f ? 9.0f : lead_)); }
                 c0 = v_add(cjp, off0);
                 c0.z = cjp.z;
@@ -606,7 +608,7 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                     if (fight && hcb_agent_failed(b, ids[i], now)) {
                         hk = 0; dt->man[i].hold_ok = 0; hcb_agent_forgive(b, ids[i]);
                         if (dt->man[i].alt < 250) dt->man[i].alt++;
-                        c0 = v_add(cjp, rot(v_mul(sd, R), dt->man[i].alt % 12)); c0.z = cjp.z;
+                        c0 = v_add(cjp, rot(v_mul(sd, R), dt->man[i].alt % 3)); c0.z = cjp.z;
                     }   /* 1.0: he cannot get there - another place */
                     /* 1.1: the place is chosen by weights (hcb_places.c) among everything near his anchor: cover a crouching man
                        is hidden behind and a standing one fires over, hidden from the other threats too, a good range, near him,
@@ -619,7 +621,7 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                         float sc = 0, cur = -1.0f;
                         int cvr = 0, j_;
                         zero(&in, sizeof in);
-                        in.anchor = c0; in.man = men[i]->pos; in.cj = cjp; in.threat = Tq; in.reach = 7.5f;
+                        in.anchor = c0; in.man = men[i]->pos; in.cj = cjp; in.threat = Tq; in.reach = 7.5f; in.stand_in = (u8)!(fight || watch_q);
                         in.cj_min = R - 8.0f > 10.0f ? R - 8.0f : 10.0f; in.cj_max = R + 12.0f; in.need_cj = 1;
                         for (j_ = 0; fight && j_ < HCB_MAX_TRACKS && in.n_other < 2; j_++) {
                             const track *t_ = &b->tr[j_];
@@ -649,6 +651,7 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                     if (!hk) { dt->man[i].hold = c0; dt->man[i].hold_ok = 2; dt->man[i].hold_bad = 0; dt->man[i].hold_score = 0; dt->man[i].hold_at = now ? now : 1; hk = 2; }
                     at = dt->man[i].hold;
                     dm = dist2d(at, men[i]->pos);
+                    if (dm < 1.5f && s->body) dt->man[i].alt = 0;              /* (there: the next failure starts from his quarter's middle again) */
                     crouch = dm < 1.5f && (fight || cj_speed < 2.5f);         /* (there: down - in peace too, while CJ is not on the run) */
                     d_ = fight ? (dm < 1.5f ? HCB_DUTY_COVER : HCB_DUTY_BOUND) : duty;
                     mv = fight ? pace(dm, 3) : dm < 0.9f ? 0 : dm < 4.0f ? 1 : dm > 35.0f ? 3 : 2;   /* (in peace a run at most: no sprinting about) */

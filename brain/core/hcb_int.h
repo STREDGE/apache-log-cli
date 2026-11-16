@@ -187,6 +187,7 @@ typedef struct agent {
     u32 line_since;         /* 1.3: since when CJ or one of ours is in his line of fire while he stands */
     u32 step_until, step_at;    /* 1.3: a step out of the line: kept until then; when the last one began */
     hcb_vec step;           /* 1.3: ... the offset of that step */
+    hcb_vec step_from;      /* 1.5: ... from where he stood when it began (not his place: a man a metre off it stepped a metre short) */
     float flank;            /* 1.3 (beta 5): one of the three at CJ's side steps to CJ's flank instead: +1 / -1 which side, 0 none */
 } agent;
 typedef struct squad {
@@ -207,6 +208,8 @@ typedef struct squad {
     u32 mk_heli_done;                         /* 1.3 (beta 5): the helicopter's try to pick him up ended (a minute before the next) */
     hcb_vec mk_foot;                          /* 1.5: the foot of the wall below his roof, on his side (the map's ground) */
     u8 mk_foot_ok, mk_r_[3];
+    u32 mk_ready_t;         /* 1.5: when the helicopter last hung over him for the pickup (ow_ready) */
+    u32 mk_aboard_t;        /* 1.5: when he went up its rope (he vanished from the ground right after): he waits aboard for his roof */
     float mk_z0;            /* his feet when the climb began */
     hcb_vec mk_bad[8];      /* places he could not get up to (left alone for a minute; 1.5: eight, and a high cell with no way to it
                                takes its whole roof with it - mk_bad_r) */
@@ -265,7 +268,7 @@ typedef struct place_in {
     float cj_min, cj_max;   /* how near to CJ and how far from him it may be (0, 0 = does not matter) */
     float threat_min;       /* never nearer to the main threat than this (6 m at the least) */
     u8 n_other, n_taken, need_cj, cj_fires;   /* need_cj: CJ must be seen from it; cj_fires: nobody in CJ's line of fire */
-    u8 strict, keep, pad[2];   /* strict: 1 = only places everything is KNOWN about (the man holds a place already: no moving on a guess);
+    u8 strict, keep, stand_in, pad;   /* stand_in (1.5): `threat` is no man but a point beyond the man's quarter (peace): no line-of-fight rules */   /* strict: 1 = only places everything is KNOWN about (the man holds a place already: no moving on a guess);
                                keep: 1.3 - the place he holds is valued (the line rules choose new places only: a shooter shifting about does not move him) */
 } place_in;
 HID float hcb_place_score(hcb_brain *b, hcb_out *out, const place_in *in, hcb_vec at, u32 now, int ask, int *cover);   /* < 0: not a place */

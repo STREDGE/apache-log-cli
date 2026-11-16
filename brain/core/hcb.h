@@ -600,7 +600,8 @@ void hcb_think(hcb_brain *b, const hcb_snapshot *s, hcb_out *out);
 int hcb_nav_way(hcb_brain *b, hcb_vec from, hcb_vec to, hcb_vec *wp, int max, uint32_t now);
 /* 1.1, for tests and tools: what a firing place is worth to a man (hcb_places.c; < 0 = not a place) with what the brain knows about
    it now (nothing is asked), and a mark "nobody gets through here" on the map as a man who made no progress leaves it. cj_fires: bit 0 CJ
-   fires along cj_dir; bit 1 (1.5) the place is one the man holds already (the looser rules for keeping a place) */
+   fires along cj_dir; bit 1 (1.5) the place is one the man holds already (the looser rules for keeping a place); bit 2 (1.5) `threat` is
+   no man but the peace stand-in beyond the man's quarter (no line-of-fight rules) */
 float hcb_place_value(hcb_brain *b, hcb_vec anchor, hcb_vec man, hcb_vec cj, hcb_vec threat, const hcb_vec *others, int n_others,
                       const hcb_vec *taken, int n_taken, hcb_vec cj_dir, int cj_fires, hcb_vec at, uint32_t now);
 void hcb_nav_mark(hcb_brain *b, hcb_vec at, hcb_vec toward, uint32_t now, uint32_t ttl);
