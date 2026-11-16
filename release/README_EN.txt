@@ -1,10 +1,20 @@
 HELICOVER 1.4 BETA 2 - support helicopter with a smart crew
-GTA San Andreas (Android, 64-bit), a CLEO mod + the Helicover Brain 0.4.1 mod. They only work together.
+GTA San Andreas (Android, 64-bit), a CLEO mod + the Helicover Brain 0.4.2 mod. They only work together.
 
 WHAT IT IS
 Call a support helicopter: it flies in from far away, follows CJ and covers him with four door
 gunners. Drop a four-man team on foot, get picked up by rope, fly to the map marker or Grove
 Street and get out there by landing or by rope.
+
+NEW IN BRAIN 0.4.2 - FIXED FROM YOUR LOG (a 14-minute game)
+- The door gunners had not fired one round of their own in the whole game: the brain waited for the wrong crew state.
+  Fixed - they fire while they are in their doors.
+- The commander said "into cover" / "CJ is in cover" / "stay with me" several times a second and started and stopped
+  leading CJ (177 times). Now: 2.5 s between any two things said, "into cover" every 6 s at most, "in cover" after CJ
+  has stayed there a second; a shooter moving in a car no longer throws the cover spot away.
+- Guards were run over (7 in the game). A guard now sprints out of the path of a car coming at him.
+- The detail no longer turns round for every new shooter: it keeps the man it fights for 3 s at least.
+  The scripts did not change (1.4 beta 2): only libHelicoverBrain64.so is new.
 
 NEW IN BRAIN 0.4.1 - ONE LOG FOR THE WHOLE GAME
 - Everything needed for a diagnosis goes into ONE file: mods/hcbrain_log.txt. It is added to as the game goes (twice a

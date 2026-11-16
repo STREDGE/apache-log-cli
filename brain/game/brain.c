@@ -55,7 +55,7 @@ extern void *memset(void *d, int c, u64 n);
 
 #define HIDDEN __attribute__((visibility("hidden")))
 #define EXPORT __attribute__((visibility("default")))
-#define VERSION "0.4.1 (one log for the whole game: every second the full picture, crashes and hangs in the same file)"
+#define VERSION "0.4.2 (the gunners do fire, a calm commander, out of the way of cars; one log for the whole game)"
 #define GAME_DIR "/storage/emulated/0/Android_unprotected/data/com.rockstargames.gtasa/"
 
 /* ---------- the game (offsets from libGTASA base; see brain/research/game_facts.md) ---------- */
@@ -874,7 +874,9 @@ static void gunner_shot(u32 who) {
 }
 static void gunners_fire(void) {
     u32 k, v;
-    if (!g_fire_ready || !g_ticks || !(shared_get(HC_PHASE, &v) && v == 2)) return;   /* (PHASE 2: the crew is in its doors) */
+    /* PHASE: 0 and 3 = the crew is in its doors, 1 = on foot after a landing, 2 = moving to the doors (the Fire script rests
+       them then). 0.4.1 asked for 2 - the one phase they do not fire in - and no gunner fired a round in a whole game. */
+    if (!g_fire_ready || !g_ticks || (shared_get(HC_PHASE, &v) && (v == 1 || v == 2))) return;
     for (k = 0; k < g_snap.n_ours; k++)
         if (g_snap.our_role[k] >= HCB_ROLE_GUNNER && g_snap.our_role[k] < HCB_ROLE_SQUAD) gunner_shot(g_snap.ours[k]);
 }
@@ -1775,7 +1777,7 @@ static void *watchdog(void *arg) {
 }
 
 struct ModInfo { char guid[48]; char name[48]; char version[24]; char author[48]; u16 ver[4]; u8 reserved[336]; };
-static struct ModInfo g_info __attribute__((aligned(16))) = {"net.helicover.brain", "Helicover Brain", "0.4.1", "Helicover", {0, 4, 1, 0}, {0}};
+static struct ModInfo g_info __attribute__((aligned(16))) = {"net.helicover.brain", "Helicover Brain", "0.4.2", "Helicover", {0, 4, 2, 0}, {0}};
 static int g_done;
 EXPORT struct ModInfo *__GetModInfo(void) { return &g_info; }
 EXPORT void OnModPreLoad(void) {}

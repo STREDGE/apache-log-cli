@@ -631,7 +631,7 @@ e.share(HC_POLICE, 0); e.share(HC_MISSION, 0)
 e.share(HC_STATE + 27, 1); e.frame(n=1)                              # the helicopter has landed: the crew are guards on foot now
 s = replay_tool.replay(e.save())[2][-1]['snapshot']
 assert sorted(s.our_role[:s.n_ours]) == [1, 6, 6, 7, 7], list(s.our_role[:s.n_ours])
-e.share(HC_STATE + 27, 0)
+e.share(HC_STATE + 27, 2)                                            # (2 = moving to the doors: the brain fires no round by itself, so the rounds asked for by opcode below are all there are)
 # a guard who was let go and walks away (the scripts keep him in LEAVE..+7) is still ours: a friend in every line of fire, no orders
 gone = e.ped(-6, -9, pedtype=8, weapon=0)
 e.share(HC_STATE + 416, e.handle(gone)); e.frame(n=1)
@@ -695,7 +695,22 @@ passed('A door gunner asks every frame (0E48, 9 variables): weapon on the man, t
 # 1.4.1: the gunners fire their own weapons through the game's weapon code - the brain checks the round, then calls
 # CWeapon::Fire with the gunner's current weapon, aimed (IK bit) at the checked point, and the gun flash, as the game's task does
 assert 'the gunners fire their own weapons through the game' in e.log(), e.log()
-e.share(HC_STATE + 27, 2); e.fire_calls.clear(); e.flash_calls.clear()
+# (PHASE as the scripts really set it: 0 and 3 = the crew in its doors - they fire; 2 = moving to the doors - the Fire script rests
+#  them and the brain fires nothing. 0.4.1 fired only in phase 2, which never coincides with a fight: 0 rounds in a whole game.)
+e.fire_calls.clear(); e.flash_calls.clear()
+for k in range(16):
+    e.frame(ms=50, hud=False)
+    e.gunshot(gang, (0., 0.5, 1.)) if k % 8 == 0 else None
+assert not e.fire_calls, 'moving to the doors: no rounds'
+n_by_phase = {}
+for ph in (0, 3):
+    e.share(HC_STATE + 27, ph); e.fire_calls.clear()
+    for k in range(24):
+        e.frame(ms=50, hud=False)
+        e.gunshot(gang, (0., 0.5, 1.)) if k % 8 == 0 else None
+    n_by_phase[ph] = len(e.fire_calls)
+assert n_by_phase[0] and n_by_phase[3], n_by_phase
+e.fire_calls.clear(); e.flash_calls.clear()
 e.w32(g1 + 0x730 + 8, 0); e.w32(g1 + 0x730 + 0xc, 5); e.w32(g1 + 0x730 + 4, 2)   # an empty clip, reloading
 for k in range(40):
     e.frame(ms=50, hud=False)
@@ -708,7 +723,7 @@ for c in fc:
 assert e.r32(g1 + 0x698) & 1 == 0, 'the IK bit is put back after the shot'
 assert [f for f in e.flash_calls if f[0] == g1] and all(f[1:] == (250, 0) for f in e.flash_calls), e.flash_calls
 assert e.opcode(3, 3, CMD_SQUAD, handle=H_(g1))[1][1] in (0, 1, 3, 4) and e.opcode(3, 3, CMD_SQUAD, handle=H_(g1))[1][1] != 2, 'the gunner\'s script only aims (4): the brain fires'
-e.share(HC_STATE + 27, 0)
+e.share(HC_STATE + 27, 2)
 passed('1.4.1 gunners fire their own weapons: %d rounds through CWeapon::Fire - the current weapon of the gunner, from 0.8 m in front of him to the checked point (IK bit set for the shot and put back, clip and ammo topped up, no reload stall, no extra spread), the gun flash as the game\'s own task does; the script only keeps his weapon on the man' % len(fc))
 
 
@@ -966,7 +981,7 @@ cheap, _ = crowd(10)
 n_cheap = []
 for k in range(20):
     n0 = len(cheap.los_calls); cheap.frame(ms=50, hud=False); n_cheap.append(len(cheap.los_calls) - n0)
-assert max(n_cheap) > max(per_frame) and max(n_cheap) <= 10 + 32 + 2, (n_cheap, per_frame)
+assert max(n_cheap) > max(per_frame) and max(n_cheap) <= 10 + 32 + 4, (n_cheap, per_frame)   # (+ one ray for each of the four gunners' own rounds)
 passed('A crowded street (4 door gunners, 24 armed men, shots every 150 ms) with rays costing 0.3 ms each: at most %d rays a frame (2.5 ms), every one of the %d questions answered in turn, the brain under a quarter of the time (%.0f %%); with cheap rays more per frame, never more than 10 + 32 a look' % (max(per_frame), len(asked_pairs), share_ * 100))
 
 # a man whose position is not a number (a broken entity): he is left out, no ray and no round ever gets such a point
@@ -1079,7 +1094,7 @@ e.gunshot(gang, (0., 0.5, 1.))
 for k in range(45):
     e.frame(ms=100, hud=False)
     e.opcode(10, 10, CMD_POST, handle=e.handle(s1)); e.opcode(3, 9, CMD_GUNNER, handle=e.handle(g1))
-    if k == 20: e.share(HC_STATE + 27, 2)
+    if k == 20: e.share(HC_STATE + 27, 3)
 lg1 = e.log()
 if os.environ.get('HCB_LOG_SAMPLE'): Path(os.environ['HCB_LOG_SAMPLE']).write_text(lg1)     # (to read what the log looks like)
 H_ = e.handle
@@ -1089,7 +1104,7 @@ assert re.search(r'brain: alert (COMBAT|threat|EVACUATE)', lg1) and 'contact #%d
 assert re.search(r'^  guard1#%d hp 100\.0/0\.0 \(4\.0 2\.0 1\.0\) w 31 .*\| post \w+ \w+ \(.*\| order ' % H_(s1), lg1, re.M), lg1[-3000:]
 assert re.search(r'^  gunner1#%d .*\| order ' % H_(g1), lg1, re.M) and re.search(r'^  pilot#%d ' % H_(pilot), lg1, re.M)
 assert re.search(r'0E48: gunner [1-9]\d* squad 0 status 0 post [1-9]', lg1) and re.search(r'shots: ours 0 others [1-9]', lg1)
-assert 'Helicover (all): ' in lg1 and ' +7=3' in lg1 and re.search(r'Helicover changed:.* \+27=2', lg1), [l_ for l_ in lg1.splitlines() if 'Helicover' in l_]
+assert 'Helicover (all): ' in lg1 and ' +7=3' in lg1 and re.search(r'Helicover changed:.* \+27=3', lg1), [l_ for l_ in lg1.splitlines() if 'Helicover' in l_]
 assert 'detail: ' in lg1 and 'helicopter our-heli' in lg1 and 'time: looks ' in lg1
 opens = [o for o in e.opens if o[0].endswith('hcbrain_log.txt')]
 assert opens and all(f & 0o2000 and not f & 0o1000 for _, f in opens), 'the log file is only ever added to'
