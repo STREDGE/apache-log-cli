@@ -697,3 +697,51 @@ Checked on the player's libGTASA.so (DWARF + disassembly), 16.11.2026.
   found (0x453d90); `CTaskSimpleJump::ProcessPed` 0x646d18 and `CTaskSimpleInAir::ProcessPed` 0x645bbc call
   `CTaskSimpleClimb::TestForClimb` 0x645c20. vtable `_ZTV16CTaskComplexJump` (GOT 0x850490).
 - `CPed` +0x6ac health, +0x6b0 `m_nMaxHealth` (float), +0x6b4 armour.
+
+## O. 2.0 beta 6: the commander's voice and his "come to me"
+
+Checked on the player's libGTASA.so (DWARF + disassembly) and in the emulator on its real code, 16.11.2026.
+
+- `CPed::Say(u16 ctx, u32 delay, float prob, u8 overrideSilence, u8 forceAudible, u8 frontEnd)` 0x5a57c4 =
+  `CAEPedSpeechAudioEntity::AddSayEvent(this + 0x340, 52, ctx, delay, prob, ...)` 0x4757c0 (tail call; returns the sound id,
+  -1 (0xffff) for every early return). The speech entity is `CPed` +0x340 (0x130 bytes, vtable 0x82f650): +8 the ped, +0xb8
+  initialised, +0xba audio type (0 GEN, 1 EMG, 2 PLAYER, 3 GANG, 4 GFD, 5 SPC), +0xbc voice, +0xbe female, +0xc0 speaking,
+  +0xc1 speech off (0489 "mute", being hit), +0xc2 off for a script line, +0xc3 front end, +0xc4 force audible, +0xd0 sound,
+  +0xd2 bank, +0xd4 slot, +0xd8 volume, +0xdc last global context.
+- `Initialise(CEntity*)` 0x4785f8 (called by the CCivilianPed / CCopPed / CEmergencyPed / CPlayerPed constructors): type =
+  `CPedModelInfo` +0x6c (`m_AudioPedType`, from peds.ide), voice = +0x72 (`m_NextVoice`, then `IncrementVoice`), SPC models
+  through `gSpecialPedVoiceLookup`; female from the default ped type (5 / 22); +0xb8 = 1 last. Type > 5 or voice < 0: not
+  initialised (AddSayEvent then returns -1 at once).
+- AddSayEvent returns -1 when: not initialised; `s_bAllSpeechDisabled` 0xbab97c (cutscenes); +0xc2; widescreen and not PLAYER /
+  GFD; `CGameLogic::GameState` == 2; probability; +0xc1 unless overrideSilence; +0xc0 (speaking) for a non-pain line; dead;
+  `CStreaming::IsVeryBusy()` (0x392dc4: `CRenderer::m_loadingPriority` or `ms_numModelsRequested` > 5) unless frontEnd,
+  forceAudible or the context is "important for streaming" (jump table 0x74a154: only 13, 15, 48-64, 125-127, 161-171 -
+  NOT MOVE_IN, NOT DUCK); farther than 40 m from the camera (0x740298 = 1600); no free speech slot of 5 or the context rested
+  (`CanWePlayGlobalSpeechContext` 0x475fc8: `gGlobalSpeechContextNextPlayTime[ctx]` 0xbab058, set to now + repeat (7000 ms for
+  most) + 1..1000 by anybody who says it); `GetSoundAndBankIDs` 0x476284 < 0.
+- `GetSoundAndBankIDs`: `gSpeechContextLookup` 0x880c92 (GOT 0x851d88), rows of 8 int16 {global, GEN, EMG, PLAYER, GANG, GFD,
+  repeat ms, 0}, -1 ends; column = type. EMG (type 1, jump table 0x74a64c entry 1 -> 0x4763e0): specific <= 34,
+  `gEmgSpeechLookup` 0x874710 (GOT 0x8505c0) [35][46] {int16 first, last} (-1 = the voice has none), bank =
+  `gEmgSpeechVoiceToBankLookup` 0x8746b4 [voice] (ARMY1-3 = banks 365-367). Voice names `gEmgSpeechVoiceLookup` 0x87431c (20 bytes
+  each): 0-2 ARMY1-3, 3-7 EMT1-5, 8-12 FBI2-6, 13-20 LAPD1-8, 21-25 LVPD1-5, 26-31 MCOP1-6, 32 PULASKI, 33-36 RCOP1-4, 37-41 SFPD1-5,
+  42-45 SWAT1, 2, 4, 6.
+- The 0.8 table against EMG: MOVE_IN 144 (EMG 10: ARMY1-3, SWAT1, police), ORDER_WAIT_MANY 159 / ORDER_FOLLOW_NEAR_MANY 153 /
+  CHASED 44 / ORDER_ATTACK_SINGLE 148 (PLAYER only), ENEMY_GANG_WASTED 258 / CAR_WAIT_FOR_ME 40 (GANG only), DUCK 85 (EMG 7: all
+  army, SWAT, FBI, police), TARGET 220 (EMG 20: SWAT, FBI, police - no army voice). The GEN column is -1 for all of them.
+- What the army voices have (global contexts): CHAT 45, COVER_ME 65, DODGE 74, DUCK 85, FIGHT 89, JACKING 121-124, MOVE_IN 144,
+  SHOCKED 181, SHOOT_GENERIC 184, STEALTH_ALERT_SOUND 202 / SIGHT 203 / GENERIC 204, STEALTH_NOTHING_THERE 206. SWAT1: CHASE_FOOT
+  43, COVER_ME, DODGE, DUCK, MOVE_IN, ROPE 177, SOLO 199, SURROUNDED 207, TARGET (SWAT2/4/6: no MOVE_IN).
+- `PlayLoadedSound` 0x478e2c: forceAudible sets the sound's emitted volume to +3 dB (CAESound +0x20).
+- `CTaskSimpleRunNamedAnim(anim, set, flags, blend, time, dontInterrupt, runInSequence, offsetPed, holdLastFrame)` ctor
+  0x5d790c, 0x78 bytes (TASK_PLAY_ANIM: `CTask::operator new(0x78)` 0x3ff32c), vtable 0x8335f0, type 401. TASK_PLAY_ANIM
+  (`CRunningScript::PlayAnimScriptCommand` 0x3ff208) passes flags 0x10, +2 looped (loop, or a time with lockF 0), +0x40 / +0x80 /
+  +8 locks; the task goes to the ped as a `CEventScriptCommand` (`GivePedScriptedTask` 0x3f41b0) and ends up in the main slot.
+  `StartAnim` 0x5d7d00 starts a timer for time >= 0 and blends with `CAnimManager::BlendAnimation`; without the set in memory
+  the hierarchy is null and `ProcessPed` 0x5d7a10 ends the task at once. The task's destructor blends the anim out (-4.0).
+- Anim sets: `CAnimManager::ms_aAnimBlocks` 0xba7220 (GOT 0x850780), 180 x 0x20 {name[16], loaded +0x10, refs +0x12, ...},
+  count `ms_numAnimBlocks` 0xba88a4 (GOT 0x84f4b0); `GetAnimationBlock` 0x4668f0 compares names with strcasecmp.
+  REQUEST_ANIMATION (04ED, 0x41d850): `CStreaming::RequestModel(index + 25575, 4)` 0x3949e0 + the script's resource manager;
+  HAS_ANIMATION_LOADED (04EE): +0x10 of the set.
+- The game has no arm-only "come here": its partial gestures are the gang hand signs (`CTaskComplexPlayHandSignalAnim`, GHANDS
+  gsign*) and talk (GANGS prtial_gngtlkA-H); the always-loaded "ped" set has idle_taxi (a full-body hail). CopTraf_Come of the
+  POLICE set is the traffic policeman's "come on".

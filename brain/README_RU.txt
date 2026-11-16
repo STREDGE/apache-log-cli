@@ -215,9 +215,21 @@ Helicover 1.5 бета 3 (они в том же архиве), и они без 
 - Снимок (HCB_VERSION 5): `in_water`, `hints[12]` (точки CCover игры), `dangers[8]` (граната / бутылка / ракета / взрыв);
   чёрный ящик пишет этот хвост целиком (отчёты 0.7 и старше новым ядром не читаются).
 - Адаптер читает таблицы игры: взрывы 0xd28c78 (16 × 0x88), gaProjectileInfo 0xd29508 (32 × 0x38), CCover::m_aPoints
-  0xc9b390 (100 × 0x28); зовёт CWaterLevel::GetWaterLevel 0x6ba834 и CPed::Say 0x5a57c4 (контексты — по таблице имён в
-  libGTASA.so: 144 MOVE_IN, 159 ORDER_WAIT_MANY, 153 ORDER_FOLLOW_NEAR_MANY, 44, 148, 258, 85 DUCK, 220 TARGET, 40).
+  0xc9b390 (100 × 0x28); зовёт CWaterLevel::GetWaterLevel 0x6ba834 и CPed::Say 0x5a57c4.
   Каждая часть сверяется со словами кода при старте; `VoiceOff` / `WaterOff` в настройках после вылета в шаге 21 / 22.
+- 2.0 бета 6, голос командира (разбор — `brain/research/game_facts.md`, раздел O): таблица 0.8 (MOVE_IN, ORDER_WAIT_MANY,
+  ORDER_FOLLOW_NEAR_MANY, CHASED, ORDER_ATTACK_SINGLE, ENEMY_GANG_WASTED, DUCK, TARGET, CAR_WAIT_FOR_ME) — фразы игрока и банд:
+  у голоса EMG (солдат 287 — VOICE_EMG_ARMY1–3) есть только MOVE_IN и DUCK, у GEN (агент в чёрном) — ничего; MOVE_IN и DUCK
+  игра ещё и выбрасывает, пока стриминг занят (бой), если нет «force audible». Теперь: командиру без армейского голоса мод даёт
+  VOICE_EMG_ARMY1–3, как это делает Initialise (+0x340: +0xba тип 1, +0xbc голос, +0xbe 0, +0xb8 1); у каждой фразы список
+  контекстов (DUCK, MOVE_IN, COVER_ME, DODGE, STEALTH_ALERT_*, STEALTH_NOTHING_THERE, SEARCH, TARGET, ROPE), берётся первый,
+  который есть у его голоса (gSpeechContextLookup + gEmgSpeechLookup) и который игра не «отдыхает» (gGlobalSpeechContextNextPlayTime);
+  Say(..., force audible = 1); ответ игры считается («aloud / refused / no line / rested» в строке `seen:` и у слов в журнале).
+- 2.0 бета 6, жест «ко мне» — сам мод (`body_wave`): командир стоит у своей точки и ядро говорит sign — поворот к CJ (+0x6c4/+0x6c8),
+  его задача просится остановиться, CTaskSimpleRunNamedAnim 0x5d790c ("CopTraf_Come", "POLICE", флаги 0x12, 4.0, 1500 мс) в главный
+  слот (SetTask); его задача оружия снимается (`arms_free`, body_gun не даёт новую, пока он машет), руки спринтового огня
+  отпускаются; не чаще раза в 4 с; CJ пошёл — жест прерывается. Набор POLICE не в памяти — RequestModel(25575 + набор, 4).
+  Скриптам +16 к долгу — только если мод махать не может (их старый жест). Шаг вылета 31, `WaveOff`.
 - Ядро: уход из радиуса опасности + слово 9; вода — посты «стоять», точка вертолёта над CJ, слово 10; здание — всё
   строится вокруг `dt->door`; машина CJ — точка вертолёта в 50 м впереди, слово 11; `HCB_HOLD_FISTS` (14) и состояние
   отряда 5 «руками»; подсказки укрытий игры в `find_cover`; пилот: `land` (флаг 8 команды 6, 15 м над площадкой).

@@ -57,6 +57,9 @@ F_POINT_ARM, F_ABORT_ARM, F_JUMP = 0x5d3b94, 0x5d3e0c, 0x647668      # 1.3: IKCh
 VT_JUMP = 0x83a5d0 + 0x10
 VT_IK_MAN, VT_IK_ARM, TASK_POOL, IK_MAN = 0x8354b8 + 0x10, 0x835600 + 0x10, 0xbc3be8, 0xc98340   # 1.4.2: the IK task (secondary slot 5), an arm's chain, CPools::ms_pTaskPool, g_ikChainMan
 F_DAMAGE, GOT_DAMAGE, PLT_DAMAGE, F_REGREF = 0x443b74, 0x83eba8, 0x21b5f0, 0x4f3b58   # 1.4.2: ComputeDamageResponse, its GOT slot and PLT stub; CEntity::RegisterReference
+# 2.0 beta 6: the commander's voice (the game's own CPed::Say runs to the point where it asks for the sound: LoadAndPlaySpeech) and his gesture
+F_LOAD_PLAY, AUDIO_VOLUMES, VT_SPEECH, ALL_SPEECH_OFF, CTX_NEXT_T = 0x4769ec, 0xc55b70, 0x82f640 + 0x10, 0xbab97c, 0xbab058
+F_NAMED_ANIM, VT_NAMED, F_REQUEST_MODEL, ANIM_BLOCKS_T, N_ANIM_BLOCKS_T = 0x5d790c, 0x8335e0 + 0x10, 0x3949e0, 0xba7220, 0xba88a4
 GOT_SCRIPTS, GOT_HUD, GOT_GUNSHOT = 0x845438, 0x845ec8, 0x843f10
 GOT_IGNORE, IGNORE_ENTITY, F_COLLECT, F_VARPTR, SCRIPT_PARAMS = 0x84b180, 0xbdcaf8, 0x3f1fcc, 0x3f2654, 0xa001ac
 HC_STATE = 0x48456A00
@@ -125,8 +128,9 @@ GTA_IMAGE = bytes(GTA_IMAGE)
 
 
 class Emu:
-    def __init__(self, tweak=None, cleo=None, sautils=True, mod=None, cleo_ready=True, gun=False):
+    def __init__(self, tweak=None, cleo=None, sautils=True, mod=None, cleo_ready=True, gun=False, real_say=False):
         self.mod_path = mod or MOD
+        self.real_say, self.lps_calls, self.anim_tasks, self.requests = real_say, [], [], []     # 2.0 beta 6
         self.uc = uc = Uc(UC_ARCH_ARM64, UC_MODE_ARM)
         self.imports, self.fs, self.fds, self.polys, self.items, self.prot, self.los_calls, self.threads = {}, {}, {}, [], [], [], [], []
         self.signals, self.sigactions, self.clock_step, self.deliver, self.opens = [], [], 5, None, []
@@ -159,14 +163,16 @@ class Emu:
         self.real_abort, self.damage_calls, self.damage_crash, self.on_screen = False, [], None, True   # 1.4.2: the game's own AbortPointArm runs; ComputeDamageResponse entries
         for addr, fn in ((F_TASK_NEW, self.g_task_new), (F_GOTO, self.g_goto), (F_SHOOT, self.g_shoot), (F_SET_TASK, self.g_set_task), (F_GROUND, self.g_ground),
                          (F_EV_CLEAR, self.g_ev_clear), (F_SET_SEC, self.g_set_sec), (F_GUN_CTOR, self.g_gun_ctor), (F_GUN_CTL, self.g_gun_ctl), (F_RELOAD, self.g_reload),
-                         (F_POINT_ARM, self.g_point_arm), (F_ABORT_ARM, self.g_abort_arm), (F_JUMP, self.g_jump), (F_REGREF, self.g_regref), (F_DAMAGE, self.g_damage)):
+                         (F_POINT_ARM, self.g_point_arm), (F_ABORT_ARM, self.g_abort_arm), (F_JUMP, self.g_jump), (F_REGREF, self.g_regref), (F_DAMAGE, self.g_damage),
+                         (F_NAMED_ANIM, self.g_named), (F_REQUEST_MODEL, self.g_request)):
             uc.hook_add(UC_HOOK_CODE, fn, begin=GTA + addr, end=GTA + addr)
         # the virtual functions the mod calls on a task: its type (+0x28) and "can you stop now?" (+0x38)
-        for vt, typ in ((VT_USE_GUN, 1017), (VT_KILL, 1000), (VT_GOTO, 903), (VT_SHOOT, 911), (VT_ROPE, 1407), (VT_JUMP, 211)):
+        for vt, typ in ((VT_USE_GUN, 1017), (VT_KILL, 1000), (VT_GOTO, 903), (VT_SHOOT, 911), (VT_ROPE, 1407), (VT_JUMP, 211), (VT_NAMED, 401)):
             uc.mem_write(GTA + vt + 0x28, struct.pack('<Q', self.stub('type:%d' % typ))); uc.mem_write(GTA + vt + 0x38, struct.pack('<Q', self.stub('abort')))
         self.vt_flee = 0x834000   # (1.1: a vtable for a task of the game AI's own - a flight - laid out by the test in the game's data)
         uc.mem_write(GTA + self.vt_flee + 0x28, struct.pack('<Q', self.stub('type:911'))); uc.mem_write(GTA + self.vt_flee + 0x38, struct.pack('<Q', self.stub('abort')))
-        for addr, fn in ((F_SCRIPTS, self.g_scripts), (F_HUD, self.g_hud), (F_GUNSHOT, self.g_gunshot), (F_LOS, self.g_los), (F_POLY, self.g_poly), (F_SCREEN, self.g_screen), (F_FIRE, self.g_fire), (F_FLASH, self.g_flash), (F_WATER, self.g_water), (F_SAY, self.g_say)):
+        for addr, fn in ((F_SCRIPTS, self.g_scripts), (F_HUD, self.g_hud), (F_GUNSHOT, self.g_gunshot), (F_LOS, self.g_los), (F_POLY, self.g_poly), (F_SCREEN, self.g_screen), (F_FIRE, self.g_fire), (F_FLASH, self.g_flash), (F_WATER, self.g_water),
+                         (F_LOAD_PLAY, self.g_load_play) if real_say else (F_SAY, self.g_say)):   # (2.0 beta 6: real_say - the game's own CPed::Say runs; the recorder sits where it asks for the sound)
             uc.hook_add(UC_HOOK_CODE, fn, begin=GTA + addr, end=GTA + addr)
         names = [b'/data/app/x/lib/arm64/libGTASA.so\0', b'/data/app/x/lib/arm64/libSAcleo64.so\0']
         ph = lambda va, sz: struct.pack('<IIQQQQQQ', 1, 6, va, va, va, sz, sz, 0x1000)
@@ -199,6 +205,11 @@ class Emu:
         self.task_pool = self.alloc(0x20); uc.mem_write(self.task_pool, struct.pack('<QQi', self.alloc(0x10), self.task_flags, 64)); self.w64(GTA + TASK_POOL, self.task_pool)
         uc.mem_write(GTA + PLAYER_FOCUS, b'\0'); uc.mem_write(GTA + USER_PAUSE, b'\0\0'); uc.mem_write(GTA + CUTSCENE, b'\0'); uc.mem_write(GTA + MISSION_FLAG, struct.pack('<I', 0))
         self.wanted = self.alloc(0x40)
+        # 2.0 beta 6: the game's animation sets (CAnimManager::ms_aAnimBlocks: name, in memory) and its audio event volumes (EVENTVOL.DAT)
+        for k_, (nm_, in_) in enumerate(((b'ped', 1), (b'police', 1), (b'gangs', 0))):
+            uc.mem_write(GTA + ANIM_BLOCKS_T + 0x20 * k_, nm_.ljust(16, b'\0') + bytes([in_]))
+        self.w32(GTA + N_ANIM_BLOCKS_T, 3)
+        self.volumes = self.alloc(0x200); self.w64(GTA + AUDIO_VOLUMES, self.volumes)
         self.shared = self.alloc(0x2000)
         self.shared_n = 0
         uc.mem_write(CI + I_SHARED, struct.pack('<QQQ', self.shared, self.shared, self.shared + 0x2000))
@@ -222,7 +233,8 @@ class Emu:
     def r32(self, a): return struct.unpack('<I', bytes(self.uc.mem_read(a, 4)))[0]
     def r64(self, a): return struct.unpack('<Q', bytes(self.uc.mem_read(a, 8)))[0]
 
-    def ped(self, x, y, z=1., pedtype=4, weapon=0, health=100., flag=1, face=(0., 1.), model=20, index=None):
+    def ped(self, x, y, z=1., pedtype=4, weapon=0, health=100., flag=1, face=(0., 1.), model=20, index=None, voice=(0, 57)):
+        """voice: (audio type, voice) of his speech entity, as CAEPedSpeechAudioEntity::Initialise sets it from his model (0 GEN, 1 EMG; None = not initialised)"""
         uc = self.uc
         i = index if index is not None else next(k for k in range(self.n_peds) if bytes(uc.mem_read(self.ped_flags + k, 1))[0] & 0x80)
         p = self.ped_objs + i * PED_STRIDE
@@ -235,6 +247,11 @@ class Emu:
         self.w64(p + 0x20, self.alloc(0x10))                                               # (1.4.2: his RwObject - a man the game draws; PointArm reads it)
         uc.mem_write(p + 0x548, b'\x01'); self.w32(p + 0x54c, 1); self.wf(p + 0x6ac, health); self.w32(p + 0x720, pedtype)
         uc.mem_write(p + 0x8dc, b'\x00'); self.w32(p + 0x730, weapon); self.w32(p + 0x738, 30); self.w32(p + 0x73c, 500)   # (a full magazine, rounds in reserve)
+        # his speech entity (CPed +0x340) as the game's constructor and Initialise leave it
+        sp = p + 0x340
+        self.w64(sp, GTA + VT_SPEECH); self.w64(sp + 8, p); self.wf(sp + 0xd8, -100.)
+        uc.mem_write(sp + 0xb8, bytes([0 if voice is None else 1])); uc.mem_write(sp + 0xba, struct.pack('<hhh', *((voice or (-1, -1)) + (0,))))
+        uc.mem_write(sp + 0xd0, struct.pack('<hhh', -1, -1, -1)); uc.mem_write(sp + 0xdc, struct.pack('<h', -1))
         return p
 
     def handle(self, ptr):
@@ -433,6 +450,21 @@ class Emu:
     def g_say(self, uc, *_):
         self.say_calls.append((uc.reg_read(X[0]), uc.reg_read(X[1]) & 0xffff, uc.reg_read(X[2]) & 0xffffffff, round(fl(uc.reg_read(S[0])), 3)))
         self._ret(uc, 0)
+    def g_load_play(self, uc, *_):
+        """CAEPedSpeechAudioEntity::LoadAndPlaySpeech(delay): the game has chosen the sound and asks for it - the end of the road this test follows"""
+        sp = uc.reg_read(X[0]); h16 = lambda o: struct.unpack('<h', bytes(uc.mem_read(sp + o, 2)))[0]; b8 = lambda o: bytes(uc.mem_read(sp + o, 1))[0]
+        self.lps_calls.append(dict(sp=sp, delay=uc.reg_read(X[1]) & 0xffffffff, type=h16(0xba), voice=h16(0xbc), sound=h16(0xd0), bank=h16(0xd2), slot=h16(0xd4), ctx=h16(0xdc),
+                                   speaking=b8(0xc0), force=b8(0xc4), front=b8(0xc3), volume=round(self.rf(sp + 0xd8), 1)))
+        uc.mem_write(sp + 0xc0, b'\0')        # (and the line is over before the next look: what the game's audio Service does when the sound ends)
+        self._ret(uc)
+    def g_named(self, uc, *_):
+        t, sp_ = uc.reg_read(X[0]), uc.reg_read(UC_ARM64_REG_SP)
+        self.w64(t, GTA + VT_NAMED)
+        self.anim_tasks.append(dict(task=t, anim=self.cstr(uc.reg_read(X[1])), set=self.cstr(uc.reg_read(X[2])), flags=uc.reg_read(X[3]) & 0xffffffff, blend=round(fl(uc.reg_read(S[0])), 2),
+                                    time=uc.reg_read(X[4]) & 0xffffffff, rest=[uc.reg_read(X[k]) & 0xff for k in (5, 6, 7)] + [bytes(uc.mem_read(sp_, 1))[0]]))
+        self._ret(uc)
+    def g_request(self, uc, *_):
+        self.requests.append((uc.reg_read(X[0]) & 0xffffffff, uc.reg_read(X[1]) & 0xffffffff)); self._ret(uc)
     def g_flash(self, uc, *_):
         self.flash_calls.append((uc.reg_read(X[0]), uc.reg_read(X[1]) & 0xffffffff, uc.reg_read(X[2]) & 0xff)); self._ret(uc, 1)
     def g_los(self, uc, *_):
@@ -1297,6 +1329,70 @@ cfg_ = e.fs[CFG_].decode()
 assert 'written by an older version: not read' in lg_ and 'water level off' not in lg_ and e.water_calls > 0 and 'RunFireOff' not in cfg_ and 'SettingsVersion = 15' in cfg_ and 'OuterPeaceM = 21' in cfg_, (cfg_[:400], [l_ for l_ in lg_.splitlines() if 'settings' in l_])
 passed('1.5: a settings file written by an older version (crash switches of crashes that version had, its built-in numbers) is not read - the new version starts with its own and writes the file anew, numbered')
 
+# ------------------------------------------------------------------ 2.0 beta 6: the commander's voice - heard
+# (the player: "there is no voice" - 44 lines counted in 11 minutes.) Here the game's OWN CPed::Say runs (Emu(real_say=True)): its
+# AddSayEvent with every early return, GetSoundAndBankIDs and CanWePlayGlobalSpeechContext on the game's own lookup tables; the
+# recorder sits where the game has chosen the sound and asks for it (CAEPedSpeechAudioEntity::LoadAndPlaySpeech).
+NUM_REQUESTED = 0x9729d8                                               # CStreaming::ms_numModelsRequested (more than 5 = "very busy")
+e = Emu(real_say=True); lg_ = e.load()
+soldier = e.ped(4, 2, pedtype=8, weapon=31, voice=(1, 1))             # model 287 as the game makes him: VOICE_EMG_ARMY2
+agent = e.ped(5, 2, pedtype=8, weapon=31, voice=(0, 57))              # an agent in black: a GEN voice
+def game_say(ped, ctx, force=0):
+    e.uc.mem_write(GTA + CTX_NEXT_T, bytes(4 * 0x168))                # (the game's rest per context: none)
+    n = len(e.lps_calls)
+    return (e.call(GTA + F_SAY, x=(ped, ctx, 0, 0, force, 0), s=(1.0,)) & 0xffff) != 0xffff and len(e.lps_calls) == n + 1
+OLD = sorted({144, 159, 153, 44, 148, 258, 85, 220, 40})              # the 0.8 table (MOVE_IN, ORDER_WAIT_MANY, ORDER_FOLLOW_NEAR_MANY, CHASED, ...)
+heard = {c: game_say(soldier, c) for c in OLD}
+assert heard == {40: False, 44: False, 85: True, 144: True, 148: False, 153: False, 159: False, 220: False, 258: False}, heard
+assert not any(game_say(agent, c) for c in OLD), 'a GEN voice has none of them'
+e.w32(GTA + NUM_REQUESTED, 8)                                         # a fight: the streaming is busy
+assert not game_say(soldier, 144) and game_say(soldier, 144, force=1), 'MOVE_IN is dropped while the streaming is busy - unless "force audible"'
+e.w32(GTA + NUM_REQUESTED, 0)
+NEW = (65, 74, 85, 144, 202, 203, 204, 206)                           # the lines the phrases use now (army voices)
+for v_ in (0, 1, 2):                                                  # VOICE_EMG_ARMY1-3: every one of them, each with its own bank
+    e.uc.mem_write(soldier + 0x340 + 0xbc, struct.pack('<h', v_)); n_ = len(e.lps_calls)
+    assert all(game_say(soldier, c) for c in NEW) and all(c_['bank'] == 365 + v_ and c_['type'] == 1 and c_['sound'] >= 0 for c_ in e.lps_calls[n_:]), (v_, e.lps_calls[-3:])
+passed('2.0 beta 6, why no voice: the game\'s own CPed::Say on the soldier\'s army voice returns -1 before asking for any sound for 7 of the 9 lines of the 0.8 table (they are the player\'s orders and the gangs\' words), on an agent\'s GEN voice for all of them, and drops MOVE_IN while the streaming is busy unless "force audible"; the 8 lines the phrases use now reach the sound for each of VOICE_EMG_ARMY1-3 (its own bank)')
+# the mod: an agent in black is the commander - he is given an army voice the way the game's Initialise gives one, and what he says is heard
+def voice_world(voice, tweak=None, frames=220, busy=8):
+    e = Emu(real_say=True, tweak=tweak); e.load()
+    gang = e.ped(20, 0, pedtype=7, weapon=30, face=(-1., 0.))
+    s1 = e.ped(4, 2, pedtype=8, weapon=31, voice=voice)
+    e.share(HC_STATE + 71, e.handle(s1)); e.share(HC_HELLO, 0)
+    e.w32(GTA + NUM_REQUESTED, busy)                                  # (a fight: the streaming is busy all the time)
+    e.frame(n=8); e.gunshot(gang, (0., 0.5, 1.))
+    for k in range(frames):
+        e.frame(ms=100, n=1, hud=False)
+        if k % 50 == 10: e.gunshot(gang, (0., 0.5, 1.))
+    return e, s1
+e, s1 = voice_world((0, 57))
+lg_ = e.log(); aloud = re.findall(r'commander: "[^"]+" \(direction \d\) - aloud: (\w+) \(VOICE_EMG_ARMY1\)', lg_)
+assert 'the commander\'s voice: VOICE_EMG_ARMY1 (given by the mod: he had audio type 0 voice 57)' in lg_, [l_ for l_ in lg_.splitlines() if 'voice' in l_][:6]
+assert e.lps_calls and len(e.lps_calls) == len(aloud) and all(c_['sp'] == s1 + 0x340 and (c_['type'], c_['voice'], c_['bank']) == (1, 0, 365) and c_['force'] == 1 and c_['front'] == 0 and c_['sound'] >= 0 for c_ in e.lps_calls), (aloud, e.lps_calls)
+assert all(c_['ctx'] in (65, 74, 85, 144, 177, 180, 202, 203, 204, 206, 220) for c_ in e.lps_calls) and set(aloud) <= {'COVER_ME', 'DODGE', 'DUCK', 'MOVE_IN', 'ROPE', 'SEARCH', 'STEALTH_ALERT_SOUND', 'STEALTH_ALERT_SIGHT', 'STEALTH_ALERT_GENERIC', 'STEALTH_NOTHING_THERE', 'TARGET'}, aloud
+assert ('voice lines %d (aloud %d, refused 0' % (len(aloud), len(aloud))) in lg_ and 'voices given 1)' in lg_, [l_ for l_ in lg_.splitlines() if 'voice lines' in l_][-1:]
+passed('2.0 beta 6, the commander\'s voice: an agent in black (a GEN voice) in command is given VOICE_EMG_ARMY1 the way the game\'s Initialise gives a voice; every phrase that has a line (%d here: %s) goes through the game\'s own AddSayEvent to the point where the sound is asked for - his entity, the army bank, "force audible", while the streaming is busy; the log says which line was said' % (len(aloud), ', '.join(sorted(set(aloud)))))
+e, s1 = voice_world((1, 1), frames=120)
+lg_ = e.log()
+assert 'the commander\'s voice: VOICE_EMG_ARMY2 (his own)' in lg_ and e.lps_calls and all((c_['voice'], c_['bank']) == (1, 366) for c_ in e.lps_calls) and 'voices given 0)' in lg_, e.lps_calls[:2]
+# the game says no (all speech off - a cutscene): counted and said why; the game resting a line (said by somebody a few seconds ago)
+e, s1 = voice_world((1, 1), frames=120, tweak=lambda e_: e_.uc.mem_write(GTA + ALL_SPEECH_OFF, b'\1'))
+lg_ = e.log()
+assert not e.lps_calls and re.search(r'- the game refused \w+ \(all speech is off - a cutscene; ', lg_) and ', refused 0,' not in [l_ for l_ in lg_.splitlines() if 'voice lines' in l_][-1], [l_ for l_ in lg_.splitlines() if 'refused' in l_][-2:]
+e, s1 = voice_world((1, 1), frames=120, tweak=lambda e_: [e_.w32(GTA + CTX_NEXT_T + 4 * c_, 0x7fffffff) for c_ in range(0x168)])
+lg_ = e.log()
+assert not e.lps_calls and re.search(r'- the game rests \w+ \(said by somebody a few seconds ago\)', lg_), [l_ for l_ in lg_.splitlines() if 'commander:' in l_][-2:]
+# safety: a table not where the code reads it - no voice; VoiceOff / a crash in it (step 21) - no voice from the next start on
+e = Emu(real_say=True, tweak=lambda e_: e_.w64(GTA + 0x851d88, GTA + 0x880c94)); lg_ = e.load()
+assert "the commander's voice off (the code differs)" in lg_ and 'the brain is running' in lg_
+e = Emu(); e.fs[CFG_] = b'[Preferences]\nSettingsVersion = 15\nVoiceOff = 1\n'; lg_ = e.load()
+s1 = e.ped(4, 2, pedtype=8, weapon=31); gang = e.ped(20, 0, pedtype=7, weapon=30, face=(-1., 0.)); e.share(HC_STATE + 71, e.handle(s1)); e.share(HC_HELLO, 0)
+e.frame(n=8); e.gunshot(gang, (0., 0.5, 1.)); e.frame(n=60, hud=False)
+assert "the commander's voice off (the game crashed in it once)" in lg_ and not e.say_calls
+e = Emu(); e.fs[CFG_] = b'[Preferences]\nSettingsVersion = 15\nMarkers = 0\nLastCrash = 21\n'; lg_ = e.load()
+assert b'VoiceOff = 1' in e.fs[CFG_], e.fs[CFG_]
+passed('2.0 beta 6, the voice: the soldier keeps his own army voice; the game\'s refusals (all speech off) and rests (the same line said by anybody within ~7 s) are counted and told in the log; a table not where the game\'s code reads it - no voice; VoiceOff and a crash in it (step 21) keep it off')
+
 # ------------------------------------------------------------------ 1.0: the body (the mod walks the guards) and the map
 def detail_world(tweak=None, cfg=None, n=1):
     e = Emu(tweak=tweak)
@@ -1751,6 +1847,88 @@ assert 'inside the brain: 31 ' in e.log() and b'LastCrash = 31' in cfg and b'Our
 e2 = Emu(); e2.fs.update({k: v for k, v in e.fs.items() if k.endswith(('hcbrain_log.txt', 'net.helicover.brain.ini'))}); lg2 = e2.load()
 assert 'the last game crashed while a hit by one of ours was worked out' in lg2 and 'our damage: off in the settings' in lg2 and e2.slot(GOT_DAMAGE) == GTA + F_DAMAGE, lg2[-1500:]
 passed('1.4.2 our damage: the one function every hurt to a ped goes through (CPedDamageResponseCalculator::ComputeDamageResponse, all 26 callers through its GOT slot 0x83eba8 - bullets by way of GenerateDamageEvent) is the mod\'s slot; the game\'s own code then works the hit out: a round or blow of a guard or a door gunner does 25 %% (an M4 round 40 -> 10; a man falls after %d rounds instead of %d), anybody else\'s - CJ\'s too - and a round at one of ours the game\'s own, explosions the game\'s own; a head hit of ours is no instant kill (the game\'s rule kills the same man in one round from anybody else) and the true hit zone is put back; the log counts the scaled hits every second; OurDamage = 5..100 in the settings file (written back, a bad value ignored), 100 or OurDamageOff = 1 leave the slot alone, a crash in step 31 sets OurDamageOff by itself' % (n_ours + 1, n_game))
+
+# ------------------------------------------------------------------ 2.0 beta 6: the commander's "come to me" - the mod's own gesture
+# The real core leads: a shooter 25 m east of CJ, a wall 3 m west of him (the cover), four guards; each look the test walks every
+# guard a step towards the post the brain gives him (the emulator does not move peds). CJ stays: the commander, at his point, waves.
+def lead_world(tweak=None, cfg=None, looks=90, cj_comes_at=None, unloaded=False):
+    e = Emu(gun=True, tweak=tweak, real_say=True)                    # (his words go through the game's own CPed::Say too)
+    if cfg: e.fs[CFG_] = cfg
+    if unloaded: e.uc.mem_write(GTA + ANIM_BLOCKS_T + 0x20 + 0x10, b'\0')     # (the POLICE set is not in memory)
+    lg_ = e.load()
+    e.los_fn = lambda a, b: min(a[2], b[2]) >= 0 and not (min(a[0], b[0]) < -3.0 < max(a[0], b[0]) and abs(a[1] + b[1]) / 2 < 3 and min(a[2], b[2]) < 2.2)
+    team = [e.ped(x, y, pedtype=8, weapon=31, voice=(1, 0)) for x, y in ((-2.6, -1.6), (1.1, -1.3), (-0.8, 4.5), (0.6, -5.0))]
+    for k, g in enumerate(team): e.share(HC_STATE + 71 + k, e.handle(g))
+    e.share(HC_HELLO, 0); e.share(HC_MODE, 0); e.share(HC_RECALL, 0)
+    e.frame(n=6, hud=False)
+    gang = e.ped(25, 0, pedtype=7, weapon=30, face=(-1., 0.))
+    e.frame(n=2, hud=False); e.gunshot(gang, (0., 0.5, 1.))
+    rec = []                                                          # every look: time, the commander, his post answer, his squad answer
+    for k in range(looks):
+        if cj_comes_at is not None and e.r32(GTA + TIME_MS) >= cj_comes_at:          # CJ goes to the cover (west) at a run
+            m = e.r64(e.cj + 0x18); x_, y_ = struct.unpack('<2f', bytes(e.uc.mem_read(m + 0x30, 8)))
+            if x_ > -3.5: e.move(e.cj, x_ - 0.3, y_); e.wf(e.cj + 0x68, -3. / 50, 0., 0.)
+            else: e.wf(e.cj + 0x68, 0., 0., 0.)
+        e.frame(ms=100, hud=False)
+        if k % 10 == 0: e.gunshot(gang, (0., 0.5, 1.))
+        lead = e.opcode(0, 9, CMD_DETAIL)[1][8]
+        for g in team:
+            v = post(e, g); sq = squad(e, g)
+            if v[1] == -1: continue
+            m = e.r64(g + 0x18); px, py = struct.unpack('<2f', bytes(e.uc.mem_read(m + 0x30, 8)))
+            tx, ty = fl(v[2]), fl(v[3]); d = math.dist((px, py), (tx, ty))
+            if d > 0.05: e.move(g, px + (tx - px) / d * min(d, 0.25), py + (ty - py) / d * min(d, 0.25))
+            if e.handle(g) == lead: rec.append(dict(t=e.r32(GTA + TIME_MS), g=g, v=v, sq=sq[1], waves=len(e.anim_tasks), sec=len(e.sec_tasks), sets=len(e.set_tasks)))
+    return e, team, rec, lg_
+e, team, rec, lg_ = lead_world()
+assert "the commander's gesture: the mod's own (the game's CopTraf_Come, 1.5 s, at most once in 4 s)" in lg_, lg_[-500:]
+lead = rec[-1]['g']; mgr = e.r64(lead + 0x538) + 8
+starts = [r for i, r in enumerate(rec) if i and r['waves'] > rec[i - 1]['waves']]
+assert len(starts) >= 2 and all(w['anim'] == 'CopTraf_Come' and w['set'] == 'POLICE' and w['flags'] == 0x12 and w['blend'] == 4.0 and w['time'] == 1500 and w['rest'] == [0, 0, 0, 0] for w in e.anim_tasks), e.anim_tasks
+assert all(b['t'] - a['t'] >= 4000 for a, b in zip(starts, starts[1:])), [s_['t'] for s_ in starts]
+assert all((mgr, w['task'], 3) in e.set_tasks for w in e.anim_tasks), 'the gesture is the game\'s own task in his main slot (CTaskManager::SetTask)'
+assert [a_ for a_ in e.abort_calls if a_[1] == lead and a_[2] == 1], 'what he was doing was asked to stop first (MakeAbortable, urgent)'
+for s_ in [s_ for s_ in starts if s_['t'] + 1500 <= rec[-1]['t']]:
+    during = [r for r in rec if s_['t'] <= r['t'] < s_['t'] + 1500]
+    assert len(during) >= 12 and all(r['v'][1] == 5 and r['v'][9] < 16 and r['sq'] in (0, 6) for r in during), [(r['t'], r['v'][1], r['v'][9], r['sq']) for r in during]
+    news = e.sec_tasks[during[0]['sec']:during[-1]['sec']] + [x_ for x_ in e.set_tasks[during[0]['sets']:during[-1]['sets']]]
+    assert not [x_ for x_ in news if x_[0] == mgr and x_[1]], ('nothing is given to him while he waves - no walk, no gun task', news)
+gun_given = [i for i, x_ in enumerate(e.sec_tasks) if x_[0] == mgr and x_[1]]
+assert gun_given and [x_ for x_ in e.sec_tasks[gun_given[0]:] if x_ == (mgr, 0, 0)], ('his gun task (weapon up) is taken off for the gesture and given back after it', e.sec_tasks)
+h_ = e.rf(lead + 0x6c4); m = e.r64(lead + 0x18); px, py = struct.unpack('<2f', bytes(e.uc.mem_read(m + 0x30, 8)))
+assert abs(h_ - math.atan2(-(0. - px), 0. - py)) < 0.1 and e.rf(lead + 0x6c8) == h_, (h_, px, py)
+lg_ = e.log()
+assert lg_.count('commander waves CJ on (the game\'s CopTraf_Come, 1.5 s)') >= 2 and "commander's waves 2 (cut short 0" in lg_, [l_ for l_ in lg_.splitlines() if 'waves' in l_][-1:]
+assert 'commander: "into cover" (direction 3) - aloud: DUCK (VOICE_EMG_ARMY1)' in lg_ and any(c_['sp'] == lead + 0x340 and c_['ctx'] == 85 for c_ in e.lps_calls), [l_ for l_ in lg_.splitlines() if 'commander:' in l_]
+passed('2.0 beta 6, the commander\'s "come to me": the real core leads CJ to a wall ("into cover" - heard: the game\'s DUCK line); standing at his point with CJ not coming, the commander is turned to CJ and gets the game\'s own CTaskSimpleRunNamedAnim (CopTraf_Come of the POLICE set, looped, 1.5 s - what TASK_PLAY_ANIM makes) in his main slot, %d times, 4 s apart at least; for those 1.5 s the scripts are told "his legs are the mod\'s" (5, no +16 for their own wave) and nothing replaces it - no walk, his gun task (weapon up) is taken off and given back after' % len(starts))
+# CJ comes: the gesture is cut and he leads on
+e, team, rec, lg_ = lead_world(looks=70)
+t0 = [r for i, r in enumerate(rec) if i and r['waves'] > rec[i - 1]['waves']][0]['t']
+e, team, rec, lg_ = lead_world(looks=70, cj_comes_at=t0 + 500)
+lg_ = e.log()
+lead = rec[-1]['g']
+assert "commander's waves 1 (cut short 1" in lg_ and len(e.anim_tasks) == 1, [l_ for l_ in lg_.splitlines() if 'waves' in l_][-1:]
+assert (e.anim_tasks[0]['task'], lead, 1) in e.abort_calls, 'the gesture is asked to stop (urgent: the game blends it out)'
+cut = [r for r in rec if t0 + 500 <= r['t'] < t0 + 1500]
+mgr_ = e.r64(lead + 0x538) + 8
+walk_after = [x_ for x_ in e.set_tasks[cut[0]['sets']:] if x_[0] == mgr_ and x_[1] not in {w['task'] for w in e.anim_tasks}]
+assert cut and cut[-1]['v'][9] < 16 and (walk_after or not all(r['v'][1] == 5 for r in cut if r['t'] >= t0 + 700)), ([(r['t'], r['v'][1]) for r in cut], walk_after)   # (1.5: the core may walk him on at once - a new task of the mod's is the body having him again)
+passed('2.0 beta 6, the gesture: CJ starts for the cover - the gesture is cut short (the game\'s own MakeAbortable on it) and the body has the commander again')
+# the set is not in memory: the game is asked to stream it (once in 10 s), no gesture and no fault until it is there
+e, team, rec, lg_ = lead_world(looks=60, unloaded=True)
+assert not e.anim_tasks and e.requests and set(e.requests) == {(25575 + 1, 4)} and len(e.requests) <= 2, e.requests
+e.uc.mem_write(GTA + ANIM_BLOCKS_T + 0x20 + 0x10, b'\1'); n_ = len(e.anim_tasks)
+for k in range(40):
+    e.frame(ms=100, hud=False)
+    for g in team: post(e, g); squad(e, g)
+assert len(e.anim_tasks) > n_, 'once the set is there he waves'
+# off: WaveOff / a crash in it (step 32) / the code differs - the scripts' own wave as before (+16 on his duty)
+for kw in (dict(cfg=b'[Preferences]\nSettingsVersion = 15\nWaveOff = 1\n'), dict(cfg=b'[Preferences]\nSettingsVersion = 15\nMarkers = 0\nLastCrash = 32\n'), dict(tweak=lambda e_: e_.uc.mem_write(GTA + F_NAMED_ANIM, b'\0\0\0\0'))):
+    e, team, rec, lg_ = lead_world(looks=60, **kw)
+    assert "the commander's gesture: the scripts'" in lg_ or 'the commander\'s gesture: the scripts\' wave from now on' in lg_ or 'crashed in the commander\'s gesture' in lg_, lg_[-600:]
+    assert not e.anim_tasks and any(r['v'][9] >= 16 for r in rec), [r['v'][9] for r in rec][-10:]
+    if 'cfg' in kw: assert b'WaveOff = 1' in e.fs[CFG_], e.fs[CFG_]
+passed('2.0 beta 6, the gesture\'s safety: the POLICE set not in memory - the game is asked to stream it (RequestModel of the set, as REQUEST_ANIMATION does), no gesture and no fault until it is there; off in the settings, after a crash in it (step 32, WaveOff written) or when the game\'s code differs - the scripts\' own wave as before')
 
 text = '\n'.join(results) + '\nThe phone build on an emulated CPU with the real libGTASA.so and the real code of the CLEO library; the world in memory is laid out by the test. Not run in the game.\n'
 (h.OUT / 'brain_adapter_tests.txt').write_text(text)
