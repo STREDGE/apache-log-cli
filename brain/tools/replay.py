@@ -21,7 +21,7 @@ EVENT = {h.HCB_EV_SHOT: 'shot', h.HCB_EV_DAMAGE: 'damage', h.HCB_EV_EXPLOSION: '
 def replay(data):
     """Returns (head, text, ticks): ticks = [dict(snapshot, out (a copy), match (bool), exact (bool), rounds)];
     rounds = the rounds of ours asked for after that look and before the next (hcb_round)."""
-    head, records, text = h.read_box(data)
+    head, records, text = h.read_box(data, inputs_only=True)      # (1.3: a report of 1.2 replays from its inputs, approximately)
     brain = h.Brain(seed=head.seed)
     ticks, exact = [], False
     for r in records:

@@ -118,7 +118,7 @@ passed('The shooter down and quiet: "area secure, regrouping on CJ", once')
 # ------------------------------------------------------------------ no medic (the user's decision: maybe later)
 w.dead.add(hostile);w.health[1]=50;w.messages.clear();w.now+=60000;steps(w,V,30)
 assert w.health[1]==50
-passed('No medic for now (the user\'s decision): nobody patches CJ up')
+passed('No medic on foot: nobody of the squad patches CJ up on the ground (2.0 beta 4: the medic is aboard the helicopter - the mod heals him there)')
 # ------------------------------------------------------------------ vehicles
 w.now+=4000  # radio calls are spaced 3.5 s apart
 car=777;w.exists.add(car);w.cars[car]={'pos':[0.,0.,0.],'heading':0.};w.model[car]=400;w.incar[1]=car
@@ -284,16 +284,16 @@ def roe(fire,typ=7,weapon=30,shooting=False,attacker=False,wanted=0,targeting=Fa
  if cj_fires:w.shooting=True
  steps(w,V,10);assert not invariants(w),invariants(w)
  return any(w.shared[b.SQ_T+k]==npc and w.shared[b.SQ_BR_ST+k]==2 and firing(w,team[k]) for k in range(4))
-assert not roe(0,shooting=True) and not roe(0,attacker=True)
-passed('HOLD FIRE: nobody of the squad fires, not even at a man who is shooting at CJ or has hurt him')
+assert not roe(0) and not roe(0,targeting=True,cj_fires=True,weapon=0,typ=4) and roe(0,attacker=True)
+passed('HOLD FIRE (2.0 beta 4): nobody of the squad opens fire - not at an armed man turned to CJ, not where CJ shoots; the man who has hurt CJ is answered')
 assert roe(3,shooting=True) and roe(3,attacker=True,weapon=0,typ=4) and roe(3) and not roe(3,facing=False) and not roe(3,weapon=0) and not roe(3,pos=(60.,0.,0.))
 passed('PROTECT ME: whoever fires at CJ or has hurt him, and an armed gang member within 40 m who is turned to him; not one looking away, unarmed, or far off')
 assert not roe(3,typ=8) and not roe(4,typ=8)
 passed('Grove Street members are not engaged, armed and looking at CJ or not')
 assert not roe(3,typ=6,wanted=0) and not roe(3,typ=6,wanted=2) and roe(3,typ=6,wanted=2,shooting=True) and not roe(3,typ=6,wanted=2,shooting=True,police=1)
 passed('Police: nobody without stars; with stars only a policeman who has fired (POLICE: FIRE BACK), and none at all with POLICE: NEVER FIRE')
-assert roe(2,targeting=True,cj_fires=True,weapon=0,typ=4) and not roe(2,attacker=True) and not roe(2,shooting=True)
-passed('WHERE I SHOOT: the squad engages the man CJ is firing at, and nobody else - not even somebody shooting at him')
+assert roe(2,targeting=True,cj_fires=True,weapon=0,typ=4) and roe(2,attacker=True) and not roe(2)
+passed('WHERE I SHOOT: the squad engages the man CJ is firing at and (2.0 beta 4) the man who has hurt him - nobody else')
 assert roe(4,facing=False) and not roe(4,typ=4,weapon=22,facing=False) and not roe(4,weapon=0,facing=False)
 passed('ARMED ONLY: an armed gang member even with his back to CJ; never an armed civilian, never an unarmed man')
 w,c,ground,sq,team=escort_world();V=(c,ground,sq)
@@ -442,14 +442,16 @@ def follow_world(npcs,typ=4):
  w,c,f=fw();w.shared[b.FIRE]=2;w.civilians=[]
  for npc,x,y in npcs:w.exists.add(npc);w.pos[npc]=[x,y,0.];w.skin[npc]=20;w.pedtype[npc]=typ;w.health[npc]=100000;w.civilians.append(npc)
  w.step(c,f,n=3);return w,c,f
-w,c,f=follow_world([(940,30.,10.),(941,-25.,15.)]);w.damage.add((1,941));w.weapons[941]=30;w.step(c,f,n=12)
-assert not attacks(w) and aims(w,941) and not aims(w,940),'nobody is fired at until CJ fires at him - the man who has hurt CJ is covered (weapons on him), no more'
+w,c,f=follow_world([(941,-25.,15.)]);w.damage.add((1,941));w.weapons[941]=30;w.step(c,f,n=12)
+assert attacks(w) and hit(w)=={941} and not invariants(w),'2.0 beta 4: the man who has hurt CJ is answered under WHERE I SHOOT as well'
+w,c,f=follow_world([(940,30.,10.),(941,-25.,15.)]);w.weapons[941]=30;w.step(c,f,n=12)
+assert not attacks(w) and not aims(w,940),'nobody is fired at until CJ fires at him'
 pulses=0
 for k in range(40):                       # single shots: the firing flag is up for one frame in five
  w.shooting=(k%5==0);w.cj_aim=[30.,10.,0.];w.step(c,f)
 w.shooting=False;first=[x[0] for x in attacks(w)]
 assert hit(w)=={940} and first and max(b_-a_ for a_,b_ in zip(first,first[1:]))<1500 and not invariants(w),(hit(w),first[:5])
-passed('WHERE I SHOOT: single shots of CJ keep the gunners on the man he is firing at (free aim, no lock-on needed), without long gaps; the man who hurt CJ is left to him')
+passed('WHERE I SHOOT: single shots of CJ keep the gunners on the man he is firing at (free aim, no lock-on needed), without long gaps; an armed man who has done nothing is left alone, the man who hurt CJ is answered')
 n=len(attacks(w));w.step(c,f,n=45);n2=len(attacks(w));w.step(c,f,n=10);assert len(attacks(w))==n2 and n2-n<25,(n,n2)
 passed('WHERE I SHOOT: about three seconds after CJ\'s last shot the gunners stop too')
 w,c,f=follow_world([(940,30.,10.)]);w.shooting=True;w.cj_aim=[0.,200.,40.];w.step(c,f,n=20);assert not attacks(w)
@@ -684,7 +686,9 @@ passed('An unarmed brawler at CJ is taken down by hand (the guard puts his gun a
 w,c,ground,sq,team=escort_world();V=(c,ground,sq);steps(w,V,3)
 for seq_,(what,dir_,key) in enumerate([(9,3,'SQGL'),(10,0,'SQWATER'),(11,0,'SQAHEAD'),(12,3,'SQKL'),(7,1,'SQSR'),(8,0,'SQMEM')]):
  w.messages.clear();w.now+=4000;w.brain.say=(100+seq_,what,dir_);steps(w,V,4);assert key in w.messages,(key,w.messages)
-passed('The commander\'s words reach the screen: "grenade - left", "CJ is in the water", "armed men ahead", "sniper - right", "we were attacked here before"')
+for seq_,(what,dir_,key) in enumerate([(13,0,'SQHOLD'),(14,1,'SQCDR'),(14,3,'SQCDL')]):
+ w.messages.clear();w.now+=4000;w.brain.say=(150+seq_,what,dir_);steps(w,V,4);assert key in w.messages,(key,w.messages)
+passed('The commander\'s words reach the screen: "grenade - left", "CJ is in the water", "armed men ahead", "sniper - right", "we were attacked here before"; 2.0 beta 4: "fire held - we answer only those who hit", "cover on your right - I lead, stay behind me"')
 # "we pull out" also orders the rope pickup for the player (the hot pickup) - only while the helicopter escorts and CJ is on foot
 w,c,ground,sq,team=escort_world();V=(c,ground,sq);steps(w,V,3)
 assert w.shared[b.STATE]==2
@@ -696,6 +700,13 @@ rows=[]
 for _ in range(4):rows.append(w.menu[3]);w.events.append(1);w.step(c,p,n=4)   # (1.5: MESSAGES is row 1 of the settings)
 assert rows==[b'MESSAGES: ALL',b'MESSAGES: IMPORTANT',b'MESSAGES: OFF',b'MESSAGES: ALL'],rows
 passed('SETTINGS: one row cycles MESSAGES: ALL / IMPORTANT / OFF')
+# 2.0 beta 4, the medic aboard: the mod heals CJ in our helicopter and says so through HEAL (1 healing, 2 well again); the core says it once
+w,c,_=setup();summon(w,c);w.step(c,n=3);w.messages.clear()
+assert w.shared[b.HEAL]==0,'the core creates the switch the mod writes (the mod only changes switches that exist)'
+w.shared[b.HEAL]=1;w.step(c,n=3);assert w.messages.count('HCMED1')==1 and w.shared[b.HEAL]==0,(w.messages,w.shared[b.HEAL])
+w.step(c,n=10);assert w.messages.count('HCMED1')==1
+w.shared[b.HEAL]=2;w.step(c,n=3);assert w.messages.count('HCMED2')==1 and w.shared[b.HEAL]==0,(w.messages,w.shared[b.HEAL])
+passed('2.0 beta 4 the medic aboard: "MEDIC: hold still, patching you up" when the mod starts healing CJ, "you are good to go" at his full health - each said once')
 # ------------------------------------------------------------------ v41 frame cost
 def cost_of(vm,fn):
  """(peak, average) script instructions per frame of one worker while fn runs."""
@@ -740,13 +751,29 @@ assert not [x for x in w.calls if x[1] in WEAPON_TASKS and x[2][0] in team],('no
 assert {st for _,who_,st in w.brain.gun_states if who_ in team}&{2},'while the brain did order fire (it went to the mod\'s gun task)'
 assert all(w.shared[b.SQ_SLOT+k*b.SQ_SLOT_SIZE] in (20,21) for k in range(4)),[w.shared[b.SQ_SLOT+k*b.SQ_SLOT_SIZE] for k in range(4)]
 passed('2.0 beta 2 the mod has the guards\' weapons: the squad worker is answered 6 and gives no aim or fire task (074D, 0634, 0637, 0667...) - walking and firing are both the mod\'s, the script keeps the crouch, the cars and the words')
+# 2.0 beta 4 (the second 2.0 log: men stood aiming at walls): while the mod walks them the scripts never aim a man at a point of his sector -
+# the only aiming task left is the weapon on his man (no fire), at the man
+w.brain.gun=False;w.calls.clear();steps(w,V,40)
+assert all(math.dist(x[2][1:3],w.pos[hostile][:2])<1. for x in w.calls if x[1]==0x667 and x[2][0] in team),[x[2] for x in w.calls if x[1]==0x667 and x[2][0] in team][:3]
+alive_=[t for t in team if t not in w.dead];w.dead.add(hostile);w.calls.clear();steps(w,V,40)
+assert not [x for x in w.calls if x[1]==0x667 and x[2][0] in team],'no aiming at a wall: no man, no aiming task'
+passed('2.0 beta 4: while the mod walks the guards no script aims a man at a point of his sector (in the second 2.0 log men stood aiming at walls) - the mod turns him to it')
+# 2.0 beta 4: the commander waves CJ on (the brain's +16 on the duty): the game's police gesture, standing at his point only, at most once in 3 s
+w.calls.clear();lead=team[0];w.brain.sign_for={lead};steps(w,V,40)
+waves=[(x[0],x[2]) for x in w.calls if x[1]==0x605 and x[2][0]==lead]
+assert waves and all(a_[1:3]==['CopTraf_Come','POLICE'] for _,a_ in waves),waves
+assert all(b_-a_>=3000 for (a_,_),(b_,_) in zip(waves,waves[1:])) and 1<=len(waves)<=2,[t_ for t_,_ in waves]
+assert not [x for x in w.calls if x[1]==0x605 and x[2][0] in team[1:]],'only the man the brain told to'
+w.brain.sign_for=set();w.calls.clear();steps(w,V,40);assert not [x for x in w.calls if x[1]==0x605 and x[2][0]==lead],'no wave without the word'
+passed('2.0 beta 4 the commander waves CJ on: the brain\'s word (+16 on the duty) - the game\'s own police gesture (CopTraf_Come), standing at his point only, not more than once in 3 s, nobody else')
 w.brain.gun=False
 # the script falls back by itself when the mod stops walking them (the answer is no longer 5)
 w.brain.body=False;w.dead.add(hostile)
 for t in team:w.pos[t]=[0.,-14.,0.]
 w.walk.clear();w.calls.clear();steps(w,V,6)
-assert w.shared[b.NATIVE]==0 and all(orders(w,0x5d3,t) or orders(w,0x637,t) for t in team),'the scripts walk them again'
+assert w.shared[b.NATIVE]==0 and all(orders(w,0x5d3,t) or orders(w,0x637,t) or orders(w,0x5f5,t) for t in team),'the scripts walk them again (the path network for a man the brain says has stopped getting nearer)'
 passed('2.0 fallback: when the mod does not walk the guards (its checks failed, or it was turned off after a crash) the scripts walk them exactly as in 1.5')
+w_=escort_world()[0];assert any(x[2]==['POLICE'] for x in calls(w_,0x4ed)),'the gesture\'s set is asked for when the squad worker starts'
 # ------------------------------------------------------------------ 2.0: ASSAULT - the squad goes for the man CJ points out, and says what it does
 w,c,ground,sq,team=escort_world();V=(c,ground,sq);w.brain.body=True;steps(w,V,20)
 w.shared[b.MODE]=1;hostile=951;w.exists.add(hostile);w.pos[hostile]=[0.,70.,0.];w.pedtype[hostile]=7;w.weapons[hostile]=30;w.civilians=[hostile];w.health[hostile]=100000

@@ -173,6 +173,8 @@ def decode(buf, start, end):
             out.append(('state', state.raw))
         elif kind == HCB_REC_ROUND:
             out.append(('round', rnd))
+        elif kind == HCB_REC_OTHER:
+            continue
         else:
             break
     return out
@@ -240,21 +242,30 @@ class Recorder:
         return bytes(head) + bytes(self.buf[self.rec.start:self.rec.end]) + raw
 
 
-def read_box(data):
-    """Parse a report file. Returns (head, records, text); raises ValueError with a plain reason when it cannot be used."""
+def read_box(data, inputs_only=False):
+    """Parse a report file. Returns (head, records, text); raises ValueError with a plain reason when it cannot be used.
+    inputs_only (1.3): a report of an earlier brain whose snapshots have the same layout is read for its inputs alone - its
+    stored brain states (another size) are left out, so a replay of it is approximate (head.inputs_only is set)."""
     n = ctypes.sizeof(hcb_box_head)
     if len(data) < n or data[:7] != b'HCBBOX1':
         raise ValueError('not a Helicover Brain report')
     head = hcb_box_head.from_buffer_copy(data[:n])
     mine = dict(version=HCB_VERSION, brain_size=LIB.hcb_brain_size(), snapshot_size=ctypes.sizeof(hcb_snapshot), ped_size=ctypes.sizeof(hcb_ped),
                 veh_size=ctypes.sizeof(hcb_veh), event_size=ctypes.sizeof(hcb_event))
+    head.inputs_only = False
     for k, v in mine.items():
         if getattr(head, k) != v:
+            if inputs_only and k in ('version', 'brain_size'):
+                head.inputs_only = True
+                continue
             raise ValueError('the report was written by another version of the brain (%s %d, here %d)' % (k, getattr(head, k), v))
     if n + head.data_len + head.text_len > len(data):
         raise ValueError('the report is cut short')
     buf = (ctypes.c_uint8 * max(head.data_len, 1)).from_buffer_copy(data[n:n + head.data_len].ljust(1, b'\0'))
-    return head, decode(buf, 0, head.data_len), data[n + head.data_len:n + head.data_len + head.text_len].decode('utf-8', 'replace')
+    recs = decode(buf, 0, head.data_len)
+    if head.inputs_only:
+        recs = [r for r in recs if r[0] == 'snapshot' or r[0] == 'round']
+    return head, recs, data[n + head.data_len:n + head.data_len + head.text_len].decode('utf-8', 'replace')
 
 
 class Scene:
@@ -377,10 +388,11 @@ class Scene:
             best = min(best, math.hypot(pt[0] - x1 - dx * k, pt[1] - y1 - dy * k))
         return best
 
-    def walk_blocked(self, p, q):
-        """Can a man NOT walk straight from p to q: a wall crossed or brushed (0.3 m), a ledge, a hole."""
+    def walk_blocked(self, p, q, moving=False):
+        """Can a man NOT walk straight from p to q: a wall crossed or brushed (0.3 m), a ledge, a hole. (moving: a man who walks
+        does step off a ledge up to 4.5 m high, as in the game - he drops; the map's question about the leg still says "no")"""
         import math
-        if self.blocked(p, q) or self.crosses_block(p, q):
+        if self.blocked(p, q) or self.crosses_block(p, q, allow_drop=moving and getattr(self, 'drops', True)):
             return True
         n = max(1, int(math.dist(p[:2], q[:2]) / 0.2))
         d0 = self.wall_dist(p)
@@ -391,14 +403,19 @@ class Scene:
                 return True
         return False
 
-    def crosses_block(self, p, q):
+    def crosses_block(self, p, q, allow_drop=False):
         import math
         n = max(2, int(math.dist(p[:2], q[:2]) / 0.25))
         z0 = self.ground_at(p[0], p[1])
         for k in range(n + 1):
             x, y = p[0] + (q[0] - p[0]) * k / n, p[1] + (q[1] - p[1]) * k / n
             g = self.ground_at(x, y)
-            if g is None or (z0 is not None and abs(g - z0) > 0.75):
+            if g is None:
+                return True
+            if z0 is not None and abs(g - z0) > 0.75:
+                if allow_drop and g < z0 and z0 - g <= 4.5:
+                    z0 = g
+                    continue
                 return True
         return False
 
@@ -468,6 +485,10 @@ class Scene:
             o.at = vec(x_, y_, z_); o.height = z_ - (self.cj['pos'][2] - 1.); o.sees_cj = int(sees_)
         # 1.1: the ways asked for by the last look - found on the brain's map as it is now (in the game: a thread of the mod)
         pq = getattr(self, 'path_q', [])[:HCB_MAX_PATHQ]
+        if getattr(self, 'path_delay', 0):          # (1.3: the mod's thread answers some looks later, as in a busy game)
+            hist = self.__dict__.setdefault('_pq_hist', [])
+            hist.append(list(pq))
+            pq = hist.pop(0) if len(hist) > self.path_delay else []
         s.n_paths = len(pq)
         for o, (frm_, to_, key_) in zip(s.paths, pq):
             wp = (hcb_vec * 10)()
@@ -532,7 +553,33 @@ class Scene:
             if out.say:
                 self.said.append((self.time, out.say, out.say_dir))
             if self.walk_posts:
+                climbing = getattr(self, '_climb', None)
+                if climbing is None:
+                    climbing = self._climb = {}
                 for who, p_ in self.posts.items():
+                    # 1.3, the game's jump-and-climb (the task CJ uses, given by the mod): about a second, then he is up on what is in
+                    # front of him - if it is not more than climb_max (3 m) above his feet; higher, he stays where he is
+                    if self.body and who in self.peds and p_.climb and getattr(self, 'can_climb', True):
+                        c0 = climbing.setdefault(who, self.time)
+                        if self.time - c0 >= 1000:
+                            del climbing[who]
+                            me = self.peds[who]['pos']
+                            g0 = self.ground_at(me[0], me[1]) or 0.
+                            dx, dy = p_.at.x - me[0], p_.at.y - me[1]
+                            dd = math.hypot(dx, dy)
+                            for k_ in range(1, 9):
+                                if dd < 1e-6:
+                                    break
+                                x_, y_ = me[0] + dx / dd * 0.25 * k_, me[1] + dy / dd * 0.25 * k_
+                                g_ = self.ground_at(x_, y_)
+                                if g_ is not None and g_ > g0 + 0.75:
+                                    x2, y2 = x_ + dx / dd * 0.5, y_ + dy / dd * 0.5
+                                    if g_ - g0 <= getattr(self, 'climb_max', 3.0) and self.ground_at(x2, y2) == g_:
+                                        self.peds[who]['pos'] = [x2, y2, g_ + 1.]
+                                        self.climbs = getattr(self, 'climbs', 0) + 1
+                                    break
+                        continue
+                    climbing.pop(who, None)
                     if who in self.peds and p_.move and who not in getattr(self, 'stuck_men', ()):
                         tgt = p_.via if self.body else p_.at       # (1.0: the mod walks him to the next point of his way)
                         me, to = self.peds[who]['pos'], [tgt.x, tgt.y, me_z] if (me_z := self.peds[who]['pos'][2]) is not None else None
@@ -543,8 +590,21 @@ class Scene:
                         step = min(d, spd * ms / 1000.)
                         if d > 1e-6:
                             nw = [me[0] + (to[0] - me[0]) * step / d, me[1] + (to[1] - me[1]) * step / d, me[2]]
-                            if self.body and self.walls_stop and (p_.move != 4 or getattr(self, 'net_blocked', False)) and self.walk_blocked(me, nw):   # (4: the game's path network takes him round - simulated as a walk that walls do not stop)
-                                nw = me                              # a wall, a ledge: he does not get through
+                            if self.body and self.walls_stop and (p_.move != 4 or getattr(self, 'net_blocked', False)) and self.walk_blocked(me, nw, moving=True):   # (4: the game's path network takes him round - simulated as a walk that walls do not stop)
+                                # 1.3, like the game (the first 2.0 log: a man walking into a car, a building, a post gets the game's own
+                                # "walk round it" for a moment - 508 / 509 / 510 - and goes on): he slides along what is in his way if a
+                                # step to the side of his line gets him on; only a dead end stops him
+                                slid = None
+                                if getattr(self, 'game_slide', True):
+                                    dx, dy = to[0] - me[0], to[1] - me[1]
+                                    for ang in (0.6, -0.6, 1.2, -1.2):
+                                        ca, sa = math.cos(ang), math.sin(ang)
+                                        sx, sy = (dx * ca - dy * sa) / d * step, (dx * sa + dy * ca) / d * step
+                                        cand = [me[0] + sx, me[1] + sy, me[2]]
+                                        if not self.walk_blocked(me, cand, moving=True):
+                                            slid = cand
+                                            break
+                                nw = slid if slid is not None else me      # a wall, a ledge: he does not get through
                             g_ = self.ground_at(nw[0], nw[1]) if self.body else None
                             if g_ is not None and self.body:
                                 nw[2] = g_ + 1.

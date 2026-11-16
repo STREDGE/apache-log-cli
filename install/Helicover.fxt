@@ -69,11 +69,17 @@ HCDSQ ~b~PILOT:~w~ picking the squad up first, then we leave.
 HCMDP ~g~ALPHA:~w~ PROTECT. Three by you, four in cover, marksman up high.
 HCMDA ~r~ALPHA:~w~ ASSAULT. Aim or fire at an enemy - we go for him.
 HCRCL ~g~ALPHA:~w~ all back to CJ!
+HCFR3 ~g~ALPHA:~w~ PROTECT ME - we fire at anyone who threatens you.
+HCFR4 ~g~ALPHA:~w~ ARMED ONLY - we fire at armed men who threaten you.
+HCFR2 ~g~ALPHA:~w~ WHERE I SHOOT - we fire with you and at whoever hits you.
+HCFR0 ~y~ALPHA:~w~ HOLD FIRE - we only answer those who hit you or us.
+HCMED1 ~g~MEDIC:~w~ hold still, patching you up.
+HCMED2 ~g~MEDIC:~w~ you are good to go.
 HCBURN ~r~CAR ON FIRE!~w~ Get away from it.
 HCEVADE ~r~TAKING HITS!~w~ Pilot breaking away.
 HCSHOT ~r~TAKING FIRE!~w~ Pilot breaking away.
-HCHELLO ~b~HELICOVER 2.0 BETA 3~w~ ready. CLEO menu > Helicover.
-HCHELLV ~b~HELICOVER 2.0 BETA 3~w~ ready. Map marker is off here.
+HCHELLO ~b~HELICOVER 2.0 BETA 4~w~ ready. CLEO menu > Helicover.
+HCHELLV ~b~HELICOVER 2.0 BETA 4~w~ ready. Map marker is off here.
 RGDEP ~b~PILOT:~w~ team going down the ropes.
 RGDONE ~g~SQUAD:~w~ team back aboard.
 RGFAIL ~r~HELICOVER:~w~ could not load the team.
@@ -137,6 +143,11 @@ SQGB ~r~GRENADE - BEHIND!~w~ Get away from it!
 SQGL ~r~GRENADE - LEFT!~w~ Get away from it!
 SQWATER ~y~ALPHA:~w~ CJ in the water - helicopter over you, take the rope.
 SQAHEAD ~y~PILOT:~w~ armed men ahead on your way.
+SQHOLD ~y~ALPHA:~w~ fire held - we answer only those who hit you or us.
+SQCDF ~g~ALPHA:~w~ CJ, cover straight ahead - get in there!
+SQCDR ~g~ALPHA:~w~ CJ, cover on your right - get in there!
+SQCDB ~g~ALPHA:~w~ CJ, cover behind you - get in there!
+SQCDL ~g~ALPHA:~w~ CJ, cover on your left - get in there!
 SQKF ~r~CAR - FRONT!~w~ Get out of its way!
 SQKR ~r~CAR - RIGHT!~w~ Get out of its way!
 SQKB ~r~CAR - BEHIND!~w~ Get out of its way!

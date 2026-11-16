@@ -97,7 +97,7 @@ assert [draw_game(r_) for r_ in rows_of(w)]==list(MAIN_RU) and draw_game(w.menu[
 press(w,(c,p),6,5);assert [draw_game(r_) for r_ in w.menu]==['HELICOVER / НАСТРОЙКИ','CLOSE','МОДЕЛЬ ВЕРТОЛЕТА >','СООБЩЕНИЯ: ВСЕ','МИССИИ: ОБОРОНА','< НАЗАД'],[draw_game(r_) for r_ in w.menu]
 passed('With the game in Russian the menu is Russian and reads correctly in the simulated font: main page, state in the title, settings')
 w,c,p=open_menu(True);press(w,(c,p),3,5)
-assert [draw_game(r_) for r_ in w.menu]==['HELICOVER / РЕЖИМ И ОГОНЬ','CLOSE','РЕЖИМ: ЗАЩИТА','ОТМЕНА: КО МНЕ','ЗАЩИЩАТЬ МЕНЯ [X]','ТОЛЬКО ВООРУЖЕННЫЕ','ТАМ, ГДЕ СТРЕЛЯЮ Я','НЕ СТРЕЛЯТЬ','ПОЛИЦИЯ: ОТВЕЧАТЬ','< НАЗАД'],[draw_game(r_) for r_ in w.menu]
+assert [draw_game(r_) for r_ in w.menu]==['HELICOVER / РЕЖИМ И ОГОНЬ','CLOSE','РЕЖИМ: ЗАЩИТА','ОТМЕНА: КО МНЕ','ЗАЩИЩАТЬ МЕНЯ [X]','НЕ СТРЕЛЯТЬ','ТОЛЬКО ВООРУЖЕННЫЕ','ТАМ, ГДЕ СТРЕЛЯЮ Я','ПОЛИЦИЯ: ОТВЕЧАТЬ','< НАЗАД'],[draw_game(r_) for r_ in w.menu]
 w.step(c,p,n=3);press(w,(c,p),6,5);w.step(c,p,n=3);press(w,(c,p),0,5)
 assert [draw_game(r_) for r_ in (w.menu[8],w.menu[2])]==['ПОЛИЦИЯ: НЕ СТРЕЛЯТЬ','РЕЖИМ: НАСТУПЛЕНИЕ'] and (w.shared[b.POLICE],w.shared[b.MODE])==(1,1),[draw_game(r_) for r_ in w.menu]
 passed('The fire page in Russian: four rules and the two switches (police, missions), every row readable in the simulated font')
@@ -198,7 +198,7 @@ w.events.append(0);w.step(c,p);w.events.append(0);w.step(c,p,n=5)   # a double t
 assert w.menu[0]==b'HELICOVER / HELICOPTER' and w.shared[b.MODEL]==487,(w.menu,w.shared[b.MODEL])
 w,c,p=open_menu();w.events.append(3);w.step(c,p);w.events.append(3);w.step(c,p,n=5)   # a double tap on "GUNNER FIRE >"
 assert w.menu[0]==b'HELICOVER / MODE AND FIRE' and w.shared[b.FIRE]==3,(w.menu,w.shared[b.FIRE])
-w.step(c,p,n=2);press(w,(c,p),5,5);assert w.shared[b.FIRE]==0,'a deliberate tap half a second later is taken (the sixth row: HOLD FIRE)'
+w.step(c,p,n=2);press(w,(c,p),3,5);assert w.shared[b.FIRE]==0,'a deliberate tap half a second later is taken (the fourth row: HOLD FIRE)'
 passed('A double tap on a row that opens a page opens the page and nothing more (no crew, helicopter or fire mode changed by the second tap)')
 w,c,p=open_menu();w.incar[1]=c.v[5];w.calls.clear();w.events.append(1);w.step(c,p,n=4)   # CJ got aboard and the tap comes before the page is redrawn
 assert not orders_given(w) and rows_of(w)[:2]==[b'FLY TO MAP MARKER',b'FLY TO GROVE STREET'] and w.shared[b.STATE]==2,(orders_given(w),w.menu)

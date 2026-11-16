@@ -35,7 +35,7 @@ most, waited, arrived_all = 0, 0, None
 for k in range(300):
     if k % 9 == 0: sc.shot(g, (0., 0., 1.), dst=1)
     sc.step(1)
-    outer = [p for p in sc.posts.values() if p.job not in INNER]
+    outer = [p for p in sc.posts.values() if p.job not in INNER and p.job != HCB_ROLE_MARKSMAN]   # (1.3: the marksman goes his own way, no token)
     moving = sum(1 for p in outer if p.phase == HCB_PH_MOVING and p.act not in (HCB_ACT_HOLD,))
     most = max(most, moving); waited += sum(1 for p in outer if p.why == HCB_WHY2_WAIT_TURN and p.phase == HCB_PH_CHOSEN)
     if arrived_all is None and k > 20 and all(p.phase >= HCB_PH_ARRIVED for p in outer): arrived_all = k / 10.

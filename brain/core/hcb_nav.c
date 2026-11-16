@@ -141,8 +141,11 @@ HID void hcb_nav_update(hcb_brain *b, const hcb_snapshot *s, hcb_out *out, hcb_v
         const hcb_patha *pa = &s->paths[k];
         for (i = 0; i < NAV_PATHS; i++) {
             pathent *e = &b->pa[i];
-            if (!e->used || e->key != pa->key || v_dist(e->from, pa->from) > 0.05f || v_dist(e->to, pa->to) > 0.05f) continue;
-            e->n = pa->n > AG_PATH ? AG_PATH : pa->n; e->answered = now ? now : 1;
+            /* 1.3 (the first 2.0 log from the game: a place that moves with CJ was asked about again on every look and the answer
+               for the place as it was a moment ago was thrown away - the man stood "waiting for a way" for 20 s): an answer is
+               taken for the latest question of that man if it is about much the same place (3 m) */
+            if (!e->used || e->key != pa->key || v_dist(e->to, pa->to) > 3.0f || v_dist(e->from, pa->from) > 4.0f) continue;
+            e->n = pa->n > AG_PATH ? AG_PATH : pa->n; e->answered = now ? now : 1; e->from = pa->from; e->to = pa->to;
             for (j = 0; j < e->n; j++) e->wp[j] = pa->wp[j];
         }
     }
@@ -433,17 +436,23 @@ HID int hcb_path_ask(hcb_brain *b, hcb_out *out, u32 key, hcb_vec from, hcb_vec 
         if (q->used && q->key == key) { e = q; break; }
         if (!q->used || (old->used && (q->asked > q->answered ? q->asked : q->answered) < (old->asked > old->answered ? old->asked : old->answered))) old = q;
     }
-    if (e && e->answered && e->answered >= e->asked && now - e->answered <= 2500 && v_dist(e->from, from) < 1.5f && v_dist(e->to, to) < 1.0f) {
+    if (e && e->answered && e->answered >= e->asked && now - e->answered <= 2500 && v_dist(e->from, from) < 4.0f && v_dist(e->to, to) < 3.0f) {
         int n = e->n > max ? max : e->n;
         for (i = 0; i < n; i++) wp[i] = e->wp[i];
+        if (n > 0 && v_dist(wp[n - 1], to) < 3.0f) wp[n - 1] = to;      /* (1.3: the place has moved a little since: its end is where it is now) */
         return n;
     }
-    if (e && e->asked > e->answered && now - e->asked < 600 && v_dist(e->to, to) < 1.0f) return -2;
+    if (e && e->asked > e->answered && now - e->asked < 600 && v_dist(e->to, to) < 3.0f) return -2;
     if (out->n_path_q >= HCB_MAX_PATHQ) return -2;
     if (!e) { e = old; zero(e, sizeof *e); e->used = 1; e->key = key; }
     e->from = from; e->to = to; e->asked = now ? now : 1; e->answered = 0;
     out->path_q[out->n_path_q].from = from; out->path_q[out->n_path_q].to = to; out->path_q[out->n_path_q].key = key; out->n_path_q++;
     return -2;
+}
+/* 1.3: the way this man had is no good (a leg of it is blocked): the next question gets a new answer */
+HID void hcb_path_forget(hcb_brain *b, u32 key) {
+    int i;
+    for (i = 0; i < NAV_PATHS; i++) if (b->pa[i].used && b->pa[i].key == key) { b->pa[i].answered = 0; b->pa[i].asked = 0; }
 }
 API int hcb_nav_cell(const hcb_brain *b, float x, float y, float *z, int *blocked, uint32_t now) {
     const nav *n = &b->nv;

@@ -1,6 +1,9 @@
 """Turn a Helicover Brain report into a fight file that outlives the brain's version.
 
-    python3 brain/tools/box2json.py report.bin brain/tests/data/name.json.gz
+    python3 brain/tools/box2json.py report.bin brain/tests/data/name.json.gz [first_tick last_tick]
+
+(1.3: a window of the report only - the looks first_tick..last_tick, counted from 0 - for a test that needs a few
+hundred looks of a long report. A report of the version before is read for its inputs.)
 
 A report can only be read by the core that wrote it (the structs are stored raw). A fight file stores the same
 snapshots by FIELD NAME, so a later core with more fields can still be fed the recorded fight
@@ -39,11 +42,11 @@ def plain(obj, schema):
     return row
 
 
-def convert(data):
-    head, records, text = h.read_box(data)
+def convert(data, first=0, last=None):
+    head, records, text = h.read_box(data, inputs_only=True)
     schema, ticks = {}, []
-    for r in records:
-        if r[0] != 'snapshot':
+    for k, r in enumerate([r for r in records if r[0] == 'snapshot']):
+        if k < first or (last is not None and k > last):
             continue
         s = r[1]
         t = dict(head=plain(s, schema))
@@ -55,9 +58,9 @@ def convert(data):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 3:
+    if len(sys.argv) not in (3, 5):
         sys.exit(__doc__)
-    fight = convert(Path(sys.argv[1]).read_bytes())
+    fight = convert(Path(sys.argv[1]).read_bytes(), *(int(a) for a in sys.argv[3:5]))
     raw = json.dumps(fight, separators=(',', ':')).encode()
     with gzip.GzipFile(sys.argv[2], 'wb', mtime=0) as f:
         f.write(raw)
