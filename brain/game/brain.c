@@ -640,7 +640,7 @@ struct bod { u32 who, at, target; const u8 *task; float via[3]; u8 kind, ms; };
 static struct bod g_bod[16];
 static struct { u32 who, target, at; u8 state; } g_sq[16];             /* each guard's last fire order as the script was told it */
 static int g_body_ok, g_map_ok;
-static u32 g_body_new, g_body_turn, g_body_refused, g_body_nomem, g_body_kept, g_recall_until;
+static u32 g_soft_falls, g_body_new, g_body_turn, g_body_refused, g_body_nomem, g_body_kept, g_recall_until;
 static u32 g_map_ground, g_map_ground_ok, g_map_segs, g_map_left, g_map_us_max, g_high_i;
 static u64 g_map_us;
 static struct { hcb_vec at; float height; u32 time; u8 sees, ok; } g_high[32];
@@ -1778,7 +1778,7 @@ static void session_second(u32 now) {
     ts(D, " | high places "); tu(D, g_snap.n_high);
     if (g_out.ow_ok) { ts(D, " marksman's roof "); tvec(D, g_out.ow_at.x, g_out.ow_at.y, g_out.ow_at.z); if (g_out.ow_ready) ts(D, " HELICOPTER-READY"); }
     ts(D, " | body "); ts(D, g_snap.body ? "MOD" : "scripts"); ts(D, ": new tasks "); tu(D, g_body_new); ts(D, " retargets "); tu(D, g_body_turn); ts(D, " kept "); tu(D, g_body_kept);
-    ts(D, " refused "); tu(D, g_body_refused); ts(D, " no memory "); tu(D, g_body_nomem);
+    ts(D, " refused "); tu(D, g_body_refused); ts(D, " no memory "); tu(D, g_body_nomem); ts(D, " falls slowed "); tu(D, g_soft_falls);
     ts(D, " | map: ground asked "); tu(D, g_map_ground); ts(D, " found "); tu(D, g_map_ground_ok); ts(D, " legs "); tu(D, g_map_segs); ts(D, " left for later "); tu(D, g_map_left);
     ts(D, " max "); tu(D, g_map_us_max); ts(D, " us a look");
     ts(D, "\n  seen: peds "); tu(D, g_snap.n_peds); ts(D, " (+"); tu(D, g_snap.peds_lost); ts(D, " left out) vehicles "); tu(D, g_snap.n_vehs);
@@ -1924,6 +1924,18 @@ static void watch_frames(u64 t, u64 brain_us) {
         if (g_crawls == 1) save_report("the game crawled (20 frames in a row over 0.25 s)");
     }
 }
+/* 2.0: none of ours comes down faster than a man on a rope. (The second four used to drop from a helicopter that was flying away;
+   the scripts now hold it - this is the net under them: a guard on foot who falls faster than 8 m/s is slowed to 6.) */
+static void soft_fall(void) {
+    u32 k;
+    for (k = 0; k < HCB_MAX_OURS; k++) {
+        u8 *e = (u8 *)g_our_ent[2 + k];
+        float vz;
+        if (!e || (RD(u8, e + 0x585) & 1) || is_dead(e)) continue;
+        vz = RD(float, e + 0x70);
+        if (vz == vz && vz < -0.16f) { RD(float, e + 0x70) = -0.12f; g_soft_falls++; }
+    }
+}
 HIDDEN void brain_scripts(void) {
     u64 t = now_us();
     if (!g_main_tid) g_main_tid = syscall(178);        /* gettid: the game's thread, for the hang recorder */
@@ -1931,7 +1943,7 @@ HIDDEN void brain_scripts(void) {
     if (g_ready && !g_busy) { g_busy = 1; g_where = 1; bridge(); think(); g_where = 0; g_busy = 0; watch_frames(t, now_us() - t); }
     g_frame_at_us = t;
     g_scripts_orig();
-    if (g_ready && !g_busy) { g_busy = 1; g_where = 4; pilot_turn(); gunners_fire(); g_where = 0; g_busy = 0; }
+    if (g_ready && !g_busy) { g_busy = 1; g_where = 4; pilot_turn(); gunners_fire(); soft_fall(); g_where = 0; g_busy = 0; }
     if (g_ready && now_us() - g_flush_us > 3000000UL) flush_log();     /* (only if the writer thread has stopped) */
 }
 

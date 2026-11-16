@@ -39,6 +39,11 @@ class BrainSim:
         self.probe_q = []           # the cover questions of the last look (answered in the next snapshot)
         self.say = (0, 0, 0)        # the commander's last words: (seq, HCB_SAY_*, direction)
         self.words = []             # (time, HCB_SAY_*, direction): everything the commander said
+        self.body = False           # 2.0: True = the mod walks the guards itself (post command answers 5, this file moves the man)
+        self.recall_until = 0
+        self.ground_q, self.seg_q, self.high = [], [], []   # the map's questions of the last look; high places [(x, y, z, sees CJ)]
+        self.walked = {}            # who -> metres this file walked him (body mode)
+        self.plans = []             # (time, mode, task): every change of the squad's task
 
     # ------------------------------------------------------------ the world as a snapshot
     @staticmethod
@@ -159,6 +164,33 @@ class BrainSim:
         s.police = h.HCB_POLICE_EVADE if w.shared[b.POLICE] == 1 else h.HCB_POLICE_ANSWER
         s.mission_free = int(w.shared[b.MISSIONS] == 1)
         s.tactics = w.shared[b.TACTICS] if 0 <= w.shared[b.TACTICS] <= 2 else 0   # 0 AUTO, 1 ASSAULT, 2 GUARD
+        # 2.0: the player's mode, "to me" (taken once, holds 10 s), who walks the guards, the map's answers
+        s.umode = h.HCB_UMODE_ASSAULT if w.shared.get(b.MODE, 0) == 1 else h.HCB_UMODE_PROTECT
+        if w.shared.get(b.RECALL, 0) == 1:
+            self.recall_until = w.now + 10000; w.shared[b.RECALL] = 0
+        s.recall = int(w.now < self.recall_until)
+        s.body = int(self.body)
+        gz = lambda x_, y_, z_=1000.: w.ground_fn(x_, y_, z_) if hasattr(w, 'ground_fn') else 0.
+        walk = lambda p_, q_: self.sight(w, [p_[0], p_[1], p_[2] - .4], [q_[0], q_[1], q_[2] - .4])
+        gq = self.ground_q[:h.HCB_MAX_GROUND]
+        s.n_ground = len(gq)
+        for o, (x_, y_, z_) in zip(s.ground, gq):
+            g_ = gz(x_, y_, z_)
+            o.x, o.y = x_, y_
+            if g_ is None or g_ > z_ or any(math.dist((x_, y_), hp[:2]) < hr for hp, hr in getattr(w, 'holes', [])):
+                o.found, o.z = 0, 0.
+            else:
+                o.found, o.z = 1, g_
+                o.wall = (0 if walk((x_, y_, g_ + 1.), (x_ + 1., y_, g_ + 1.)) else 1) | (0 if walk((x_, y_, g_ + 1.), (x_, y_ + 1., g_ + 1.)) else 2)
+        sq = self.seg_q[:h.HCB_MAX_SEGS]
+        s.n_segs = len(sq)
+        for o, (a_, b_) in zip(s.segs, sq):
+            o.a, o.b = h.vec(*a_), h.vec(*b_)
+            o.clear = int(walk(a_, b_))
+        hg = list(getattr(w, 'high_places', self.high))[:h.HCB_MAX_HIGH]
+        s.n_high = len(hg)
+        for o, (x_, y_, z_, sees_) in zip(s.high, hg):
+            o.at = h.vec(x_, y_, z_); o.height = z_ - (w.coords(1)[2] - 1.); o.sees_cj = int(sees_)
         # the cover questions: is a man crouching at `at` hidden from the threat's chest, is there ground under it
         s.n_probes = len(self.probe_q)
         for o, (at, frm) in zip(s.probes, self.probe_q):
@@ -170,6 +202,7 @@ class BrainSim:
         s.n_ours = len(ours)
         for i, (who, role) in enumerate(ours):
             s.ours[i], s.our_role[i] = who, role
+            s.our_state[i] = (h.HCB_OS_ROPING if self.roping(w, who) else 0) | (h.HCB_OS_NATIVE if self.body else 0)
         cj = w.coords(1)
         mine = {o for o, _ in ours}
         people = sorted(self.peds(w), key=lambda p: 0. if p in mine else math.dist(w.coords(p), cj))
@@ -205,8 +238,36 @@ class BrainSim:
         s.n_los = n
         return s
 
+    @staticmethod
+    def roping(w, who):
+        """On the rope or in the air: the test world's rope men hang (attached) until they stand, or carry a height."""
+        return who in getattr(w, 'on_rope', ()) or (who in w.pos and w.pos[who][2] - w.ground_fn(w.pos[who][0], w.pos[who][1], w.pos[who][2]) > 3.5)
+
+    def walk_men(self, w):
+        """Body mode: what the mod's go-to task does in the game - the man goes to `via` at his pace."""
+        dt = (w.now - self.walk_at) / 1000. if getattr(self, 'walk_at', None) is not None else 0.
+        self.walk_at = w.now
+        if not self.body or self.out is None or dt <= 0 or dt > 1.:
+            return
+        for p in self.out.posts[:self.out.n_posts]:
+            who = p.who
+            if who not in self.mine_now or who not in w.pos or who in w.dead or who in w.incar or p.phase > h.HCB_PH_MOVING:
+                continue
+            if not (h.HCB_ACT_WALK <= p.act <= h.HCB_ACT_SPRINT or p.act == h.HCB_ACT_SIDESTEP):
+                continue
+            cur = w.pos[who]; to = (p.via.x, p.via.y); dd = math.dist(cur[:2], to)
+            v = {h.HCB_ACT_WALK: 1.5, h.HCB_ACT_FASTWALK: 2.4, h.HCB_ACT_RUN: 4.6, h.HCB_ACT_SPRINT: 6.6, h.HCB_ACT_SIDESTEP: 1.5}[p.act]
+            if dd < 1e-3:
+                continue
+            st = min(dd, v * dt)
+            w.pos[who] = [cur[0] + (to[0] - cur[0]) * st / dd, cur[1] + (to[1] - cur[1]) * st / dd, cur[2]]
+            self.walked[who] = self.walked.get(who, 0.) + st
+
     # ------------------------------------------------------------ once a frame, before the scripts (the GOT hook on the phone)
     def frame(self, w):
+        self.mine_now = set()        # (the men whose legs the mod has: those the scripts asked a post for and were answered 5)
+        self.mine_now = getattr(self, 'mine_last', set()); self.mine_last = set()
+        self.walk_men(w)
         if b.BRAIN_HELLO in w.shared and w.shared[b.BRAIN_HELLO] != b.BRAIN_MAGIC:
             w.shared[b.BRAIN_HELLO] = b.BRAIN_MAGIC           # the handshake: only a value the scripts have created is answered
         self.gather(w)
@@ -219,6 +280,10 @@ class BrainSim:
         self.looks += 1
         self.asked = [(getattr(q, 'from'), q.to) for q in self.out.queries[:self.out.n_queries]]
         self.probe_q = [((q.at.x, q.at.y, q.at.z), (getattr(q, 'from').x, getattr(q, 'from').y, getattr(q, 'from').z)) for q in self.out.probe_q[:self.out.n_probe_q]]
+        self.ground_q = [(q.x, q.y, q.z) for q in self.out.ground_q[:self.out.n_ground_q]]
+        self.seg_q = [((q.a.x, q.a.y, q.a.z), (q.b.x, q.b.y, q.b.z)) for q in self.out.seg_q[:self.out.n_seg_q]]
+        if not self.plans or self.plans[-1][1:] != (self.out.umode, self.out.task):
+            self.plans.append((w.now, self.out.umode, self.out.task))
         if self.out.say:
             self.say = (self.out.say_seq, self.out.say, self.out.say_dir)
             self.words.append((w.now, self.out.say, self.out.say_dir))
@@ -230,6 +295,10 @@ class BrainSim:
         for p in (self.out.posts[:self.out.n_posts] if self.out is not None else []):
             if p.who == who:
                 v[f + 1], v[f + 2], v[f + 3], v[f + 4], v[f + 5] = p.move, p.at.x, p.at.y, p.at.z, p.crouch
+                if self.body:      # the mod's body_walk: on his way his legs are the mod's (5); arrived he stays (0)
+                    mine = p.phase <= h.HCB_PH_MOVING and (h.HCB_ACT_WALK <= p.act <= h.HCB_ACT_SPRINT or p.act == h.HCB_ACT_SIDESTEP) and who in w.pos and who not in w.dead and who not in w.incar
+                    v[f + 1] = 5 if mine else 0 if p.phase >= h.HCB_PH_ARRIVED else p.move
+                    if mine: self.mine_last.add(who)
                 v[f + 6], v[f + 7], v[f + 8], v[f + 9] = p.look.x, p.look.y, p.look.z, p.duty
                 return
 
@@ -307,6 +376,10 @@ class BrainSim:
             self.detail(w, v, first)
         elif cmd == 6 and count >= 6:
             self.pilot(w, v, first)
+        elif cmd == 7 and count >= 10:
+            o = self.out
+            for k_, x_ in enumerate([o.umode, o.task, o.ow_ok, o.ow_ready, o.ow_at.x, o.ow_at.y, o.ow_at.z, o.target_dist, o.n_moving, int(self.body)]):
+                v[first + k_] = x_
         else:
             raise AssertionError(('0E48: unknown command or too few variables', cmd, count))
 

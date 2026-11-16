@@ -528,9 +528,9 @@ passed('WHERE I SHOOT: the man CJ has locked on and is firing at is the gunners\
 w,c,p=setup(True);launch=VM('Helicover',w);w.step(c,p,launch,n=15)
 assert w.menu[1]==b'CLOSE' and w.menu[2:]==[b'CALL HELICOPTER',b'SETTINGS >'],w.menu
 summon(w,c);w.step(c,p,n=4)
-assert w.menu[2:]==[b'FOLLOW ME [X]',b'HOLD HERE',b'PATROL AROUND ME',b'GUNNER FIRE >',b'CLIMB ABOARD BY ROPE',b'DEPLOY SQUAD',b'SETTINGS >',b'DISMISS HELICOPTER'],w.menu
+assert w.menu[2:]==[b'FOLLOW ME [X]',b'HOLD HERE',b'PATROL AROUND ME',b'MODE AND FIRE >',b'CLIMB ABOARD BY ROPE',b'DEPLOY SQUAD',b'SETTINGS >',b'DISMISS HELICOPTER'],w.menu
 w.incar[1]=c.v[5];w.step(c,p,n=4)
-assert w.menu[2:]==[b'FLY TO MAP MARKER',b'FLY TO GROVE STREET',b'EXIT BUTTON: LAND [X]',b'EXIT BUTTON: ROPE',b'GUNNER FIRE >',b'SETTINGS >'],w.menu
+assert w.menu[2:]==[b'FLY TO MAP MARKER',b'FLY TO GROVE STREET',b'EXIT BUTTON: LAND [X]',b'EXIT BUTTON: ROPE',b'MODE AND FIRE >',b'SETTINGS >'],w.menu
 passed('Main menu shows only what fits the moment: call it; on foot - three modes (marked), gunner fire, rope, squad, dismiss; aboard - destinations and the two exit-button switches')
 
 w,c,f=fire_world();n=target(w);w.damage.add((1,n));w.step(c,f,n=12)
@@ -540,7 +540,7 @@ passed('Protect CJ and cease-fire remain active after aim and takeoff changes')
 
 w,c,p=setup(True);summon(w,c);f=VM('Helicover_Fire',w);w.step(c,p,f,n=3);w.shared[b.FIRE]=3;w.step(c,p,f,n=5)
 launch=VM('Helicover',w);w.step(c,p,f,launch,n=15);w.events.append(6);w.step(c,p,f,n=4)
-assert w.menu==[b'HELICOVER / SETTINGS',b'CLOSE',b'HELICOPTER MODEL >',b'MESSAGES: ALL',b'< BACK'],w.menu
+assert w.menu==[b'HELICOVER / SETTINGS',b'CLOSE',b'HELICOPTER MODEL >',b'MESSAGES: ALL',b'MISSIONS: DEFEND ONLY',b'< BACK'],w.menu
 assert w.shared[b.WPN]==31 and all(w.weapons[c.v[v]]==31 for v in [13,14,15,16])
 passed('1.4.1: the crews are fixed - no crew or crew weapon pages; the SWAT door gunners carry M4s')
 w.now+=1100;w.events.append(1);w.step(c,p,f,n=12);assert w.shared.get(b.TACTICS,0)==0 and not any(b'TACTICS' in r for r in w.menu) and any(r.startswith(b'MESSAGES:') and r!=b'MESSAGES: ALL' for r in w.menu),w.menu
@@ -987,8 +987,8 @@ def to_destination(w,c,*vms):
 # menu (beta 4): the two EXIT BUTTON rows are switches for the game's own exit button - they start nothing themselves
 w,c,p=setup(True);summon(w,c);w.incar[1]=c.v[5];launch=VM('Helicover',w);w.step(c,p,launch,n=15)
 assert b'EXIT BUTTON: LAND [X]' in w.menu and b'EXIT BUTTON: ROPE' in w.menu and b'GET OUT HERE' not in w.menu,w.menu
-w.events.append(5);w.step(c,p,n=5);assert w.menu==[b'HELICOVER / SETTINGS',b'CLOSE',b'HELICOPTER MODEL >',b'MESSAGES: ALL',b'< BACK'] and not any(b'EXIT' in r or b'LANGUAGE' in r for r in w.menu),w.menu
-w.events.append(2);w.step(c,p,n=5);assert w.menu[0]==b'HELICOVER / FOLLOWING',w.menu
+w.events.append(5);w.step(c,p,n=5);assert w.menu==[b'HELICOVER / SETTINGS',b'CLOSE',b'HELICOPTER MODEL >',b'MESSAGES: ALL',b'MISSIONS: DEFEND ONLY',b'< BACK'] and not any(b'EXIT' in r or b'LANGUAGE' in r for r in w.menu),w.menu
+w.events.append(3);w.step(c,p,n=5);assert w.menu[0]==b'HELICOVER / FOLLOWING',w.menu
 st=w.shared[b.STATE];pos=list(w.car)
 for idx,mode,row,key in [(3,1,b'EXIT BUTTON: ROPE [X]','HCXBR'),(3,1,b'EXIT BUTTON: ROPE [X]','HCXBR'),(2,0,b'EXIT BUTTON: LAND [X]','HCXBL'),(2,0,b'EXIT BUTTON: LAND [X]','HCXBL'),(3,1,b'EXIT BUTTON: ROPE [X]','HCXBR')]:
  w.calls.clear();w.messages.clear();w.shared[b.MSG_UNTIL]=0;w.events.append(idx);w.step(c,p,n=12)
@@ -1095,15 +1095,25 @@ passed('Rope evacuation lifts CJ only after he walks to the rope (6 m away)')
 # ---- v39-fire: fire control upgrade ----
 # menu order and value mapping
 w,c,p=setup(True);summon(w,c);launch=VM('Helicover',w);w.step(c,p,launch,n=15);w.events.append(3);w.step(c,p,n=5)
-assert w.menu[0]==b'HELICOVER / GUNNER FIRE' and w.menu[2:]==[b'PROTECT ME [X]',b'ARMED ONLY',b'WHERE I SHOOT',b'HOLD FIRE',b'POLICE: FIRE BACK',b'MISSIONS: DEFEND ONLY',b'< BACK'],w.menu
+assert w.menu[0]==b'HELICOVER / MODE AND FIRE' and w.menu[2:]==[b'MODE: PROTECT',b'CANCEL: TO ME',b'PROTECT ME [X]',b'ARMED ONLY',b'WHERE I SHOOT',b'HOLD FIRE',b'POLICE: FIRE BACK',b'< BACK'],w.menu
 for idx,val in [(3,0),(1,4),(2,2),(0,3)]:
- w.events.append(idx);w.step(c,p,n=5);assert w.shared[b.FIRE]==val and [r for r in w.menu if r.endswith(b'[X]')]==[w.menu[2+idx]],(idx,val,w.shared[b.FIRE],w.menu)
+ w.events.append(idx+2);w.step(c,p,n=5);assert w.shared[b.FIRE]==val and [r for r in w.menu if r.endswith(b'[X]')]==[w.menu[4+idx]],(idx,val,w.shared[b.FIRE],w.menu)
 assert w.shared[b.POLICE]==0 and w.shared[b.MISSIONS]==0
-w.events.append(4);w.step(c,p,n=5);assert w.shared[b.POLICE]==1 and w.menu[6]==b'POLICE: NEVER FIRE' and w.menu[2]==b'PROTECT ME [X]',w.menu
-w.events.append(5);w.step(c,p,n=5);assert w.shared[b.MISSIONS]==1 and w.menu[7]==b'MISSIONS: AS USUAL' and w.menu[6]==b'POLICE: NEVER FIRE',w.menu
-w.events.append(4);w.step(c,p,n=5);w.events.append(5);w.step(c,p,n=5);assert (w.shared[b.POLICE],w.shared[b.MISSIONS])==(0,0) and w.menu[6:8]==[b'POLICE: FIRE BACK',b'MISSIONS: DEFEND ONLY'],w.menu
-w.events.append(6);w.step(c,p,n=5);assert w.menu[0]==b'HELICOVER / FOLLOWING'
-passed('GUNNER FIRE page: four rules - PROTECT ME (default), ARMED ONLY, WHERE I SHOOT, HOLD FIRE (the old FIRE AT ALL is gone) - and two switches: POLICE fire back / never fire, MISSIONS defend only / as usual; BACK returns to the main page')
+w.events.append(6);w.step(c,p,n=5);assert w.shared[b.POLICE]==1 and w.menu[8]==b'POLICE: NEVER FIRE' and w.menu[4]==b'PROTECT ME [X]',w.menu
+w.events.append(6);w.step(c,p,n=5);assert w.shared[b.POLICE]==0 and w.menu[8]==b'POLICE: FIRE BACK',w.menu
+# 2.0: the mode switch and "to me"
+assert w.shared[b.MODE]==0 and w.shared[b.RECALL]==0
+w.events.append(0);w.step(c,p,n=5);assert w.shared[b.MODE]==1 and w.menu[2]==b'MODE: ASSAULT' and 'HCMDA' in w.messages and w.shared[b.FIRE]==3,(w.menu,w.messages)
+w.events.append(1);w.step(c,p,n=5);assert 'HCRCL' in w.messages and w.shared[b.MODE]==1 and w.menu[0]==b'HELICOVER / MODE AND FIRE',(w.messages,w.menu)   # (the brain takes the 1 at its next look)
+w.events.append(0);w.step(c,p,n=5);assert w.shared[b.MODE]==0 and w.menu[2]==b'MODE: PROTECT' and 'HCMDP' in w.messages,w.menu
+w.events.append(7);w.step(c,p,n=5);assert w.menu[0]==b'HELICOVER / FOLLOWING'
+passed('MODE AND FIRE page (2.0): MODE: PROTECT / ASSAULT (a switch; the commander says what it means) and CANCEL: TO ME first, then the four fire rules - PROTECT ME (default), ARMED ONLY, WHERE I SHOOT, HOLD FIRE - and the POLICE switch; BACK returns to the main page; eight rows')
+# the MISSIONS switch lives on the settings page now
+w.events.append(6);w.step(c,p,n=5);assert w.menu==[b'HELICOVER / SETTINGS',b'CLOSE',b'HELICOPTER MODEL >',b'MESSAGES: ALL',b'MISSIONS: DEFEND ONLY',b'< BACK'],w.menu
+w.events.append(2);w.step(c,p,n=5);assert w.shared[b.MISSIONS]==1 and w.menu[4]==b'MISSIONS: AS USUAL',w.menu
+w.events.append(2);w.step(c,p,n=5);assert w.shared[b.MISSIONS]==0 and w.menu[4]==b'MISSIONS: DEFEND ONLY',w.menu
+w.events.append(3);w.step(c,p,n=5);assert w.menu[0]==b'HELICOVER / FOLLOWING'
+passed('SETTINGS page (2.0): HELICOPTER MODEL, MESSAGES, MISSIONS defend only / as usual (moved here from the fire page), BACK')
 w.events.append(7);w.step(c,p,n=5);assert w.menu[0]==b'SEND THE HELICOPTER AWAY?' and w.shared[b.STATE]==2
 w.events.append(1);w.step(c,p,n=5);assert w.shared[b.STATE]==2 and w.menu[0]==b'HELICOVER / FOLLOWING'
 w.events.append(7);w.step(c,p,n=5);w.events.append(0);w.step(c,p,n=8);assert w.shared[b.STATE]==4,w.shared[b.STATE]

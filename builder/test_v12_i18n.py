@@ -89,20 +89,20 @@ def rows_of(w):return w.menu[2:]
 def press(w,vms,index,n=8):w.events.append(index);w.step(*vms,n=n)
 def orders_given(w):return [x[2][1] for x in calls(w,0xddc) if x[2][0]==b.CMD and x[2][1]!=0]
 w,c,p=open_menu()
-assert w.menu[0]==b'HELICOVER / FOLLOWING' and rows_of(w)==[b'FOLLOW ME [X]',b'HOLD HERE',b'PATROL AROUND ME',b'GUNNER FIRE >',b'CLIMB ABOARD BY ROPE',b'DEPLOY SQUAD',b'SETTINGS >',b'DISMISS HELICOPTER']
-MAIN_RU=('ЛЕТЕТЬ ЗА МНОЙ [X]','ЖДАТЬ ЗДЕСЬ','ПАТРУЛЬ ВОКРУГ','ОГОНЬ СТРЕЛКОВ >','НА БОРТ ПО ВЕРЕВКЕ','ВЫСАДИТЬ ОТРЯД','НАСТРОЙКИ >','ОТПУСТИТЬ ВЕРТОЛЕТ')
+assert w.menu[0]==b'HELICOVER / FOLLOWING' and rows_of(w)==[b'FOLLOW ME [X]',b'HOLD HERE',b'PATROL AROUND ME',b'MODE AND FIRE >',b'CLIMB ABOARD BY ROPE',b'DEPLOY SQUAD',b'SETTINGS >',b'DISMISS HELICOPTER']
+MAIN_RU=('ЛЕТЕТЬ ЗА МНОЙ [X]','ЖДАТЬ ЗДЕСЬ','ПАТРУЛЬ ВОКРУГ','РЕЖИМ И ОГОНЬ >','НА БОРТ ПО ВЕРЕВКЕ','ВЫСАДИТЬ ОТРЯД','НАСТРОЙКИ >','ОТПУСТИТЬ ВЕРТОЛЕТ')
 w,c,p=open_menu(True)
 assert rows_of(w)==[i18n.encode(x,'game') for x in MAIN_RU],rows_of(w)
 assert [draw_game(r_) for r_ in rows_of(w)]==list(MAIN_RU) and draw_game(w.menu[0])=='HELICOVER / ЛЕТИТ ЗА ВАМИ',[draw_game(r_) for r_ in w.menu]
-press(w,(c,p),6,5);assert [draw_game(r_) for r_ in w.menu]==['HELICOVER / НАСТРОЙКИ','CLOSE','МОДЕЛЬ ВЕРТОЛЕТА >','СООБЩЕНИЯ: ВСЕ','< НАЗАД'],[draw_game(r_) for r_ in w.menu]
+press(w,(c,p),6,5);assert [draw_game(r_) for r_ in w.menu]==['HELICOVER / НАСТРОЙКИ','CLOSE','МОДЕЛЬ ВЕРТОЛЕТА >','СООБЩЕНИЯ: ВСЕ','МИССИИ: ОБОРОНА','< НАЗАД'],[draw_game(r_) for r_ in w.menu]
 passed('With the game in Russian the menu is Russian and reads correctly in the simulated font: main page, state in the title, settings')
 w,c,p=open_menu(True);press(w,(c,p),3,5)
-assert [draw_game(r_) for r_ in w.menu]==['HELICOVER / ОГОНЬ СТРЕЛКОВ','CLOSE','ЗАЩИЩАТЬ МЕНЯ [X]','ТОЛЬКО ВООРУЖЕННЫЕ','ТАМ, ГДЕ СТРЕЛЯЮ Я','НЕ СТРЕЛЯТЬ','ПОЛИЦИЯ: ОТВЕЧАТЬ','МИССИИ: ОБОРОНА','< НАЗАД'],[draw_game(r_) for r_ in w.menu]
-w.step(c,p,n=3);press(w,(c,p),4,5);w.step(c,p,n=3);press(w,(c,p),5,5)
-assert [draw_game(r_) for r_ in w.menu[6:8]]==['ПОЛИЦИЯ: НЕ СТРЕЛЯТЬ','МИССИИ: КАК ОБЫЧНО'] and (w.shared[b.POLICE],w.shared[b.MISSIONS])==(1,1),[draw_game(r_) for r_ in w.menu]
+assert [draw_game(r_) for r_ in w.menu]==['HELICOVER / РЕЖИМ И ОГОНЬ','CLOSE','РЕЖИМ: ЗАЩИТА','ОТМЕНА: КО МНЕ','ЗАЩИЩАТЬ МЕНЯ [X]','ТОЛЬКО ВООРУЖЕННЫЕ','ТАМ, ГДЕ СТРЕЛЯЮ Я','НЕ СТРЕЛЯТЬ','ПОЛИЦИЯ: ОТВЕЧАТЬ','< НАЗАД'],[draw_game(r_) for r_ in w.menu]
+w.step(c,p,n=3);press(w,(c,p),6,5);w.step(c,p,n=3);press(w,(c,p),0,5)
+assert [draw_game(r_) for r_ in (w.menu[8],w.menu[2])]==['ПОЛИЦИЯ: НЕ СТРЕЛЯТЬ','РЕЖИМ: НАСТУПЛЕНИЕ'] and (w.shared[b.POLICE],w.shared[b.MODE])==(1,1),[draw_game(r_) for r_ in w.menu]
 passed('The fire page in Russian: four rules and the two switches (police, missions), every row readable in the simulated font')
 w,c,p=open_menu(True,aboard=True)
-assert [draw_game(r_) for r_ in rows_of(w)]==['ЛЕТЕТЬ К МЕТКЕ НА КАРТЕ','ЛЕТЕТЬ НА ГРОУВ-СТРИТ','КНОПКА ВЫХОДА: ПОСАДКА [X]','КНОПКА ВЫХОДА: ВЕРЕВКА','ОГОНЬ СТРЕЛКОВ >','НАСТРОЙКИ >'],[draw_game(r_) for r_ in rows_of(w)]
+assert [draw_game(r_) for r_ in rows_of(w)]==['ЛЕТЕТЬ К МЕТКЕ НА КАРТЕ','ЛЕТЕТЬ НА ГРОУВ-СТРИТ','КНОПКА ВЫХОДА: ПОСАДКА [X]','КНОПКА ВЫХОДА: ВЕРЕВКА','РЕЖИМ И ОГОНЬ >','НАСТРОЙКИ >'],[draw_game(r_) for r_ in rows_of(w)]
 w.calls.clear();w.messages.clear();press(w,(c,p),3)
 assert w.shared[b.EXIT_MODE]==1 and draw_game(rows_of(w)[3])=='КНОПКА ВЫХОДА: ВЕРЕВКА [X]' and not orders_given(w) and w.incar.get(1)==c.v[5] and 'HCXBR' in w.messages,(w.menu,orders_given(w),w.messages)
 passed('Aboard in Russian: the two exit-button switches; switching shows the Russian hint and starts nothing')
@@ -118,7 +118,7 @@ for label,data in b.p.data.items():
 bases=[l_ for l_ in b.p.data if l_.startswith(('MAIN_','SETUP_','PREF_','DISMISS_')) and not l_.endswith('_U')]
 for base in bases:
  assert base+'_U' in b.p.data and len(b.p.data[base].split(b'\0'))==len(b.p.data[base+'_U'].split(b'\0')),base
-assert all(len([f_ for f_ in b.p.data[l_][4:].split(b'\0')[2:] if f_])==3 for l_ in b.p.data if l_.startswith('SETUP_')),'settings (1.5): helicopter model, messages, BACK - the crews, the gunners\' pose and the tactics are fixed / the brain\'s'
+assert all(len([f_ for f_ in b.p.data[l_][4:].split(b'\0')[2:] if f_])==4 for l_ in b.p.data if l_.startswith('SETUP_')),'settings (2.0): helicopter model, messages, missions, BACK - the crews, the gunners\' pose and the tactics are fixed / the brain\'s'
 passed('Every one of the %d menu pages has an English and a Russian version with the same rows; at most 8 rows, none longer than 26 (RU 30) characters; no language page, no FONT TEST'%len(bases))
 # the launcher's "files missing" message follows the same rule
 def missing_key(russian,game_lang):
@@ -134,7 +134,7 @@ assert len(calls(w,0xa5))==1 and not invariants(w),(len(calls(w,0xa5)),invariant
 passed('CALL HELICOPTER: once called the page is the FOLLOWING page - there is no CALL row to press twice, and one helicopter exists')
 # the "preparing" state itself (a frame or two in the game) and the swap states: a progress row, not a button
 for st,row in [(1,b'HELICOPTER INBOUND...'),(16,b'CHANGING, PLEASE WAIT...'),(17,b'CHANGING, PLEASE WAIT...'),(13,b'HELICOPTER LEAVING...')]:
- w,c,p=open_menu();w.shared[b.STATE]=st;w.step(p,n=4);assert rows_of(w)==[row,b'GUNNER FIRE >',b'SETTINGS >'],(st,w.menu)
+ w,c,p=open_menu();w.shared[b.STATE]=st;w.step(p,n=4);assert rows_of(w)==[row,b'MODE AND FIRE >',b'SETTINGS >'],(st,w.menu)
  w.calls.clear()
  for _ in range(3):press(w,(p,),0,3)
  assert not orders_given(w) and rows_of(w)[0]==row,(st,orders_given(w))
@@ -186,7 +186,7 @@ w.step(*V,n=8);w.messages.clear();press(w,V,4);assert w.shared[b.STATE]==2 and '
 w.step(*V,n=8);press(w,V,4);hover(w,c);w.step(*V,n=30);assert w.shared[b.STATE]==3 and w.shared[b.ROPE_WAIT]==1 and rows_of(w)[4]==b'CANCEL ROPE PICKUP' and rows_of(w)[1]==b'HOLD HERE',(w.shared[b.STATE],w.shared[b.ROPE_WAIT],w.menu)
 passed('The rope row: CLIMB ABOARD BY ROPE -> CANCEL ROPE PICKUP (on the way in the cancel sends the helicopter back to following); the hover for the rope is not marked as HOLD')
 w,c,p=open_menu();press(w,(c,p),7,4);press(w,(c,p),0,8)
-assert w.shared[b.STATE]==4 and w.menu[0]==b'HELICOVER / DEPARTING' and rows_of(w)==[b'HELICOPTER LEAVING...',b'GUNNER FIRE >',b'SETTINGS >'],(w.shared[b.STATE],w.menu)
+assert w.shared[b.STATE]==4 and w.menu[0]==b'HELICOVER / DEPARTING' and rows_of(w)==[b'HELICOPTER LEAVING...',b'MODE AND FIRE >',b'SETTINGS >'],(w.shared[b.STATE],w.menu)
 w.calls.clear()
 for _ in range(3):press(w,(c,p),0,3)
 assert not orders_given(w) and w.shared[b.STATE]==4
@@ -197,8 +197,8 @@ w,c,p=open_menu();press(w,(c,p),6,5);assert w.menu[0]==b'HELICOVER / SETTINGS'
 w.events.append(0);w.step(c,p);w.events.append(0);w.step(c,p,n=5)   # a double tap on "HELICOPTER MODEL >"
 assert w.menu[0]==b'HELICOVER / HELICOPTER' and w.shared[b.MODEL]==487,(w.menu,w.shared[b.MODEL])
 w,c,p=open_menu();w.events.append(3);w.step(c,p);w.events.append(3);w.step(c,p,n=5)   # a double tap on "GUNNER FIRE >"
-assert w.menu[0]==b'HELICOVER / GUNNER FIRE' and w.shared[b.FIRE]==3,(w.menu,w.shared[b.FIRE])
-w.step(c,p,n=2);press(w,(c,p),3,5);assert w.shared[b.FIRE]==0,'a deliberate tap half a second later is taken (the fourth row: HOLD FIRE)'
+assert w.menu[0]==b'HELICOVER / MODE AND FIRE' and w.shared[b.FIRE]==3,(w.menu,w.shared[b.FIRE])
+w.step(c,p,n=2);press(w,(c,p),5,5);assert w.shared[b.FIRE]==0,'a deliberate tap half a second later is taken (the sixth row: HOLD FIRE)'
 passed('A double tap on a row that opens a page opens the page and nothing more (no crew, helicopter or fire mode changed by the second tap)')
 w,c,p=open_menu();w.incar[1]=c.v[5];w.calls.clear();w.events.append(1);w.step(c,p,n=4)   # CJ got aboard and the tap comes before the page is redrawn
 assert not orders_given(w) and rows_of(w)[:2]==[b'FLY TO MAP MARKER',b'FLY TO GROVE STREET'] and w.shared[b.STATE]==2,(orders_given(w),w.menu)
@@ -235,7 +235,7 @@ passed('DISMISS without a squad is immediate after the confirmation; "NO, KEEP I
 # models for the HELICOPTER page are requested while the page is open and released after
 w,c,p=open_menu();w.calls.clear();press(w,(c,p),6,4);press(w,(c,p),0,4)
 assert w.menu[0]==b'HELICOVER / HELICOPTER' and {x[2][0] for x in calls(w,0x247)}=={487,497,425},'the helicopter models when the HELICOPTER page opens'
-w.calls.clear();press(w,(c,p),3,4);press(w,(c,p),2,4);assert w.menu[0]==b'HELICOVER / FOLLOWING' and {x[2][0] for x in calls(w,0x249)}>={487,497,425},('and released when the pages are left',w.menu)
+w.calls.clear();press(w,(c,p),3,4);press(w,(c,p),3,4);assert w.menu[0]==b'HELICOVER / FOLLOWING' and {x[2][0] for x in calls(w,0x249)}>={487,497,425},('and released when the pages are left',w.menu)
 passed('The helicopter models are pre-requested while their page is open, so choosing one does not stall a frame')
 
 # =================================================================== beta 5: the menu opens at once

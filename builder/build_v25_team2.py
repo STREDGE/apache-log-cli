@@ -12,7 +12,8 @@ counter-assault pair and the marksman) and the second squad worker (Helicover_Sq
     off; each one is deleted the moment he is off the screen (never in view, never handed to the game armed).
   - A dead one stays dead (his slot is cleared after 10 s so the brain forgets him).
 Registers: 0 CJ, 1 first living guard of the first four, 2-5 the four, 6 scratch, 7 the man being set up, 8-12 scratch,
-13 now, 14-17 death times, 18 state (0 none, 1 on the ground, 2 leaving).
+13 now, 14-17 death times, 18 state (0 none, 1 on the ground, 2 leaving), 19 the marksman (0 nothing, 1 waits for his roof,
+2 on the rope over it: the helicopter is held), 20 since when, 21-30 the brain's plan (0E48, command 7).
 """
 from asm_v25 import *
 import build_v25 as b
@@ -24,8 +25,8 @@ def alive(var,fail):s.check(0x056d,[V(var)],fail);s.check(0x8118,[V(var)],fail)
 
 s.label('INIT');a(0)
 for i in range(4):s.set(b.GROUND_PUB2+i,-1);a(6,V(2+i),I(-1));a(6,V(14+i),I(0))
-s.set(b.TEAM2_STATE,0);a(6,V(18),I(0))
-s.label('LOOP');a(1,I(250));a(0x01bd,V(13))
+s.set(b.TEAM2_STATE,0);a(6,V(18),I(0));a(6,V(19),I(0));a(6,V(20),I(0))
+s.label('LOOP');a(1,I(250));a(0x01bd,V(13));a(0xddc,I(b.TEAM2_HEART),V(13));s.get(0,b.PUB)   # (2.0: 0@ = CJ was only read when the four left - the 1.5.4 "left behind" check measured from actor 0)
 s.check(0x0256,[I(0)],'LOOP')
 # are the first four on foot with CJ?
 a(6,V(1),I(-1));s.get(6,b.SQ_ROPE);s.eq(6,1,'MAIN_GONE')
@@ -42,12 +43,47 @@ for i in range(4):
  s.label(live);a(6,V(14+i),I(0));s.go(nx)
  s.label('KEEP_OLD_%d'%i);a(0x0085,V(8),V(13));a(0x0062,V(8),V(14+i));s.check(0x0019,[V(8),I(10000)],nx);s.set(b.GROUND_PUB2+i,-1)
  s.label(nx)
+# ---- 2.0: the marksman. The brain looks for a flat high place from which CJ is seen and sends the helicopter over it (the pilot's
+# spot); when it hangs there steady (24@ = 1) he goes down the rope onto the roof and the helicopter is held until he stands (8 s at
+# most). No roof within 15 s, or the helicopter not there within 45 s: he comes in on the ground like a man who was left behind.
+s.eq(19,2,'MK_NOT_HOLD');s.get(6,b.PUB+1);a(0x0085,V(8),V(13));a(0x0062,V(8),V(20));s.check(0x0019,[V(8),I(8000)],'MK_HOLD_CHECK');s.go('MK_RELEASE')
+s.label('MK_HOLD_CHECK');s.check(0x056d,[V(5)],'MK_RELEASE');s.check(0x8118,[V(5)],'MK_RELEASE');a(0x0819,V(5),V(8));s.check(0x0023,[F(2.5),V(8)],'MK_DONE')
+s.label('MK_RELEASE');a(6,V(19),I(0));s.check(0x056e,[V(6)],'MK_DONE');a(0x0574,V(6),I(0));s.set(b.FROZEN,0);s.go('MK_DONE')
+s.label('MK_NOT_HOLD');s.eq(19,1,'MK_DONE')
+a(0x0085,V(8),V(13));a(0x0062,V(8),V(20))                               # 8@ = how long he has waited
+s.get(9,b.BRAIN_HELLO);s.check(0x0039,[V(9),I(b.BRAIN_MAGIC)],'MK_GROUND')
+a(0x0e48,V(21),I(10),I(7))
+s.eq(24,1,'MK_NOT_READY');s.go('MK_ROPE')
+s.label('MK_NOT_READY');s.check(0x8019,[V(8),I(45000)],'MK_GROUND');s.eq(23,0,'MK_DONE');s.check(0x8019,[V(8),I(15000)],'MK_GROUND');s.go('MK_DONE')
+s.label('MK_ROPE');s.get(6,b.PUB+1);s.check(0x056e,[V(6)],'MK_GROUND')
+a(0x0247,I(MODELS[3]));a(0x0247,I(WEAPONS[3][1]));a(0x038b);a(1,I(0));s.check(0x0248,[I(MODELS[3])],'MK_DONE');s.check(0x0248,[I(WEAPONS[3][1])],'MK_DONE');s.check(0x056e,[V(6)],'MK_DONE')
+a(0x0574,V(6),I(1));s.set(b.FROZEN,1)
+a(0x0407,V(6),F(1.5),F(0.0),F(-1),V(10),V(11),V(12));a(0x0503,I(8),I(MODELS[3]),V(10),V(11),V(12),V(5));s.check(0x056d,[V(5)],'MK_ROPE_FAIL')
+a(0x0085,V(7),V(5));s.call('SETUP');a(0x01b2,V(5),I(WEAPONS[3][0]),I(30000));a(0x01b9,V(5),I(WEAPONS[3][0]));a(0x0223,V(5),I(250));a(0x035f,V(5),I(100))
+a(0xddc,I(b.GROUND_PUB2+3),V(5));a(6,V(17),I(0));a(0x0249,I(MODELS[3]));a(0x0249,I(WEAPONS[3][1]))
+a(6,V(19),I(2));a(0x0085,V(20),V(13));s.go('MK_DONE')
+s.label('MK_ROPE_FAIL');a(0x0574,V(6),I(0));s.set(b.FROZEN,0);s.go('MK_DONE')   # (he still waits: the next pass tries again, or the clock sends him in on the ground)
+s.label('MK_GROUND');a(6,V(19),I(0));a(6,V(5),I(-1))
+a(0x0247,I(MODELS[3]));a(0x0247,I(WEAPONS[3][1]));a(0x038b);a(1,I(0));s.check(0x0248,[I(MODELS[3])],'MK_GROUND_RETRY');s.check(0x0248,[I(WEAPONS[3][1])],'MK_GROUND_RETRY');s.check(0x056d,[V(1)],'MK_GROUND_RETRY')
+for n_,(ox,oy) in enumerate([(-14.,-14.),(14.,-14.),(-14.,14.),(14.,14.)]):
+ cand='MK_CAND_%d'%n_
+ a(0x00a0,V(1),V(10),V(11),V(12));a(0x000b,V(10),F(ox));a(0x000b,V(11),F(oy));a(0x000b,V(12),F(30));a(0x02ce,V(10),V(11),V(12),V(12))
+ if n_<3:s.check(0x80c2,[V(10),V(11),V(12),F(3.0)],cand);s.go('MK_AT_OK');s.label(cand)
+s.label('MK_AT_OK');a(0x0172,V(1),V(9))
+a(0x000b,V(10),F(SPOTS[3][0]));a(0x000b,V(11),F(SPOTS[3][1]))
+a(0x009a,I(8),I(MODELS[3]),V(10),V(11),V(12),V(5));s.check(0x056d,[V(5)],'MK_DONE')
+a(0x0173,V(5),V(9));a(0x0085,V(7),V(5));s.call('SETUP');a(0x01b2,V(5),I(WEAPONS[3][0]),I(30000));a(0x01b9,V(5),I(WEAPONS[3][0]));a(0x0223,V(5),I(250));a(0x035f,V(5),I(100))
+a(0xddc,I(b.GROUND_PUB2+3),V(5));a(6,V(17),I(0));a(0x0249,I(MODELS[3]));a(0x0249,I(WEAPONS[3][1]));s.go('MK_DONE')
+s.label('MK_GROUND_RETRY');a(6,V(19),I(1))
+s.label('MK_DONE')
 # 1.5.4 (fifth log: two of the second four stood 57 s on a slope, 37 and 58 m from their posts, and the catch-up by footsteps
 # did not get them off it): a man 45 m or more from CJ for 40 s who is not on the screen is deleted and a new one comes in
 # where the screen does not show (14 m round the first living guard, like the second four when the helicopter has gone)
 for i in range(4):
  var=2+i;nx='LAG_NEXT_%d'%i;clr='LAG_CLR_%d'%i;run='LAG_RUN_%d'%i
  alive(var,nx)
+ if i==3:   # 2.0: the marksman on his roof (3 m or more above CJ) is where he should be, however far
+  a(0x00a0,V(0),V(10),V(11),V(12));a(0x00a0,V(var),V(8),V(9),V(6));a(0x0063,V(6),V(12));s.check(0x0023,[F(3.0),V(6)],clr)
  a(0x00a0,V(0),V(10),V(11),V(6));a(0x00a0,V(var),V(8),V(9),V(6));a(0x0509,V(10),V(11),V(8),V(9),V(12));s.check(0x0021,[V(12),F(45)],clr)
  s.get(9,b.TEAM2_LAG+i);s.eq(9,0,run);a(0xddc,I(b.TEAM2_LAG+i),V(13));s.go(nx)
  s.label(run);a(0x0085,V(10),V(13));a(0x0062,V(10),V(9));s.check(0x0019,[V(10),I(40000)],nx)
@@ -86,6 +122,8 @@ a(0x00aa,V(6),V(10),V(11),V(12));a(0x00a0,V(1),V(8),V(9),V(10));a(0x0063,V(12),V
 s.get(8,b.DEPLOY_T0);a(0x0085,V(9),V(13));a(0x0062,V(9),V(8));s.check(0x0019,[V(9),I(3000)],'LOOP')      # (not yet: the first four are still on the ropes)
 for i,(x,y) in enumerate([(-1.5,0.0),(1.5,0.0),(-1.5,-2.4),(1.5,-2.4)]):
  var=2+i;nx='ROPE_NEXT_%d'%i
+ if i==3:   # 2.0: the marksman does not come down here - the helicopter takes him to a roof (MARKSMAN below); without the brain he comes down with the others
+  s.get(8,b.BRAIN_HELLO);s.check(0x0039,[V(8),I(b.BRAIN_MAGIC)],'MK_WITH_OTHERS');a(6,V(19),I(1));a(0x0085,V(20),V(13));s.go(nx);s.label('MK_WITH_OTHERS')
  a(0x0407,V(6),F(x),F(y),F(-1),V(10),V(11),V(12));a(0x0503,I(8),I(MODELS[i]),V(10),V(11),V(12),V(var));s.check(0x056d,[V(var)],nx)
  a(0x0085,V(7),V(var));s.call('SETUP')
  wpn,_=WEAPONS[i];a(0x01b2,V(var),I(wpn),I(30000));a(0x01b9,V(var),I(wpn));a(0x0223,V(var),I(250));a(0x035f,V(var),I(100))
@@ -114,6 +152,8 @@ for typ in range(32):a(0x077a,V(7),I(2),I(typ))
 a(0x077a,V(7),I(0),I(0));a(0x077a,V(7),I(0),I(8));b.brave(s,7,'SETUP_BRAVE');s.ret()
 # ---- the first four are gone: weapons away, walk off, deleted out of view
 s.label('LEAVE');a(6,V(18),I(2));s.set(b.TEAM2_STATE,2)
+s.eq(19,2,'LEAVE_NO_HOLD');s.get(6,b.PUB+1);s.check(0x056e,[V(6)],'LEAVE_NO_HOLD');a(0x0574,V(6),I(0));s.set(b.FROZEN,0)
+s.label('LEAVE_NO_HOLD');a(6,V(19),I(0))
 for i in range(4):s.set(b.GROUND_PUB2+i,-1)
 s.get(0,b.PUB)
 for i in range(4):

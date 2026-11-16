@@ -98,6 +98,7 @@ s.get(7,b.TACTICS)
 # 1.5.3: CJ inside a building - the brain lays the detail out round the door he went in by (it never follows him into interior
 # coordinates); the guards take those posts like any others. Only the catch-up by his footsteps is left out (see ON_FOOT).
 (s.call('PERCEIVE') if not TEAM else a(6,V(18),I(0)))   # (the second four: no speech, no radio calls)
+if not TEAM:s.call('PLAN')   # 2.0: the squad's task (said when it changes) and who walks the guards - the mod or these scripts (NATIVE, for both fours)
 # each guard's man: the one the brain has him firing at (or holding fire on). A suspect he is only told to cover does not take him out
 # of the formation.
 for k in range(4):
@@ -192,6 +193,21 @@ def call_table(prefix,throttle):
 call_table('CT0_',False)
 s.label('CALL_THROTTLED');call_table('CT1_',True)
 s.label('CALL_RET');s.ret()
+# ---------------------------------------------------------------- 2.0: the squad's plan (0E48, command 7)
+# 21@ mode (0 PROTECT, 1 ASSAULT), 22@ task (HCB_TASK_*), 23@ a roof for the marksman, 24@ the helicopter is over it, 25-27@ the roof,
+# 28@ metres to the target, 29@ men on the move, 30@ 1 = the mod walks the guards itself. Keeps 8@, 13@, 18@.
+if not TEAM:
+ s.label('PLAN');s.get(19,b.BRAIN_HELLO);s.check(0x0039,[V(19),I(b.BRAIN_MAGIC)],'PLAN_NONE')
+ a(0x0e48,V(21),I(10),I(7));a(0xddc,I(b.NATIVE),V(30))
+ s.get(19,b.SQ_TASK_SAID);s.check(0x003b,[V(19),V(22)],'PLAN_NEW');s.ret()
+ s.label('PLAN_NEW');a(0xddc,I(b.SQ_TASK_SAID),V(22))
+ for task,key in [(3,'SQTAP'),(5,'SQTBD'),(6,'SQTSR'),(7,'SQTCN'),(9,'SQTWD')]:
+  nx=uid('PLAN_T');s.eq(22,task,nx);msg(key,False);s.ret();s.label(nx)
+ # "back to CJ" only after an assault task (3-7, 9), not at the first look
+ s.eq(22,8,'PLAN_RET');s.check(0x0019,[V(19),I(2)],'PLAN_RET');s.eq(19,8,'PLAN_BACK');s.ret()
+ s.label('PLAN_BACK');msg('SQTRG',False)
+ s.label('PLAN_RET');s.ret()
+ s.label('PLAN_NONE');s.set(b.NATIVE,0);s.ret()
 # ---------------------------------------------------------------- one guard
 def post_spot(G,fail):
  """26-28@ = this guard's post from the brain (cmd 4); `fail` when the brain has none for him (or no handshake)."""
@@ -248,12 +264,15 @@ def guard(k):
  # within 10 m again; then the brain's posts apply as before. (1.2 sent him by the path network at 40 m: in the canal under
  # the bridge the whole detail stood 60-80 m away for half a minute - the third whole-game log.) Never a teleport.
  s.label(P+'ON_FOOT');a(0x077e,V(25));s.eq(25,0,P+'NEAR')   # (CJ is inside a building: no following him - the post at the door)
+ s.get(25,b.NATIVE);s.eq(25,0,P+'NEAR')   # 2.0: the mod walks him - from any distance, by the brain's way (in ASSAULT his place is far from CJ on purpose)
  s.check(0x0021,[V(24),F(22)],P+'FS_NEAR');s.get(25,fk(k,'TASK'));s.eq(25,13,P+'FS_ISSUE');s.get(25,fk(k,'NEXT'));s.check(0x001d,[V(12),V(25)],R)
  s.label(P+'FS_ISSUE');a(0x0850,V(G),V(0));setk_lit(k,'TASK',13);later(k,4000);s.ret()
  s.label(P+'FS_NEAR');s.get(25,fk(k,'TASK'));s.eq(25,13,P+'NEAR');s.check(0x0021,[V(24),F(10)],P+'FS_DONE');s.ret()
  s.label(P+'FS_DONE');setk_lit(k,'TASK',0)
  # ---- stuck check every 2.5 s: moving, far, and barely moved
- s.label(P+'NEAR');s.get(25,fk(k,'LT'));a(0x0085,V(26),V(12));a(0x0062,V(26),V(25));s.check(0x0019,[V(26),I(2500)],P+'STUCK_DONE')
+ # 2.0: while the mod walks the guards (NATIVE) the scripts' own stuck check, path-network detour and vault are not used: the brain's map
+ # finds the way and the mod's task takes him there
+ s.label(P+'NEAR');s.get(25,b.NATIVE);s.eq(25,0,P+'VAULT_DONE');s.get(25,fk(k,'LT'));a(0x0085,V(26),V(12));a(0x0062,V(26),V(25));s.check(0x0019,[V(26),I(2500)],P+'STUCK_DONE')
  s.get(26,fk(k,'LX'));s.get(27,fk(k,'LY'));a(0x0509,V(21),V(22),V(26),V(27),V(28));setk(k,'LX',21);setk(k,'LY',22);setk(k,'LT',12)
  s.check(0x0021,[V(24),F(9)],P+'STUCK_DONE');s.check(0x0023,[F(.7),V(28)],P+'STUCK_DONE');s.get(25,fk(k,'TASK'));s.eq(25,1,P+'STUCK_T12');s.go(P+'STUCK_YES');s.label(P+'STUCK_T12');s.eq(25,12,P+'STUCK_DONE');s.label(P+'STUCK_YES')
  post_spot(G,R);a(0x05f5,V(G),V(26),V(27),V(28),I(6),I(15000));setk_lit(k,'TASK',7);later(k,3000);s.ret()   # 1.2: re-path, no teleport
@@ -285,6 +304,10 @@ def guard(k):
  s.label(rearmed)
  s.eq(22,0,P+'GO');s.go(P+'AT')
  s.label(P+'GO');s.check(0x0021,[V(19),F(.9)],P+'AT')
+ # 2.0: move 5 = the mod has his legs (its own go-to task, given once). The script only stands him up once and keeps its hands off
+ nat=uid(P+'NAT');natn=uid(P+'NATN');s.eq(22,5,nat);s.get(31,fk(k,'TASK'));s.eq(31,20,natn);s.ret()
+ s.label(natn);a(0x04eb,V(G),I(0));setk_lit(k,'TASK',20);setk_lit(k,'COVER',0);s.ret()
+ s.label(nat)
  # 1.4.1: the brain says he has not got nearer for a while (move 4): the game's path network takes him round
  nopath=uid(P+'NOPATH');s.eq(22,4,nopath);issue=uid(P+'PATH');same_post(k,7,issue)   # (same_post places the label)
  a(0x05f5,V(G),V(23),V(24),V(25),I(6),I(15000));setk(k,'TX',23);setk(k,'TY',24);setk_lit(k,'COVER',0);a(0xddc,I(PACE+k),V(22));order(k,7,21,3000)
@@ -360,7 +383,13 @@ TEXTS={'SQXF': '~r~SHOTS AT CJ - FRONT!~w~ Covering him.',
  'SQWATER': '~y~ALPHA:~w~ CJ in the water - helicopter over you, take the rope.',
  'SQAHEAD': '~y~PILOT:~w~ armed men ahead on your way.',
  'SQKF': '~r~CAR - FRONT!~w~ Get out of its way!', 'SQKR': '~r~CAR - RIGHT!~w~ Get out of its way!', 'SQKB': '~r~CAR - BEHIND!~w~ Get out of its way!', 'SQKL': '~r~CAR - LEFT!~w~ Get out of its way!',
- 'SQCMD': '~r~ALPHA DOWN!~w~ BRAVO: I have command.'}
+ 'SQCMD': '~r~ALPHA DOWN!~w~ BRAVO: I have command.',
+ 'SQTAP': '~r~ALPHA:~w~ target marked. Moving up - stay behind us.',
+ 'SQTBD': '~r~ALPHA:~w~ fire team, cover! Pairs - bound!',
+ 'SQTSR': '~y~ALPHA:~w~ lost him. Searching where he was.',
+ 'SQTCN': '~g~ALPHA:~w~ target down. All-round watch.',
+ 'SQTRG': '~g~ALPHA:~w~ done here. Back to CJ.',
+ 'SQTWD': '~r~ALPHA:~w~ too many down - falling back!'}
 if __name__=='__main__':
  report=s.build('Helicover_Squad2' if TEAM else 'Helicover_Squad','csa');print(report)
  with (OUT/'validation.txt').open('a') as validation:validation.write(report+'\n')

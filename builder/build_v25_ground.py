@@ -260,7 +260,21 @@ s.label('ESCORT_READY');s.get(29,b.WPN);s.set(b.ESC_LAGGED,0)
 for i in range(4):s.set(b.SQ_LAG+i,0)
 for i,var in enumerate([20,21,22,23]):
  skip='ESCORT_ARM_'+str(var);gr_alive(var,skip);a(0x01b2,V(var),I(TEAM_WEAPONS[i][0]),I(30000));a(0x01b9,V(var),I(TEAM_WEAPONS[i][0]));s.label(skip)
-s.set(b.SQ_ROPE,1);s.set(b.ESCORT_ON,1);s.set(b.ROPE_BUSY,0);a(0x0574,V(1),I(0));s.set(b.FROZEN,0);say(s,'SQIN');s.set(b.NOTICE_SKIP,2);s.set(b.CMD,2)
+s.set(b.SQ_ROPE,1);s.set(b.ESCORT_ON,1)
+# 2.0: the helicopter hangs where it is until the SECOND four are down too. (Until 1.5 it was let go the moment the first four stood -
+# exactly when the second four were put on its ropes: they came down from a helicopter that was flying away, and fell.) The second
+# four's worker starts when SQ_ROPE is 1; here: wait until it has made them (TEAM2_STATE 1) and every living one of them is within
+# 2.5 m of the ground - 16 s at most.
+a(0x01bd,V(27));a(0x000a,V(27),I(16000))
+s.get(19,b.TEAM2_HEART);a(0x01bd,V(15));a(0x0062,V(15),V(19));s.check(0x8019,[V(15),I(1500)],'T2_DONE')
+s.label('T2_WAIT');a(1,I(200));gr_checks()
+s.get(19,b.TEAM2_HEART);a(0x01bd,V(15));a(0x0062,V(15),V(19));s.check(0x8019,[V(15),I(1500)],'T2_DONE')   # (the second four's worker is not running: nobody to wait for)
+s.get(19,b.TEAM2_STATE);s.eq(19,1,'T2_TIMER');a(6,V(19),I(1))
+for i in range(4):
+ skip='T2_DOWN_%d'%i;s.get(12,b.GROUND_PUB2+i);gr_alive(12,skip);a(0x0819,V(12),V(15));s.check(0x0021,[V(15),F(2.5)],skip);a(6,V(19),I(0));s.label(skip)
+s.eq(19,0,'T2_DONE')
+s.label('T2_TIMER');a(0x01bd,V(15));s.check(0x001d,[V(15),V(27)],'T2_WAIT')
+s.label('T2_DONE');s.set(b.ROPE_BUSY,0);a(0x0574,V(1),I(0));s.set(b.FROZEN,0);say(s,'SQIN');s.set(b.NOTICE_SKIP,2);s.set(b.CMD,2)
 s.label('ESCORT_LOOP');a(1,I(250));s.get(19,b.BUSY);s.eq(19,1,'ESC_NOT_BUSY');s.go('ESCORT_LOOP')
 s.label('ESC_NOT_BUSY');s.call('LEAVERS_TICK');s.set(b.SQ_ROPE,1);s.check(0x0256,[I(0)],'CLEANUP');s.check(0x056d,[V(0)],'CLEANUP');s.check(0x8118,[V(0)],'CLEANUP')
 s.get(1,b.PUB+1)   # 1.2: the helicopter and the guards are re-read every cycle (a model swap or a re-skin publishes new handles)

@@ -40,7 +40,7 @@ static void set_task(squad *q, u8 task, u32 now) {
 }
 
 /* the marksman's high place, and the helicopter that takes him there */
-static void overwatch(hcb_brain *b, const hcb_snapshot *s, hcb_out *out, int n_ground, int have_marksman) {
+static void overwatch(hcb_brain *b, const hcb_snapshot *s, hcb_out *out, int n_ground, int have_marksman, int mk_roping) {
     squad *q = &b->sq;
     u32 now = s->time;
     int i, best = -1, n = s->n_high < HCB_MAX_HIGH ? s->n_high : HCB_MAX_HIGH;
@@ -48,6 +48,8 @@ static void overwatch(hcb_brain *b, const hcb_snapshot *s, hcb_out *out, int n_g
     hcb_vec cjp = s->player.pos;
 
     out->ow_ok = 0; out->ow_ready = 0;
+    /* he is on the rope over his roof: the helicopter stays where it hangs until he stands */
+    if (have_marksman && mk_roping && q->ow_ok && s->heli) { out->heli_ok = 1; out->heli_at = q->ow_at; out->heli_at.z += 11.0f; return; }
     if (have_marksman || !s->heli || n_ground < 3 || s->interior || s->player.vehicle || b->alert >= HCB_ALERT_COMBAT) { q->ow_ok = 0; q->ow_since = 0; return; }
     /* (one try of 40 s for each commander's team: after that he comes down with the others) */
     if (q->ow_done_for == out->lead && out->lead) { q->ow_ok = 0; return; }
@@ -77,7 +79,7 @@ HID void hcb_squad_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
     hcb_post *post[8];
     hcb_vec cjp = cj->pos, u, side, front, T;
     const track *tg = 0;
-    int i, k, n = 0, have_marksman = 0, n_ground = 0, danger_cj, seen = 0, n_ours = s->n_ours < HCB_MAX_OURS ? s->n_ours : HCB_MAX_OURS;
+    int i, k, n = 0, have_marksman = 0, mk_roping = 0, n_ground = 0, danger_cj, seen = 0, n_ours = s->n_ours < HCB_MAX_OURS ? s->n_ours : HCB_MAX_OURS;
     float best = -1, D;
 
     q->umode = s->umode == HCB_UMODE_ASSAULT ? HCB_UMODE_ASSAULT : HCB_UMODE_PROTECT;
@@ -87,10 +89,10 @@ HID void hcb_squad_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         if (s->our_role[i] < HCB_ROLE_SQUAD || s->our_role[i] > HCB_ROLE_SQUAD + 7) continue;
         p = hcb_ped_of(s, s->ours[i]);
         if (!p || (p->flags & HCB_PF_DEAD)) continue;
-        if (s->our_role[i] == HCB_ROLE_SQUAD + 7) have_marksman = 1;
+        if (s->our_role[i] == HCB_ROLE_SQUAD + 7) { have_marksman = 1; mk_roping = (s->our_state[i] & HCB_OS_ROPING) != 0; }
         if (!(s->our_state[i] & HCB_OS_ROPING) && !p->vehicle) n_ground++;
     }
-    overwatch(b, s, out, n_ground, have_marksman);
+    overwatch(b, s, out, n_ground, have_marksman, mk_roping);
     for (i = 0; i < out->n_posts && n < 8; i++) {
         const hcb_ped *p = hcb_ped_of(s, out->posts[i].who);
         if (!p || hcb_squad_roping(s, out->posts[i].who)) continue;
