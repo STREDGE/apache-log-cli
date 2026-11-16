@@ -107,8 +107,8 @@ API void hcb_init(hcb_brain *b, u32 seed) {
     b->cfg.round_past_m = 0.6f;
     b->cfg.round_min_ms = 130;
     b->cfg.round_max_ms = 180;
-    b->cfg.scatter_m = 0.1f;
-    b->cfg.scatter_per_m = 0.01f;
+    b->cfg.scatter_m = 0.06f;           /* 0.5: trained men - half the scatter of 0.4 (0.1 + 0.01 a metre) */
+    b->cfg.scatter_per_m = 0.005f;
     b->cfg.scatter_per_ms = 0.02f;
     b->cfg.gunner_weapon = 1;
     b->cfg.cabin_skip_m = 1.5f;

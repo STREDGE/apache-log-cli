@@ -16,8 +16,8 @@
 #define CLEAR       35.0f      /* m over the highest roof ahead while travelling */
 #define HOVER       25.0f      /* m over the ground where it stops */
 #define CLIMB       12.0f      /* m/s up */
-#define SINK        7.0f       /* m/s down */
-#define SINK_FAST   10.0f      /* m/s down when far too high */
+#define SINK        9.0f       /* m/s down */
+#define SINK_FAST   14.0f      /* m/s down when far too high */
 #define VACC        5.0f       /* m/s^2 vertical */
 #define TURN_HOVER  0.9f       /* rad/s turn on the spot */
 #define BANK_MAX    0.60f      /* rad (34 degrees) */

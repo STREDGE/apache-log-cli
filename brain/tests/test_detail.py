@@ -213,7 +213,7 @@ sc.step(6)
 o = sc.last_out
 lead_p = sc.posts[o.lead]
 assert o.duty == HCB_DUTY_RING and o.mode == HCB_MODE_PULLOUT and all(d2(at(p), sc.cj['pos']) <= 1.9 for w_, p in sc.posts.items() if w_ != o.lead), [at(p) for p in sc.posts.values()]
-assert o.leading and d2(at(lead_p), sc.cj['pos']) <= 2.6 and at(lead_p)[0] < sc.cj['pos'][0], ('the commander leads CJ away from the shooter (east)', at(lead_p))
+assert o.leading and d2(at(lead_p), sc.cj['pos']) <= 6.1 and at(lead_p)[0] < sc.cj['pos'][0], ('the commander leads CJ away from the shooter (east)', at(lead_p))
 evac = [s_ for s_ in sc.said if s_[1] == HCB_SAY_EVAC]
 sc.step(60)
 assert len(evac) == 1 and len([s_ for s_ in sc.said if s_[1] == HCB_SAY_EVAC]) == 1, 'said once, then not again for 20 s'
@@ -266,21 +266,21 @@ passed('Eight men: the commander, two bodyguards either side of CJ, the advance 
 sc, team, g = contact(walls=[(-3., -2.5, -3., 2.5)])
 sc.step(4)
 lp = sc.posts[sc.last_out.lead]
-assert sc.last_out.leading and 0.5 < d2(at(lp), sc.cj['pos']) <= 2.6 and at(lp)[0] < 0, ('the commander walks ahead of CJ towards the cover (west)', at(lp))
+assert sc.last_out.leading and d2(at(lp), (sc.last_out.cover_at.x, sc.last_out.cover_at.y)) <= 1.1 and at(lp)[0] < sc.last_out.cover_at.x + 0.1, ('the commander runs to the cover itself (west), 1 m past it', at(lp))
 for k in range(5):                                         # CJ follows him (the cover is 4 m west)
     sc.cj['pos'][0] -= 0.25
     sc.step(1)
     lp = sc.posts[sc.last_out.lead]
     assert sc.last_out.leading and at(lp)[0] <= sc.cj['pos'][0] + 0.1, ('he stays ahead of CJ on the way', at(lp), sc.cj['pos'])
-passed('Under fire the commander leads CJ to the cover himself: he walks 2-3 m ahead of CJ on the way, staying ahead as CJ follows')
+passed('Under fire the commander leads CJ to the cover himself: he runs to the spot (1 m past it, in CJ\'s sight) and stays ahead as CJ follows')
 sc, team, g = contact(walls=[(-3., -2.5, -3., 2.5)])
 sc.step(4)
 assert sc.last_out.leading
-sc.step(35)                                                # CJ stays where he is
-assert not sc.last_out.leading and d2(at(sc.posts[sc.last_out.lead]), sc.cj['pos']) < 2.2, 'CJ does not come: after 3 s the commander goes back to his side'
-sc.step(90)
+sc.step(55)                                                # CJ stays where he is
+assert not sc.last_out.leading and d2(at(sc.posts[sc.last_out.lead]), sc.cj['pos']) < 2.2, 'CJ does not come: after 5 s the commander goes back to his side'
+sc.step(45)
 assert sc.last_out.leading, 'and tries again a few seconds later'
-passed('CJ decides: if he does not follow, the commander goes back to his side after 3 s and offers the way again a few seconds later')
+passed('CJ decides: if he does not follow, the commander goes back to his side after 5 s and sets off again 4 s later')
 
 sc, team, g = contact(walls=[(-3., -2.5, -3., 2.5)])
 sc.step(10)
@@ -313,11 +313,22 @@ sc, team, g = contact(walls=[(-3., -2.5, -3., 2.5)])
 sc.heli = sc.veh(0, -30, z=25.)
 sc.step(10)
 o = sc.last_out
-assert o.heli_ok and 25 < d2((o.heli_at.x, o.heli_at.y), sc.cj['pos']) < 31 and o.heli_at.x < 0, ('a spot for the helicopter from which the gunners see the shooter, on the far side', o.heli_ok, o.heli_at.x, o.heli_at.y)
+assert o.heli_ok and 19 < d2((o.heli_at.x, o.heli_at.y), sc.cj['pos']) < 21 and o.heli_at.y < -15 and abs(o.heli_at.z - sc.cj['pos'][2] - 16) < 0.1, ('a spot for the helicopter 20 m off and 16 m up, abeam of the line CJ - shooter, on the side the helicopter is', o.heli_ok, o.heli_at.x, o.heli_at.y, o.heli_at.z)
 assert o.gunner_pose == 1
+spot0 = (o.heli_at.x, o.heli_at.y); moved = 0
+g2 = sc.ped(-20., 15., pedtype=GANG, weapon=AK, face=(1., -1.))
+for k in range(100):                                       # the shooter moves about, a second one fires in turn, CJ shifts a little: the spot stays
+    sc.peds[g]['pos'] = [25. + 6. * math.sin(k * 0.2), 8. * math.sin(k * 0.13), 1.]
+    if k % 7 == 0: sc.shot(g if (k // 7) % 2 else g2, (0., 0., 1.), dst=1)
+    if k % 30 == 15: sc.cj['pos'] = [sc.cj['pos'][0] + 1.5, sc.cj['pos'][1], 1.]
+    sc.step(1)
+    if sc.last_out.heli_ok: moved += d2((sc.last_out.heli_at.x, sc.last_out.heli_at.y), spot0) > 1.0
+assert moved == 0 and sc.last_out.heli_ok, ('the spot is kept', moved)
+sc.cj['pos'] = [60., 0., 1.]; sc.step(15)
+assert sc.last_out.heli_ok and d2((sc.last_out.heli_at.x, sc.last_out.heli_at.y), sc.cj['pos']) < 21, 'CJ has gone far from it: a new one beside him'
 sc2 = Scene(); detail(sc2); sc2.heli = sc2.veh(0, -30, z=25.); sc2.step(3)
 assert sc2.last_out.gunner_pose == 2 and not sc2.last_out.heli_ok
-passed('The helicopter gets a spot 28 m from CJ on the far side, where the gunners see the shooter; the gunners sit on the skid when all is quiet and kneel at the door over a fight')
+passed('The helicopter gets a spot 20 m from CJ and 16 m up, abeam of the line to the shooter on the side it is already, where the gunners see him; it is kept for 10 s of a fight with shooters moving and firing in turn and replaced only when CJ has gone far; the gunners sit on the skid when all is quiet and kneel at the door over a fight')
 
 # ------------------------------------------------------------------ ASSAULT tactics: the fire team pushes further
 sc, team, g = contact(tactics=1)
@@ -366,6 +377,21 @@ assert least > 2.0, ('nobody is within 2 m of the car\'s path as it passes', lea
 sc.vehs[car]['vel'] = [0., 0., 0.]; sc.step(40)
 assert d2(sc.peds[team[0]]['pos'], at(post(sc, team[0]))) < 1.5 and post(sc, team[0]).move != 3
 passed('A car at speed coming at a guard: he sprints out of its path (never within 2 m of it as it passes; closest %.1f m) and returns to his post after' % least)
+
+# 0.5: nobody runs across in front of a car - a man whose post is on the other side of its path waits for it to pass
+sc = Scene(); team = detail(sc); sc.step(10)
+me = team[2]; mx, my = sc.peds[me]['pos'][:2]
+drv = sc.ped(mx + 5., my - 40., pedtype=4); car = sc.veh(mx + 5., my - 40., vel=(0., 16., 0.), driver=drv)
+sc.cj['pos'] = [sc.cj['pos'][0] + 10., sc.cj['pos'][1], 1.]            # CJ steps over the road: the man's post is on the far side now
+least = 9.
+for k in range(30):
+    sc.step(1)
+    c_ = sc.vehs[car]['pos']; q = sc.peds[me]['pos']
+    if abs(q[1] - c_[1]) < 3.5: least = min(least, abs(q[0] - c_[0]))
+assert least > 2.5, ('he was never in front of the car', least)
+sc.step(40)
+assert d2(sc.peds[me]['pos'], at(post(sc, me))) < 2.0, 'and when it has passed he crosses to his post'
+passed('A post on the other side of a road with a car coming: the man waits for it to pass (closest %.1f m to its path) and crosses after' % least)
 
 # the threat drives round CJ and others come and go: the commander does not chatter, the commander does not start and stop
 sc, team, g = contact(walls=[(-3., -2.5, -3., 2.5)])

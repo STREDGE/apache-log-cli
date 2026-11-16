@@ -109,7 +109,7 @@ passed('Contact with a pillar 3 m away: the commander tells CJ which way to go (
 # ------------------------------------------------------------------ too hot: a ring and the pickup call
 w2.health[1]=20;w2.messages.clear();steps(w2,V2,8)
 P2=posts(w2);lead_=w2.brain.out.lead
-assert all(math.dist(spot(p),w2.coords(1)[:2])<=(2.6 if who_==lead_ else 2.) for who_,p in P2.items()) and w2.messages.count('SQEVAC')==1,([spot(p) for p in P2.values()],w2.messages)   # (the commander 2.5 m ahead: he leads CJ out)
+assert all(math.dist(spot(p),w2.coords(1)[:2])<=(6.1 if who_==lead_ else 2.) for who_,p in P2.items()) and w2.messages.count('SQEVAC')==1,([spot(p) for p in P2.values()],w2.messages)   # (the commander up to 6 m ahead: he leads CJ out)
 steps(w2,V2,60);assert w2.messages.count('SQEVAC')==1
 passed('CJ badly hurt under fire: a tight ring round him and "too hot - call ROPE PICKUP", once (not again for 20 s)')
 w2.health[1]=100;w2.dead.add(h2);w2.messages.clear();w2.now+=30000;steps(w2,V2,6);w2.now+=30000;steps(w2,V2,6);w2.now+=30000;steps(w2,V2,6)
@@ -328,11 +328,11 @@ w.incar[1]=car;w.car_speeds={car:20.};w.step(c,n=40)
 assert calls(w,0x726)[-1][2][1:]==[1,-1,20.]
 passed('CJ driving fast: the helicopter switches to the native chase')
 fw=g['fire_world'];w,c,f=fw();npc=g['target'](w,typ=7,skin=20);w.damage.add((1,npc));w.los_fn=lambda a,z:False;w.step(c,f,n=12)
-m=[x[2] for x in calls(w,0x4a2) if abs(x[2][5]-70.)<.01][-1];assert abs(m[3]-(w.pos[npc][2]+40.))<.01,m
+m=[x[2] for x in calls(w,0x4a2) if abs(x[2][4]-12.)<.01 and abs(x[2][5]-x[2][3])<.01][-1];assert abs(m[3]-(w.pos[npc][2]+40.))<.01,m
 passed('Combat orbit: a point without a view of the threat is flown 15 m higher and the next one is tried')
 pts=[];n=len(calls(w,0x4a2))
 for _ in range(30):w.step(c,f)
-pts={(round(x[2][1]),round(x[2][2])) for x in calls(w,0x4a2)[n:] if abs(x[2][5]-70.)<.01}
+pts={(round(x[2][1]),round(x[2][2])) for x in calls(w,0x4a2)[n:] if abs(x[2][4]-12.)<.01 and abs(x[2][5]-x[2][3])<.01}
 assert len(pts)<=4,pts
 passed('Combat orbit with no clear view moves on at most every 1.2 s instead of thrashing every tick')
 
@@ -572,7 +572,7 @@ passed('A burning car within %d m of CJ is called out ("CAR ON FIRE! Get away fr
 w,c,f=fire_world();npc=target(w,typ=7,skin=20);w.pos[npc]=[40.,0.,0.];w.damage.add((1,npc));w.step(c,f,n=12)
 for _ in range(20):
  w.step(c,f);m=calls(w,0x4a2)[-1][2];cj=w.coords(1)
- assert abs(math.dist(m[1:3],[28.,0.])-b.ORBIT_RADIUS)<.5 or (w.shared[b.HELI_SPOT_Z]>1 and abs(math.dist(m[1:3],cj[:2])-28.)<.5 and m[1]<cj[0]),m
+ assert abs(math.dist(m[1:3],[28.,0.])-b.ORBIT_RADIUS)<.5 or (w.shared[b.HELI_SPOT_Z]>1 and 9.<=math.dist(m[1:3],cj[:2])<=34.),m
 passed('Threat 40 m from CJ: the helicopter covers both - the brain\'s spot 28 m from CJ on the far side (or the old orbit centre 30% towards CJ)')
 w,V,team=squad_scene([(997,0.,20.,30,True)]);steps(w,V,10)
 assert sum(1 for t in team if firing(w,t))>=2

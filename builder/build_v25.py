@@ -180,8 +180,8 @@ MESSAGES={'HCLOAD': '~b~PILOT:~w~ inbound to your position.',
  'HCBURN': '~r~CAR ON FIRE!~w~ Get away from it.',
  'HCEVADE': '~r~TAKING HITS!~w~ Pilot breaking away.',
  'HCSHOT': '~r~TAKING FIRE!~w~ Pilot breaking away.',
- 'HCHELLO': '~b~HELICOVER 1.4 BETA 2~w~ ready. CLEO menu > Helicover.',
- 'HCHELLV': '~b~HELICOVER 1.4 BETA 2~w~ ready. Map marker is off here.'}
+ 'HCHELLO': '~b~HELICOVER 1.4 BETA 3~w~ ready. CLEO menu > Helicover.',
+ 'HCHELLV': '~b~HELICOVER 1.4 BETA 3~w~ ready. Map marker is off here.'}
 # Generate state updates; panel prints messages when the state changes.
 # beta 6: our people do not cower. CREATE_CHAR gives a mission ped the built-in "normal" decision maker (m_norm.ped): punched, shot at or
 # aimed at, it picks "duck and cover" / "flee" like any passer-by. 65542 is the game's built-in EMPTY decision maker (slot 6 | 1<<16, loaded
@@ -480,7 +480,7 @@ for k,(ox,oy) in enumerate([(0,0),(25,0),(-25,0),(0,25),(0,-25)]):
 a(0x00aa,V(5),V(26),V(27),V(28));a(0x000b,V(28),F(100));a(0x02ce,V(26),V(27),V(28),V(28))
 c.label('EMERGENCY_GO');state(c,15)
 c.label('ISSUE_LANDING');c.set(LAND_STABLE,0);c.set(LAND_SLOW,0);c.set(LAND_FINAL,0);c.call('SET_LANDING_MISSION');a(0x01bd,V(21));c.go('TICK')
-c.label('LANDING_TICK');a(0x00aa,V(5),V(9),V(10),V(11));a(0x0509,V(9),V(10),V(26),V(27),V(31));c.get(19,LAND_SLOW);c.eq(19,0,'LAND_CHECK_FINAL');c.check(0x0023,[F(45),V(31)],'LAND_CHECK_FINAL');c.set(LAND_SLOW,1);a(0x00ad,V(5),F(8))
+c.label('LANDING_TICK');a(0x00aa,V(5),V(9),V(10),V(11));a(0x0509,V(9),V(10),V(26),V(27),V(31));c.get(19,LAND_SLOW);c.eq(19,0,'LAND_CHECK_FINAL');c.check(0x0023,[F(45),V(31)],'LAND_CHECK_FINAL');c.set(LAND_SLOW,1);a(0x00ad,V(5),F(14))
 c.label('LAND_CHECK_FINAL');c.get(19,LAND_FINAL);c.eq(19,0,'LAND_VERIFY_TOUCHDOWN');c.check(0x0023,[F(10),V(31)],'LAND_VERIFY_TOUCHDOWN');a(0x02e3,V(5),V(19));c.check(0x0023,[F(4),V(19)],'LAND_VERIFY_TOUCHDOWN');c.set(LAND_FINAL,1);c.call('SET_FINAL_LANDING')
 c.label('LAND_VERIFY_TOUCHDOWN');c.check(0x0023,[F(18),V(31)],'LAND_TIMEOUT');a(0x0819,V(4),V(19));c.check(0x0023,[F(3),V(19)],'LAND_TIMEOUT');a(0x02e3,V(5),V(19));c.check(0x0023,[F(1.2),V(19)],'LAND_TIMEOUT')
 # Require the successful v8 landing conditions to persist for one second before the team gets out.
@@ -580,13 +580,13 @@ c.label('MAP_NO_PAD');c.get(19,AUTO_EXIT);c.eq(19,1,'MAP_NO_PAD_PLAIN');c.get(19
 c.label('MAP_NO_PAD_PLAIN');msg(c,'HCNOPAD')
 c.label('DEST_HOVER_GO');c.set(DBG_CODE,4);c.set(DEST_NATIVE,0);a(0x01bd,V(21));state(c,22);c.go('TICK')
 # v31: cruise to the pad at altitude, then sink vertically to 18 m above it (no native circling).
-c.label('DEST_APPROACH_TICK');c.get(26,DEST_X);c.get(27,DEST_Y);c.get(28,DEST_Z);c.get(19,DEST_NATIVE);c.eq(19,0,'DEST_DESCEND');a(0x00aa,V(5),V(9),V(10),V(11));a(0x0509,V(9),V(10),V(26),V(27),V(31));c.check(0x0021,[V(31),F(1)],'DEST_DESCEND');c.call('CRUISE_STEP');c.go('TICK')
+c.label('DEST_APPROACH_TICK');c.get(26,DEST_X);c.get(27,DEST_Y);c.get(28,DEST_Z);c.get(19,DEST_NATIVE);c.eq(19,0,'DEST_DESCEND');a(0x00aa,V(5),V(9),V(10),V(11));a(0x0509,V(9),V(10),V(26),V(27),V(31));c.check(0x0021,[V(31),F(4)],'DEST_DESCEND');c.call('CRUISE_STEP');c.go('TICK')
 # v37: the in-game freezes happened during the frozen, teleported descent next to roofs
 # (DBG 2205). Now the scripted cruise only brings the helicopter exactly overhead at its safe
 # altitude; then it is unfrozen, its residual speed zeroed, and the native pilot descends to
 # 18 m with a 10 m reached distance (already overhead, so it does not circle).
 c.label('DEST_DESCEND');c.set(DBG_CODE,5);c.get(19,DEST_NATIVE);c.eq(19,0,'DEST_NATIVE_WAIT')
-c.call('UNFREEZE');a(0x04ba,V(5),F(0));a(0x07bb,V(5),I(0));a(0x0853,V(5),I(10));a(0x0087,V(9),V(28));a(0x000b,V(9),F(18));a(0x04df,V(5),I(0));a(0x04a2,V(5),V(26),V(27),V(9),F(10),V(9));a(0x00ad,V(5),F(12));c.set(DEST_NATIVE,1);a(0x01bd,V(21));c.go('TICK')
+c.call('UNFREEZE');a(0x04ba,V(5),F(0));a(0x07bb,V(5),I(0));a(0x0853,V(5),I(10));a(0x0087,V(9),V(28));a(0x000b,V(9),F(18));a(0x04df,V(5),I(0));a(0x04a2,V(5),V(26),V(27),V(9),F(10),V(9));a(0x00ad,V(5),F(22));c.set(DEST_NATIVE,1);a(0x01bd,V(21));c.go('TICK')
 c.label('DEST_NATIVE_WAIT');c.set(DBG_CODE,6);a(0x00aa,V(5),V(9),V(10),V(11));a(0x0509,V(9),V(10),V(26),V(27),V(31));c.check(0x0023,[F(8),V(31)],'DEST_NATIVE_TIMEOUT');a(0x0087,V(19),V(11));a(0x0063,V(19),V(28));c.check(0x0021,[V(19),F(12)],'DEST_NATIVE_TIMEOUT');c.check(0x0023,[F(23),V(19)],'DEST_NATIVE_TIMEOUT');a(0x02e3,V(5),V(19));c.check(0x0023,[F(4),V(19)],'DEST_NATIVE_TIMEOUT')
 c.label('DEST_NATIVE_ARRIVE');c.call('BLOCK_HOVER');c.set(DBG_CODE,7);state(c,23);a(6,V(7),I(23));c.get(19,AUTO_EXIT);c.eq(19,1,'DEST_ARRIVE_ASK');c.set(AUTO_EXIT,0);c.go('EXIT_BY_MODE')
 c.label('DEST_ARRIVE_ASK');msg(c,'HCCHOS');c.go('TICK')
@@ -737,7 +737,9 @@ a(0x0087,V(30),V(31));a(0x000b,V(30),F(1));c.check(0x06bd,[V(9),V(10),V(11),V(17
 # v40.1: move on to the next point after 1.2 s at the earliest (v40 re-picked every 100 ms and the
 # helicopter thrashed between points); only buildings count, not trees and other objects.
 c.label('TRACK_BLOCKED');a(0x000b,V(11),F(15));c.get(30,ORBIT_NEXT);a(0x0085,V(8),V(20));a(0x000a,V(8),I(1200));c.check(0x001d,[V(30),V(8)],'TRACK_ISSUE');a(0xddc,I(ORBIT_NEXT),V(8))
-c.label('TRACK_ISSUE');a(0x07bb,V(5),I(0));a(0x04a2,V(5),V(9),V(10),V(11),F(20),F(70));a(0xddc,I(TRACKED_TARGET),V(29));c.ret()
+# 1.4.3: the ceiling of the flight is the spot's own height (with 20 / 70 the game's pilot climbed to 70 m above the sea and
+# hung there, far from the fight: the second whole-game log), and it goes there at speed
+c.label('TRACK_ISSUE');a(0x07bb,V(5),I(0));a(0x04a2,V(5),V(9),V(10),V(11),F(12),V(11));a(0x00ad,V(5),F(32));a(0xddc,I(TRACKED_TARGET),V(29));c.ret()
 c.label('TRACK_STOP');c.get(19,TRACKED_TARGET);c.eq(19,-1,'TRACK_RESUME');c.ret()
 c.label('TRACK_RESUME');c.set(TRACKED_TARGET,-1);c.call('RESTORE_FLIGHT');a(0x0726,V(5),V(18),I(-1),F(15));c.ret()
 c.label('TRACK_INACTIVE');c.set(TRACKED_TARGET,-1)
@@ -915,9 +917,9 @@ c.label('RESTORE_FLIGHT');a(0x0853,V(5),I(10));a(0x07bb,V(5),I(6));c.ret()
 c.label('BLOCK_HOVER');c.call('UNFREEZE');a(0x07bb,V(5),I(0));a(0x0853,V(5),I(10));a(0x00aa,V(5),V(9),V(10),V(11));a(0x04df,V(5),I(0));a(0x04a2,V(5),V(9),V(10),V(11),F(10),V(11));a(0x00ad,V(5),F(21));a(0x04df,V(5),I(1));c.ret()
 c.label('SET_LANDING_MISSION');c.call('UNFREEZE');a(0x04df,V(5),I(0));a(0x07bb,V(5),I(0));a(0x0853,V(5),I(3));c.get(19,LAND_FINAL);c.eq(19,1,'LAND_APPROACH_MISSION');c.call('SET_FINAL_LANDING');c.ret()
 # Faster long approach; still use native AI and slow before the pad.
-c.label('LAND_APPROACH_MISSION');a(0x0087,V(17),V(28));a(0x000b,V(17),F(6));a(0x0743,V(5),V(26),V(27),V(28),F(6),V(17));c.get(19,LAND_SLOW);c.eq(19,1,'LAND_SPEED_FAST');a(0x00ad,V(5),F(8));c.ret()
+c.label('LAND_APPROACH_MISSION');a(0x0087,V(17),V(28));a(0x000b,V(17),F(6));a(0x0743,V(5),V(26),V(27),V(28),F(6),V(17));c.get(19,LAND_SLOW);c.eq(19,1,'LAND_SPEED_FAST');a(0x00ad,V(5),F(14));c.ret()
 c.label('LAND_SPEED_FAST');a(0x00ad,V(5),F(25));c.ret()
-c.label('SET_FINAL_LANDING');a(0x0743,V(5),V(26),V(27),V(28),F(0),F(0));a(0x00ad,V(5),F(8));c.ret()
+c.label('SET_FINAL_LANDING');a(0x0743,V(5),V(26),V(27),V(28),F(0),F(0));a(0x00ad,V(5),F(14));c.ret()
 
 c.label('UNFREEZE');c.check(0x056e,[V(5)],'UNFREEZE_DONE');a(0x0574,V(5),I(0))
 c.label('UNFREEZE_DONE');c.set(FROZEN,0);c.set(CR_V,0);c.ret()   # 1.2: no stale cruise speed for the next exit
@@ -1194,7 +1196,7 @@ p.label('CLOSE');p.call('UNLOAD');a(0xdf3);p.set(OPEN,0);p.set(0,0);a(6,V(10),I(
 VERSION='1.4'
 for st,sit,x in MAIN_VARIANTS:
  for prof,suf in zip(PROFILES,SUFFIX):
-  title=(i18n.encode('HELICOVER 1.4 BETA 2','en') if prof=='en' else i18n.menu_text('TITLE_READY',prof)) if st==0 else i18n.state_title(st,STATES[st],prof)
+  title=(i18n.encode('HELICOVER 1.4 BETA 3','en') if prof=='en' else i18n.menu_text('TITLE_READY',prof)) if st==0 else i18n.state_title(st,STATES[st],prof)
   p.blob('MAIN_%d_%d_%d'%(st,sit,x)+suf,title,main_rows(st,sit,x,prof))
 for prof,suf in zip(PROFILES,SUFFIX):
  if prof=='en':p.blob('OFFLINE_MENU',i18n.menu_text('OFFLINE_TITLE',prof),[i18n.menu_text('OFFLINE_ROW',prof)])   # the core is missing, so the language is unknown: English only

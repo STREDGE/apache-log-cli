@@ -57,13 +57,13 @@ for i,(x,y) in enumerate(SPOTS):
  a(0x000b,V(10),F(x));a(0x000b,V(11),F(y))
  a(0x009a,I(8),I(MODELS[i]),V(10),V(11),V(8),V(var));s.check(0x056d,[V(var)],nx)
  a(0x0173,V(var),V(9));a(0x0085,V(7),V(var));s.call('SETUP')
- wpn,_=WEAPONS[i];a(0x01b2,V(var),I(wpn),I(30000));a(0x01b9,V(var),I(wpn));a(0x0223,V(var),I(150));a(0x035f,V(var),I(50))
+ wpn,_=WEAPONS[i];a(0x01b2,V(var),I(wpn),I(30000));a(0x01b9,V(var),I(wpn));a(0x0223,V(var),I(250));a(0x035f,V(var),I(100))
  a(0xddc,I(b.GROUND_PUB2+i),V(var));a(6,V(14+i),I(0))
  s.label(nx)
 for m in sorted(set(MODELS))+[w for _,w in WEAPONS]:a(0x0249,I(m))
 a(6,V(18),I(1));s.set(b.TEAM2_STATE,1);s.go('LOOP')
 # SETUP: V7 = a new man: mine, friendly to everybody, accurate, brave (the same as the first four: Ground's GSETUP)
-s.label('SETUP');a(0x01c5,V(7));a(0x08af,V(7),I(150));a(0x02e2,V(7),I(100))
+s.label('SETUP');a(0x01c5,V(7));a(0x08af,V(7),I(250));a(0x02e2,V(7),I(100));a(0x02ab,V(7),I(0),I(0),I(0),I(1),I(0));
 for typ in range(32):a(0x077a,V(7),I(2),I(typ))
 a(0x077a,V(7),I(0),I(0));a(0x077a,V(7),I(0),I(8));b.brave(s,7,'SETUP_BRAVE');s.ret()
 # ---- the first four are gone: weapons away, walk off, deleted out of view
