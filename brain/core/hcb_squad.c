@@ -343,6 +343,7 @@ HID void hcb_squad_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
 #define MK_VROOF 4          /* the roof of a big vehicle */
 #define MK_LONG 5
 #define MK_UP 6             /* he is up there: he stays */
+#define MK_HELI 7           /* 1.3 (beta 5): no way up to a good roof but the rope - the helicopter picks him up and puts him on it */
 static int big_vehicle(int model) {
     static const short M[] = {431, 437, 403, 514, 515, 456, 499, 498, 609, 414, 455, 578, 524, 443, 428, 427, 601, 528, 433, 573, 408, 440, 482, 413, 459, 588, 423};
     unsigned i;
@@ -396,10 +397,10 @@ plan:
     /* a plan is kept until it has worked, failed or is no good any more; a new one is looked for every 4 s */
     if (q->mk_state != MK_NONE && q->mk_state != MK_UP) {
         int stale = d2(q->mk_at, cjp) > 62.0f || now - q->mk_since > 30000;
-        if (stale) { if (q->mk_state != MK_LONG && q->mk_state != MK_HIGHGROUND) mk_mark_bad(q, q->mk_at, now); q->mk_state = MK_NONE; }
+        if (stale) { if (q->mk_state != MK_LONG && q->mk_state != MK_HIGHGROUND) mk_mark_bad(q, q->mk_at, now); if (q->mk_state == MK_HELI) q->mk_heli_done = now ? now : 1; q->mk_state = MK_NONE; }
     }
     if (q->mk_state == MK_NONE || (q->mk_state == MK_LONG && now - q->mk_pick_t > 4000)) {
-        int best = -1, n = s->n_high < HCB_MAX_HIGH ? s->n_high : HCB_MAX_HIGH, j;
+        int best = -1, n = s->n_high < HCB_MAX_HIGH ? s->n_high : HCB_MAX_HIGH, j, n_ground = 0;
         float bd = 1e9f;
         hcb_vec step = me->pos;
         u8 how = MK_NONE;
@@ -421,6 +422,20 @@ plan:
             if (k != MK_NONE && dm < bd) { bd = dm; best = i; how = k; step = st; }
         }
         if (best >= 0) { q->mk_at = s->high[best].at; q->mk_step = step; }
+        /* (1a) a good roof (the helicopter's kind: 4 m up or more, CJ seen from it) and no way up but the rope: the helicopter picks
+           him up and puts him on it - if it is free (no fight on, CJ on foot, at least three of ours on the ground) */
+        for (j = 0; j < (int)s->n_ours && j < HCB_MAX_OURS; j++) { const hcb_ped *o = hcb_ped_of(s, s->ours[j]); if (o && !o->vehicle && !(s->our_state[j] & HCB_OS_ROPING) && s->our_role[j] >= HCB_ROLE_SQUAD) n_ground++; }
+        if (best < 0 && s->heli && b->alert < HCB_ALERT_COMBAT && n_ground >= 3 && !mk_is_bad(q, me->pos, now) && !(q->mk_heli_done && now - q->mk_heli_done < 60000)) {
+            float bsc = -1e9f;
+            for (i = 0; i < n; i++) {
+                const hcb_high *h = &s->high[i];
+                float d = d2(h->at, cjp), sc;
+                if (!h->sees_cj || h->height < b->cfg.ow_min_h || h->height > b->cfg.ow_max_h || d < b->cfg.ow_min_d || d > b->cfg.ow_max_d || mk_is_bad(q, h->at, now)) continue;
+                sc = (h->height > 15.0f ? 15.0f : h->height) * 0.1f - f_abs(d - 30.0f) / 30.0f;
+                if (sc > bsc) { bsc = sc; best = i; }
+            }
+            if (best >= 0) { q->mk_at = s->high[best].at; how = MK_HELI; }
+        }
         /* (2) high ground on the map */
         if (best < 0 && b->nv.ok) {
             const nav *nv = &b->nv;
@@ -460,6 +475,19 @@ plan:
     }
     /* the way there */
     p->look = look; p->climb = 0;
+    if (q->mk_state == MK_HELI) {
+        /* he waits where he stands; the helicopter comes over him, 12 m up, and when it hangs there steady (ow_ok 2 + ow_ready) the
+           squad worker takes him up its rope (Helicover_Team2); once he is aboard the brain sends the helicopter over the roof as for
+           the first drop. 40 s and no helicopter: the roof is left for a minute, the next place is looked for. */
+        const vtrack *hv = hcb_vfind(b, s->heli);
+        p->at = me->pos; p->via = me->pos; p->via2 = me->pos; p->move = 0; p->crouch = 0; p->duty = HCB_DUTY_HOLD;
+        out->ow_ok = 2; out->ow_at = me->pos; out->ow_ready = 0;
+        out->heli_ok = 1; out->heli_at = me->pos; out->heli_at.z += 12.0f;
+        if (hv && d2(hv->last.pos, me->pos) < 4.0f && v_len(hv->last.vel) < 1.5f && f_abs(hv->last.pos.z - out->heli_at.z) < 5.0f) out->ow_ready = 1;
+        q->ow_done_for = 0;                                        /* (the drop over the roof is a new try) */
+        if (now - q->mk_since > 40000) { mk_mark_bad(q, q->mk_at, now); q->mk_heli_done = now ? now : 1; q->mk_state = MK_NONE; }
+        return;
+    }
     if (q->mk_state == MK_LONG) {
         p->at = q->mk_at; p->duty = HCB_DUTY_HOLD; p->crouch = d2(me->pos, q->mk_at) < 1.5f; if (p->move == 0 && d2(me->pos, q->mk_at) > 1.3f) p->move = 2;
         return;

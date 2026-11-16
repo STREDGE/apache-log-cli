@@ -181,6 +181,7 @@ typedef struct agent {
     u32 line_since;         /* 1.3: since when CJ or one of ours is in his line of fire while he stands */
     u32 step_until, step_at;    /* 1.3: a step out of the line: kept until then; when the last one began */
     hcb_vec step;           /* 1.3: ... the offset of that step */
+    float flank;            /* 1.3 (beta 5): one of the three at CJ's side steps to CJ's flank instead: +1 / -1 which side, 0 none */
 } agent;
 typedef struct squad {
     u8 umode, task, ow_ok, ow_ready, mover, gathered, pad0, pad1;
@@ -197,6 +198,7 @@ typedef struct squad {
     hcb_vec mk_at, mk_step, mk_prog_pos;      /* where he is going, the step on his way up (a car), where he last got on */
     float mk_best_d;                          /* 1.3: the nearest he has been to the wall he goes to (sliding along it is no progress) */
     u32 mk_down_until;                        /* 1.3: "to me" - no high place for him until then (he comes down with the others) */
+    u32 mk_heli_done;                         /* 1.3 (beta 5): the helicopter's try to pick him up ended (a minute before the next) */
     float mk_z0;            /* his feet when the climb began */
     hcb_vec mk_bad[4];      /* places he could not get up to (left alone for a minute) */
     u32 mk_bad_t[4];

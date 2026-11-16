@@ -393,6 +393,8 @@ class BrainSim:
             o = self.out
             for k_, x_ in enumerate([o.umode, o.task, o.ow_ok, o.ow_ready, o.ow_at.x, o.ow_at.y, o.ow_at.z, o.target_dist, o.n_moving, int(self.body)]):
                 v[first + k_] = x_
+            for k_, x_ in getattr(self, 'plan_override', {}).items():      # (a test may set some of the answers itself)
+                v[first + k_] = x_
         else:
             raise AssertionError(('0E48: unknown command or too few variables', cmd, count))
 

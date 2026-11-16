@@ -12,7 +12,7 @@ counter-assault pair and the marksman) and the second squad worker (Helicover_Sq
     off; each one is deleted the moment he is off the screen (never in view, never handed to the game armed).
   - A dead one stays dead (his slot is cleared after 10 s so the brain forgets him).
 Registers: 0 CJ, 1 first living guard of the first four, 2-5 the four, 6 scratch, 7 the man being set up, 8-12 scratch,
-13 now, 14-17 death times, 18 state (0 none, 1 on the ground, 2 leaving), 19 the marksman (0 nothing, 1 waits for his roof,
+13 now, 14-17 death times, 18 state (0 none, 1 on the ground, 2 leaving), 19 the marksman (0 on the ground / nothing, 1 waits aboard for his roof,
 2 on the rope over it: the helicopter is held), 20 since when, 21-30 the brain's plan (0E48, command 7).
 """
 from asm_v25 import *
@@ -46,6 +46,26 @@ for i in range(4):
 # ---- 2.0: the marksman. The brain looks for a flat high place from which CJ is seen and sends the helicopter over it (the pilot's
 # spot); when it hangs there steady (24@ = 1) he goes down the rope onto the roof and the helicopter is held until he stands (8 s at
 # most). No roof within 15 s, or the helicopter not there within 45 s: he comes in on the ground like a man who was left behind.
+# ---- 2.0 beta 5: the marksman on the ground with no way up to a good roof but the rope (the brain's plan: ow_ok 2, the helicopter over
+# him). When it hangs there steady (24@ = 1) it is held, he takes its rope and goes up (the ABSEIL clip run backwards, lifted to 4.5 m
+# under it in 1.5 s, as the four go up), and is aboard; then he waits for his roof as at the first drop (19@ = 1): the brain sends the
+# helicopter over it and he goes down its rope onto the roof.
+s.eq(19,0,'PK_DONE');alive(5,'PK_DONE');s.check(0x80df,[V(5)],'PK_DONE')
+s.get(9,b.BRAIN_HELLO);s.check(0x0039,[V(9),I(b.BRAIN_MAGIC)],'PK_DONE')
+a(0x0e48,V(21),I(10),I(7));s.eq(23,2,'PK_DONE');s.eq(24,1,'PK_DONE')
+s.get(6,b.PUB+1);s.check(0x056e,[V(6)],'PK_DONE');s.check(0x04ee,[S('PED')],'PK_DONE')
+a(0x0574,V(6),I(1));s.set(b.FROZEN,1)
+a(0x00aa,V(6),V(10),V(11),V(12));a(0x000b,V(12),F(-4.5));a(0x00a0,V(5),V(25),V(26),V(27))
+for r_,t_ in [(10,25),(11,26),(12,27)]:a(0x0063,V(r_),V(t_));a(0x0013,V(r_),F(1000.0/1500.0))   # 10-12@: his speed to the rope's end in 1.5 s
+a(0x0605,V(5),S('ABSEIL'),S('PED'),F(2),I(1),I(1),I(1),I(1),I(-1));a(1,I(0))
+s.check(0x0611,[V(5),S('ABSEIL')],'PK_NOCLIP');a(0x0614,V(5),S('ABSEIL'),F(.99));a(0x0393,V(5),S('ABSEIL'),F(-1));s.label('PK_NOCLIP')
+a(0x01bd,V(28))
+s.label('PK_TICK');a(1,I(0));alive(5,'PK_LOST');s.check(0x056e,[V(6)],'PK_LOST')
+a(0x083c,V(5),V(10),V(11),V(12));a(0x01bd,V(29));a(0x0062,V(29),V(28));s.check(0x0019,[V(29),I(1500)],'PK_TICK')
+a(0x083c,V(5),F(0),F(0),F(0));a(0x009b,V(5));a(6,V(5),I(-1));s.set(b.GROUND_PUB2+3,-1);a(6,V(17),I(0))   # aboard (boarding = removal at the door, as the four)
+a(0x0574,V(6),I(0));s.set(b.FROZEN,0);a(6,V(19),I(1));a(0x01bd,V(20));s.go('PK_DONE')
+s.label('PK_LOST');s.check(0x056e,[V(6)],'PK_LOST_NOHELI');a(0x0574,V(6),I(0));s.label('PK_LOST_NOHELI');s.set(b.FROZEN,0)
+s.label('PK_DONE')
 s.eq(19,2,'MK_NOT_HOLD');s.get(6,b.PUB+1);a(0x0085,V(8),V(13));a(0x0062,V(8),V(20));s.check(0x0019,[V(8),I(8000)],'MK_HOLD_CHECK');s.go('MK_RELEASE')
 s.label('MK_HOLD_CHECK');s.check(0x056d,[V(5)],'MK_RELEASE');s.check(0x8118,[V(5)],'MK_RELEASE');a(0x0819,V(5),V(8));s.check(0x0023,[F(2.5),V(8)],'MK_DONE')
 s.label('MK_RELEASE');a(6,V(19),I(0));s.check(0x056e,[V(6)],'MK_DONE');a(0x0574,V(6),I(0));s.set(b.FROZEN,0);s.go('MK_DONE')

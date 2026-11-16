@@ -186,6 +186,18 @@ assert wh.shared[b.GROUND_PUB2+3]==-1
 wh.now+=15500;steps(wh,VH,8);mk2=wh.shared[b.GROUND_PUB2+3]
 assert mk2 in wh.exists and wh.skin[mk2]==t2b.MODELS[3] and [x for x in wh.calls if x[1]==0x9a and x[2][1]==164 or x[1]==0x9a and x[2][1]==165],(mk2,wh.messages[-3:])
 passed('2.0 the drop of eight: the helicopter hangs over the drop until the second four are down its ropes too (nobody comes down from a helicopter that is leaving); with no roof found within 15 s the marksman comes in on the ground, out of view')
+# 2.0 beta 5: the marksman on the ground and no way up to a good roof but the rope (the brain: ow_ok 2, the helicopter over him): when it hangs
+# there steady he goes up its rope (held meanwhile) and is aboard - then he waits for his roof as at the first drop
+heliH=wh.shared[b.PUB+1];t2H=VH[3];mp=wh.coords(mk2)
+wh.brain.plan_override={2:2,3:1,4:mp[0],5:mp[1],6:mp[2]};wh.calls.clear()
+for _ in range(30):
+ steps(wh,VH,1)
+ if mk2 not in wh.exists:break
+ups=[x for x in wh.calls if x[1]==0x83c and x[2][0]==mk2 and x[2][3]>0.5]
+assert mk2 not in wh.exists and ups and wh.shared[b.GROUND_PUB2+3]==-1 and t2H.v[19]==1,(mk2 in wh.exists,len(ups),t2H.v[19])
+assert any(x[1]==0x605 and x[2][0]==mk2 and x[2][1]=='ABSEIL' for x in wh.calls) and any(x[1]==0x574 and x[2]==[heliH,1] for x in wh.calls) and not wh.frozen.get(heliH),'the rope clip, the helicopter held while he climbs and let go when he is aboard'
+wh.brain.plan_override={}
+passed('2.0 beta 5 the marksman picked up: no way up to a good roof but the rope - the helicopter hangs over him, is held, he goes up its rope (the rope clip run backwards, lifted to the door in 1.5 s) and is aboard; then he waits for his roof as at the first drop')
 steps(w8,V8,20)
 P8=posts(w8);jobs8={P8[x].job for x in team8+extra if x in P8}
 assert set(team8+extra)<=set(P8) and jobs8=={H.HCB_ROLE_LEAD,H.HCB_ROLE_CLOSE,H.HCB_ROLE_POINT,H.HCB_ROLE_REAR,H.HCB_ROLE_CLOSE2,H.HCB_ROLE_POINT2,H.HCB_ROLE_REAR2,H.HCB_ROLE_MARKSMAN},jobs8   # (2.0: three with CJ - the commander and two bodyguards - four outer men, the marksman)
