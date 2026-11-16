@@ -1,10 +1,41 @@
-HELICOVER 2.0 BETA 5 - support helicopter with an autonomous protective detail
-GTA San Andreas (Android, 64-bit), a CLEO mod + the Helicover Brain 1.4 mod. They only work together.
+HELICOVER 2.0 BETA 6 - support helicopter with an autonomous protective detail
+GTA San Andreas (Android, 64-bit), a CLEO mod + the Helicover Brain 1.5 mod. They only work together.
 
 WHAT IT IS
 Call a support helicopter: it flies in from far away, follows CJ and covers him with four door
 gunners. Drop a four-man team on foot, get picked up by rope, fly to the map marker or Grove
 Street and get out there by landing or by rope.
+
+NEW IN 2.0 BETA 6 (brain 1.5) - FROM YOUR BETA 5 LOG AND YOUR WORDS
+IMPORTANT: replace EVERYTHING - the CLEO files and libHelicoverBrain64.so.
+Both black boxes (811 and 1695 ticks) replay bit for bit here. What is done:
+- The crash. The game fell when a guard stopped firing at a sprint: the mod lowered his arms after the game itself had
+  already removed its arm-pointing task (the crash address in the log matches exactly). The mod now checks what the
+  game checks before each such call; in the emulator on your libGTASA.so the old version crashes there, the new one
+  does not. Fire at a sprint is on again: the settings file of the old version is not read any more (it had "fire at a
+  sprint off" written after the crash); the mod writes it anew.
+- Fights last several times longer. Rounds and blows of our guards and door gunners do 25 % of the game's damage
+  (configs/net.helicover.brain.ini: OurDamage = 25, 5..100), and a head shot of ours is no instant kill. In your log a
+  man died 0.4 s after the first hit (four rounds of 30), 8 of 12 by the door gunners; now it takes about 14 hits. Door
+  gunners fire bursts of 3-6 rounds with a breath of 0.7-1.5 s and aim lower at a man who ducks.
+- Only the commander and two bodyguards at your side. The other four are 15-35 m out, a quarter each round you. While
+  you walk they walk beside you in their quarters (a short stop: they just halt); you stand 4 s - each takes a place
+  behind cover in his quarter from which you are seen, gets down and watches his side. In a fight: behind cover from the
+  enemy, down, firing from there; no place from which the line of fire passes you. To a new place they go round you on an
+  arc, never across. "We pull out": 14-19 m, no heap. In ASSAULT the commander stays with you too - the four attack.
+  In the 30-minute simulations an outer man is within 12 m of you 2-4 % of the time and down at his place 98-99 %.
+- The marksman. In the log he was never on a roof over 4 m: the map's "high ground" was roofs with no way up and he
+  stood at the wall with "no route"; the helicopter took him only with all quiet; after a pickup the script at once
+  dropped a new marksman on the same spot. Now roofs are looked for every look all round you (32 fixed points before),
+  from the edge you are seen from; a low roof on the map (up to 2.8 m) is a roof he walks to and climbs; a roof with no
+  way up is given up at once, whole; the helicopter picks him up in a fight too; a new marksman goes down the rope only
+  over the roof chosen.
+- VOICE_AND_WAVE
+- No jostling: the places of the three at your side are 1.1 m apart at least (58 times under a metre in the log); the
+  commander in cover is right behind you, the bodyguards to the sides.
+- Log and summary: the table the mod sees hits on ours by no longer fills up (after 8 minutes hits on new guards were
+  lost); the summary shows "an outer man within 12 m of CJ", "down at his place", "the commander at CJ", "high places
+  known", "our damage".
 
 NEW IN 2.0 BETA 5 (brain 1.4) - WHAT BETA 4 LEFT, DONE
 IMPORTANT: replace EVERYTHING - the CLEO files and libHelicoverBrain64.so.

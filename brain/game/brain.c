@@ -55,7 +55,7 @@ extern void *memset(void *d, int c, u64 n);
 
 #define HIDDEN __attribute__((visibility("hidden")))
 #define EXPORT __attribute__((visibility("default")))
-#define VERSION "1.4 (the helicopter picks the marksman up, the bodyguards step round CJ, files written off the game's thread, less stop-and-go; 1.3: the commander leads to cover, fire on the move, HOLD FIRE answers attackers, the medic aboard)"
+#define VERSION "1.5 (only the commander and two bodyguards at CJ's side, the other four out of sight in cover, a quarter each; our damage a quarter - fights last; the marksman gets up; the commander's voice and wave; the crash at a sprint mended)"
 #define GAME_DIR "/storage/emulated/0/Android_unprotected/data/com.rockstargames.gtasa/"
 
 /* ---------- the game (offsets from libGTASA base; see brain/research/game_facts.md) ---------- */
@@ -3218,7 +3218,7 @@ static void *watchdog(void *arg) {
 }
 
 struct ModInfo { char guid[48]; char name[48]; char version[24]; char author[48]; u16 ver[4]; u8 reserved[336]; };
-static struct ModInfo g_info __attribute__((aligned(16))) = {"net.helicover.brain", "Helicover Brain", "1.4", "Helicover", {1, 4, 0, 0}, {0}};
+static struct ModInfo g_info __attribute__((aligned(16))) = {"net.helicover.brain", "Helicover Brain", "1.5", "Helicover", {1, 5, 0, 0}, {0}};
 static int g_done;
 EXPORT struct ModInfo *__GetModInfo(void) { return &g_info; }
 EXPORT void OnModPreLoad(void) {}

@@ -292,7 +292,7 @@ M = [
  (Q, 'if (best >= 0) how = q->mk_at.z - 1.0f - here <= 2.8f ? MK_ROOF : MK_HIGHGROUND;', 'if (best >= 0) how = MK_HIGHGROUND;', '1.5 marksman: a high cell he can climb is a roof to climb'),
  (Q, '|| (now - q->mk_since > 2500 && hcb_agent_why(b, p->who) == HCB_WHY2_NO_ROUTE)', '', '1.5 marksman: high ground with no way to it is dropped at once'),
  (Q, 'q->mk_bad_r[q->mk_n_bad < 8 ? q->mk_n_bad - 1 : (int)(now / 1000 % 8)] = 10.0f;', '', '1.5 marksman: the whole roof with it'),
- (A, 'if (l_ >= 1.1f) continue;', 'if (l_ >= 0.8f) continue;', '1.5 agent: places 1.1 m apart'),
+ (A, 'out->posts[i].at.x = out->posts[j].at.x + dv_.x / l_ * 1.1f; out->posts[i].at.y = out->posts[j].at.y + dv_.y / l_ * 1.1f;', 'out->posts[i].at.x = out->posts[j].at.x + dv_.x / l_ * 0.8f; out->posts[i].at.y = out->posts[j].at.y + dv_.y / l_ * 0.8f;', '1.5 agent: places 1.1 m apart'),
  (D, 'at = v_sub(dt->cj_cover, v_mul(u, 1.3f)); crouch = 1;', 'at = v_add(v_sub(dt->cj_cover, v_mul(u, 0.9f)), v_mul(pr, -0.9f)); crouch = 1;', '1.5 commander in cover right behind CJ'),
  (C, 'b->cfg.pause_min_ms = 700;', 'b->cfg.pause_min_ms = 200;', '1.5 gunners: a real breath between bursts'),
  (F, 'if (tt && tt->used && (tt->last.flags & HCB_PF_DUCKING)) q.to.z -= 0.45f;', '', '1.5 gunners: a man who ducks is aimed at lower'),

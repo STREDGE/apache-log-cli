@@ -142,6 +142,14 @@ lead = next(p for p in sc.posts.values() if p.job == HCB_ROLE_LEAD)
 assert lead.at.y > -1.5 and d2((lead.at.x, lead.at.y), sc.cj['pos']) < 2.0 and lead.phase != HCB_PH_FAILED, ('on CJ\'s side of the wall', (lead.at.x, lead.at.y), lead.phase)
 passed('The commander\'s place beyond a wall CJ stands beside is pulled in to CJ\'s side of it (he does not stand 8 s with "no way")')
 
+# 1.5: a suspect behind CJ on his right - the bodyguard's step towards him lands on the commander's place at CJ's right shoulder: the two
+# places are 1.1 m apart all the same
+sc = Scene(); team = team8(sc); sc.step(40)
+susp = sc.ped(12.5, -8.3, pedtype=GANG, weapon=AK, face=(1., 0.)); sc.step(20)
+pts = [(p.at.x, p.at.y) for p in sc.posts.values()]
+assert all(d2(pts[i], pts[j]) >= 1.09 for i in range(len(pts)) for j in range(i)), ('1.5: no two places nearer than 1.1 m', sorted(pts))
+passed('1.5: the bodyguard steps towards a suspect behind CJ\'s right shoulder - onto the commander\'s place: the two places are kept 1.1 m apart')
+
 # two men are never left standing on one spot: "near enough" is not enough when another of ours is within 0.6 m
 sc = Scene(); team = team8(sc); sc.step(40)
 a_, b_ = team[1], team[3]                                              # the two bodyguards
@@ -149,8 +157,8 @@ sc.peds[b_]['pos'] = [sc.peds[a_]['pos'][0] + 0.2, sc.peds[a_]['pos'][1] + 0.1, 
 sc.step(40)
 assert d2(sc.peds[a_]['pos'], sc.peds[b_]['pos']) > 0.6, ('they step apart to their own places', d2(sc.peds[a_]['pos'], sc.peds[b_]['pos']))
 pts = [(p.at.x, p.at.y) for p in sc.posts.values()]
-assert all(d2(pts[i], pts[j]) >= 0.79 for i in range(len(pts)) for j in range(i)), 'and no two places are nearer than shoulder width'
-passed('Two of ours on one spot: each walks on to his own place (within a step of it is "there" only with nobody on top of him), and no two places are given nearer than 0.8 m')
+assert all(d2(pts[i], pts[j]) >= 1.09 for i in range(len(pts)) for j in range(i)), 'and no two places are nearer than 1.1 m'
+passed('Two of ours on one spot: each walks on to his own place (within a step of it is "there" only with nobody on top of him), and no two places are given nearer than 1.1 m (1.5: 0.8 before - the fifth 2.0 log: the three at CJ jostled)')
 
 # a man far outside the brain's map with a wall across the straight way: the game's path network takes him (move 4), not a failure
 sc = Scene(); sc.walls = [(-50., -30., -50., 30.)]
@@ -194,6 +202,8 @@ passed('A jam: the man behind one of ours who is held up waits (it is not his fa
 sc = Scene(); team = team8(sc); sc.step(20)
 susp = sc.ped(25, 0, pedtype=GANG, weapon=AK, face=(-1., 0.)); sc.step(20)        # a suspect: the bodyguard steps out 1.5 m towards him, the commander is 0.85 m from that
 jj = {p.job: p for p in sc.posts.values()}
+pts_ = [(p.at.x, p.at.y) for p in sc.posts.values()]
+assert all(d2(pts_[i], pts_[j]) >= 1.09 for i in range(len(pts_)) for j in range(i)), ('1.5: the bodyguard stepped out and the commander - 0.85 m from him before - are 1.1 m apart', pts_)
 A_, B_ = jj[HCB_ROLE_CLOSE], jj[HCB_ROLE_CLOSE2]
 la, ca = (A_.at.x, A_.at.y), (B_.at.x, B_.at.y)
 assert 1.2 < d2(la, ca) < 1.8, (la, ca)                                 # (their places are 1.7 m apart: the middle is "near enough" for both)
