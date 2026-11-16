@@ -55,7 +55,7 @@ extern void *memset(void *d, int c, u64 n);
 
 #define HIDDEN __attribute__((visibility("hidden")))
 #define EXPORT __attribute__((visibility("default")))
-#define VERSION "1.2 (a man on his way has no gun task holding him; \"no way on the map\" is not \"stand\": straight, then the game's path network)"
+#define VERSION "1.3 (the commander leads to cover, fire on the move at any pace, cars that pass are traffic, HOLD FIRE answers attackers, the marksman climbs, the medic aboard)"
 #define GAME_DIR "/storage/emulated/0/Android_unprotected/data/com.rockstargames.gtasa/"
 
 /* ---------- the game (offsets from libGTASA base; see brain/research/game_facts.md) ---------- */
@@ -266,7 +266,8 @@ static void flush_log(void) {
 static int g_marks = 0;         /* debug markers: off unless the player turns them on */
 static u32 g_last_crash;        /* 1.4.1: the brain's step when the last game crashed inside it (0 = none); 20 = a gunner's shot */
 static int g_voice_off, g_water_off;   /* 0.8: the commander's voice (CPed::Say) / the water level call are off: the game crashed in them once */
-static int g_mind_off, g_gun_off, g_rope_off;   /* 1.1: keeping the game AI off the guards / the mod's own gun task / holding the ropes are off (a crash there once, or the player's choice) */
+static int g_mind_off, g_gun_off, g_rope_off;
+static int g_runfire_off, g_climb_off, g_medic_off;   /* 1.3: fire at a sprint / climbing / the medic aboard are off (a crash there once, or the player's choice) */   /* 1.1: keeping the game AI off the guards / the mod's own gun task / holding the ropes are off (a crash there once, or the player's choice) */
 static int g_body_off, g_map_off;      /* 1.0: the mod's own walking of the guards / its questions about the ground are off (the game crashed there once) */
 static int g_fire_off;          /* 1.4.1: the game's own weapon fire for the gunners is off (it crashed once, or the words differ) */
 static int key_at(const char *b, const char *key) { int i, k; for (i = 0; b[i]; i++) { if (i && b[i - 1] != '\n') continue; for (k = 0; key[k] && b[i + k] == key[k]; k++) {} if (!key[k] && (b[i + k] == ' ' || b[i + k] == '\t' || b[i + k] == '=')) { i += k; while (b[i] == ' ' || b[i] == '\t' || b[i] == '=') i++; return i; } } return -1; }
@@ -330,7 +331,7 @@ static void load_config(void) {
     n = read(fd, b, sizeof(g_cfg_text) - 1); close(fd);
     if (n <= 0) return;
     b[n] = 0;
-    if ((i = key_at(b, "Markers")) >= 0 && (b[i] == '0' || b[i] == '1')) g_marks = b[i] == '1';
+    (void)0;   /* (1.3: the markers are gone - the old Markers line of the file is read no more) */
     if ((i = key_at(b, "FireOff")) >= 0 && b[i] == '1') g_fire_off = 1;
     if ((i = key_at(b, "VoiceOff")) >= 0 && b[i] == '1') g_voice_off = 1;
     if ((i = key_at(b, "WaterOff")) >= 0 && b[i] == '1') g_water_off = 1;
@@ -339,6 +340,9 @@ static void load_config(void) {
     if ((i = key_at(b, "MindOff")) >= 0 && b[i] == '1') g_mind_off = 1;
     if ((i = key_at(b, "GunOff")) >= 0 && b[i] == '1') g_gun_off = 1;
     if ((i = key_at(b, "RopeOff")) >= 0 && b[i] == '1') g_rope_off = 1;
+    if ((i = key_at(b, "RunFireOff")) >= 0 && b[i] == '1') g_runfire_off = 1;
+    if ((i = key_at(b, "ClimbOff")) >= 0 && b[i] == '1') g_climb_off = 1;
+    if ((i = key_at(b, "MedicOff")) >= 0 && b[i] == '1') g_medic_off = 1;
     if ((i = key_at(b, "LastCrash")) >= 0) for (g_last_crash = 0; b[i] >= '0' && b[i] <= '9'; i++) g_last_crash = g_last_crash * 10 + (u32)(b[i] - '0');
     for (k = 0; k < N_TUNE; k++) if ((i = key_at(b, TUNE[k].key)) >= 0) {
         float v;
@@ -357,7 +361,7 @@ static void save_config_with(u32 crash) {
     int fd = open(CFG, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     u32 k;
     if (fd < 0) return;
-    ts(&t, g_marks ? "[Preferences]\nMarkers = 1\n" : "[Preferences]\nMarkers = 0\n");
+    ts(&t, "[Preferences]\n");
     if (crash) { ts(&t, "LastCrash = "); tu(&t, crash); ts(&t, "\n"); }
     if (g_fire_off || crash == 20) ts(&t, "FireOff = 1\n");
     if (g_voice_off || crash == 21) ts(&t, "VoiceOff = 1\n");
@@ -367,6 +371,9 @@ static void save_config_with(u32 crash) {
     if (g_mind_off || crash == 25) ts(&t, "MindOff = 1\n");
     if (g_gun_off || crash == 26) ts(&t, "GunOff = 1\n");
     if (g_rope_off || crash == 27) ts(&t, "RopeOff = 1\n");
+    if (g_runfire_off || crash == 28) ts(&t, "RunFireOff = 1\n");
+    if (g_climb_off || crash == 29) ts(&t, "ClimbOff = 1\n");
+    if (g_medic_off || crash == 30) ts(&t, "MedicOff = 1\n");
     if (g_cfg_now) {
         ts(&t, "\n[Tactics]\n; every number of the detail and the squad; change a value and start the game again. A value outside its limits is ignored.\n");
         for (k = 0; k < N_TUNE; k++) {
@@ -721,7 +728,13 @@ typedef void (*set_task_fn)(void *mgr, void *task, int slot, int unused);
 typedef float (*ground_fn)(float x, float y, float z, u8 *found, void **ent);
 typedef int (*abort_fn)(void *task, void *ped, int priority, const void *event);
 typedef int (*type_fn)(const void *task);
-struct bod { u32 who, at, target; const u8 *task; float via[3]; u8 kind, ms; u32 walk_at, chk_at, plain_until; float chk[3]; };
+struct bod { u32 who, at, target; const u8 *task; float via[3]; u8 kind, ms; u32 walk_at, chk_at, plain_until; float chk[3];
+             u32 kind_at, ms_at, climb_at, early; float tgt[3]; };
+/* 1.3: a guard who fires at a sprint (the game does not: the mod points his arms at the man and fires his weapon itself) */
+static struct { u32 who, target, until, next, pause_until; u8 burst, pace, fire, arms; } g_run[16];
+static u32 g_run_rounds, g_run_refused, g_run_reloads, g_climbs, g_healed_hp, g_heal_on, g_faced;
+static int g_runfire_ok, g_climb_ok, g_shoot_rt_ok;
+static u32 g_shoot_new, g_shoot_turn, g_ends_early;
 static struct bod g_bod[16];
 static struct { u32 who, target, at; u8 state; } g_sq[16];             /* each guard's last fire order as the script was told it */
 static int g_body_ok, g_map_ok, g_gun_ok;
@@ -766,14 +779,86 @@ static int on_rope(const u8 *ped) {                                     /* comin
 /* Walk this guard to the next point of his way. 1 = the mod has his legs (the script leaves them alone), 0 = it has not
    (the script walks him as before 1.0). Called from the script's own question about his post, in the script's turn - where
    the game's own task commands run. */
+#define VT_JUMP (0x83a5d0UL + 0x10)      /* 1.3: CTaskComplexJump (0x20 bytes): +0x18 force climb, +0x1c the player's launch force */
+#define JUMP_CTOR 0x647668UL
+#define POINT_ARM 0x5d3b94UL             /* IKChainManager_c::PointArm(name, arm, ped, entity, bone, RwV3d *pos, float rate, int time, float blend) */
+#define ABORT_ARM 0x5d3e0cUL             /* IKChainManager_c::AbortPointArm(arm, ped, time) */
+#define IK_MAN 0xc98340UL                /* g_ikChainMan */
+#define IK_RATE 0x88cd80UL               /* ARM_IK_AIM_RATE (float) */
+#define IK_TIME 0x88cd84UL               /* ARM_IK_AIM_BLEND_TIME (int) */
+typedef void (*jump_ctor_fn)(void *task, int force_climb);
+typedef void (*point_arm_fn)(void *self, const char *name, int arm, void *ped, void *ent, int bone, float *pos, float rate, int time, float blend);
+typedef void (*abort_arm_fn)(void *self, int arm, void *ped, int time);
+static const struct { u32 at, word; } MOVE_WORDS[] = {
+    {0x647668, 0xa9be4ff4U}, {0x64766c, 0xa9017bfdU},                                             /* the jump task's constructor */
+    {0x5d3b94, 0x6db82bebU}, {0x5d3b98, 0x6d0123e9U}, {0x5d3b9c, 0xf90013fbU}, {0x5d3ba0, 0xa90367faU},   /* PointArm */
+    {0x5d3e0c, 0xa9be4ff4U},                                                                      /* AbortPointArm */
+};
+static const struct { u32 at, word; } SHOOT_RT_WORDS[] = {   /* go-and-aim: +0x48 bit 0 rebuilds, +0x34 is copied into its walk every frame */
+    {0x633280, 0x394122a8U}, {0x633288, 0x37000808U}, {0x6332b0, 0xbc434d20U}, {0x632eac, 0xb9001a76U},
+};
+static void move_setup(void) {
+    u32 i;
+    g_runfire_ok = !g_runfire_off; g_climb_ok = !g_climb_off; g_shoot_rt_ok = 1;
+    for (i = 0; i < sizeof MOVE_WORDS / sizeof MOVE_WORDS[0]; i++) if (RD(u32, G + MOVE_WORDS[i].at) != MOVE_WORDS[i].word) { g_runfire_ok = 0; g_climb_ok = 0; }
+    for (i = 0; i < sizeof SHOOT_RT_WORDS / sizeof SHOOT_RT_WORDS[0]; i++) if (RD(u32, G + SHOOT_RT_WORDS[i].at) != SHOOT_RT_WORDS[i].word) g_shoot_rt_ok = 0;
+    if (!g_body_ok) { g_runfire_ok = 0; g_climb_ok = 0; }
+    lg("on the move: fire at a walk and a run by the game's go-and-shoot task"); lg(g_shoot_rt_ok ? " (its point moved, not a new task)" : " (a new task for each point)");
+    lg("; at a sprint "); lg(g_runfire_ok ? "the mod's own (arms on the man, his weapon fired)" : g_runfire_off ? "off (settings)" : "none");
+    lg("; climbing "); lg(g_climb_ok ? "the game's jump-and-climb" : g_climb_off ? "off (settings)" : "none");
+    lg("; the medic aboard "); lg(g_medic_off ? "off (settings)" : "on"); lg("\n");
+}
+static float f_atan2(float y, float x) {               /* within 0.005 rad: enough to turn a man to a wall */
+    float ax = x < 0 ? -x : x, ay = y < 0 ? -y : y, a, r, s;
+    if (ax < 1e-6f && ay < 1e-6f) return 0.0f;
+    a = ax > ay ? ay / ax : ax / ay;
+    s = a * a; r = ((-0.0464964749f * s + 0.15931422f) * s - 0.327622764f) * s * a + a;
+    if (ay > ax) r = 1.57079637f - r;
+    if (x < 0) r = 3.14159274f - r;
+    if (y < 0) r = -r;
+    return r;
+}
+static void run_note(u32 who, u32 target, int fire, int pace) {
+    u32 i, old = 0, now = RD(u32, G + TIME_MS);
+    for (i = 0; i < 16; i++) { if (g_run[i].who == who) { old = i; break; } if (g_run[i].until < g_run[old].until) old = i; }
+    if (g_run[old].who != who || g_run[old].target != target) { memset(&g_run[old], 0, sizeof g_run[old]); g_run[old].who = who; g_run[old].target = target; }
+    g_run[old].until = now + 400; g_run[old].fire = (u8)fire; g_run[old].pace = (u8)pace;
+}
+/* 1.3: the marksman at his wall (hcb_marksman_plan): the game's own jump-and-climb, the one CJ uses - turned to the wall first */
+static int body_climb(u32 who, const hcb_post *p, u8 *me, u8 *mgr) {
+    struct bod *b = bod_of(who);
+    u32 now = RD(u32, G + TIME_MS), was = g_where, ty;
+    u8 *t3 = RD(u8 *, mgr + 24), *task;
+    float dx = p->at.x - pos_of(me)[0], dy = p->at.y - pos_of(me)[1], h;
+    if (!g_climb_ok) return 0;
+    if (t3) { ty = (u32)((type_fn)RD(u64, RD(u64, t3) + 0x28))(t3); if (ty == 211 || ty == 210 || ty == 254 || ty == 267 || ty == 240) return 1; }   /* (jumping, climbing, in the air) */
+    if (b->climb_at && now >= b->climb_at && now - b->climb_at < 2500) return 1;
+    g_where = 29;
+    h = f_atan2(-dx, dy);                                               /* (the game's heading: 0 = north, counter-clockwise) */
+    RD(float, me + 0x6c4) = h; RD(float, me + 0x6c8) = h;
+    if (t3) {
+        u64 vt = RD(u64, t3);
+        if (vt < G + 0x800000UL || vt >= G + 0x880000UL) { g_where = was; return 0; }
+        if (!((abort_fn)RD(u64, vt + 0x38))(t3, me, 1, 0)) { g_where = was; return 1; }
+    }
+    task = ((task_new_fn)(G + TASK_NEW))(0x20);
+    if (!task) { g_body_nomem++; g_where = was; return 0; }
+    ((jump_ctor_fn)(G + JUMP_CTOR))(task, 1);
+    if (RD(u64, task) != G + VT_JUMP) { g_climb_ok = 0; g_where = was; log_begin(); lg("climbing: the game made another task than expected - no climbing from now on\n"); log_end(); return 0; }
+    RD(u8, task + 0x1c) = 0;
+    ((set_task_fn)(G + SET_TASK))(mgr, task, 3, 0);
+    b->task = 0; b->kind = 0; b->climb_at = now ? now : 1; g_climbs++;
+    g_where = was;
+    return 1;
+}
 static int body_walk(u32 who, const hcb_post *p) {
     struct pool pp;
     u8 *me, *intel, *mgr, *t3, *task;
     const u8 *him = 0;
     struct bod *b;
     u32 now = RD(u32, G + TIME_MS), k, tgt = 0, was = g_where;
-    int ms, kind = 1, final;
-    float via[3], dx, dy, d;
+    int ms, kind = 1, final, fire = 0, st = 0;
+    float via[3], aim[3], dx, dy, d, thr;
     if (!g_body_ok || !g_snap.body || p->phase > HCB_PH_MOVING || p->move == 4) return 0;   /* (4: outside the brain's map - the script takes him by the game's path network) */
     if (!(p->act >= HCB_ACT_WALK && p->act <= HCB_ACT_SPRINT) && p->act != HCB_ACT_SIDESTEP) return 0;
     if (!get_pool(PED_POOL, &pp) || !(me = obj_of(&pp, who, PED_STRIDE)) || is_dead(me) || vehicle_of(me)) return 0;
@@ -782,46 +867,62 @@ static int body_walk(u32 who, const hcb_post *p) {
     if (!intel || !sane(via) || !sane(pos_of(me))) return 0;
     if (on_rope(me)) return 1;                                          /* the game has him: wait */
     mgr = intel + 8;
+    if (p->climb) return body_climb(who, p, me, mgr);
     dx = via[0] - pos_of(me)[0]; dy = via[1] - pos_of(me)[1]; d = f_sqrt(dx * dx + dy * dy);
-    dx = p->via.x - p->at.x; dy = p->via.y - p->at.y;
-    final = dx * dx + dy * dy < 0.01f;
+    final = (p->via.x - p->at.x) * (p->via.x - p->at.x) + (p->via.y - p->at.y) * (p->via.y - p->at.y) < 0.01f;
+    /* 1.3 (the first 2.0 log: the game's walk ended at every point of the way - the man stood with no task 22 % of his "moving"
+       time, 0.45 new tasks a second each): the walk is aimed PAST a point of the way - at the next one, or 2 m on along the
+       line - so it does not end there; the core moves the point on long before he gets to the aim */
+    memcpy(aim, via, 12);
+    if (!final) {
+        float ex = p->via2.x - p->via.x, ey = p->via2.y - p->via.y, e = f_sqrt(ex * ex + ey * ey);
+        if (e > 0.5f && sane(&p->via2.x)) { aim[0] = p->via2.x; aim[1] = p->via2.y; aim[2] = p->via2.z; }
+        else if (d > 0.3f) { aim[0] += dx / d * 2.0f; aim[1] += dy / d * 2.0f; }
+    }
     ms = p->act == HCB_ACT_SPRINT ? 7 : p->act == HCB_ACT_RUN || (p->act == HCB_ACT_FASTWALK && d > 4.0f) ? 6 : 4;
-    /* (fire on the move: the game's go-and-shoot task) */
-    /* 1.2 (the first log of 2.0 from the game): a man with the mod's gun task in his hands did not move at all - 173 samples
-       "on his way, aiming", 1 cm a second; without the gun task 1.3 m a second. So: a man on his way has NO gun task of the
-       mod's (body_gun takes it off him); fire on the move is the game's own go-and-shoot task again, and that one is watched:
-       0.4 m in 1.2 s or it is a plain walk for him for 6 s; three such with none that walked - never again this game. */
     b = bod_of(who);
+    /* the go-and-shoot watch (1.2), now for one man at a time: 0.4 m in 1.2 s or a plain walk for him for 6 s */
     if (b->chk_at && now >= b->chk_at && now - b->chk_at < 5000) {
         if (now - b->chk_at >= 1200) {
             int moved = dist2(b->chk, pos_of(me)) > 0.16f;
-            if (b->kind == 2 && b->task && b->task == RD(u8 *, mgr + 24)) {
-                if (moved) g_shoot_moved++;
-                else {
-                    g_shoot_stood++; b->plain_until = now + 6000;
-                    if (g_shoot_stood >= 3 && !g_shoot_moved && !g_shoot_off) { g_shoot_off = 1; log_begin(); lg("the body: a man with the game's go-and-shoot task does not move here - plain walks only from now on\n"); log_end(); }
-                }
-            }
+            if (b->kind == 2 && b->task && b->task == RD(u8 *, mgr + 24)) { if (moved) g_shoot_moved++; else { g_shoot_stood++; b->plain_until = now + 6000; } }
             b->chk_at = now; memcpy(b->chk, pos_of(me), 12);
         }
     } else { b->chk_at = now ? now : 1; memcpy(b->chk, pos_of(me), 12); }
     b->walk_at = now ? now : 1;
-    for (k = 0; k < 16 && !g_shoot_off && now >= b->plain_until; k++) if (g_sq[k].who == who && g_sq[k].state == 2 && now >= g_sq[k].at && now - g_sq[k].at < 400 && g_sq[k].target) {
-        him = obj_of(&pp, g_sq[k].target, PED_STRIDE);
-        if (him && !is_dead(him)) { kind = 2; tgt = g_sq[k].target; } else him = 0;
+    /* 1.3, fire on the move: the core says he moves facing his man (face). Fire allowed now (state 2): at a walk or a run the
+       game's go-and-shoot task (he backs away, sideways, facing the man, firing); at a sprint a plain sprint and the mod's own
+       fire (run_fire, every frame). Not allowed now: weapon on the man (the mod's arms at a sprint), no fire. */
+    if (p->face) {
+        for (k = 0; k < 16; k++) if (g_sq[k].who == who && now >= g_sq[k].at && now - g_sq[k].at < 400 && g_sq[k].target) {
+            him = obj_of(&pp, g_sq[k].target, PED_STRIDE);
+            if (him && !is_dead(him)) { tgt = g_sq[k].target; st = g_sq[k].state; } else him = 0;
+        }
+        fire = him && st == 2;
+        if (him && ms == 7) { if (g_runfire_ok) run_note(who, tgt, fire, 3); }
+        else if (fire && now >= b->plain_until) kind = 2;
+        else if (him && g_runfire_ok) run_note(who, tgt, 0, ms == 6 ? 2 : 1);      /* (his weapon on the man, no fire) */
     }
+    /* (a kind once taken is kept 1.5 s: no task torn down for every look of a flickering order) */
+    if (b->task && b->kind && b->kind != kind && b->kind_at && now - b->kind_at < 1500 && !(b->kind == 2 && !fire)) kind = b->kind;
     t3 = RD(u8 *, mgr + 24);
+    /* (1.3: the retarget threshold - only when the aim has moved more than 15 % of the way left, 0.3 to 1 m) */
+    thr = d * 0.15f; if (thr < 0.3f) thr = 0.3f; if (thr > 1.0f) thr = 1.0f;
     if (t3 && t3 == b->task && b->kind == kind && RD(u64, t3) == G + (kind == 1 ? VT_GOTO : VT_GOTO_SHOOT)) {
         if (kind == 1) {                                                /* still on his way: only the target moves */
             int ch = 0;
-            if (dist2((const float *)(t3 + 0x1c), via) > 0.09f) { memcpy(t3 + 0x1c, via, 12); ch = 1; }
-            if (RD(int, t3 + 0x18) != ms) { RD(int, t3 + 0x18) = ms; ch = 1; }
+            if (dist2((const float *)(t3 + 0x1c), aim) > thr * thr) { memcpy(t3 + 0x1c, aim, 12); ch = 1; }
+            if (RD(int, t3 + 0x18) != ms && (!b->ms_at || now - b->ms_at >= 1500)) { RD(int, t3 + 0x18) = ms; ch = 1; b->ms_at = now ? now : 1; }
             RD(float, t3 + 0x2c) = final ? 2.0f : 0.2f;
-            if (ch) { RD(u8, t3 + 0x30) |= 4; g_body_turn++; memcpy(b->via, via, 12); b->ms = (u8)ms; } else g_body_kept++;
+            if (ch) { RD(u8, t3 + 0x30) |= 4; g_body_turn++; memcpy(b->tgt, aim, 12); b->ms = (u8)ms; } else g_body_kept++;
             return 1;
         }
-        if (tgt == b->target && ms == b->ms && dist2(via, b->via) < 2.25f) { g_body_kept++; return 1; }
+        if (tgt == b->target) {                                         /* go-and-shoot at the same man: its move point is moved */
+            if (g_shoot_rt_ok) { if (dist2((const float *)(t3 + 0x34), aim) > thr * thr) { memcpy(t3 + 0x34, aim, 12); g_shoot_turn++; } else g_body_kept++; return 1; }
+            if (dist2(aim, b->tgt) < 2.25f) { g_body_kept++; return 1; }
+        }
     }
+    if (b->task && t3 != b->task && b->kind && b->at && now - b->at < 4000) g_ends_early++;   /* (the game ended our walk before he got there) */
     if (b->at && now >= b->at && now - b->at < 300) return 1;           /* never more than three new tasks a second for one man */
     g_where = 23;
     if (t3) {                                                           /* what he is doing now is asked to stop, as the game does it */
@@ -831,16 +932,17 @@ static int body_walk(u32 who, const hcb_post *p) {
     }
     task = ((task_new_fn)(G + TASK_NEW))(kind == 1 ? 0x38 : 0x50);
     if (!task) { g_body_nomem++; g_where = was; return 0; }
-    if (kind == 1) ((goto_ctor_fn)(G + GOTO_CTOR))(task, ms, via, 0.5f, final ? 2.0f : 0.2f, 0, 0);
-    else ((shoot_ctor_fn)(G + SHOOT_CTOR))(task, ms, via, him, 0.0f, 0.0f, 0.0f, 0.5f, 1.0f);
+    if (kind == 1) ((goto_ctor_fn)(G + GOTO_CTOR))(task, ms, aim, 0.5f, final ? 2.0f : 0.2f, 0, 0);
+    else ((shoot_ctor_fn)(G + SHOOT_CTOR))(task, ms == 7 ? 6 : ms, aim, him, 0.0f, 0.0f, 0.0f, 0.5f, 1.0f);
     if (RD(u64, task) != G + (kind == 1 ? VT_GOTO : VT_GOTO_SHOOT)) {   /* not the task this was made for: never again */
         g_body_ok = 0; g_where = was;
         log_begin(); lg("the body: the game made another task than expected - the mod stops walking the guards (the scripts do it)\n"); log_end();
         return 0;
     }
     ((set_task_fn)(G + SET_TASK))(mgr, task, 3, 0);
-    b->task = task; b->kind = (u8)kind; b->ms = (u8)ms; b->target = tgt; b->at = now ? now : 1; memcpy(b->via, via, 12);
-    g_body_new++;
+    if (b->kind != kind) b->kind_at = now ? now : 1;
+    b->task = task; b->kind = (u8)kind; b->ms = (u8)ms; b->target = tgt; b->at = now ? now : 1; memcpy(b->via, via, 12); memcpy(b->tgt, aim, 12);
+    g_body_new++; if (kind == 2) g_shoot_new++;
     g_where = was;
     return 1;
 }
@@ -1157,14 +1259,17 @@ static void fill_map(hcb_snapshot *s, const hcb_out *prev, const float *cjp) {
         hcb_seg *a = &s->segs[s->n_segs++];
         float p[3], q[3];
         *a = prev->seg_q[i];
-        p[0] = a->a.x; p[1] = a->a.y; p[2] = a->a.z - 0.4f; q[0] = a->b.x; q[1] = a->b.y; q[2] = a->b.z - 0.4f;
+        /* (1.3, the first 2.0 log: the low ray went along the ground itself - a kerb, a slope or a step "blocked" a leg a man walks
+           without noticing, and blocked legs went on the map: no ways left. Now knee and waist: 0.5 and 1.0 m over the ground) */
+        p[0] = a->a.x; p[1] = a->a.y; p[2] = a->a.z + 0.1f; q[0] = a->b.x; q[1] = a->b.y; q[2] = a->b.z + 0.1f;
         a->clear = (u8)map_ray(p, q);
-        if (a->clear) { p[2] += 0.7f; q[2] += 0.7f; a->clear = (u8)map_ray(p, q); }
+        if (a->clear) { p[2] += 0.5f; q[2] += 0.5f; a->clear = (u8)map_ray(p, q); }
         g_map_segs++;
     }
     g_map_left += n - i;
-    /* a high place for the marksman: one spot every other look (before the ground, which takes all the time there is while the map is new), on four rings round CJ. It must be 4-35 m above his feet, flat (the
-       ground a metre to each side is level with it) - whether CJ is seen from it is told with it */
+    /* a high place for the marksman: one spot every other look (before the ground, which takes all the time there is while the map is new), on four rings round CJ. It must be 2-35 m above his feet, flat (the
+       ground a metre to each side is level with it) - whether CJ is seen from it is told with it. (1.3: from 2 m, not 4 - a shed, a
+       container, a kiosk the marksman can climb himself; the helicopter still only takes him to one 4 m up or more, ow_min_h) */
     if (g_map_us < MAP_LOOK_US && !(g_ticks & 1) && !s->player.vehicle && !s->interior && s->n_ours) {
         static const float RING[4] = {14.0f, 22.0f, 32.0f, 45.0f};
         static const float DIR[8][2] = {{1, 0}, {0.7071f, 0.7071f}, {0, 1}, {-0.7071f, 0.7071f}, {-1, 0}, {-0.7071f, -0.7071f}, {0, -1}, {0.7071f, -0.7071f}};
@@ -1173,7 +1278,7 @@ static void fill_map(hcb_snapshot *s, const hcb_out *prev, const float *cjp) {
         int f, f2, f3;
         g_high[c].ok = 0;
         g = ground_z(x, y, feet + 38.0f, &f);
-        if (f && g >= feet + 4.0f && g <= feet + 35.0f) {
+        if (f && g >= feet + 2.0f && g <= feet + 35.0f) {
             g2 = ground_z(x + 1.0f, y, g + 1.5f, &f2); g3 = ground_z(x, y + 1.0f, g + 1.5f, &f3);
             if (f2 && f3 && g2 - g < 0.4f && g - g2 < 0.4f && g3 - g < 0.4f && g - g3 < 0.4f) {
                 eye[0] = x; eye[1] = y; eye[2] = g + 1.6f; cj[0] = cjp[0]; cj[1] = cjp[1]; cj[2] = cjp[2] + 0.3f;
@@ -1697,12 +1802,13 @@ static const char *const MODE_NAME[] = {"HOLD", "PULLOUT", "ASSAULT"};
 static const char *const MOVE_NAME[] = {"stay", "walk", "run", "sprint", "path"};
 static const char *const ACT_NAME[] = {"HOLD", "WALK", "FASTWALK", "RUN", "SPRINT", "COVER", "OVERWATCH", "SIDESTEP"};
 static const char *const PHASE_NAME[] = {"chosen", "moving", "arrived", "acting", "FAILED"};
-static const char *const WHY2_NAME[] = {"-", "new-post", "direct", "route", "blocked", "no-progress", "no-route", "arrived", "wait-turn", "in-air"};
+static const char *const WHY2_NAME[] = {"-", "new-post", "direct", "route", "blocked", "no-progress", "no-route", "arrived", "wait-turn", "in-air", "corner", "doorway", "climb", "step-out"};
 static const char *const UMODE_NAME[] = {"PROTECT", "ASSAULT"};
 static const char *const TASK_NAME[] = {"ESCORT", "SHIELD", "EXTRACT", "APPROACH", "GATHER", "BOUND", "SEARCH", "CONSOLIDATE", "REGROUP", "WITHDRAW"};
 /* 1.0: the summary of the session (mods/hcbrain_summary.txt, rewritten every ten seconds): the numbers the 2.0 plan is judged by.
    One sample a second for every guard on the ground who has a post. */
-static struct { u32 samples, still, far8, far20, stuck, failed, sprint_calm, calm, changes, near4, near4_n, up, up_n, secs, assault_secs, think_max; u8 act[HCB_MAX_OURS]; u32 act_who[HCB_MAX_OURS]; } g_sum;
+static struct { u32 samples, still, far8, far20, stuck, failed, sprint_calm, calm, changes, near4, near4_n, up, up_n, secs, assault_secs, think_max; u8 act[HCB_MAX_OURS]; u32 act_who[HCB_MAX_OURS];
+                u32 away, away_still, in3, in3_near, uninvolved, fire_ticks, roe_hold_secs; float last[HCB_MAX_OURS][2]; } g_sum;   /* 1.3: the real thing */
 static const char *const ALERT_NAME[] = {"calm", "wary", "threat", "COMBAT", "EVACUATE"};
 static const char *const SAY_NAME[] = {"", "into cover", "CJ is in cover", "stay with me", "we pull out", "I have command", "clear", "sniper", "we were attacked here before", "grenade", "CJ is in the water", "armed men ahead"};
 static const char *const AIM_NAME[] = {"body", "driver", "tyre"};
@@ -1832,9 +1938,11 @@ static void cmd_squad(int *v) {
     hcb_shot q;
 
     v[1] = 0; v[2] = 0;
-    if (!hcb_order_get(BRAIN, who, &o) || !o.target || !cj || !get_pool(PED_POOL, &pp)) { sq_note(who, 0, 0); body_gun(who, 0, 0, 0); return; }   /* (nobody for him: the mod's gun task, if he has one, is told to stop) */
+    /* (nobody for him: the mod's gun task, if he has one, is told to stop - 1.3: and the answer is 6 all the same, "his weapon is
+       the mod's", so the script does not aim him at a wall by its sector rule) */
+    if (!hcb_order_get(BRAIN, who, &o) || !o.target || !cj || !get_pool(PED_POOL, &pp)) { sq_note(who, 0, 0); if (body_gun(who, 0, 0, 0)) v[1] = 6; return; }
     me = obj_of(&pp, who, PED_STRIDE); him = obj_of(&pp, o.target, PED_STRIDE);
-    if (!me || !him || is_dead(him) || is_dead(me)) { sq_note(who, 0, 0); body_gun(who, 0, 0, 0); return; }
+    if (!me || !him || is_dead(him) || is_dead(me)) { sq_note(who, 0, 0); if (body_gun(who, 0, 0, 0)) v[1] = 6; return; }
     v[2] = (int)o.target;
     fill_shot(&q, who, o.target, &pp, cj, me, him, 0, 0);
     v[1] = hcb_squad_state(BRAIN, &q);
@@ -1847,6 +1955,128 @@ static void cmd_squad(int *v) {
         for (k = 0; k < g_snap.n_ours; k++) if (g_snap.ours[k] == who && g_snap.our_role[k] >= HCB_ROLE_GUNNER && g_snap.our_role[k] < HCB_ROLE_SQUAD) v[1] = 4;
     }
 }
+/* 1.3, fire at a sprint (the player: "get out of the game's frame - nobody fired on the move"): the game fires a man's weapon
+   only while he aims, and a man aiming does not sprint. For a guard the core has sprinting facing his man the mod does it
+   itself, every frame: his arms on the man (the game's own arm-pointing, IKChainManager_c::PointArm, as its aiming does) and
+   his weapon fired in short bursts by the game's weapon code (CWeapon::Fire: flash, sound, tracer, rounds out of HIS magazine).
+   Every round is checked: the brain's own rule for a guard's fire (hcb_squad_state) and a corridor round CJ and every man of
+   ours as wide as the scatter of a man firing on the run; then a ray. */
+static u32 g_run_rng = 0x2545f491U;
+static float run_rand(void) { g_run_rng ^= g_run_rng << 13; g_run_rng ^= g_run_rng >> 17; g_run_rng ^= g_run_rng << 5; return (float)(g_run_rng & 0xffff) / 65535.0f - 0.5f; }
+static int two_handed(u32 wt) { return wt == 25 || wt == 27 || wt == 29 || wt == 30 || wt == 31 || wt == 33 || wt == 34; }
+static float seg_off(const float *a, const float *b, const float *p) {   /* distance of p from the segment a-b */
+    float ab[3] = {b[0] - a[0], b[1] - a[1], b[2] - a[2]}, ap[3] = {p[0] - a[0], p[1] - a[1], p[2] - a[2]}, l2 = ab[0] * ab[0] + ab[1] * ab[1] + ab[2] * ab[2], t, q[3];
+    t = l2 > 1e-6f ? (ap[0] * ab[0] + ap[1] * ab[1] + ap[2] * ab[2]) / l2 : 0; if (t < 0) t = 0; if (t > 1) t = 1;
+    q[0] = a[0] + ab[0] * t - p[0]; q[1] = a[1] + ab[1] * t - p[1]; q[2] = a[2] + ab[2] * t - p[2];
+    return f_sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2]);
+}
+static void run_fire(void) {
+    struct pool pp;
+    u32 i, k, now = RD(u32, G + TIME_MS), was = g_where;
+    const u8 *cj = player_ped();
+    if (!g_runfire_ok || !cj || !get_pool(PED_POOL, &pp)) return;
+    g_where = 28;
+    for (i = 0; i < 16; i++) {
+        u8 *me, *him, *w;
+        u32 cur, wt, old;
+        float tp[3], s[3], t[3], d[3], len, spread, wide;
+        int ok = 1;
+        hcb_shot q;
+        if (!g_run[i].who || now >= g_run[i].until) {
+            if (g_run[i].arms && g_run[i].who && (me = obj_of(&pp, g_run[i].who, PED_STRIDE)) && !is_dead(me)) {
+                ((abort_arm_fn)(G + ABORT_ARM))((void *)(G + IK_MAN), 0, me, 200); ((abort_arm_fn)(G + ABORT_ARM))((void *)(G + IK_MAN), 1, me, 200);
+            }
+            g_run[i].arms = 0; g_run[i].who = g_run[i].who && now >= g_run[i].until + 2000 ? 0 : g_run[i].who;
+            continue;
+        }
+        me = obj_of(&pp, g_run[i].who, PED_STRIDE); him = obj_of(&pp, g_run[i].target, PED_STRIDE);
+        if (!me || !him || is_dead(me) || is_dead(him) || vehicle_of(me) || on_rope(me)) continue;
+        cur = (u32)(int)RD(signed char, me + 0x8dc);
+        if (cur > 12) continue;
+        w = me + 0x730 + (u64)cur * 0x20; wt = RD(u32, w);
+        if (wt < 22 || wt > 34) continue;                                 /* (instant-hit guns) */
+        memcpy(tp, pos_of(him), 12); tp[2] += 0.3f;                     /* his chest */
+        if (!sane(tp)) continue;
+        /* the arms on him (both for a two-handed weapon), renewed every frame as the game's own aiming does */
+        ((point_arm_fn)(G + POINT_ARM))((void *)(G + IK_MAN), "HCBrainRun", 0, me, 0, -1, tp, RD(float, G + IK_RATE), RD(int, G + IK_TIME), 100.0f);
+        if (two_handed(wt)) ((point_arm_fn)(G + POINT_ARM))((void *)(G + IK_MAN), "HCBrainRun", 1, me, 0, -1, tp, RD(float, G + IK_RATE), RD(int, G + IK_TIME), 100.0f);
+        g_run[i].arms = 1;
+        if (!g_run[i].fire || now < g_run[i].next || now < g_run[i].pause_until) continue;
+        if (RD(int, w + 8) <= 0) { reload_now(g_run[i].who); g_run_reloads++; g_run[i].pause_until = now + 1500; continue; }
+        /* the round: the brain's rule for this guard and this man, now */
+        fill_shot(&q, g_run[i].who, g_run[i].target, &pp, cj, me, him, 0, 0);
+        if (hcb_squad_state(BRAIN, &q) != 2) { g_run_refused++; g_run[i].next = now + 200; continue; }
+        spread = g_run[i].pace >= 3 ? 0.06f : g_run[i].pace == 2 ? 0.035f : 0.02f;
+        memcpy(s, pos_of(me), 12); s[2] += 0.5f;
+        d[0] = tp[0] - s[0]; d[1] = tp[1] - s[1]; d[2] = tp[2] - s[2]; len = f_sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+        if (!(len > 1.5f) || len > 60.0f) continue;
+        s[0] += d[0] / len * 0.7f; s[1] += d[1] / len * 0.7f; s[2] += d[2] / len * 0.7f;
+        t[0] = tp[0] + run_rand() * 2.0f * spread * len; t[1] = tp[1] + run_rand() * 2.0f * spread * len; t[2] = tp[2] + run_rand() * 1.2f * spread * len;
+        wide = 1.0f + spread * len;                                    /* (the wider the scatter, the wider the corridor) */
+        if (seg_off(s, t, pos_of(cj)) < wide + 0.6f) ok = 0;
+        for (k = 0; k < g_snap.n_ours && ok; k++) {
+            const u8 *o = g_snap.ours[k] != g_run[i].who ? obj_of(&pp, g_snap.ours[k], PED_STRIDE) : 0;
+            if (o && !is_dead(o) && seg_off(s, t, pos_of(o)) < wide) ok = 0;
+        }
+        if (ok && !ray(s, t, vehicle_of(him))) ok = 0;
+        if (!ok) { g_run_refused++; g_run[i].next = now + 150; continue; }
+        old = RD(u32, me + 0x698); RD(u32, me + 0x698) = old | 1;     /* (the IK bit: the round goes to the point given) */
+        RD(u8, me + 0x8de) = 100;                                       /* (scattered here already: no second spread) */
+        if (((weapon_fire_fn)(G + WEAPON_FIRE))(w, me, s, s, 0, t, 0)) {
+            g_run_rounds++;
+            if (RD(int, w + 4) == 1) ((gunflash_fn)(G + PED_GUNFLASH))(me, 250, 0);
+        } else g_run_refused++;
+        RD(u32, me + 0x698) = old;
+        /* a burst of 2-4, then 0.45-0.7 s; a pistol slower */
+        if (!g_run[i].burst) g_run[i].burst = (u8)(2 + (g_run_rng % 3));
+        g_run[i].next = now + (wt <= 24 ? 300 : 110);
+        if (--g_run[i].burst == 0) g_run[i].pause_until = now + 450 + (g_run_rng % 250);
+    }
+    g_where = was;
+}
+/* 1.3, the medic aboard (the player: "in my helicopter with the four guards I want to be healed - health back to full"): CJ in
+   our helicopter gets 5 health a second up to his own maximum (CPed +0x6b0 - the game raises it with his stats); so do ours
+   aboard. The scripts say it (HC_STATE+578: 1 healing, 2 well again). */
+#define HC_HEAL (HC_STATE + 578)
+static u32 g_heal_t;
+static void medic(void) {
+    struct pool pp;
+    u8 *cj = player_ped();
+    u32 now = RD(u32, G + TIME_MS), k, was = g_where;
+    float dt, h, mx;
+    if (g_medic_off || !cj || !g_snap.heli || !get_pool(PED_POOL, &pp)) return;
+    if (g_snap.player.vehicle != g_snap.heli || is_dead(cj)) { if (g_heal_on) { g_heal_on = 0; } g_heal_t = 0; return; }
+    dt = g_heal_t && now > g_heal_t && now - g_heal_t < 1000 ? (float)(now - g_heal_t) / 1000.0f : 0.0f;
+    g_heal_t = now ? now : 1;
+    g_where = 30;
+    h = RD(float, cj + 0x6ac); mx = RD(float, cj + 0x6b0);
+    if (h == h && mx == mx && mx >= 100.0f && mx <= 250.0f && h > 0.0f && h < mx) {
+        float nh = h + 5.0f * dt;
+        if (nh > mx) nh = mx;
+        if (!g_heal_on && mx - h >= 10.0f) { g_heal_on = 1; shared_set(HC_HEAL, 1); }
+        RD(float, cj + 0x6ac) = nh; g_healed_hp += (u32)(nh - h + 0.5f);
+        if (g_heal_on && nh >= mx) { g_heal_on = 0; shared_set(HC_HEAL, 2); }
+    }
+    for (k = 0; k < g_snap.n_ours; k++) {                              /* ours aboard */
+        u8 *o = obj_of(&pp, g_snap.ours[k], PED_STRIDE);
+        const u8 *v = o ? vehicle_of(o) : 0;
+        if (!o || is_dead(o) || !v || v != vehicle_of(cj)) continue;
+        h = RD(float, o + 0x6ac); mx = RD(float, o + 0x6b0);
+        if (h == h && mx == mx && mx > 0.0f && mx <= 1000.0f && h > 0.0f && h < mx) { h += 5.0f * dt; RD(float, o + 0x6ac) = h > mx ? mx : h; }
+    }
+    g_where = was;
+}
+/* 2.0 beta 4: a guard standing at his post on alert, or the commander waving CJ on, faces where the brain says (his sector, CJ):
+   only the heading he wants (+0x6c8) is set, the game turns him at its own pace - no aiming task (in the second 2.0 log the
+   scripts' aiming at a point of the sector had men aiming at walls). Not while his weapon is on a man (the gun task turns him). */
+static void face_look(u32 who, const hcb_post *p, u8 *me) {
+    u32 i, now = RD(u32, G + TIME_MS);
+    float dx = p->look.x - pos_of(me)[0], dy = p->look.y - pos_of(me)[1];
+    if (dx * dx + dy * dy < 1.0f || !(dx == dx) || !(dy == dy)) return;
+    for (i = 0; i < 16; i++) if (g_gun[i].who == who && g_gun[i].target && g_gun[i].cmd != 6 && g_gun[i].at && now - g_gun[i].at < 400) return;
+    RD(float, me + 0x6c8) = f_atan2(-dx, dy);
+    g_faced++;
+}
 /* A guard of the detail: where to be and how (the fire order is asked for separately, command 2) */
 static void cmd_post(int *v) {
     u32 who = (u32)v[0], i;
@@ -1857,8 +2087,9 @@ static void cmd_post(int *v) {
         /* 1.0: on his way the mod walks him itself - the script is told 5 ("his legs are mine"); arrived, he stays (0) */
         if (g_snap.body) { struct pool pp_; u8 *me_ = get_pool(PED_POOL, &pp_) ? obj_of(&pp_, who, PED_STRIDE) : 0; if (me_ && !is_dead(me_) && !vehicle_of(me_) && !on_rope(me_)) mind_keep(me_); }
         v[1] = g_snap.body ? (body_walk(who, p) ? 5 : p->phase >= HCB_PH_ARRIVED ? 0 : p->move) : p->move;
+        if (g_snap.body && v[1] == 0 && (p->duty || p->sign)) { struct pool pp_; u8 *me_ = get_pool(PED_POOL, &pp_) ? obj_of(&pp_, who, PED_STRIDE) : 0; if (me_ && !is_dead(me_) && !vehicle_of(me_) && !on_rope(me_)) face_look(who, p, me_); }
         put_f(v + 2, p->at.x); put_f(v + 3, p->at.y); put_f(v + 4, p->at.z);
-        v[5] = p->crouch; put_f(v + 6, p->look.x); put_f(v + 7, p->look.y); put_f(v + 8, p->look.z); v[9] = p->duty;
+        v[5] = p->crouch; put_f(v + 6, p->look.x); put_f(v + 7, p->look.y); put_f(v + 8, p->look.z); v[9] = p->duty + (p->sign ? 16 * (int)p->sign : 0);   /* (1.3: +16 = wave CJ on) */
         return;
     }
 }
@@ -2120,7 +2351,7 @@ static void pct(struct text *t, const char *name, u32 a, u32 of, const char *goa
     ts(t, name); ts(t, ": "); if (of) { tu(t, (u64)a * 100 / of); ts(t, " %"); } else ts(t, "-"); ts(t, " ("); tu(t, a); ts(t, " of "); tu(t, of); ts(t, ")"); ts(t, goal); ts(t, "\n");
 }
 static void session_summary(u32 now) {
-    static char buf[2048];
+    static char buf[4096];
     struct text t = {buf, sizeof buf, 0};
     const hcb_ped *cj = &g_snap.player;
     float cv = f_sqrt(cj->vel.x * cj->vel.x + cj->vel.y * cj->vel.y);
@@ -2140,6 +2371,16 @@ static void session_summary(u32 now) {
         if (po->stuck) g_sum.stuck++;
         if (po->phase == HCB_PH_FAILED) g_sum.failed++;
         if (g_out.alert < HCB_ALERT_THREAT) { g_sum.calm++; if (po->act == HCB_ACT_SPRINT) g_sum.sprint_calm++; }
+        /* 1.3 (the first 2.0 log: "stuck 5 %" while a man more than 2 m from his post stood still one second in five): measured by
+           where he really is, a second apart */
+        if (k < HCB_MAX_OURS) {
+            if (g_sum.act_who[k] == po->who && po->phase == HCB_PH_MOVING && d > 2.0f) {
+                float mx = p->pos.x - g_sum.last[k][0], my = p->pos.y - g_sum.last[k][1];
+                g_sum.away++; if (mx * mx + my * my < 0.25f) g_sum.away_still++;
+            }
+            g_sum.last[k][0] = p->pos.x; g_sum.last[k][1] = p->pos.y;
+        }
+        if ((po->job == HCB_ROLE_CLOSE || po->job == HCB_ROLE_CLOSE2) && cv < 0.5f) { float ex = cj->pos.x - p->pos.x, ey = cj->pos.y - p->pos.y; g_sum.in3++; if (ex * ex + ey * ey < 6.25f) g_sum.in3_near++; }
         if (k < HCB_MAX_OURS) { if (g_sum.act_who[k] == po->who && g_sum.act[k] != po->act) g_sum.changes++; g_sum.act_who[k] = po->who; g_sum.act[k] = po->act; }
         dx = cj->pos.x - p->pos.x; dy = cj->pos.y - p->pos.y;
         if (dx * dx + dy * dy < 16.0f) near++;
@@ -2147,6 +2388,15 @@ static void session_summary(u32 now) {
     }
     if (!any) return;
     g_sum.secs++;
+    if (g_snap.roe == HCB_ROE_HOLD) g_sum.roe_hold_secs++;
+    for (i = 0; i < g_out.n_orders; i++) {                             /* 1.3: fire at a man who is no threat: must be 0 */
+        const hcb_order *o = &g_out.orders[i];
+        u32 m, cls = 0;
+        if (!o->fire || !o->target) continue;
+        g_sum.fire_ticks++;
+        for (m = 0; m < g_out.n_marks; m++) if (g_out.marks[m].id == o->target) cls = g_out.marks[m].cls;
+        if (cls < HCB_CLS_THREAT) g_sum.uninvolved++;
+    }
     if (g_out.umode == HCB_UMODE_ASSAULT) g_sum.assault_secs++;
     if (g_out.umode == HCB_UMODE_PROTECT && g_out.n_posts >= 7) { g_sum.near4 += near; g_sum.near4_n++; }
     if (g_tick_us_max > g_sum.think_max) g_sum.think_max = g_tick_us_max;
@@ -2161,6 +2411,13 @@ static void session_summary(u32 now) {
     ts(&t, "changes of action per guard per minute: "); if (g_sum.samples) tf(&t, (float)g_sum.changes * 60.0f / (float)g_sum.samples); ts(&t, "   [goal: 6 or less]\n");
     ts(&t, "guards within 4 m of CJ in PROTECT (average): "); if (g_sum.near4_n) tf(&t, (float)g_sum.near4 / (float)g_sum.near4_n); ts(&t, "   [0.9: 6 of 8, goal: 3]\n");
     pct(&t, "the marksman 4 m or more above CJ", g_sum.up, g_sum.up_n, "   [0.9: never]");
+    pct(&t, "1.3: a guard 2 m+ from his post, on his way, who did not move in a second", g_sum.away_still, g_sum.away, "   [1.2 in the game: 20 %, goal: 5 % or less]");
+    pct(&t, "1.3: the two bodyguards within 2.5 m of CJ standing", g_sum.in3_near, g_sum.in3, "   [goal: 80 % or more]");
+    pct(&t, "1.3: fire orders at a man who is no threat (a passer-by, a driver going by)", g_sum.uninvolved, g_sum.fire_ticks, "   [1.2 in the game: half of them, goal: 0]");
+    ts(&t, "1.3: the fire rule HOLD FIRE was on for "); tu(&t, g_sum.roe_hold_secs); ts(&t, " s (under it the guards answer only a man who has hit or shot at CJ or one of ours)\n");
+    ts(&t, "1.3: fire on the move: go-and-shoot tasks "); tu(&t, g_shoot_new); ts(&t, ", moved on "); tu(&t, g_shoot_turn); ts(&t, "; rounds fired at a sprint "); tu(&t, g_run_rounds); ts(&t, ", held (CJ or ours near the line) "); tu(&t, g_run_refused);
+    ts(&t, "\n1.3: the game ended a walk before he got there: "); tu(&t, g_ends_early); ts(&t, " times; new tasks per guard per minute: "); if (g_sum.samples) tf(&t, (float)g_body_new * 60.0f / (float)g_sum.samples); ts(&t, "\n");
+    ts(&t, "1.3: the marksman tried to climb "); tu(&t, g_climbs); ts(&t, " times; health given back aboard "); tu(&t, g_healed_hp); ts(&t, "; guards turned to their sector "); tu(&t, g_faced); ts(&t, "\n");
     ts(&t, "the mod's own tasks: new "); tu(&t, g_body_new); ts(&t, ", retargets "); tu(&t, g_body_turn); ts(&t, ", the game refused "); tu(&t, g_body_refused); ts(&t, ", no memory "); tu(&t, g_body_nomem);
     ts(&t, "\nmap: ground cells asked "); tu(&t, g_map_ground); ts(&t, ", found "); tu(&t, g_map_ground_ok); ts(&t, ", straight legs asked "); tu(&t, g_map_segs); ts(&t, ", questions left for a later look "); tu(&t, g_map_left);
     ts(&t, ", the longest look "); tu(&t, g_map_us_max); ts(&t, " us\nthink, the longest: "); tu(&t, g_sum.think_max); ts(&t, " us   [goal: 4000 or less]\n");
@@ -2364,7 +2621,7 @@ HIDDEN void brain_scripts(void) {
     if (g_ready && !g_busy) { g_busy = 1; g_where = 1; bridge(); think(); g_where = 0; g_busy = 0; watch_frames(t, now_us() - t); }
     g_frame_at_us = t;
     g_scripts_orig();
-    if (g_ready && !g_busy) { g_busy = 1; g_where = 4; pilot_turn(); gunners_fire(); soft_fall(); ropes_keep(); g_where = 0; g_busy = 0; }
+    if (g_ready && !g_busy) { g_busy = 1; g_where = 4; pilot_turn(); gunners_fire(); soft_fall(); ropes_keep(); run_fire(); medic(); g_where = 0; g_busy = 0; }
     if (g_ready && now_us() - g_flush_us > 3000000UL) flush_log();     /* (only if the writer thread has stopped) */
 }
 
@@ -2415,16 +2672,18 @@ static const char *g_onoff[2] = {"Off", "On"};
 static const char *g_save[2] = {"Tap to save", "Tap to save again"};
 static void set_marks(int o, int v, void *d) { (void)o; (void)d; g_marks = v != 0; save_config(); }
 static void ask_report(int o, int v, void *d) { (void)o; (void)v; (void)d; __atomic_store_n(&g_dump_request, 1, __ATOMIC_RELEASE); }
+/* 1.3: no Mods Settings item any more - the tests (and nothing else) ask for a report through this */
+EXPORT void hcb_report_now(void) { __atomic_store_n(&g_dump_request, 1, __ATOMIC_RELEASE); }
 static void add_menu_items(void) {
     typedef void *(*getif_fn)(const char *);
     typedef int (*add_fn)(void *self, int type, const char *name, int init, int min, int max, const char **sw, void (*cb)(int, int, void *));
     void *aml = dlopen("libAML.so", RTLD_NOW), *sa; getif_fn getif = aml ? (getif_fn)dlsym(aml, "GetInterface") : 0; add_fn add;
     sa = getif ? getif("SAUtils") : 0;
     if (!sa) { lg("SAUtils not found - no settings items (a report is still saved when CJ dies)\n"); return; }
-    add = (add_fn)((*(void ***)sa)[3]);   /* ISAUtils::AddClickableItem, as Touch x4 and CLEO UI use it */
-    add(sa, 5, "Brain markers", g_marks, 0, 1, g_onoff, set_marks);
-    add(sa, 5, "Brain report", 0, 0, 1, g_save, ask_report);
-    lg("Mods Settings: Brain markers, Brain report\n");
+    /* 1.3 (the player: "the old markers switch and the rest in Mods Settings - what do I need them for?"): the brain adds nothing
+       there any more - no markers at all, and the black box saves itself (CJ's death, a crash, a hang, leaving the game) */
+    (void)sa; (void)add; (void)set_marks; (void)ask_report; (void)g_onoff; (void)g_save;
+    lg("Mods Settings: nothing of the brain's (1.3)\n");
 }
 
 /* ---------- install ---------- */
@@ -2515,6 +2774,7 @@ static int try_install(void) {
     more_setup();
     body_setup();
     mind_setup();
+    move_setup();
     places_load();
     map_load();
     return 1;
@@ -2715,7 +2975,7 @@ static void *watchdog(void *arg) {
 }
 
 struct ModInfo { char guid[48]; char name[48]; char version[24]; char author[48]; u16 ver[4]; u8 reserved[336]; };
-static struct ModInfo g_info __attribute__((aligned(16))) = {"net.helicover.brain", "Helicover Brain", "1.2", "Helicover", {1, 2, 0, 0}, {0}};
+static struct ModInfo g_info __attribute__((aligned(16))) = {"net.helicover.brain", "Helicover Brain", "1.3", "Helicover", {1, 3, 0, 0}, {0}};
 static int g_done;
 EXPORT struct ModInfo *__GetModInfo(void) { return &g_info; }
 EXPORT void OnModPreLoad(void) {}
@@ -2737,7 +2997,7 @@ EXPORT void OnModLoad(void) {
     first_line_of(&g_log, "/sys/devices/system/cpu/present", "0");
     log_end();
     load_config();
-    lg("settings: markers "); tu(&g_log, (u64)g_marks); lg(", fire off "); tu(&g_log, (u64)g_fire_off); lg(", last crash step "); tu(&g_log, g_last_crash); lg("\n");
+    lg("settings: fire off "); tu(&g_log, (u64)g_fire_off); lg(", last crash step "); tu(&g_log, g_last_crash); lg("\n");
     add_menu_items();
     r = try_install();
     if (r != -1 && (r == 0 || !g_cleo)) { if (pthread_create(&th, 0, waiter, (void *)(long)r)) lg("cannot start the waiting thread\n"); else lg("waiting (for the game or for CLEO)\n"); }
@@ -2749,6 +3009,9 @@ EXPORT void OnModLoad(void) {
         if (g_last_crash == 25) { g_mind_off = 1; g_mind_ok = 0; lg("the last game crashed while the mod was keeping the game AI off a guard: that stays off from now on\n"); }
         if (g_last_crash == 26) { g_gun_off = 1; g_gun_ok = 0; lg("the last game crashed in the mod's gun task: the scripts fire the guards' weapons from now on\n"); }
         if (g_last_crash == 27) { g_rope_off = 1; g_rope_ok = 0; lg("the last game crashed while the mod held a rope: the ropes are the game's own from now on\n"); }
+        if (g_last_crash == 28) { g_runfire_off = 1; g_runfire_ok = 0; lg("the last game crashed while a guard fired at a sprint: fire on the move at a walk and a run only from now on\n"); }
+        if (g_last_crash == 29) { g_climb_off = 1; g_climb_ok = 0; lg("the last game crashed while the marksman climbed: no climbing from now on\n"); }
+        if (g_last_crash == 30) { g_medic_off = 1; lg("the last game crashed in the medic's turn: no healing aboard from now on\n"); }
         if (g_last_crash) { if (g_last_crash == 99) lg("the last game crashed outside the brain"); else { lg("the last game crashed inside the brain at step "); tu(&g_log, g_last_crash); } lg(" (its CRASH block is above, at the end of that game)\n"); g_last_crash = 0; save_config(); } }
     ti(&g_log, r); lg(" = state at load\n");
     flush_log();

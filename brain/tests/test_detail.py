@@ -283,11 +283,11 @@ assert o.duty == HCB_DUTY_RING and o.mode == HCB_MODE_PULLOUT, o.duty
 dists = sorted(d2(at(p), sc.cj['pos']) for p in sc.posts.values())
 # 0.9 (fifth log: six men of eight stood within 2-6 m of CJ): commander and bodyguards at his side, the outer men 7.5-12.5 m off
 assert all(x <= 5.1 for x in dists[:-1]) and 7.5 <= dists[-1] <= 12.5, dists
-assert o.leading and d2(at(lead_p), sc.cj['pos']) <= 1.7 and at(lead_p)[0] < sc.cj['pos'][0], ('the commander at CJ\'s side, a step away from the shooter: he takes CJ out', at(lead_p))
+assert o.leading and d2(at(lead_p), sc.cj['pos']) <= 4.1 and at(lead_p)[0] < sc.cj['pos'][0], ('the commander goes ahead of CJ (1.3: 4 m at most), away from the shooter: he takes CJ out', at(lead_p))
 evac = [s_ for s_ in sc.said if s_[1] == HCB_SAY_EVAC]
 sc.step(60)
 assert len(evac) == 1 and len([s_ for s_ in sc.said if s_[1] == HCB_SAY_EVAC]) == 1, 'said once, then not again for 20 s'
-passed('Too hot (CJ badly hurt under fire): the detail pulls out - the commander and the bodyguards come in (5 m at most), the outer man holds 8-12 m off, the bodyguards towards the shooter, the commander at CJ\'s side a step away from the shooter, taking him out; "we pull out - call the pickup", not repeated for 20 s')
+passed('Too hot (CJ badly hurt under fire): the detail pulls out - the commander and the bodyguards come in (5 m at most), the outer man holds 8-12 m off, the bodyguards towards the shooter, the commander 4 m ahead of CJ away from the shooter, taking him out; "we pull out - call the pickup", not repeated for 20 s')
 
 # ------------------------------------------------------------------ all clear: once
 sc, team, g = contact(walls=[(-3., -2.5, -3., 2.5)])
@@ -320,24 +320,34 @@ sc.step(3)
 assert not sc.posts, sc.posts
 passed('CJ in a vehicle: the detail gives no posts on foot (the scripts take the free seats or follow)')
 
-# ------------------------------------------------------------------ the commander takes CJ to his cover: at his side, a step ahead
+# ------------------------------------------------------------------ the commander takes CJ to his cover himself (1.3)
+# (the player: "why does the commander not lead me to cover - he stands in front of me and talks, no movement at all": his place
+#  was 1.6 m from CJ towards the cover - one step, then waiting. Now he goes there, 4 m ahead of CJ, waits and waves him on.)
 sc, team, g = contact(walls=[(-3., -2.5, -3., 2.5)])
 sc.step(4)
 lp = sc.posts[sc.last_out.lead]
-assert sc.last_out.leading and 1.0 < d2(at(lp), sc.cj['pos']) <= 1.7 and at(lp)[0] < sc.cj['pos'][0] - 0.9, ('the commander is at CJ\'s side, a step towards the cover (west)', at(lp))
+assert sc.last_out.leading and d2(at(lp), sc.cj['pos']) > 2.0 and d2(at(lp), sc.cj['pos']) <= 4.1 and at(lp)[0] < sc.cj['pos'][0] - 1.5, ('the commander goes ahead of CJ towards the cover (west)', at(lp))
 for k in range(12):                                        # CJ goes with him (the cover is 4 m west)
-    sc.cj['pos'][0] -= 0.25
+    sc.cj['pos'][0] -= 0.25; sc.cj['vel'] = [-2.5, 0., 0.]
     sc.step(1)
     lp = sc.posts[sc.last_out.lead]
-    if sc.last_out.leading: assert d2(at(lp), sc.cj['pos']) <= 1.7 and at(lp)[0] <= sc.cj['pos'][0], ('he stays at CJ\'s side, a step ahead, all the way', at(lp), sc.cj['pos'])
+    if sc.last_out.leading: assert d2(at(lp), sc.cj['pos']) <= 4.1 and at(lp)[0] <= sc.cj['pos'][0] + 0.1, ('he stays ahead of CJ, on the way to the cover, all the way', at(lp), sc.cj['pos'])
+sc.cj['vel'] = [0., 0., 0.]
 sc.cj['pos'] = [sc.last_out.cover_at.x, sc.last_out.cover_at.y, 1.]
 sc.step(20)
 assert not sc.last_out.leading and sc.posts[sc.last_out.lead].crouch and d2(at(sc.posts[sc.last_out.lead]), sc.cj['pos']) < 2.0, 'there: he crouches next to CJ'
 sc, team, g = contact(walls=[(-3., -2.5, -3., 2.5)])
-for k in range(80):                                        # CJ stays where he is: the commander does not leave him
+waved, said, far = 0, [], 0
+for k in range(140):                                       # CJ stays where he is
     sc.step(1)
-    assert d2(at(sc.posts[sc.last_out.lead]), sc.cj['pos']) <= 1.7, 'the commander never leaves CJ\'s side'
-passed('Under fire the commander takes CJ to the cover like by the hand: at CJ\'s side, a step towards the cover, all the way, crouching next to him there; if CJ stays where he is, so does the commander')
+    lp = sc.posts[sc.last_out.lead]
+    waved += lp.sign == HCB_SIGN_COME
+    far = max(far, d2(at(lp), sc.cj['pos']))
+said = [s_ for s_ in sc.said if s_[1] in (HCB_SAY_TAKE_COVER, HCB_SAY_COVER_DIR)]
+assert waved >= 10 and far <= 4.1, ('CJ does not come: the commander waits at his point, turned to CJ, and waves him on', waved, far)
+assert len(said) <= 2, ('"follow me" is said once for a cover, not every 6 s', said)
+assert d2(at(sc.posts[sc.last_out.lead]), sc.cj['pos']) <= 2.0 and sc.posts[sc.last_out.lead].sign == HCB_SIGN_NONE, 'after 10 s without a step of CJ\'s he is back at CJ\'s side, covering him where he is'
+passed('1.3: under fire the commander goes to the cover himself, 4 m ahead of CJ, all the way; CJ there - he crouches next to him; CJ stays - he waits at his point, turned to CJ, and waves him on ("follow me" said once), and after 10 s he comes back to CJ\'s side')
 
 sc, team, g = contact(walls=[(-3., -2.5, -3., 2.5)])
 sc.step(10)
@@ -611,16 +621,16 @@ passed('A blast in the game\'s table: every man within its radius (kept between 
 sc = Scene(); team = detail8(sc); sc.step(20)
 drv = sc.ped(-40., 0., pedtype=GANG, weapon=0)
 sc.veh(-35., 0., vel=(14., 0., 0.), driver=drv)
-for _ in range(8): sc.step(1)
+for _ in range(14): sc.step(1)
 cars = [s_ for s_ in sc.said if s_[1] == HCB_SAY_CAR]
 assert cars and cars[0][2] == 3, ('"car - left!" (it comes from the west, CJ faces north)', sc.said)
-assert len(cars) <= 2, 'not every look'
+assert len(cars) == 1, '1.3: once for a car'
 sc = Scene(); team = detail8(sc); sc.step(20)
 drv = sc.ped(-40., 0., pedtype=GANG, weapon=0)
 sc.veh(-35., 0., vel=(0., 14., 0.), driver=drv)            # it drives past, not at CJ
 sc.step(8)
 assert not [s_ for s_ in sc.said if s_[1] == HCB_SAY_CAR], sc.said
-passed('A car on a collision course with CJ is called with the side it comes from ("car - left!"); one that drives past is not')
+passed('A car on a collision course with CJ is called with the side it comes from ("car - left!") - 1.3: once for a car, within 1.5 s of it; one that drives past is not')
 
 # "into cover" is not repeated while CJ stands still: only if he has moved 3 m or after 15 s
 sc, team, g = contact(walls=[(-3., -2.5, -3., 2.5)])

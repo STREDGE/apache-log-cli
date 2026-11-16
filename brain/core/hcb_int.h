@@ -60,6 +60,8 @@ typedef struct vtrack {
     u32 driver_was;         /* the last driver it had (policemen jump out of a car that is still rolling) */
     float edps, dist, ram_edps;
     u8 used, seen, cls, why;
+    u8 ram_n, r0_, r1_, r2_;  /* 1.3: looks in a row on a collision course (two before it is "ramming") */
+    u32 ram_said;           /* 1.3: when the commander last called this car */
 } vtrack;
 /* one of our shooters between ticks: whom he is on, since when, where he is in his burst */
 typedef struct shooter {
@@ -98,6 +100,10 @@ typedef struct detail {
     hcb_vec lead_to;        /* where the commander leads CJ, since when, and the nearest CJ has come to it */
     u32 lead_since, lead_gave_up;
     float lead_best;
+    u32 lead_prog_t;        /* 1.3: when CJ last came nearer to that cover (10 s without: the commander comes back to him) */
+    u32 hold_said;          /* 1.3: when "fire is held" was last said */
+    u32 gun_blind_since;    /* 1.3: since when every door gunner with a man to fire at has had no line to him */
+    u8 lead_near, lead_wave, lead_r_[2];   /* 1.3: the commander is within 6 m of CJ / he stands and waves CJ on */
     hcb_vec heli_at;        /* the helicopter's spot for the gunners, the candidate being asked about */
     u32 heli_t;
     u8 heli_ok, heli_k, mode, leading, pose, pad_[3];
@@ -170,6 +176,11 @@ typedef struct agent {
     u32 corner_until;       /* ... he stands short of a corner until then */
     u32 door_since;         /* ... since when he has waited for a doorway to clear */
     u8 off_map, r_[3];      /* 1.1: the map does not reach where he stands (he is far from CJ / the target) */
+    u32 pace_since;         /* 1.3: when his pace last changed (no change within 1.5 s - unless his place is now 3 m nearer or further) */
+    float pace_d;           /* 1.3: ... and how far from his place he was then */
+    u32 line_since;         /* 1.3: since when CJ or one of ours is in his line of fire while he stands */
+    u32 step_until, step_at;    /* 1.3: a step out of the line: kept until then; when the last one began */
+    hcb_vec step;           /* 1.3: ... the offset of that step */
 } agent;
 typedef struct squad {
     u8 umode, task, ow_ok, ow_ready, mover, gathered, pad0, pad1;
@@ -179,6 +190,16 @@ typedef struct squad {
     hcb_vec apost[8];       /* each man's place in the assault (kept between looks) */
     u32 apost_id[8], apost_t[8];
     u8 apost_ok[8];
+    u32 regroup_until;      /* 1.3: CJ is hurt / far from the squad: everybody back to him until then */
+    /* 1.3, the marksman's own plan (hcb_marksman_plan): what he is going for and how he gets up */
+    u8 mk_state, mk_tries, mk_n_bad, mk_up;   /* MK_*; climbs tried at this place; bad places known; 1 = he is up (a roof, a step, high ground) */
+    u32 mk_id, mk_since, mk_climb_t, mk_far_since, mk_prog_t, mk_pick_t;
+    hcb_vec mk_at, mk_step, mk_prog_pos;      /* where he is going, the step on his way up (a car), where he last got on */
+    float mk_best_d;                          /* 1.3: the nearest he has been to the wall he goes to (sliding along it is no progress) */
+    u32 mk_down_until;                        /* 1.3: "to me" - no high place for him until then (he comes down with the others) */
+    float mk_z0;            /* his feet when the climb began */
+    hcb_vec mk_bad[4];      /* places he could not get up to (left alone for a minute) */
+    u32 mk_bad_t[4];
 } squad;
 struct hcb_brain {
     hcb_cfg cfg;
@@ -232,7 +253,8 @@ typedef struct place_in {
     float cj_min, cj_max;   /* how near to CJ and how far from him it may be (0, 0 = does not matter) */
     float threat_min;       /* never nearer to the main threat than this (6 m at the least) */
     u8 n_other, n_taken, need_cj, cj_fires;   /* need_cj: CJ must be seen from it; cj_fires: nobody in CJ's line of fire */
-    u8 strict, pad[3];      /* 1 = only places everything is KNOWN about (the man holds a place already: no moving on a guess) */
+    u8 strict, keep, pad[2];   /* strict: 1 = only places everything is KNOWN about (the man holds a place already: no moving on a guess);
+                               keep: 1.3 - the place he holds is valued (the line rules choose new places only: a shooter shifting about does not move him) */
 } place_in;
 HID float hcb_place_score(hcb_brain *b, hcb_out *out, const place_in *in, hcb_vec at, u32 now, int ask, int *cover);   /* < 0: not a place */
 HID int hcb_place_pick(hcb_brain *b, hcb_out *out, const place_in *in, u32 now, hcb_vec *found, float *score, int *cover);
@@ -240,6 +262,8 @@ HID int hcb_place_pick(hcb_brain *b, hcb_out *out, const place_in *in, u32 now, 
 HID int hcb_cv_state(hcb_brain *b, hcb_vec at, hcb_vec from, u32 now, int low);     /* 1 cover, 0 none, -1 not known, -2 asked */
 HID int hcb_cv_raw(hcb_brain *b, hcb_vec at, hcb_vec from, u32 now, int *hidden, int *hidden_hi, int *ground);   /* 1 known */
 HID void hcb_cv_ask(hcb_brain *b, hcb_out *out, hcb_vec at, hcb_vec from, u32 now);
+HID void hcb_path_forget(hcb_brain *b, u32 key);
+HID void hcb_marksman_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out);   /* 1.3: the marksman: a roof, a step, high ground or a long look */
 HID int hcb_path_ask(hcb_brain *b, hcb_out *out, u32 key, hcb_vec from, hcb_vec to, hcb_vec *wp, int max, u32 now);   /* 1.1: -2 asked (the answer comes with a later look); else as hcb_nav_path */
 HID int hcb_nav_inside(const hcb_brain *b, hcb_vec at);                                    /* 1 = within the square the map covers now */
 HID int hcb_nav_narrow(const hcb_brain *b, hcb_vec at);                                     /* 1 = a doorway: walls on both sides of the cell */

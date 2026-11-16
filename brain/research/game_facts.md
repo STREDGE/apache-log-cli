@@ -671,3 +671,29 @@ The gun task for an NPC in the attack slot with nothing in his main slot is the 
 control tasks create a CTaskSimpleUseGun); whether it FIRES for a task made by the mod could not be proved here - so the mod
 checks it in the game: fire ordered for 3 s and the weapon's rounds (clip + total) unchanged for every guard means "no", is
 logged, and the scripts fire as before.
+
+## N. 1.3 (Helicover 2.0 beta 4): fire on the move, arms on the target, climbing, the medic
+
+Checked on the player's libGTASA.so (DWARF + disassembly), 16.11.2026.
+
+- In the 1.2 game a guard with `CTaskSimpleUseGun` in his attack slot did not move (173 samples, 1 cm a sample); walking
+  guards therefore carry no gun task of the mod's.
+- `CTaskComplexGoToPointAiming` (base of GoToPointShooting 0x633510, 0x50 bytes): +0x18 move state, +0x20 aim entity
+  (registered reference - never changed in place), +0x28 aim point, +0x34 move point, +0x40 target radius, +0x44 slow-down
+  distance, +0x48 bit 0 = new target. `ControlSubTask` 0x633240: `ldrb w8,[x21,#0x48]` (0x394122a8) `tbnz w8,#0`
+  (0x37000808) rebuilds the subtask; otherwise, while the subtask is GoToPointAndStandStill (903), it copies +0x34 into the
+  subtask's +0x1c and sets the subtask's bit 0x4 when they differ (0x6332b0 `ldr s0,[x9,#0x34]!` 0xbc434d20 ... `orr w11,
+  w11,#4` 0x321e016b). So the move point of a running go-and-shoot task is changed by writing +0x34 alone.
+- `IKChainManager_c::PointArm` 0x5d3b94 (first words 6db82beb 6d0123e9 f90013fb a90367fa), this = `g_ikChainMan` 0xc98340.
+  The game's own aiming (`CTaskSimpleUseGun::AimGun` 0x5deef4) calls it every frame as
+  `PointArm(&g_ikChainMan, "CTaskSimpleUseGun", arm, ped, entity, bone, &pos, ARM_IK_AIM_RATE, ARM_IK_AIM_BLEND_TIME, 100.0)`:
+  arm 0 = the weapon arm, 1 = the other arm too for two-handed weapons (CWeaponInfo flags +0x18 bit 3 at +0x19); entity 0 and
+  bone -1 = `pos` is a world point. `ARM_IK_AIM_RATE` (float) and `ARM_IK_AIM_BLEND_TIME` (int) are globals read through the
+  GOT (0x84b390, 0x850eb8). The chain lives in the ped's secondary task slot 5 (`IsArmPointing` / `AbortPointArm` read
+  GetTaskSecondary(5)) - not the attack slot, so it does not hold the man still.
+- `CTaskComplexJump` (0x20 bytes) ctor 0x647668 (`stp x20,x19` a9be4ff4): +0x18 `m_nForceClimb` (int), +0x1c
+  `m_bUsePlayerLaunchForce`. The game gives it to ordinary peds itself: `CEventHandler::ComputeBuildingCollisionResponse`
+  0x453c9c makes `CTaskComplexJump(0)` for a ped that walks into a building, and `CTaskSimpleClimb` directly when an edge is
+  found (0x453d90); `CTaskSimpleJump::ProcessPed` 0x646d18 and `CTaskSimpleInAir::ProcessPed` 0x645bbc call
+  `CTaskSimpleClimb::TestForClimb` 0x645c20. vtable `_ZTV16CTaskComplexJump` (GOT 0x850490).
+- `CPed` +0x6ac health, +0x6b0 `m_nMaxHealth` (float), +0x6b4 armour.

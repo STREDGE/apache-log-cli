@@ -18,6 +18,7 @@ typedef struct cand {
     u8 fire;            /* the fire rule allows shooting him; 0 = cover only */
     u8 taken;           /* shooters already on him */
     u8 free;            /* a man who is not firing at anybody could take him */
+    u8 taken_g;         /* 1.3: ... of them door gunners (they have a token of their own) */
 } cand;
 
 static losent *los_find(hcb_brain *b, u32 from, u32 to) {
@@ -177,7 +178,12 @@ HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         switch (fire ? 99 : s->roe) {
         case 99: break;
         case HCB_ROE_ARMED: case HCB_ROE_LEGACY_ALL: fire = t->cls >= HCB_CLS_THREAT || armed_hostile; break;
-        case HCB_ROE_FOLLOW: fire = t->cj_marked && now - t->cj_marked < (u32)c->follow_ms; break;
+        /* (1.3: WHERE I SHOOT answers an ATTACKER as well - it was the one rule stricter than HOLD FIRE about a man hurting CJ) */
+        case HCB_ROE_FOLLOW: fire = (t->cj_marked && now - t->cj_marked < (u32)c->follow_ms) || t->cls == HCB_CLS_ATTACKER; break;
+        /* 1.3 (the first 2.0 log: HOLD FIRE was on for 290 s, CJ took 150 from policemen and stood at 2 HP for 14 s with three of
+           them on him - and twelve rifles stayed silent): HOLD FIRE is "we do not open fire". A man who has hit or fired at CJ
+           or one of ours (an ATTACKER) is answered all the same: the brain is never switched off, CJ's life comes first. */
+        case HCB_ROE_HOLD: fire = t->cls == HCB_CLS_ATTACKER; break;
         default: fire = 0;
         }
         /* "evade": the police are never fired at, whatever they do */
@@ -192,7 +198,7 @@ HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         {
             float value = t->edps > 1 ? t->edps : 1;
             for (j = n; j > 0 && (fire > cs[j - 1].fire || (fire == cs[j - 1].fire && value > cs[j - 1].value)); j--) cs[j] = cs[j - 1];
-            cs[j].t = t; cs[j].fire = (u8)fire; cs[j].taken = 0; cs[j].value = value;
+            cs[j].t = t; cs[j].fire = (u8)fire; cs[j].taken = 0; cs[j].taken_g = 0; cs[j].value = value;
             n++;
         }
     }
@@ -208,7 +214,7 @@ HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
     }
     for (j = 0; j < n; j++) for (i = 0; i < n_ours; i++) {
         if (!me[i]) continue;
-        if (cs[j].fire && s->roe != HCB_ROE_HOLD) why[i][j] = (u8)check(b, s, me[i], s->our_role[i], cs[j].t, out, &aim_at[i][j], &dummy);
+        if (cs[j].fire) why[i][j] = (u8)check(b, s, me[i], s->our_role[i], cs[j].t, out, &aim_at[i][j], &dummy);
         else { why[i][j] = HCB_HOLD_ROE; aim_at[i][j] = HCB_AIM_BODY; }
     }
 
@@ -236,8 +242,11 @@ HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
             for (j = 0; j < n; j++) {
                 static const float share[4] = {1.0f, 0.55f, 0.3f, 0.15f};
                 float v;
-                if ((why[i][j] != HCB_HOLD_NONE && why[i][j] != SOFT_LOS) || cs[j].taken >= per_target) continue;
-                v = cs[j].value * share[cs[j].taken];
+                /* (1.3: the door gunners have a token of their own - two on a man - beside the guards' three: in the first 2.0 log
+                   "enough on him already" held the gunners 18 % of the time) */
+                if (why[i][j] != HCB_HOLD_NONE && why[i][j] != SOFT_LOS) continue;
+                if (is_gunner(s->our_role[i]) ? cs[j].taken_g >= 2 : cs[j].taken - cs[j].taken_g >= per_target) continue;
+                v = cs[j].value * share[cs[j].taken > 3 ? 3 : cs[j].taken];
                 if (why[i][j] == SOFT_LOS) v *= 0.9f;                         /* a man he is known to see comes first */
                 if (sh && sh->target == cs[j].t->last.id) v *= 1.3f;         /* stay on your man */
                 /* a man who is firing does not drop his target for another one that is looked after: somebody is on it already,
@@ -256,7 +265,7 @@ HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
             }
         }
         if (bi < 0) break;
-        choice[bi] = bj; done[bi] = 1; cs[bj].taken++;
+        choice[bi] = bj; done[bi] = 1; cs[bj].taken++; if (is_gunner(s->our_role[bi])) cs[bj].taken_g++;
     }
     /* nobody we may fire at is left without a rifle while another man has more than he needs: a third rifle goes over to
        anybody, the second one to a man who is attacking */
@@ -269,7 +278,11 @@ HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
             if (from < 0 || cs[choice[i]].taken > cs[choice[from]].taken ||
                 (cs[choice[i]].taken == cs[choice[from]].taken && v_dist(me[i]->pos, cs[j].t->last.pos) < v_dist(me[from]->pos, cs[j].t->last.pos))) from = i;
         }
-        if (from >= 0) { cs[choice[from]].taken--; choice[from] = j; cs[j].taken++; }
+        if (from >= 0) {
+            int g = is_gunner(s->our_role[from]);
+            cs[choice[from]].taken--; if (g && cs[choice[from]].taken_g) cs[choice[from]].taken_g--;
+            choice[from] = j; cs[j].taken++; if (g) cs[j].taken_g++;
+        }
     }
 
     /* (4) orders with human timing; whoever is left covers a suspect or reports why he cannot fire */

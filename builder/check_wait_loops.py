@@ -2,7 +2,7 @@
 Such a cycle freezes the game thread (picture stops, audio keeps playing)."""
 import struct,sys,json
 from asm_v25 import LIB,OUT
-SIZES={1:4,2:2,3:2,4:1,5:2,6:4,9:8}
+SIZES={1:4,2:2,3:2,4:1,5:2,6:4,9:8,15:16}
 def parse(name):
     meta=json.loads((OUT/(name+'.meta.json')).read_text());raw=(OUT/(name+('.csi' if name=='Helicover' else '.csa'))).read_bytes()
     p=0;ins={};order=[]
@@ -10,7 +10,7 @@ def parse(name):
         start=p;op=struct.unpack_from('<H',raw,p)[0];p+=2;args=[]
         for _ in range(LIB[op&0x7fff]['num_params']):
             t=raw[p];p+=1
-            v=struct.unpack_from({1:'<i',2:'<h',3:'<h',4:'<b',5:'<h',6:'<f',9:'8s'}[t],raw,p)[0];p+=SIZES[t];args.append(v)
+            v=struct.unpack_from({1:'<i',2:'<h',3:'<h',4:'<b',5:'<h',6:'<f',9:'8s',15:'16s'}[t],raw,p)[0];p+=SIZES[t];args.append(v)
         ins[start]=(op,args,p);order.append(start)
     return ins,order
 def succ(ins,a):

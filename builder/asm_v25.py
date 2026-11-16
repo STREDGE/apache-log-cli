@@ -29,7 +29,7 @@ for _op,_name,_n in [(0x020a,'SET_CAR_DOORS_LOCKED',2),(0x0a52,'IS_WIDGET_RELEAS
  # beta 6 (parameter counts read from the handlers in libGTASA): the empty decision maker for our people, script text for the notifications
  (0x060b,'SET_CHAR_DECISION_MAKER',2),(0x09f2,'DOES_DECISION_MAKER_EXIST',1),
  (0x033e,'DISPLAY_TEXT',3),(0x033f,'SET_TEXT_SCALE',2),(0x0340,'SET_TEXT_COLOUR',4),(0x0342,'SET_TEXT_CENTRE',1),(0x0344,'SET_TEXT_CENTRE_SIZE',1),
- (0x081c,'SET_TEXT_EDGE',5),(0x03f0,'USE_TEXT_COMMANDS',1)]:
+ (0x081c,'SET_TEXT_EDGE',5),(0x03f0,'USE_TEXT_COMMANDS',1),(0x04ed,'REQUEST_ANIMATION',1)]:
  LIB.setdefault(_op,{'id':'%04X'%_op,'name':_name,'num_params':_n})
 STATE=0x48454d00;CMD=STATE+1;HEART=STATE+2
 # Protocol: commands 1 summon, 2 follow, 3 hold, 4 depart.
@@ -41,6 +41,10 @@ def L(s):return('label',s)
 def S(s):
  assert len(s.encode('ascii'))<=7
  return(9,s)
+def SL(s):
+ """2.0 beta 4: a 16-byte string (type 0x0F, the game's own long text label - an animation name such as CopTraf_Come)."""
+ assert len(s.encode('ascii'))<=15
+ return(15,s)
 class Script:
  def __init__(self):self.rows=[];self.data={};self.auto=0
  def label(self,n):self.rows.append(n)
@@ -59,6 +63,7 @@ class Script:
  def build(self,name,ext):
   def param(t,v,labels=None):
    if t==9:return b'\x09'+v.encode('ascii').ljust(8,b'\0')
+   if t==15:return b'\x0f'+v.encode('ascii').ljust(16,b'\0')
    if t=='label':return b'\1'+struct.pack('<i',-labels[v] if labels else 0)
    return bytes([t])+struct.pack({1:'<i',2:'<h',3:'<h',4:'<b',5:'<h',6:'<f'}[t],v)
   labels={};pos=0;instructions={}
@@ -90,7 +95,7 @@ class Script:
     t=b[p];p+=1
     if op in [2,0x4d,0x50] and i==0:branches.append(-struct.unpack_from('<i',b,p)[0])
     if op==0xdd0 and i==1:pointers.append(-struct.unpack_from('<i',b,p)[0])
-    p+={1:4,2:2,3:2,4:1,5:2,6:4,9:8}[t]
+    p+={1:4,2:2,3:2,4:1,5:2,6:4,9:8,15:16}[t]
    count+=1
   assert p==code_size and all(t in starts for t in branches)
   assert all(t in [labels[n] for n in self.data] for t in pointers)

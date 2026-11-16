@@ -130,7 +130,7 @@ class BrainSim:
             self.shot(w, 1, a, to)
         for victim, attacker in w.damage - self.seen_damage:
             self.events.append(dict(type=h.HCB_EV_DAMAGE, src=attacker if attacker in w.exists and attacker not in w.cars else 0, dst=vid(victim) if victim in w.cars else victim,
-                                    a=[0., 0., 0.], b=[0., 0., 0.], value=20., weapon=w.weapons[attacker] if attacker in w.exists else 49, time=w.now))
+                                    a=[0., 0., 0.], b=[0., 0., 0.], value=20., weapon=49 if attacker in w.cars else w.weapons[attacker] if attacker in w.exists else 49, time=w.now))   # (a car: rammed, as the game says it)
         self.seen_damage = set(w.damage)
 
     def shot(self, w, who, a, to):
@@ -312,6 +312,7 @@ class BrainSim:
                     v[f + 1] = 5 if mine else 0 if p.phase >= h.HCB_PH_ARRIVED else p.move
                     if mine: self.mine_last.add(who)
                 v[f + 6], v[f + 7], v[f + 8], v[f + 9] = p.look.x, p.look.y, p.look.z, p.duty
+                if p.sign or who in getattr(self, 'sign_for', ()): v[f + 9] += 16      # (2.0 beta 4, as the adapter: +16 = wave CJ on)
                 return
 
     def detail(self, w, v, f):

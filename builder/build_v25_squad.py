@@ -66,6 +66,7 @@ MID=[-27.,-18.,-9.,0.,9.,18.,27.]
 
 s.label('INIT');a(0)
 s.set(GROUP,0);s.set(TICK,0);s.set(b.SQ_MSG_NEXT,0);reset_threats();reset_slots()
+a(0x04ed,S('POLICE'))   # 2.0 beta 4: the commander's "come to me" wave (CopTraf_Come of the game's police set)
 s.label('LOOP');a(1,I(0));a(0x01bd,V(12));a(0xddc,I(HEART),V(12))
 s.call('BRAIN_FRAME')                                    # every frame: the brain's word for each guard
 s.get(19,TICK);s.check(0x801d,[V(19),V(12)],'LOOP')   # everything else ten times a second (due when the time HAS come: at 10 fps that is every frame)
@@ -141,7 +142,7 @@ a(0x0e48,V(23),I(9),I(5))   # 23@ number, 24@ what (HCB_SAY_*), 25@ direction fr
 s.get(19,b.SQ_SAY_SEQ);s.check(0x003b,[V(19),V(23)],'SAY_NEW');s.go('SAY_DONE')
 s.label('SAY_NEW');a(0xddc,I(b.SQ_SAY_SEQ),V(23));s.eq(19,-1,'SAY_WHAT');s.go('SAY_DONE')
 s.label('SAY_WHAT')
-for what,keys in [(1,['SQGO'+d for d in 'FRBL']),(2,['SQSAFE']),(3,['SQME'+d for d in 'FRBL']),(4,['SQEVAC']),(5,['SQCMD']),(6,['SQCLR']),(7,['SQS'+d for d in 'FRBL']),(8,['SQMEM']),(9,['SQG'+d for d in 'FRBL']),(10,['SQWATER']),(11,['SQAHEAD']),(12,['SQK'+d for d in 'FRBL'])]:   # 1.5.4: 12 a car on a collision course   # 1.5.3: 9 grenade, 10 CJ in the water, 11 armed men ahead   # 1.5.2: 7 sniper, 8 a place where the detail was attacked before
+for what,keys in [(1,['SQGO'+d for d in 'FRBL']),(2,['SQSAFE']),(3,['SQME'+d for d in 'FRBL']),(4,['SQEVAC']),(5,['SQCMD']),(6,['SQCLR']),(7,['SQS'+d for d in 'FRBL']),(8,['SQMEM']),(9,['SQG'+d for d in 'FRBL']),(10,['SQWATER']),(11,['SQAHEAD']),(12,['SQK'+d for d in 'FRBL']),(13,['SQHOLD']),(14,['SQCD'+d for d in 'FRBL'])]:   # 2.0 beta 4: 13 fire held - we answer only those who hit, 14 the side of the cover (the commander is not at CJ's side to lead him)   # 1.5.4: 12 a car on a collision course   # 1.5.3: 9 grenade, 10 CJ in the water, 11 armed men ahead   # 1.5.2: 7 sniper, 8 a place where the detail was attacked before
  nw=uid('SAY_W');s.eq(24,what,nw)
  if len(keys)==1:
   msg(keys[0],False)
@@ -293,8 +294,19 @@ def guard(k):
  # ---- 1.4: the protective detail. The brain gives each guard his post - where to be, how fast to get there, standing or crouched,
  # where to look - and the fire order (BRAIN_FRAME: SQ_BR_ST, the man). This is only the body: go, crouch, aim, fire.
  s.get(31,b.BRAIN_HELLO);s.check(0x0039,[V(31),I(b.BRAIN_MAGIC)],R)   # never the opcode before the handshake (CLEO would run its parameters as code)
- a(0x0085,V(21),V(G));a(0x0e48,V(21),I(10),I(4))   # 22@ move (-1 no post, 0 stay, 1 walk, 2 run, 3 sprint), 23-25@ the spot, 26@ crouch, 27-29@ look, 30@ duty
+ a(0x0085,V(21),V(G));a(0x0e48,V(21),I(10),I(4))   # 22@ move (-1 no post, 0 stay, 1 walk, 2 run, 3 sprint), 23-25@ the spot, 26@ crouch, 27-29@ look, 30@ duty (+16: wave CJ on)
  s.check(0x8039,[V(22),I(-1)],R)                     # no post (the brain does not have him): nothing new
+ # 2.0 beta 4 (the second 2.0 log: "the commander only talks and stands in front of me"): the brain has him lead CJ to cover himself;
+ # when he is at his point and CJ lags, it says "wave him on" (+16 on the duty). He waves - the game's own police gesture, standing
+ # only, the set loaded, at most once in 3 s; the mod has already turned him to CJ.
+ nowave=uid(P+'NOWAVE');s.check(0x0019,[V(30),I(15)],nowave);a(0x000a,V(30),I(-16))
+ s.eq(22,0,nowave);s.eq(26,0,nowave);s.check(0x04ee,[S('POLICE')],nowave)
+ s.get(31,b.SQ_WAVE+4*TEAM+k);s.check(0x001d,[V(12),V(31)],nowave)
+ a(0x0605,V(G),SL('CopTraf_Come'),S('POLICE'),F(4),I(0),I(0),I(0),I(0),I(-1));a(0x0085,V(31),V(12));a(0x000a,V(31),I(3000));a(0xddc,I(b.SQ_WAVE+4*TEAM+k),V(31))
+ setk_lit(k,'TASK',22);later(k,1800);s.ret()
+ s.label(nowave)
+ # (waving: the gesture is not cut short by a new order)
+ waving=uid(P+'WAVING');s.get(31,fk(k,'TASK'));s.eq(31,22,waving);s.get(31,fk(k,'NEXT'));s.check(0x001d,[V(12),V(31)],R);setk_lit(k,'TASK',0);s.label(waving)
  a(0x00a0,V(G),V(19),V(20),V(31));a(0x0509,V(19),V(20),V(23),V(24),V(19))   # 19@ how far he is from his spot
  s.get(20,BR_ST+k);s.get(21,BR_TG+k)       # 20@ 0 nothing / 1 cover / 2 fire / 3 his man, no fire / 5 by hand; 21@ the man (-1 none)
  # 1.5.3, proportionate force: an unarmed man on foot - the brain says "by hand" (5). The guard puts his gun away (fists in his
@@ -336,7 +348,10 @@ def guard(k):
  s.label(P+'LOOK');s.eq(30,0,P+'SECTOR')
  s.get(31,fk(k,'TASK'));s.eq(31,16,P+'EASE');s.ret()
  s.label(P+'EASE');setk_lit(k,'TASK',16);later(k,5000);s.ret()
- s.label(P+'SECTOR');s.get(31,fk(k,'TASK'));s.eq(31,2,P+'SECTOR_GO');s.get(31,fk(k,'NEXT'));s.check(0x001d,[V(12),V(31)],R)
+ # 2.0 beta 4: while the mod walks the guards (NATIVE) there is no aiming at a point of the sector - in the log men stood aiming at a
+ # wall. The mod turns him to his sector (the game's own turn, no task); the script only notes it.
+ s.label(P+'SECTOR');s.get(31,b.NATIVE);s.eq(31,1,P+'SECTOR_OLD');setk_lit(k,'TASK',2);s.ret()
+ s.label(P+'SECTOR_OLD');s.get(31,fk(k,'TASK'));s.eq(31,2,P+'SECTOR_GO');s.get(31,fk(k,'NEXT'));s.check(0x001d,[V(12),V(31)],R)
  s.label(P+'SECTOR_GO');a(0x0667,V(G),V(27),V(28),V(29),I(2600));setk_lit(k,'TASK',2);later(k,2400);s.ret()
  # ---- casualty report (once per guard)
  s.label(P+'DEAD');s.get(25,fk(k,'DEAD'));s.eq(25,0,R);s.get(25,fk(k,'TASK'));s.eq(25,-1,P+'DEAD_NEW');s.ret()
@@ -385,6 +400,8 @@ TEXTS={'SQXF': '~r~SHOTS AT CJ - FRONT!~w~ Covering him.',
  'SQGF': '~r~GRENADE - FRONT!~w~ Get away from it!', 'SQGR': '~r~GRENADE - RIGHT!~w~ Get away from it!', 'SQGB': '~r~GRENADE - BEHIND!~w~ Get away from it!', 'SQGL': '~r~GRENADE - LEFT!~w~ Get away from it!',
  'SQWATER': '~y~ALPHA:~w~ CJ in the water - helicopter over you, take the rope.',
  'SQAHEAD': '~y~PILOT:~w~ armed men ahead on your way.',
+ 'SQHOLD': '~y~ALPHA:~w~ fire held - we answer only those who hit you or us.',
+ 'SQCDF': '~g~ALPHA:~w~ CJ, cover straight ahead - get in there!', 'SQCDR': '~g~ALPHA:~w~ CJ, cover on your right - get in there!', 'SQCDB': '~g~ALPHA:~w~ CJ, cover behind you - get in there!', 'SQCDL': '~g~ALPHA:~w~ CJ, cover on your left - get in there!',
  'SQKF': '~r~CAR - FRONT!~w~ Get out of its way!', 'SQKR': '~r~CAR - RIGHT!~w~ Get out of its way!', 'SQKB': '~r~CAR - BEHIND!~w~ Get out of its way!', 'SQKL': '~r~CAR - LEFT!~w~ Get out of its way!',
  'SQCMD': '~r~ALPHA DOWN!~w~ BRAVO: I have command.',
  'SQTAP': '~r~ALPHA:~w~ target marked. Moving up - stay behind us.',

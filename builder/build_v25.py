@@ -73,7 +73,7 @@ AUTO_DEPLOY_T=STATE+567   # 1.5.4: when the helicopter may next send the team do
 TEAM2_LAG=STATE+569   # 1.5.4: +0..3 per man of the second four: since when he has been 45 m or more from CJ
 CMD_SRC=STATE+568   # 1.5.4: who wrote CMD last: 1 the menu, 2 the commander's "we pull out", 3 the automatic deployment (the log says it)
 CR_LAND=STATE+566   # 1.5.3: 1 while the pilot is asked for a landing approach (flag 8: down to 15 m over the pad on the way in)
-MODE=STATE+573;RECALL=STATE+574;NATIVE=STATE+575;SQ_TASK_SAID=STATE+576;TEAM2_HEART=STATE+577   # 2.0: the player's mode (0 PROTECT, 1 ASSAULT); "to me" (the brain takes the 1); 1 = the mod walks the guards itself (the squad worker writes it from the brain's answer)
+MODE=STATE+573;RECALL=STATE+574;NATIVE=STATE+575;SQ_TASK_SAID=STATE+576;TEAM2_HEART=STATE+577;HEAL=STATE+578;SQ_WAVE=STATE+579   # 2.0: the player's mode (0 PROTECT, 1 ASSAULT); "to me" (the brain takes the 1); 1 = the mod walks the guards itself (the squad worker writes it from the brain's answer); 2.0 beta 4: HEAL - the medic aboard (the mod: 1 healing, 2 well again; the core says it and puts 0 back), SQ_WAVE..+7 - when each guard may wave CJ on again
 DEPLOY_T0=STATE+565   # 1.5: when the first four went down the ropes (the second four follow them down the same ropes 3 s later)
 COMBAT_PILOT=STATE+564   # 1.5: 1 while the brain's own pilot holds the helicopter on its station in a fight (escort, state 2)
 HELI_SPOT_X=STATE+561;HELI_SPOT_Y=STATE+562;HELI_SPOT_Z=STATE+563   # 1.4.1: the brain's spot for the helicopter in a fight (floats; x = 0 none)
@@ -187,11 +187,17 @@ MESSAGES={'HCLOAD': '~b~PILOT:~w~ inbound to your position.',
  'HCMDP':'~g~ALPHA:~w~ PROTECT. Three by you, four in cover, marksman up high.',
  'HCMDA':'~r~ALPHA:~w~ ASSAULT. Aim or fire at an enemy - we go for him.',
  'HCRCL':'~g~ALPHA:~w~ all back to CJ!',
+ 'HCFR3':'~g~ALPHA:~w~ PROTECT ME - we fire at anyone who threatens you.',
+ 'HCFR4':'~g~ALPHA:~w~ ARMED ONLY - we fire at armed men who threaten you.',
+ 'HCFR2':'~g~ALPHA:~w~ WHERE I SHOOT - we fire with you and at whoever hits you.',
+ 'HCFR0':'~y~ALPHA:~w~ HOLD FIRE - we only answer those who hit you or us.',
+ 'HCMED1':'~g~MEDIC:~w~ hold still, patching you up.',
+ 'HCMED2':'~g~MEDIC:~w~ you are good to go.',
  'HCBURN': '~r~CAR ON FIRE!~w~ Get away from it.',
  'HCEVADE': '~r~TAKING HITS!~w~ Pilot breaking away.',
  'HCSHOT': '~r~TAKING FIRE!~w~ Pilot breaking away.',
- 'HCHELLO': '~b~HELICOVER 2.0 BETA 3~w~ ready. CLEO menu > Helicover.',
- 'HCHELLV': '~b~HELICOVER 2.0 BETA 3~w~ ready. Map marker is off here.'}
+ 'HCHELLO': '~b~HELICOVER 2.0 BETA 4~w~ ready. CLEO menu > Helicover.',
+ 'HCHELLV': '~b~HELICOVER 2.0 BETA 4~w~ ready. Map marker is off here.'}
 # Generate state updates; panel prints messages when the state changes.
 # beta 6: our people do not cower. CREATE_CHAR gives a mission ped the built-in "normal" decision maker (m_norm.ped): punched, shot at or
 # aimed at, it picks "duck and cover" / "flee" like any passer-by. 65542 is the game's built-in EMPTY decision maker (slot 6 | 1<<16, loaded
@@ -216,7 +222,7 @@ c.set(GAME_OK,1);c.label('GAME_SIG_BAD');c.set(COMBAT_PILOT,0);c.set(CR_LAND,0);
 for key in range(PUB,PUB+7):c.set(key,-1)
 for key in range(GROUND_PUB,GROUND_PUB+5):c.set(key,-1)
 c.set(ROPE_COMMAND,0)
-for key,val in [(SQ_SAY_SEQ,-1),(BRAIN_HELLO,0),(POLICE,0),(MISSIONS,0),(MODE,0),(RECALL,0),(NATIVE,0),(SQ_TASK_SAID,-1),(TEAM2_HEART,0),(BR_ALERT,0),(BR_TOP,-1),(BR_THREATS,0),(BR_ATTACKERS,0),(POSE,2),(POSE_DONE,2),(LANG,0),(ROPE_WAIT,0),(LEAVE_N,0),(AFTER_ROPE,0),(DISMISS_NEXT,0),(LEAVE_ROT,0),(ROPE_BUSY,0),(SWAP_MSG,0),(TEAM_CREW,0),(STATE,0),(CMD,0),(OPEN,0),(MODEL,487),(CREW,2),(FIRE,3),(TOUCH,0),(HUD,2),(HP,0),(WEAPON_SETTING,0),(EXIT_MODE,0),(AUTO_EXIT,0),(LOCK_HOLD,0),(ROPE_PENDING,0),(DROP_RESULT,0),(ROPE_TRIES,0),(RETRY_AT,0),(FORCE_ROPE,0),(EXIT_PRESSED,0),(EXIT_LAST,0),(AIR_SEEN,0),(AIR_CALL_NEXT,0),(KILLS,0),(LAST_TGT,-1),(ENGAGED,0),(CLEAR_AT,0),(ORBIT_I,0),(ORBIT_NEXT,0),(TACTICS,0),(ESCORT_PENDING,0),(ST_I,0),(ST_NEXT,0),(HP_PREV,0),(HP_T,0),(EVADE_UNTIL,0),(HELI_SHOT_T,-100000)]:c.set(key,val)
+for key,val in [(SQ_SAY_SEQ,-1),(BRAIN_HELLO,0),(POLICE,0),(MISSIONS,0),(MODE,0),(RECALL,0),(NATIVE,0),(SQ_TASK_SAID,-1),(TEAM2_HEART,0),(HEAL,0),(SQ_WAVE+0,0),(SQ_WAVE+1,0),(SQ_WAVE+2,0),(SQ_WAVE+3,0),(SQ_WAVE+4,0),(SQ_WAVE+5,0),(SQ_WAVE+6,0),(SQ_WAVE+7,0),(BR_ALERT,0),(BR_TOP,-1),(BR_THREATS,0),(BR_ATTACKERS,0),(POSE,2),(POSE_DONE,2),(LANG,0),(ROPE_WAIT,0),(LEAVE_N,0),(AFTER_ROPE,0),(DISMISS_NEXT,0),(LEAVE_ROT,0),(ROPE_BUSY,0),(SWAP_MSG,0),(TEAM_CREW,0),(STATE,0),(CMD,0),(OPEN,0),(MODEL,487),(CREW,2),(FIRE,3),(TOUCH,0),(HUD,2),(HP,0),(WEAPON_SETTING,0),(EXIT_MODE,0),(AUTO_EXIT,0),(LOCK_HOLD,0),(ROPE_PENDING,0),(DROP_RESULT,0),(ROPE_TRIES,0),(RETRY_AT,0),(FORCE_ROPE,0),(EXIT_PRESSED,0),(EXIT_LAST,0),(AIR_SEEN,0),(AIR_CALL_NEXT,0),(KILLS,0),(LAST_TGT,-1),(ENGAGED,0),(CLEAR_AT,0),(ORBIT_I,0),(ORBIT_NEXT,0),(TACTICS,0),(ESCORT_PENDING,0),(ST_I,0),(ST_NEXT,0),(HP_PREV,0),(HP_T,0),(EVADE_UNTIL,0),(HELI_SHOT_T,-100000)]:c.set(key,val)
 c.label('IDLE');c.call('NAP');c.call('RESOLVE_LANG');a(0x01bd,V(20));a(0xddc,I(HEART),V(20));c.get(19,HELLO_AT);c.eq(19,-1,'HELLO_CHECK');c.go('HELLO_DONE')
 c.label('HELLO_CHECK');c.eq(19,0,'HELLO_DUE');a(0x0085,V(19),V(20));a(0x000a,V(19),I(5000));a(0xddc,I(HELLO_AT),V(19));c.go('HELLO_DONE')
 c.label('HELLO_DUE');c.check(0x001d,[V(20),V(19)],'HELLO_DONE');c.check(0x0256,[I(0)],'HELLO_DONE');c.set(HELLO_AT,-1);c.get(19,GAME_OK);c.eq(19,1,'HELLO_OLD');msg(c,'HCHELLO');c.go('HELLO_DONE')
@@ -276,6 +282,11 @@ c.label('TEAM_CHECK_PATROL');c.eq(25,12,'FOLLOW');c.go('PATROL_START')
 # long frozen holds (awaiting a choice, rope work) go back to the normal 100 ms tick.
 # beta 5: the core still works every 100 ms, but an order does not wait for the end of the nap: the nap is slept frame by frame and
 # ends the moment CMD is set (the menu page then follows the order on the next frame instead of up to 0.1 s later). Uses 17@, 19@.
+# 2.0 beta 4, the medic aboard: the mod heals CJ (5 HP a second up to his own maximum) while he sits in our helicopter and says so
+# through HEAL (1 healing, 2 well again); the core says it once and puts 0 back. Uses 19@.
+c.label('MEDIC');c.get(19,HEAL);c.eq(19,1,'MEDIC_NOT1');c.set(HEAL,0);msg(c,'HCMED1');c.ret()
+c.label('MEDIC_NOT1');c.eq(19,2,'MEDIC_RET');c.set(HEAL,0);msg(c,'HCMED2')
+c.label('MEDIC_RET');c.ret()
 c.label('NAP');a(0x01bd,V(19));a(0x000a,V(19),I(100));a(0xddc,I(NAP_UNTIL),V(19))
 c.label('NAP_LOOP');a(1,I(0));c.get(19,CMD);c.eq(19,0,'NAP_END');a(0x01bd,V(19));c.get(17,NAP_UNTIL);c.check(0x801d,[V(17),V(19)],'NAP_LOOP')
 c.label('NAP_END');c.ret()
@@ -287,7 +298,7 @@ c.label('TICK_NORMAL_WAIT');c.call('NAP')
 c.label('TICK_AFTER_WAIT')
 if DEBUG_BREADCRUMBS:
  c.get(19,STATE);a(0x0012,V(19),I(100));c.get(17,DBG_CODE);a(0x005a,V(19),V(17));c.get(17,DBG_LAST);c.check(0x803b,[V(19),V(17)],'DBG_SAME');a(0x01e5,S('HCDBG'),V(19),I(600000),I(1));a(0xddc,I(DBG_LAST),V(19));c.label('DBG_SAME')
-a(0x01bd,V(20));a(0xddc,I(HEART),V(20));healthcheck(c,'CLEANUP');c.call('RESOLVE_LANG');c.call('CHANGE_MODEL');c.call('CHANGE_CREW');c.call('CHANGE_POSE');c.call('PUBLISH');c.get(7,STATE);a(0x0227,V(5),V(6));a(0xddc,I(HP),V(6));c.call('EVADE_CHECK');c.call('TRACK_COMBAT');c.call('FLIGHT_AVOID');c.call('UNSTICK');c.call('EXIT_BUTTON');c.get(7,STATE)
+a(0x01bd,V(20));a(0xddc,I(HEART),V(20));healthcheck(c,'CLEANUP');c.call('RESOLVE_LANG');c.call('CHANGE_MODEL');c.call('CHANGE_CREW');c.call('CHANGE_POSE');c.call('PUBLISH');c.get(7,STATE);a(0x0227,V(5),V(6));a(0xddc,I(HP),V(6));c.call('EVADE_CHECK');c.call('TRACK_COMBAT');c.call('FLIGHT_AVOID');c.call('UNSTICK');c.call('EXIT_BUTTON');c.call('MEDIC');c.get(7,STATE)
 c.get(19,FIRE);c.check(0x003b,[V(19),V(23)],'UPDATE_FIRE');c.go('HEALTH')
 c.label('UPDATE_FIRE');c.call('APPLY_FIRE')
 c.label('HEALTH');c.eq(7,15,'HEALTH_LANDED_CHECK');c.go('DISPATCH')
@@ -1041,7 +1052,7 @@ p.label('HP_GUARD');a(0x0085,V(27),V(18));a(0x0062,V(27),V(16));p.check(0x0019,[
 NONE_STATES=[0,5,6];BUSY_STATES=[1,4,13,16,17]
 GROUND_STATES=[st for st in STATES if st not in NONE_STATES+BUSY_STATES]
 PROFILES=('en','game');SUFFIX=('','_U')
-FIRE_VALUES=[3,4,2,0];CREW_VALUES=[0,1,2];MODEL_VALUES=[487,497,425];WEAPON_VALUES=[0,29,30,31,34]
+FIRE_VALUES=[3,0,4,2];CREW_VALUES=[0,1,2];MODEL_VALUES=[487,497,425];WEAPON_VALUES=[0,29,30,31,34]
 MAP_STATES=(25,21,22);GROVE_STATES=(20,10,11)
 def Tx(key,prof,mark=False):return i18n.menu_text(key,prof)+(i18n.MARK.encode('ascii') if mark else b'')
 def main_rows(st,sit,x,prof='en'):
@@ -1138,7 +1149,7 @@ p.label('MODE_TO_PROTECT');p.set(MODE,0);say(p,'HCMDP');p.go('FORCE_REFRESH')
 p.label('FIRE_NOT_MODE');p.eq(1,1,'FIRE_NOT_RECALL');p.set(RECALL,1);say(p,'HCRCL');p.go('FORCE_REFRESH')
 p.label('FIRE_NOT_RECALL')
 for idx,val in enumerate(FIRE_VALUES):
- nxt='FIRE_OPTION_NEXT_'+str(idx);p.eq(1,idx+2,nxt);p.set(FIRE,val);p.go('FORCE_REFRESH');p.label(nxt)
+ nxt='FIRE_OPTION_NEXT_'+str(idx);p.eq(1,idx+2,nxt);p.set(FIRE,val);say(p,'HCFR%d'%val);p.go('FORCE_REFRESH');p.label(nxt)   # 2.0 beta 4: the menu says which rule is in force
 for idx,key in [(len(FIRE_VALUES)+2,POLICE)]:
  nxt='FIRE_SWITCH_NEXT_'+str(idx);off='FIRE_SWITCH_OFF_'+str(idx);p.eq(1,idx,nxt);p.get(9,key);p.eq(9,0,off);p.set(key,1);p.go('FORCE_REFRESH');p.label(off);p.set(key,0);p.go('FORCE_REFRESH');p.label(nxt)
 p.go('OPEN_MAIN')
@@ -1227,7 +1238,7 @@ p.label('CLOSE');p.call('UNLOAD');a(0xdf3);p.set(OPEN,0);p.set(0,0);a(6,V(10),I(
 VERSION='1.4'
 for st,sit,x in MAIN_VARIANTS:
  for prof,suf in zip(PROFILES,SUFFIX):
-  title=(i18n.encode('HELICOVER 2.0 BETA 3','en') if prof=='en' else i18n.menu_text('TITLE_READY',prof)) if st==0 else i18n.state_title(st,STATES[st],prof)
+  title=(i18n.encode('HELICOVER 2.0 BETA 4','en') if prof=='en' else i18n.menu_text('TITLE_READY',prof)) if st==0 else i18n.state_title(st,STATES[st],prof)
   p.blob('MAIN_%d_%d_%d'%(st,sit,x)+suf,title,main_rows(st,sit,x,prof))
 for prof,suf in zip(PROFILES,SUFFIX):
  if prof=='en':p.blob('OFFLINE_MENU',i18n.menu_text('OFFLINE_TITLE',prof),[i18n.menu_text('OFFLINE_ROW',prof)])   # the core is missing, so the language is unknown: English only

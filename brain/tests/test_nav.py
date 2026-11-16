@@ -132,7 +132,7 @@ for k in range(400):
     if asked4 is None and any(sc.posts[w].move == 4 for w in team): asked4 = k
 inner = [w for w in team if sc.posts[w].job in (HCB_ROLE_LEAD, HCB_ROLE_CLOSE, HCB_ROLE_CLOSE2)]
 assert asked4 is not None and asked4 < 150 and (first_fail is None or first_fail > asked4), ('the path network is asked within seconds, before anybody "fails"', asked4, first_fail)
-assert all(d2(sc.peds[w]['pos'], sc.cj['pos']) < 3.5 for w in inner), 'and the three are with CJ in the yard'
+assert all(d2(sc.peds[w]['pos'], sc.cj['pos']) < 4.5 for w in inner), 'and the three are with CJ in the yard (at their places: the bodyguard ahead is 4 m out)'
 passed('1.2 "no way on the map" is not "stand still": the men go straight at their places, then by the game\'s path network (asked after %.1f s) - the three are with CJ inside the yard the map takes for closed' % (asked4 / 10.))
 
 # ------------------------------------------------------------------ the map goes with CJ

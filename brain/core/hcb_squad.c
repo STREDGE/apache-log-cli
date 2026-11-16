@@ -158,7 +158,8 @@ HID void hcb_squad_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
     /* the squad's front: the middle of the men who are out (the bodyguards of a hurt CJ do not count) */
     danger_cj = cj->health < b->cfg.cj_low_hp || b->alert >= HCB_ALERT_EVACUATE;
     front.x = front.y = front.z = 0; k = 0;
-    for (i = 0; i < n; i++) if (!(danger_cj && (post[i]->job == HCB_ROLE_CLOSE || post[i]->job == HCB_ROLE_CLOSE2))) { front = v_add(front, men[i]->pos); k++; }
+    /* (1.3: the two bodyguards stay with CJ in ASSAULT and the marksman keeps his height: neither is in the front) */
+    for (i = 0; i < n; i++) if (post[i]->job != HCB_ROLE_CLOSE && post[i]->job != HCB_ROLE_CLOSE2 && post[i]->job != HCB_ROLE_MARKSMAN) { front = v_add(front, men[i]->pos); k++; }
     if (!k) { out->task = q->task; return; }
     front = v_mul(front, 1.0f / (float)k);
     q->front = front;
@@ -166,6 +167,25 @@ HID void hcb_squad_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
     D = d2(T, front);
     q->target_dist = D;
     out->target = seen ? q->target : 0; out->target_dist = D; out->target_at = T;
+    /* 1.3 (the first 2.0 log: CJ died alone while the whole squad was 16-60 m off on the assault): CJ hurt, an evacuation, or
+       CJ 60 m from the squad - everybody back to him, for 8 s at least */
+    {   /* (CJ going away from the squad at a run: back to him from 35 m - the plan's "CJ has left the squad behind"; measured from the
+           men who are out, not the commander, who comes back to CJ by himself) */
+        hcb_vec out4 = {0, 0, 0}, away;
+        float la, va;
+        int k4 = 0;
+        for (i = 0; i < n; i++) if (post[i]->job == HCB_ROLE_POINT || post[i]->job == HCB_ROLE_POINT2 || post[i]->job == HCB_ROLE_REAR || post[i]->job == HCB_ROLE_REAR2) { out4 = v_add(out4, men[i]->pos); k4++; }
+        out4 = k4 ? v_mul(out4, 1.0f / (float)k4) : front;
+        away = flat(v_sub(cjp, out4));
+        la = v_len(away); va = la > 0.1f ? (cj->vel.x * away.x + cj->vel.y * away.y) / la : 0.0f;
+        if (danger_cj || la > 60.0f || (la > 35.0f && va > 2.0f)) q->regroup_until = now + 8000;
+    }
+    if (q->regroup_until && now < q->regroup_until) {
+        set_task(q, HCB_TASK_REGROUP, now);
+        for (i = 0; i < 8; i++) q->apost_ok[i] = 0;
+        out->task = q->task;
+        return;
+    }
     /* the task */
     if (q->task == HCB_TASK_ESCORT || q->task == HCB_TASK_SHIELD || q->task == HCB_TASK_EXTRACT || q->task == HCB_TASK_REGROUP)
         set_task(q, D > 45.0f ? HCB_TASK_APPROACH : D > 20.0f ? HCB_TASK_GATHER : HCB_TASK_BOUND, now);
@@ -189,10 +209,11 @@ HID void hcb_squad_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         float lead_adv = 0;
         for (i = 0; i < out->n_orders; i++) if (out->orders[i].fire) fire_ok = 1;
         if (!seen) fire_ok = 1;                                        /* nobody to fire at: nothing to wait for */
+        if (s->roe == HCB_ROE_HOLD) fire_ok = 1;                       /* (1.3: under HOLD FIRE nobody covers by fire: the pairs do not wait for it for ever) */
         if (fire_ok && !q->bound_since) q->bound_since = now ? now : 1;
         /* whose turn: the pair on the move has arrived (or 6 s have passed) -> the other pair */
         for (i = 0; i < n; i++) {
-            int pair = post[i]->job == HCB_ROLE_CLOSE || post[i]->job == HCB_ROLE_POINT ? 0 : post[i]->job == HCB_ROLE_CLOSE2 || post[i]->job == HCB_ROLE_POINT2 ? 1 : -1;
+            int pair = post[i]->job == HCB_ROLE_POINT ? 0 : post[i]->job == HCB_ROLE_POINT2 ? 1 : -1;
             int m;
             if (pair != q->mover) continue;
             for (m = 0; m < 8; m++) if (q->apost_ok[m] && q->apost_id[m] == post[i]->who && d2(men[i]->pos, q->apost[m]) > 1.6f) moved_all = 0;
@@ -205,14 +226,15 @@ HID void hcb_squad_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
             hcb_vec at = men[i]->pos, want;
             int slot = -1, m, pair = -1, fire_team = 0, w = 0, is_lead = p->job == HCB_ROLE_LEAD, hold = 0;
             u8 duty = HCB_DUTY_BOUND, crouch = 0;
-            if (danger_cj && (p->job == HCB_ROLE_CLOSE || p->job == HCB_ROLE_CLOSE2)) continue;      /* back at CJ: the detail's post stands */
+            /* 1.3: the two bodyguards never leave CJ (the detail's post stands); the commander goes with the squad only while CJ is
+               within 25 m of it; the marksman's place is his own (hcb_marksman_plan) */
+            if (p->job == HCB_ROLE_CLOSE || p->job == HCB_ROLE_CLOSE2 || p->job == HCB_ROLE_MARKSMAN) continue;
+            if (is_lead && d2(cjp, front) > 25.0f) continue;
             for (m = 0; m < 8; m++) if (q->apost_id[m] == p->who) slot = m;
             if (slot < 0) { for (m = 0; m < 8; m++) if (!q->apost_ok[m]) { slot = m; break; } if (slot < 0) slot = i; q->apost_id[slot] = p->who; q->apost_ok[slot] = 0; }
             switch (p->job) {
-            case HCB_ROLE_CLOSE: pair = 0; w = 0; break;
-            case HCB_ROLE_POINT: pair = 0; w = 1; break;
-            case HCB_ROLE_CLOSE2: pair = 1; w = 0; break;
-            case HCB_ROLE_POINT2: pair = 1; w = 1; break;
+            case HCB_ROLE_POINT: pair = 0; w = 0; break;     /* (1.3: the assault pair is POINT and POINT2, one a rush each in turn) */
+            case HCB_ROLE_POINT2: pair = 1; w = 0; break;
             case HCB_ROLE_REAR: fire_team = 1; w = 0; break;
             case HCB_ROLE_REAR2: case HCB_ROLE_CLOSE3: fire_team = 1; w = 1; break;
             case HCB_ROLE_MARKSMAN: fire_team = 1; w = 2; break;
@@ -299,5 +321,174 @@ HID void hcb_squad_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
             if (hold && d2(men[i]->pos, at) >= 1.6f) p->move = 2;       /* (not yet at the place he is to hold) */
             p->act = duty == HCB_DUTY_BOUND && (q->task == HCB_TASK_BOUND || q->task == HCB_TASK_SEARCH) && pair >= 0 ? HCB_ACT_SPRINT : 0;
         }
+    }
+}
+
+/* ---------- 1.3: the marksman (the player: "no roof near - let him improvise a place to watch from; a roof he cannot get up -
+   let him see that himself and get up some real way; changing places - a real, quick way down") ----------
+   In this order, the first that will do within 60 m of CJ:
+     a roof the adapter has found (4-35 m over CJ's feet, CJ seen from it) that he can get up on foot: a wall up to 2.8 m over his
+       feet is climbed (the game's own jump-and-climb, the one CJ uses), a higher one up to 4.6 m from the roof of a car standing
+       within 7 m of it (two climbs);
+     high ground: a cell of the brain's map 2 m and more over CJ's feet, 12-45 m off (stairs, a bank, a raised car park);
+     the roof of a big vehicle standing within 35 m (bus, truck, van): climbed;
+     a long look: a spot 28 m out on the side the threat is (or CJ is going), down on one knee, watching.
+   He sees for himself that he cannot get up: three climbs or 20 s at one place and it is left alone for a minute.
+   Once up he stays while CJ is within 60 m of him; CJ 10 s beyond that - he comes down the quickest way: off the edge nearest
+   his next place (the mod slows a fall of ours), and on. */
+#define MK_NONE 0
+#define MK_ROOF 1           /* going for a roof he can climb */
+#define MK_STEP 2           /* ... by way of a car beside it */
+#define MK_HIGHGROUND 3
+#define MK_VROOF 4          /* the roof of a big vehicle */
+#define MK_LONG 5
+#define MK_UP 6             /* he is up there: he stays */
+static int big_vehicle(int model) {
+    static const short M[] = {431, 437, 403, 514, 515, 456, 499, 498, 609, 414, 455, 578, 524, 443, 428, 427, 601, 528, 433, 573, 408, 440, 482, 413, 459, 588, 423};
+    unsigned i;
+    for (i = 0; i < sizeof M / sizeof M[0]; i++) if (M[i] == model) return 1;
+    return 0;
+}
+static int mk_is_bad(const squad *q, hcb_vec at, u32 now) {
+    int i;
+    for (i = 0; i < 4 && i < q->mk_n_bad; i++) if (q->mk_bad_t[i] && now - q->mk_bad_t[i] < 60000 && d2(q->mk_bad[i], at) < 4.0f) return 1;
+    return 0;
+}
+static void mk_mark_bad(squad *q, hcb_vec at, u32 now) {
+    int i = q->mk_n_bad < 4 ? q->mk_n_bad++ : (int)(now / 1000 % 4);
+    q->mk_bad[i] = at; q->mk_bad_t[i] = now ? now : 1;
+}
+HID void hcb_marksman_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
+    squad *q = &b->sq;
+    u32 now = s->time;
+    hcb_post *p = 0;
+    const hcb_ped *me = 0, *cj = &s->player;
+    hcb_vec cjp = cj->pos, look;
+    float feet, here;
+    int i;
+    for (i = 0; i < out->n_posts; i++) if (out->posts[i].job == HCB_ROLE_MARKSMAN) { p = &out->posts[i]; me = hcb_ped_of(s, p->who); break; }
+    if (s->recall) q->mk_down_until = now + 20000;             /* ("to me": down, and no new high place for 20 s) */
+    if (!p || !me || !s->body || hcb_squad_roping(s, p->who) || me->vehicle || cj->vehicle || s->interior || s->recall || (cj->flags & HCB_PF_DEAD)
+        || (q->mk_down_until && now < q->mk_down_until)) {
+        q->mk_state = MK_NONE; q->mk_far_since = 0; q->mk_up = 0;
+        return;
+    }
+    if (q->mk_id != p->who) { q->mk_id = p->who; q->mk_state = MK_NONE; q->mk_n_bad = 0; q->mk_up = 0; }
+    feet = cjp.z - 1.0f; here = me->pos.z - 1.0f;
+    look = p->look;
+    if (b->dt.threat_mem_t && now - b->dt.threat_mem_t < 20000) { look = b->dt.threat_mem; look.z += 0.6f; }
+    if (f_abs(me->pos.z - q->mk_prog_pos.z) > 0.8f) { q->mk_prog_pos = me->pos; q->mk_prog_t = now ? now : 1; q->mk_best_d = 1e9f; }   /* (up or down: progress) */
+    /* up: he stays while CJ is within 60 m (10 s beyond it and he comes down) */
+    if (here > feet + 2.0f && (q->mk_state == MK_UP || q->mk_state == MK_ROOF || q->mk_state == MK_STEP || q->mk_state == MK_VROOF || q->mk_state == MK_HIGHGROUND || q->mk_up || here > feet + 3.5f)) {
+        if (d2(me->pos, cjp) > 60.0f) { if (!q->mk_far_since) q->mk_far_since = now ? now : 1; } else q->mk_far_since = 0;
+        if (!q->mk_far_since || now - q->mk_far_since < 10000) {
+            if (q->mk_state == MK_STEP && here < q->mk_at.z - 2.0f) goto plan;      /* (on the car on his way up: on to the roof) */
+            q->mk_state = MK_UP; q->mk_up = 1;
+            p->at = me->pos; p->via = me->pos; p->via2 = me->pos; p->move = 0; p->crouch = 0; p->duty = HCB_DUTY_HOLD; p->climb = 0;
+            p->look = look;
+            return;
+        }
+        q->mk_state = MK_NONE; q->mk_up = 0;                       /* down: the plan below gives him his next place; he walks off the edge */
+    } else q->mk_up = 0;
+    q->mk_far_since = 0;
+plan:
+    if (b->alert >= HCB_ALERT_EVACUATE || v_len(cj->vel) > 2.5f) { q->mk_state = MK_NONE; return; }   /* (an evacuation, or CJ on his way: he goes with the detail) */
+    /* a plan is kept until it has worked, failed or is no good any more; a new one is looked for every 4 s */
+    if (q->mk_state != MK_NONE && q->mk_state != MK_UP) {
+        int stale = d2(q->mk_at, cjp) > 62.0f || now - q->mk_since > 30000;
+        if (stale) { if (q->mk_state != MK_LONG && q->mk_state != MK_HIGHGROUND) mk_mark_bad(q, q->mk_at, now); q->mk_state = MK_NONE; }
+    }
+    if (q->mk_state == MK_NONE || (q->mk_state == MK_LONG && now - q->mk_pick_t > 4000)) {
+        int best = -1, n = s->n_high < HCB_MAX_HIGH ? s->n_high : HCB_MAX_HIGH, j;
+        float bd = 1e9f;
+        hcb_vec step = me->pos;
+        u8 how = MK_NONE;
+        q->mk_pick_t = now ? now : 1;
+        /* (1) a roof he can get up */
+        for (i = 0; i < n; i++) {
+            const hcb_high *h = &s->high[i];
+            float up = h->at.z - 1.0f - here, dc = d2(h->at, cjp), dm = d2(h->at, me->pos);
+            u8 k = MK_NONE;
+            hcb_vec st = me->pos;
+            if (!h->sees_cj || dc < 10.0f || dc > 60.0f || mk_is_bad(q, h->at, now)) continue;
+            if (up <= 2.8f) k = MK_ROOF;
+            else if (up <= 4.6f)
+                for (j = 0; j < (int)s->n_vehs && j < HCB_MAX_VEHS; j++) {
+                    const hcb_veh *v = &s->vehs[j];
+                    if (v->cls != HCB_VC_CAR || v->driver || v_len(v->vel) > 0.5f || d2(v->pos, h->at) > 7.0f || h->at.z - 1.0f - (v->pos.z + 0.8f) > 2.8f) continue;
+                    k = MK_STEP; st = v->pos; break;
+                }
+            if (k != MK_NONE && dm < bd) { bd = dm; best = i; how = k; step = st; }
+        }
+        if (best >= 0) { q->mk_at = s->high[best].at; q->mk_step = step; }
+        /* (2) high ground on the map */
+        if (best < 0 && b->nv.ok) {
+            const nav *nv = &b->nv;
+            float bh = 0;
+            int x, y;
+            for (y = 0; y < NAV_N; y += 2) for (x = 0; x < NAV_N; x += 2) {
+                const navcell *c = &nv->c[y * NAV_N + x];
+                hcb_vec at;
+                float dc;
+                if (c->st != 1 || c->z < feet + 2.0f || c->z > feet + 15.0f) continue;
+                at.x = (float)(nv->ox + x) + 0.5f; at.y = (float)(nv->oy + y) + 0.5f; at.z = c->z + 1.0f;
+                dc = d2(at, cjp);
+                if (dc < 12.0f || dc > 45.0f || mk_is_bad(q, at, now)) continue;
+                if (c->z - feet - dc * 0.02f > bh) { bh = c->z - feet - dc * 0.02f; q->mk_at = at; best = 1; }
+            }
+            if (best >= 0) how = MK_HIGHGROUND;
+        }
+        /* (3) the roof of a big vehicle */
+        if (best < 0)
+            for (j = 0; j < (int)s->n_vehs && j < HCB_MAX_VEHS; j++) {
+                const hcb_veh *v = &s->vehs[j];
+                float dc = d2(v->pos, cjp);
+                if (v->cls != HCB_VC_CAR || !big_vehicle(v->model) || v->driver || v_len(v->vel) > 0.5f || dc > 35.0f || dc < 6.0f || mk_is_bad(q, v->pos, now)) continue;
+                if (dc < bd) { bd = dc; q->mk_at = v->pos; q->mk_at.z += 2.6f; best = j; how = MK_VROOF; }
+            }
+        /* (4) a long look - in a fight (in peace his place on the far side of the detail is a look-out already) */
+        if (best < 0 && b->alert >= HCB_ALERT_THREAT) {
+            hcb_vec dir = look.x != 0.0f || look.y != 0.0f ? v_sub(look, cjp) : cj->fwd;
+            float l;
+            dir.z = 0; l = v_len(dir);
+            if (l < 0.1f) { dir = cj->fwd; dir.z = 0; l = v_len(dir); if (l < 0.1f) { dir.x = 0; dir.y = 1; l = 1; } }
+            q->mk_at = v_add(cjp, v_mul(dir, 28.0f / l)); q->mk_at.z = cjp.z;
+            how = MK_LONG;
+        }
+        if (how != q->mk_state) { q->mk_state = how; q->mk_since = now ? now : 1; q->mk_tries = 0; q->mk_climb_t = 0; q->mk_z0 = here; q->mk_best_d = 1e9f; q->mk_prog_t = now ? now : 1; }
+        if (how == MK_NONE) return;                                /* (nothing better: the squad's / the detail's place stands) */
+    }
+    /* the way there */
+    p->look = look; p->climb = 0;
+    if (q->mk_state == MK_LONG) {
+        p->at = q->mk_at; p->duty = HCB_DUTY_HOLD; p->crouch = d2(me->pos, q->mk_at) < 1.5f; if (p->move == 0 && d2(me->pos, q->mk_at) > 1.3f) p->move = 2;
+        return;
+    }
+    if (q->mk_state == MK_HIGHGROUND) {
+        p->at = q->mk_at; p->duty = HCB_DUTY_HOLD; p->crouch = 0; if (p->move == 0 && d2(me->pos, q->mk_at) > 1.3f) p->move = 2;
+        if (now - q->mk_since > 20000 && here < q->mk_at.z - 2.0f) { mk_mark_bad(q, q->mk_at, now); q->mk_state = MK_NONE; }
+        return;
+    }
+    {   /* ROOF, STEP, VROOF: walk to the wall (or the car), then climb */
+        hcb_vec wall = q->mk_state == MK_STEP && here < q->mk_step.z ? q->mk_step : q->mk_at;   /* (feet below the car's middle: not on it yet) */
+        float dh = d2(me->pos, wall);
+        int stalled;
+        /* (no nearer to the wall by 0.3 m in a second: he is at it - walking along it, as the game's walk-round makes him, is no progress) */
+        if (dh < q->mk_best_d - 0.3f) { q->mk_best_d = dh; q->mk_prog_t = now ? now : 1; }
+        stalled = q->mk_prog_t && now - q->mk_prog_t > 1000;
+        p->at = wall; p->duty = HCB_DUTY_BOUND; p->crouch = 0; if (p->move == 0) p->move = 2;
+        if (q->mk_climb_t) {                                       /* climbing: up, or not */
+            if (here > q->mk_z0 + 1.0f) { q->mk_climb_t = 0; q->mk_z0 = here; q->mk_tries = 0; }
+            else if (now - q->mk_climb_t > 3500) {
+                q->mk_climb_t = 0;
+                if (++q->mk_tries >= 3) { mk_mark_bad(q, q->mk_at, now); q->mk_state = MK_NONE; return; }
+            } else { p->climb = 1; return; }
+        }
+        /* at the wall: within 2.2 m of a car, or blocked within 9 m of the roof (the wall is between him and it) */
+        if ((wall.x == q->mk_step.x && wall.y == q->mk_step.y && q->mk_state == MK_STEP && dh < 2.2f) || (q->mk_state == MK_VROOF && dh < 2.4f)
+            || (dh < 9.0f && stalled)) {
+            q->mk_climb_t = now ? now : 1; q->mk_z0 = here; p->climb = 1;
+        }
+        if (now - q->mk_since > 20000 && !q->mk_climb_t && here < q->mk_at.z - 2.0f) { mk_mark_bad(q, q->mk_at, now); q->mk_state = MK_NONE; }
     }
 }

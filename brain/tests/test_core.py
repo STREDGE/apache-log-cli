@@ -230,9 +230,15 @@ def car(x, y, vel, cj_in_car=False, driver_type=CIV, **kw):
 
 
 sc, v = car(-20, 0.5, (15., 0., 0.))                   # 1.3 s away, straight at him
+assert v not in classes(sc), '1.3: one look on the course is not yet a ram (the game\'s drivers brake and swerve round a man)'
+sc.step(1)
 assert classes(sc)[v] == (HCB_CLS_THREAT, HCB_WHY_RAMMING) and sc.brain.out.alert == HCB_ALERT_THREAT
 sc, v = car(-20, 6, (15., 0., 0.))                     # passes 6 m in front
 assert v not in classes(sc)
+sc, v = car(-20, 2.0, (15., 0., 0.)); sc.step(2)       # 1.3: passes 2 m beside him (a car going by CJ standing at the kerb)
+assert v not in classes(sc), 'a car passing 2 m by is traffic, not a ram'
+sc, v = car(-26, 0.3, (15., 0., 0.)); sc.step(2)       # 1.3: dead on, but 1.6-1.8 s away
+assert v not in classes(sc), 'dead on but further than 1.5 s: not yet'
 sc, v = car(-8, 0.5, (5., 0., 0.))                     # crawling: 1.6 s away, but at walking pace
 assert v not in classes(sc)
 sc, v = car(-60, 0.5, (15., 0., 0.))                   # 4 s away
@@ -241,7 +247,7 @@ sc, v = car(20, 0.5, (15., 0., 0.))                    # driving away
 assert v not in classes(sc)
 sc, v = car(-20, 0.5, (15., 0., 0.), cj_in_car=True)   # CJ is in a car himself
 assert v not in classes(sc)
-passed('A car whose path comes within 2.5 m of CJ in the next 2 s at 8 m/s or more is called out as RAMMING; passing wide, slow, far, leaving, or CJ in a car - not')
+passed('1.3: a car is RAMMING when on two looks running its path comes within 0.8 m of CJ within 1.5 s at 8 m/s or more (the first 2.0 log: 19 cars called at 2.5 m / 2 s, none hit CJ); passing 2 m by, wide, slow, far, leaving, or CJ in a car - not')
 sc = Scene()
 b1 = sc.veh(8, 0, health=200., flags=HCB_VF_BURNING)
 b2 = sc.veh(30, 0, health=200., flags=HCB_VF_BURNING)
@@ -298,19 +304,28 @@ sc.step(2)
 assert calm_cop not in classes(sc)
 passed('With stars up an armed policeman within 40 m is a THREAT whichever way he is looking (he is coming for CJ); a gang member looking away, a policeman behind a wall or without stars is not')
 
-sc, v = car(-20, 0.5, (15., 0., 0.))
+sc, v = car(-20, 0.5, (15., 0., 0.)); sc.step(1)
 drv = sc.vehs[v]['driver']
-assert classes(sc)[v] == (HCB_CLS_THREAT, HCB_WHY_RAMMING) and classes(sc)[drv] == (HCB_CLS_THREAT, HCB_WHY_RAMMING)
+assert classes(sc)[v] == (HCB_CLS_THREAT, HCB_WHY_RAMMING) and drv not in classes(sc), '1.3: the car is called, its driver is not a man to shoot until it has hit somebody'
 sc.vehs[v]['vel'] = [12., 9., 0.]                      # it swerves: on this course it would miss by metres
 sc.step(1)
-assert classes(sc)[v] == (HCB_CLS_THREAT, HCB_WHY_RAMMING) and classes(sc)[drv][0] == HCB_CLS_THREAT, 'a swerve does not clear it'
+assert classes(sc)[v] == (HCB_CLS_THREAT, HCB_WHY_RAMMING), 'a swerve does not clear it'
 sc.step(int(sc.brain.cfg.ram_hold_ms / 100) + 1)
 assert v not in classes(sc), 'a second and a half off the collision course: released'
-sc, v = car(-20, 0.5, (15., 0., 0.))
-sc.vehs[v]['vel'] = [2., 0., 0.]                       # it brakes
+sc, v = car(-20, 0.5, (15., 0., 0.)); sc.step(1)
+assert classes(sc)[v] == (HCB_CLS_THREAT, HCB_WHY_RAMMING)
+sc.vehs[v]['vel'] = [2., 0., 0.]                       # it brakes (still rolling towards him)
 sc.step(1)
 assert v not in classes(sc), 'a car that has braked is released at once'
-passed('A car on a collision course stays RAMMING for 1.5 s through a swerve (it blinked every 0.1-0.4 s in the real fight); braking releases it at once')
+sc, v = car(-20, 0.5, (15., 0., 0.)); sc.step(1)
+sc.vehs[v]['vel'] = [-14., 3., 0.]                     # 1.3: it turns round and drives off, fast
+sc.step(1)
+assert v not in classes(sc), '1.3: a car that no longer comes nearer is released at once, however fast'
+sc, v = car(-20, 0.5, (15., 0., 0.)); sc.step(1)
+drv = sc.vehs[v]['driver']
+sc.damage(drv, sc.cj['id'], 30, weapon=49); sc.step(1)
+assert classes(sc)[drv][0] >= HCB_CLS_THREAT, 'once it has hit CJ the driver answers for it'
+passed('A car on a collision course stays RAMMING for 1.5 s through a swerve (it blinked every 0.1-0.4 s in the real fight); braking releases it at once, and (1.3) so does driving off; 1.3: its driver is fired at only after the car has hit CJ or one of ours')
 
 # ------------------------------------------------------------------ hurt, and the game does not say by whom
 sc = Scene()
@@ -421,9 +436,9 @@ d2 = play(fight)[0]
 assert d1 == d2
 short = [(hex(i), (e - a)) for i, a, e in periods if e - a < 1900]
 assert not short, short
-assert blamed and len(blamed) == 1, 'the squad member run down at 27.6 s: one driver answers for it'
+assert not blamed, ('1.3: the squad member run down at 27.6 s by a car a passer-by (pedtype 4) had jumped out of 0.1 s before - an accident, nobody is shot for it', blamed)
 assert b.out.alert == HCB_ALERT_EVACUATE
-passed('The first real fight, replayed (551 looks): every verdict of THREAT on a living man lasts at least 1.9 s (the stage 1 core changed its mind up to three times a second), the driver who ran our man down is found, the end is EVACUATE, and two replays agree bit for bit')
+passed('The first real fight, replayed (551 looks): every verdict of THREAT on a living man lasts at least 1.9 s (the stage 1 core changed its mind up to three times a second), 1.3: the passer-by whose abandoned car rolled into our man is NOT made a target (it was an accident), the end is EVACUATE, and two replays agree bit for bit')
 
 # ------------------------------------------------------------------ alert level
 sc = Scene()
@@ -586,7 +601,7 @@ head, recs2, text = _h.read_box(data)
 assert head.seed == 1 and _h.read_box(Recorder(4096).box(Brain(seed=77)))[0].seed == 77, 'the seed the brain was started with travels in the report'
 assert text == 'device: test\n' and head.records == ring.rec.records and head.dropped == ring.rec.dropped and len(recs2) == len(recs) and [r[0] for r in recs2] == [r[0] for r in recs]
 assert all(bytes(a[1]) == bytes(b_[1]) for a, b_ in zip(recs, recs2))
-for bad, why in ((b'junk' + data, 'not a'), (data[:len(data) // 2], 'cut short'), (data[:8] + bytes([9]) + data[9:], 'another version')):
+for bad, why in ((b'junk' + data, 'not a'), (data[:len(data) // 2], 'cut short'), (data[:8] + bytes([(_h.HCB_VERSION + 7) & 255]) + data[9:], 'another version')):
     try:
         _h.read_box(bad)
         raise AssertionError('accepted a bad report: ' + why)

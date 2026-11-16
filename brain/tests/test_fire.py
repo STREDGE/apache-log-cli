@@ -67,10 +67,17 @@ def rule(roe, **kw):
 
 
 sc = rule(HCB_ROE_HOLD)
-g = sc.ped(25, 0, pedtype=GANG, weapon=AK)
-sc.shot(g, (0., 0., 1.), dst=1)
-assert not run(sc, 30) and set(holds(sc).values()) == {'ROE'}
-passed('HOLD FIRE: nobody fires, even at a man shooting CJ')
+g = sc.ped(25, 0, pedtype=GANG, weapon=AK, face='away')
+assert not run(sc, 30) and set(holds(sc).values()) <= {'ROE', 'NO_TARGET', 'COVERING'}, holds(sc)
+aimer = sc.ped(-25, 0, pedtype=GANG, weapon=AK)          # turned to CJ, weapon up: a THREAT, but he has not fired
+assert not run(sc, 20), 'HOLD FIRE: a man who only threatens is not fired at'
+sc.shot(g, (0., 0., 1.), dst=1)                          # g fires at CJ: an ATTACKER
+at_g = at_aimer = 0
+for _ in range(20):
+    sc.step(1)
+    at_g += len(firing(sc, g)); at_aimer += len(firing(sc, aimer))
+assert at_g and not at_aimer, ('1.3: under HOLD FIRE the man who shot at CJ is answered - and nobody else', at_g, at_aimer)
+passed('HOLD FIRE: nobody opens fire - not at an armed man, not at one who aims at CJ; 1.3 (the first 2.0 log: CJ killed by policemen with HOLD FIRE on and twelve rifles silent): the man who has shot at CJ or one of ours is answered')
 for roe, fires in ((HCB_ROE_DEFEND, False), (HCB_ROE_ARMED, True), (HCB_ROE_LEGACY_ALL, True)):
     sc = rule(roe)
     watch = sc.ped(25, 0, pedtype=GANG, weapon=AK, face='away')
@@ -83,8 +90,7 @@ for roe, fires in ((HCB_ROE_DEFEND, False), (HCB_ROE_ARMED, True), (HCB_ROE_LEGA
 passed('DEFEND: an armed gang member who is not looking at CJ is covered - weapons on him, no fire. ARMED ONLY (and the old "fire at all"): he is engaged. An armed civilian never is')
 sc = rule(HCB_ROE_FOLLOW)
 a, b_ = sc.ped(25, 0, pedtype=GANG, weapon=AK), sc.ped(0, 25, pedtype=GANG, weapon=AK)
-sc.shot(a, (0., 0., 1.), dst=1)
-assert not run(sc, 20), 'FOLLOW: not even an attacker until CJ points at him'
+assert not run(sc, 20), 'FOLLOW: an armed man is nobody\'s target until CJ points at him'
 sc.cj['target'] = b_
 fired = run(sc, 15)
 assert fired and all(o.target == b_ for o in sc.orders.values() if o.fire) and not any(o.target == a and o.fire for o in sc.orders.values())
@@ -105,7 +111,11 @@ for _ in range(10):
     sc.step(1)
     hit = hit or bool(firing(sc, civ))
 assert hit, holds(sc)
-passed('WHERE I SHOOT: only the man CJ locks on, hits, or whose head his rounds pass - and for 3 s after; an attacker CJ ignores is left alone')
+sc = rule(HCB_ROE_FOLLOW)
+a = sc.ped(25, 0, pedtype=GANG, weapon=AK)
+sc.shot(a, (0., 0., 1.), dst=1)
+assert run(sc, 20) and all(o.target == a for o in sc.orders.values() if o.fire), '1.3: a man who shot at CJ is answered under WHERE I SHOOT too'
+passed('WHERE I SHOOT: the man CJ locks on, hits, or whose head his rounds pass - and for 3 s after; 1.3: and a man who has shot at CJ, whom CJ has not pointed at (no rule is stricter than HOLD FIRE about him)')
 
 # ------------------------------------------------------------------ police
 for policy, attacked, fires in ((HCB_POLICE_ANSWER, False, False), (HCB_POLICE_ANSWER, True, True), (HCB_POLICE_EVADE, True, False)):
@@ -188,8 +198,13 @@ d = sc.ped(-20, 0.5, pedtype=CIV)
 v = sc.veh(-20, 0.5, vel=(12., 0., 0.), driver=d)
 run(sc, 6)
 o = sc.orders[me]
+assert not (o.target == d and o.fire), '1.3: a car bearing down on CJ is called and dodged - its driver is not shot before it has hit anybody'
+sc.damage(d, sc.cj['id'], 25, weapon=49)                 # it hits CJ and drives on at him
+sc.vehs[v]['pos'] = [-16., 0.5, 1.]; sc.vehs[v]['vel'] = [12., 0., 0.]
+run(sc, 3)
+o = sc.orders[me]
 assert o.target == d and o.aim_at == HCB_AIM_TYRE and (o.fire or o.hold in (HCB_HOLD_REACTING, HCB_HOLD_PAUSE, HCB_HOLD_NO_LOS)), (o.target, o.aim_at, HOLD[o.hold])
-passed('Vehicles: fire at a man in a car is aimed at him; a car below 700 health or burning within 18 m of CJ or ours is not fired at at all; far away it may be; a car bearing down on CJ gets its tyres shot')
+passed('Vehicles: fire at a man in a car is aimed at him; a car below 700 health or burning within 18 m of CJ or ours is not fired at at all; far away it may be; 1.3: a car bearing down on CJ is not fired at until it has hit somebody - then its tyres are shot')
 
 # ------------------------------------------------------------------ range, the far side of the helicopter, walls
 sc = Scene()
@@ -337,7 +352,7 @@ assert sc.orders[front].fire and ask(sc.cj['pos']) == 'BYSTANDER', holds(sc)
 sc.roe = HCB_ROE_HOLD
 sc.peds.pop(civ)
 sc.step(1)
-assert ask(sc.cj['pos']) == 'NO_TARGET', 'the player said hold fire: no round after the next look'
+assert ask(sc.cj['pos']) == 'NONE', '1.3: the player said hold fire - but this man has shot at CJ: he is still answered'
 sc, front, rear = heli_scene(cj_at=(10., 20.))
 drv = sc.ped(40, 41, pedtype=GANG, weapon=AK)
 carid = sc.veh(40, 41, driver=drv, health=500.)        # a damaged car 36 m from CJ: far enough to be fired at
@@ -471,7 +486,7 @@ assert seen[-1] == 2 and set(seen) <= {3, 2} and seen.index(2) >= 1, ('his man a
 assert state(me, g, cj=[12., 4.5, 1.]) == 3, 'CJ in his line in this frame: cease fire'
 sc.roe = HCB_ROE_HOLD
 sc.step(1)
-assert state(me, g) == 0 and not sc.orders[me].fire, 'hold fire: he has no man at all'
+assert state(me, g) == 2 and sc.orders[me].target == g, '1.3: hold fire - but g has shot at CJ: he is still answered'
 sc.roe = HCB_ROE_DEFEND
 sc.peds[g]['flags'] |= HCB_PF_DEAD
 sc.peds.pop(sus)
@@ -830,8 +845,8 @@ def check_orders(sc, s):
                 l2, al, la = offs(a, e, (peds[f].pos.x, peds[f].pos.y, peds[f].pos.z))
                 if 0.3 < al <= ln and la <= cfg.friend_line_m + cfg.line_per_m * 0.75 * al - 1e-3:
                     bad.append(('one of ours in the line', o.who, o.target, f, al, la))
-        if s.roe == HCB_ROE_HOLD:
-            bad.append(('fires under HOLD', o.who))
+        if s.roe == HCB_ROE_HOLD and sc.brain.cls(t.id) is not None and sc.brain.cls(t.id) < HCB_CLS_ATTACKER:
+            bad.append(('fires under HOLD at a man who has not attacked', o.who))
         if s.police == HCB_POLICE_EVADE and t.pedtype == COP:
             bad.append(('fires at the police under EVADE', o.who, o.target))
         if t.vehicle:

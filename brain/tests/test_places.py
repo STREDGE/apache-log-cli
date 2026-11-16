@@ -118,15 +118,18 @@ args = (sc.brain, p3, tuple(man), tuple(cjp), tuple(a_), p3, sc.time)
 alone = hcb_py.place_value(*args)
 both = hcb_py.place_value(*args, others=[tuple(b_)])
 assert alone > 0 and abs((both - alone) - sc.brain.cfg.place_w_others) < 0.01, ('hidden from the second shooter too: worth place_w_others more', alone, both)
-crowded = hcb_py.place_value(*args, taken=[(p3[0] + 2.0, p3[1], p3[2])])
+_dx, _dy = a_[0] - p3[0], a_[1] - p3[1]; _l = math.hypot(_dx, _dy)
+crowded = hcb_py.place_value(*args, taken=[(p3[0] - _dy / _l * 2.0, p3[1] + _dx / _l * 2.0, p3[2])])          # (2 m to his side, not in his line)
 assert abs((alone - crowded) - sc.brain.cfg.place_w_crowd) < 0.01, ('another of ours 2 m off: worth place_w_crowd less', alone, crowded)
+assert hcb_py.place_value(*args, taken=[(p3[0] + _dx / _l * 2.0, p3[1] + _dy / _l * 2.0, p3[2])]) < 0, '1.3: one of ours 2 m in front of him, in his line to the shooter: no place'
+assert hcb_py.place_value(sc.brain, p3, tuple(man), (p3[0] + _dx / _l * 5.0, p3[1] + _dy / _l * 5.0, cjp[2]), tuple(a_), p3, sc.time) < 0, '1.3: CJ in his line to the shooter: no place'
 on_top = hcb_py.place_value(*args, taken=[(p3[0] + 0.8, p3[1], p3[2])])
 assert on_top < 0, 'and within 1.2 m of his place it is no place at all'
 dx, dy = p3[0] - cjp[0], p3[1] - cjp[1]; l_ = math.hypot(dx, dy)
 in_line = hcb_py.place_value(*args, cj_dir=(dx / l_, dy / l_, 0.), cj_fires=1)
 beside = hcb_py.place_value(*args, cj_dir=(-dy / l_, dx / l_, 0.), cj_fires=1)
 assert in_line < 0 and abs(beside - alone) < 0.01, ('in front of CJ\'s weapon it is no place; with CJ firing another way it is worth the same', in_line, beside)
-passed('What a place is worth, weight by weight: hidden from a second shooter +%.2f, another of ours within 3 m -%.2f (within 1.2 m - no place), in front of CJ\'s weapon while he fires - no place' % (sc.brain.cfg.place_w_others, sc.brain.cfg.place_w_crowd))
+passed('What a place is worth, weight by weight: hidden from a second shooter +%.2f, another of ours within 3 m -%.2f (within 1.2 m - no place), in front of CJ\'s weapon while he fires - no place; 1.3: CJ or one of ours in his line to the shooter - no place (a place he holds is not dropped for it: the shooter shifting about moves nobody)' % (sc.brain.cfg.place_w_others, sc.brain.cfg.place_w_crowd))
 
 text = '\n'.join(results) + '\nThe core only. Nothing here has run in the game.\n'
 (hcb_py.OUT / 'brain_places_tests.txt').write_text(text)

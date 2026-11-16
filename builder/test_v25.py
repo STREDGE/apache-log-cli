@@ -125,6 +125,7 @@ class VM:
    for _ in range(b.LIB[op&0x7fff]['num_params']):
     t=raw[p];p+=1
     if t==9:v=raw[p:p+8].split(b'\0')[0].decode();p+=8
+    elif t==15:v=raw[p:p+16].split(b'\0')[0].decode();p+=16
     else:fmt={1:'<i',2:'<h',3:'<h',4:'<b',5:'<h',6:'<f'}[t];v=struct.unpack_from(fmt,raw,p)[0];p+=struct.calcsize(fmt)
     args.append((t,v))
    self.code[start]=(op,args,p)
@@ -489,10 +490,11 @@ passed('The fire worker asks the brain: a passer-by is left alone; the man who h
 w,c,f=fire_world();npc=target(w,typ=8,skin=105);threaten(w,npc);w.wanted=6;w.step(c,f,n=14);assert not attacks(w) and not aims(w)
 w,c,f=fire_world();npc=target(w,typ=7,skin=102);threaten(w,npc);w.step(c,f,n=14);assert attacks(w) and hit(w)=={npc}
 passed('Friends come from the game, not from a list of models: an armed Grove man looking at CJ is left alone, an armed Balla looking at CJ is engaged')
-w,c,f=fire_world();w.shared[b.FIRE]=0;npc=target(w,typ=7);w.damage.add((1,npc));w.step(c,f,n=14);assert not attacks(w) and not aims(w)
+w,c,f=fire_world();w.shared[b.FIRE]=0;npc=target(w,typ=7,skin=102);threaten(w,npc);w.step(c,f,n=14);assert not attacks(w) and not aims(w)
 w.shared[b.FIRE]=3;w.step(c,f,n=10);assert attacks(w)
 w.shared[b.FIRE]=0;w.step(c,f,n=3);count=len(attacks(w));w.step(c,f,n=8);assert len(attacks(w))==count
-passed('HOLD FIRE: no weapon comes up and no round goes, even at a man who has hurt CJ; with PROTECT ME they open fire, and HOLD FIRE stops them within 0.3 s')
+w,c,f=fire_world();w.shared[b.FIRE]=0;npc=target(w,typ=7);w.damage.add((1,npc));w.step(c,f,n=14);assert attacks(w) and hit(w)=={npc} and no_game_fire(w) and not invariants(w)
+passed('HOLD FIRE (2.0 beta 4): nobody fires first - an armed man who only looks at CJ is left alone, with PROTECT ME he is engaged and HOLD FIRE stops that within 0.3 s; the man who has hurt CJ is answered all the same (the second 2.0 log: CJ killed in front of the guards)')
 w,c,f=fire_world();asked=len(calls(w,0xe48));assert asked;w.brain=None;w.shared[b.BRAIN_HELLO]=0;npc=target(w,typ=7);w.damage.add((1,npc));threaten(w,npc);w.step(c,f,n=14)
 assert not attacks(w) and len(calls(w,0xe48))==asked and not aims(w),'without the answer to the handshake the opcode is never run'
 passed('The brain mod gone: the fire worker never runs its opcode (an unregistered opcode would have its parameters executed as code) and nobody fires')
@@ -533,10 +535,10 @@ w.incar[1]=c.v[5];w.step(c,p,n=4)
 assert w.menu[2:]==[b'FLY TO MAP MARKER',b'FLY TO GROVE STREET',b'EXIT BUTTON: LAND [X]',b'EXIT BUTTON: ROPE',b'MODE AND FIRE >',b'SETTINGS >'],w.menu
 passed('Main menu shows only what fits the moment: call it; on foot - three modes (marked), gunner fire, rope, squad, dismiss; aboard - destinations and the two exit-button switches')
 
-w,c,f=fire_world();n=target(w);w.damage.add((1,n));w.step(c,f,n=12)
+w,c,f=fire_world();n=target(w,typ=7,skin=102);threaten(w,n);w.step(c,f,n=12)
 assert attacks(w) and hit(w)=={n}
 w.shared[b.FIRE]=0;w.step(c,f,n=5);count=len(attacks(w));w.step(c,f,n=6);assert len(attacks(w))==count
-passed('Protect CJ and cease-fire remain active after aim and takeoff changes')
+passed('Protect CJ and cease-fire remain active after aim and takeoff changes (2.0 beta 4: cease-fire is "we do not open fire" - a man who only threatens CJ)')
 
 w,c,p=setup(True);summon(w,c);f=VM('Helicover_Fire',w);w.step(c,p,f,n=3);w.shared[b.FIRE]=3;w.step(c,p,f,n=5)
 launch=VM('Helicover',w);w.step(c,p,f,launch,n=15);w.events.append(6);w.step(c,p,f,n=4)
@@ -1095,9 +1097,9 @@ passed('Rope evacuation lifts CJ only after he walks to the rope (6 m away)')
 # ---- v39-fire: fire control upgrade ----
 # menu order and value mapping
 w,c,p=setup(True);summon(w,c);launch=VM('Helicover',w);w.step(c,p,launch,n=15);w.events.append(3);w.step(c,p,n=5)
-assert w.menu[0]==b'HELICOVER / MODE AND FIRE' and w.menu[2:]==[b'MODE: PROTECT',b'CANCEL: TO ME',b'PROTECT ME [X]',b'ARMED ONLY',b'WHERE I SHOOT',b'HOLD FIRE',b'POLICE: FIRE BACK',b'< BACK'],w.menu
-for idx,val in [(3,0),(1,4),(2,2),(0,3)]:
- w.events.append(idx+2);w.step(c,p,n=5);assert w.shared[b.FIRE]==val and [r for r in w.menu if r.endswith(b'[X]')]==[w.menu[4+idx]],(idx,val,w.shared[b.FIRE],w.menu)
+assert w.menu[0]==b'HELICOVER / MODE AND FIRE' and w.menu[2:]==[b'MODE: PROTECT',b'CANCEL: TO ME',b'PROTECT ME [X]',b'HOLD FIRE',b'ARMED ONLY',b'WHERE I SHOOT',b'POLICE: FIRE BACK',b'< BACK'],w.menu
+for idx,val in [(3,2),(1,0),(2,4),(0,3)]:
+ w.messages.clear();w.events.append(idx+2);w.step(c,p,n=5);assert w.shared[b.FIRE]==val and [r for r in w.menu if r.endswith(b'[X]')]==[w.menu[4+idx]] and w.messages==['HCFR%d'%val],(idx,val,w.shared[b.FIRE],w.menu,w.messages)
 assert w.shared[b.POLICE]==0 and w.shared[b.MISSIONS]==0
 w.events.append(6);w.step(c,p,n=5);assert w.shared[b.POLICE]==1 and w.menu[8]==b'POLICE: NEVER FIRE' and w.menu[4]==b'PROTECT ME [X]',w.menu
 w.events.append(6);w.step(c,p,n=5);assert w.shared[b.POLICE]==0 and w.menu[8]==b'POLICE: FIRE BACK',w.menu
@@ -1107,7 +1109,7 @@ w.events.append(0);w.step(c,p,n=5);assert w.shared[b.MODE]==1 and w.menu[2]==b'M
 w.events.append(1);w.step(c,p,n=5);assert 'HCRCL' in w.messages and w.shared[b.MODE]==1 and w.menu[0]==b'HELICOVER / MODE AND FIRE',(w.messages,w.menu)   # (the brain takes the 1 at its next look)
 w.events.append(0);w.step(c,p,n=5);assert w.shared[b.MODE]==0 and w.menu[2]==b'MODE: PROTECT' and 'HCMDP' in w.messages,w.menu
 w.events.append(7);w.step(c,p,n=5);assert w.menu[0]==b'HELICOVER / FOLLOWING'
-passed('MODE AND FIRE page (2.0): MODE: PROTECT / ASSAULT (a switch; the commander says what it means) and CANCEL: TO ME first, then the four fire rules - PROTECT ME (default), ARMED ONLY, WHERE I SHOOT, HOLD FIRE - and the POLICE switch; BACK returns to the main page; eight rows')
+passed('MODE AND FIRE page (2.0): MODE: PROTECT / ASSAULT (a switch; the commander says what it means) and CANCEL: TO ME first, then the four fire rules - PROTECT ME (default), HOLD FIRE, ARMED ONLY, WHERE I SHOOT (2.0 beta 4: HOLD FIRE away from POLICE and BACK; the commander says which rule is in force) - and the POLICE switch; BACK returns to the main page; eight rows')
 # the MISSIONS switch lives on the settings page now
 w.events.append(6);w.step(c,p,n=5);assert w.menu==[b'HELICOVER / SETTINGS',b'CLOSE',b'HELICOPTER MODEL >',b'MESSAGES: ALL',b'MISSIONS: DEFEND ONLY',b'< BACK'],w.menu
 w.events.append(2);w.step(c,p,n=5);assert w.shared[b.MISSIONS]==1 and w.menu[4]==b'MISSIONS: AS USUAL',w.menu
@@ -1144,27 +1146,31 @@ passed('From a stranger\'s first round at CJ to the gunners\' first round at 30 
 # a car on a collision course with CJ at 72 km/h, an unarmed man at the wheel: the driver is fired at while the car is still far away
 w,c,f=fire_world();w.frame_ms=33;drv,car=962,963;w.exists.update({drv,car});w.cars[car]={'pos':[90.,0.,0.],'heading':90.,'vel':[-20.,0.,0.]};w.model[car]=400;w.incar[drv]=car
 w.traffic=[car];w.seats[(car,-1)]=drv;w.pedtype[drv]=4;w.skin[drv]=20;w.weapons[drv]=0;w.health[drv]=100000;w.health[car]=1000;first=None
-while w.cars[car]['pos'][0]>19.:
+while w.cars[car]['pos'][0]>1.:
  w.cars[car]['pos'][0]-=20.*.033;w.step(c,f)
- if first is None and attacks(w):first=w.cars[car]['pos'][0]
-assert first is not None and first>=30. and len(attacks(w))>=6 and {x[2] for x in w.game_rounds}=={drv} and not invariants(w),(first,len(attacks(w)))
+assert not attacks(w),'2.0 beta 4: a car coming at CJ is called and dodged - its driver is not shot before it has hit anybody'
+w.damage.add((1,car))
+while w.cars[car]['pos'][0]>-40.:
+ w.cars[car]['pos'][0]-=20.*.033;w.step(c,f)
+ if first is None and attacks(w):first=-w.cars[car]['pos'][0]
+assert first is not None and len(attacks(w))>=6 and {x[2] for x in w.game_rounds}=={drv} and not invariants(w),(first,len(attacks(w)))
 n_ram=len(attacks(w))
 w,c,f=fire_world();w.frame_ms=33;w.exists.update({drv,car});w.cars[car]={'pos':[90.,30.,0.],'heading':90.,'vel':[-20.,0.,0.]};w.model[car]=400;w.incar[drv]=car
 w.traffic=[car];w.seats[(car,-1)]=drv;w.pedtype[drv]=4;w.skin[drv]=20;w.weapons[drv]=0;w.health[drv]=100000;w.health[car]=1000
 while w.cars[car]['pos'][0]>-40.:
  w.cars[car]['pos'][0]-=20.*.033;w.step(c,f)
 assert not attacks(w),'the same car driving past 30 m away is nobody\'s business'
-passed('A car driven straight at CJ at 72 km/h: the gunners fire at the driver from %d m on (2 s before it would hit), %d rounds before it is close; a car driving past is left alone'%(first,n_ram))
+passed('A car driven straight at CJ at 72 km/h: nobody fires before it has hit anybody (2.0 beta 4 - the second 2.0 log: half the fire went at drivers of cars driving past, and it earned the wanted level); once it has run CJ down the gunners fire at the driver from %d m past him on, %d rounds; a car driving past is left alone'%(first,n_ram))
 # the gunners hate nobody (the game would open fire on its own otherwise): every kind of person is cleared for each of them when he is created
 w,c,f=fire_world()
 for g_ in [w.shared[b.PUB+i] for i in range(3,7)]:
  assert {x[2][2] for x in calls(w,0x77a) if x[2][0]==g_ and x[2][1]==2}==set(range(32)),g_
 passed('Door gunners are given no hatred of anybody: they fire only the rounds the brain lets go')
 # HOLD FIRE: the pilot is told of no fight either (he would start circling a man nobody may fire at)
-w,c,f=fire_world();w.shared[b.FIRE]=0;npc=target(w,typ=7,skin=102);w.weapons[npc]=30;w.health[npc]=100000;w.damage.add((1,npc));w.step(c,f,n=15)
-assert not attacks(w) and w.shared[b.FIRE_TARGET]==-1 and w.shared[b.BR_TOP]==-1 and w.shared[b.FIRE_ACTIVE]==0,(len(attacks(w)),w.shared[b.FIRE_TARGET])
+w,c,f=fire_world();w.shared[b.FIRE]=0;npc=target(w,typ=7,skin=102);w.weapons[npc]=30;w.health[npc]=100000;threaten(w,npc);w.step(c,f,n=15)
+assert not attacks(w) and w.shared[b.FIRE_TARGET]==-1 and w.shared[b.FIRE_ACTIVE]==0,(len(attacks(w)),w.shared[b.FIRE_TARGET])
 w.shared[b.FIRE]=3;w.step(c,f,n=15);assert attacks(w) and w.shared[b.FIRE_TARGET]==npc and w.shared[b.FIRE_ACTIVE]==1,'(control: with PROTECT ME the pilot is told the man)'
-passed('HOLD FIRE: no rounds, weapons down, and the pilot is told of no fight; back on PROTECT ME the most dangerous man is his business again')
+passed('HOLD FIRE: no rounds at a man who only threatens, weapons down, and the pilot is told of no fight; back on PROTECT ME the most dangerous man is his business again')
 # the helicopter is gone in the middle of a fight (dismissed, shot down): nothing of the fight is left behind for the next call
 w,c,f=fire_world();npc=target(w,typ=7,skin=102);w.weapons[npc]=30;w.health[npc]=100000;w.damage.add((1,npc));w.step(c,f,n=15)
 assert w.shared[b.ENGAGED]==1 and w.shared[b.FIRE_ACTIVE]==1 and w.shared[b.FIRE_TARGET]==npc

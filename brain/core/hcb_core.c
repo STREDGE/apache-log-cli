@@ -92,8 +92,8 @@ API void hcb_init(hcb_brain *b, u32 seed) {
     b->cfg.shot_pass_m = 3.0f;
     b->cfg.attacker_ms = 20000;
     b->cfg.forget_ms = 4000;
-    b->cfg.ram_time_s = 2.0f;
-    b->cfg.ram_miss_m = 2.5f;
+    b->cfg.ram_time_s = 1.5f;          /* (1.3: 2.0 and 2.5 m called 19 cars in 5.5 min that passed CJ by; none hit him) */
+    b->cfg.ram_miss_m = 0.8f;
     b->cfg.ram_speed = 8.0f;
     b->cfg.burn_m = 14.0f;
     b->cfg.melee_m = 7.0f;
@@ -202,6 +202,12 @@ static int fired_at(hcb_vec a, hcb_vec e, hcb_vec p, float pass) {
     return d <= pass && t > 0.02f;
 }
 
+/* 1.3: CJ's round marks a man for the squad only away from the muzzle (the second 2.0 log: a car that stood at CJ's side was
+   "the man CJ fires at" for every round he fired past it - and the squad in ASSAULT fired at its driver) - unless the round ends at him */
+static int cj_fired_at(hcb_vec a, hcb_vec e, hcb_vec p, float pass) {
+    return fired_at(a, e, p, pass) && (v_dist(p, a) > 4.0f + pass || v_dist(p, e) < pass + 0.5f);
+}
+
 /* CJ or one of ours was hurt and the game does not say by whom. Run down: the nearest moving vehicle that is not ours
    did it, and its driver answers for it. Rounds from nowhere with a strange helicopter overhead: the helicopter. */
 static void unknown_author(hcb_brain *b, const hcb_snapshot *s, const hcb_event *e) {
@@ -222,6 +228,9 @@ static void unknown_author(hcb_brain *b, const hcb_snapshot *s, const hcb_event 
     if (ram) {
         /* the man at the wheel, or the one who has just jumped out of it, if he is still about */
         track *t = hcb_find(b, b->vt[best].driver_was);
+        /* 1.3: a guard standing in the road and run down by the traffic is an accident, not an attack: only a car that was on a
+           collision course, or a driver who is not a passer-by, answers for it */
+        if (!b->vt[best].ram_n && !(b->vt[best].ram_until && e->time < b->vt[best].ram_until + 1000) && (!t || t->last.pedtype == 4 || t->last.pedtype == 5)) return;
         if (t) {
             if (to_cj) t->damage_cj += e->value; else t->damage_ours += e->value;
             t->last_hostile = e->time;
@@ -244,12 +253,12 @@ static void on_event(hcb_brain *b, const hcb_snapshot *s, const hcb_event *e) {
             if (e->dst && !hcb_is_ours(s, e->dst)) { t = hcb_find(b, e->dst); if (t) t->cj_marked = e->time; }
             for (i = 0; i < HCB_MAX_TRACKS; i++) {
                 t = &b->tr[i];
-                if (t->used && t->seen && !t->friendly && fired_at(e->a, e->b, t->last.pos, 1.5f)) t->cj_marked = e->time;
+                if (t->used && t->seen && !t->friendly && cj_fired_at(e->a, e->b, t->last.pos, 1.5f)) t->cj_marked = e->time;
             }
             /* ... and at vehicles: whoever sits in a car CJ is shooting at is CJ's target too */
             for (i = 0; i < HCB_MAX_VTRACKS; i++) {
                 vtrack *v = &b->vt[i];
-                if (v->used && v->seen && v->last.id != s->heli && (e->dst == v->last.id || fired_at(e->a, e->b, v->last.pos, 2.5f))) v->cj_marked = e->time;
+                if (v->used && v->seen && v->last.id != s->heli && (e->dst == v->last.id || cj_fired_at(e->a, e->b, v->last.pos, 2.5f))) v->cj_marked = e->time;
             }
             return;
         }
@@ -273,6 +282,12 @@ static void on_event(hcb_brain *b, const hcb_snapshot *s, const hcb_event *e) {
         }
         if (hcb_is_ours(s, e->src)) return;
         if (!e->src) { unknown_author(b, s, e); return; }
+        /* 1.3: run down by a passer-by's car that was not on a collision course: an accident */
+        if ((e->weapon == 49 || e->weapon == 50) && (e->dst == s->player.id || hcb_is_ours(s, e->dst))) {
+            const hcb_ped *p = hcb_ped_of(s, e->src);
+            const vtrack *v = p ? hcb_vfind(b, p->vehicle) : 0;
+            if (p && (p->pedtype == 4 || p->pedtype == 5) && (!v || (!v->ram_n && !(v->ram_until && e->time < v->ram_until + 1000)))) return;
+        }
         if (e->dst == s->player.id) { t = touch(b, e->src, s->time); t->damage_cj += e->value; t->last_hostile = e->time; }
         else if (hcb_is_ours(s, e->dst)) { t = touch(b, e->src, s->time); t->damage_ours += e->value; t->last_hostile = e->time; }
         /* run down by a car whose driver the game named: the car is remembered as well */
@@ -378,23 +393,29 @@ static void judge_vehicle(hcb_brain *b, const hcb_snapshot *s, vtrack *v) {
     if ((h->flags & HCB_VF_BURNING) && !(h->flags & HCB_VF_WRECKED) && dist <= c->burn_m) {
         v->cls = HCB_CLS_THREAT; v->why = HCB_WHY_BURNING; v->edps = 60 * (1 - dist / (c->burn_m * 1.5f)); return;
     }
-    /* collision course: closest approach of the car to CJ within the look-ahead time */
+    /* collision course: closest approach of the car to CJ within the look-ahead time.
+       1.3 (the first 2.0 log: 19 cars "on a collision course" in 5.5 min, none hit CJ - the game's drivers brake and swerve
+       round a man; several were dead on for half a second and passed 5-7 m off): it has to be dead on (0.8 m) and close (1.5 s)
+       on two looks running before it is a ram */
     if (!cj->vehicle && speed2 >= c->ram_speed * c->ram_speed && h->cls != HCB_VC_HELI && h->cls != HCB_VC_PLANE) {   /* (with or without a driver) */
         float tca = v_dot(rel, rv) / speed2;
+        int on = 0;
         if (tca > 0 && tca <= c->ram_time_s) {
             hcb_vec at = v_sub(rel, v_mul(rv, tca));
             at.z = 0;
-            if (v_len(at) <= c->ram_miss_m && f_abs(rel.z) < 3) {
-                v->cls = HCB_CLS_THREAT; v->why = HCB_WHY_RAMMING; v->edps = 70 * (1 - tca / (c->ram_time_s * 1.5f));
-                v->ram_until = now + (u32)c->ram_hold_ms; v->ram_edps = v->edps;
-                return;
-            }
+            on = v_len(at) <= c->ram_miss_m && f_abs(rel.z) < 3;
         }
-    }
+        if (on) { if (v->ram_n < 255) v->ram_n++; } else v->ram_n = 0;
+        if (on && v->ram_n >= 2) {
+            v->cls = HCB_CLS_THREAT; v->why = HCB_WHY_RAMMING; v->edps = 70 * (1 - tca / (c->ram_time_s * 1.5f));
+            v->ram_until = now + (u32)c->ram_hold_ms; v->ram_edps = v->edps;
+            return;
+        }
+    } else v->ram_n = 0;
     if (!cj->vehicle && h->cls != HCB_VC_HELI && h->cls != HCB_VC_PLANE) {
         float own2 = v_dot(h->vel, h->vel);
         /* it was on a collision course a moment ago and is still coming fast: one swerve does not make it harmless */
-        if (v->ram_until && now < v->ram_until && speed2 >= c->ram_speed * c->ram_speed * 0.25f) {
+        if (v->ram_until && now < v->ram_until && speed2 >= c->ram_speed * c->ram_speed * 0.25f && v_dot(rel, rv) > 0) {   /* (1.3: and still closing) */
             v->cls = HCB_CLS_THREAT; v->why = HCB_WHY_RAMMING; v->edps = v->ram_edps * 0.6f; return;
         }
         /* it has already run into CJ or one of ours and is still driving about */
@@ -493,8 +514,10 @@ API void hcb_think(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         if (!v->seen) { if (now - v->last_seen > (u32)c->forget_ms) v->used = 0; continue; }
         judge_vehicle(b, s, v);
         if (v->why != HCB_WHY_RAMMING && v->why != HCB_WHY_BURNING && v->why != HCB_WHY_AIR_FIRE) continue;     /* occupants are marked as people */
-        /* whoever drives a car at CJ is a threat for as long as he does */
-        drv = v->why == HCB_WHY_RAMMING ? hcb_find(b, v->last.driver) : 0;
+        /* whoever drives a car at CJ is a threat for as long as he does - 1.3: once his car has hit CJ or one of ours; before that
+           the car is called and dodged, the driver is not shot (the first 2.0 log: half the guards' fire went at drivers of cars
+           passing by, and it earned the wanted level) */
+        drv = v->why == HCB_WHY_RAMMING && v->hit_time && now - v->hit_time < (u32)c->hit_hold_ms ? hcb_find(b, v->last.driver) : 0;
         if (drv && !drv->friendly && drv->cls < HCB_CLS_THREAT) { drv->cls = HCB_CLS_THREAT; drv->why = HCB_WHY_RAMMING; drv->edps = v->edps; }
         else { threats++; danger += v->edps; }
         m.id = v->last.id; m.edps = v->edps; m.dist = v->dist; m.kind = HCB_KIND_VEH; m.cls = v->cls; m.why = v->why; m.seen = 1;
@@ -536,12 +559,14 @@ API void hcb_think(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
     hcb_nav_update(b, s, out, b->sq.umode == HCB_UMODE_ASSAULT && b->sq.target_seen && !s->recall ? b->sq.front : s->player.pos);
     hcb_detail_plan(b, s, out);
     hcb_squad_plan(b, s, out);
+    hcb_marksman_plan(b, s, out);
     hcb_agent_plan(b, s, out);
     for (i = 0; i < out->n_posts; i++) {
         const hcb_post *p = &out->posts[i];
         h = hcb_fnv(h, p->who); h = hcb_fnv(h, hcb_bits(p->at.x)); h = hcb_fnv(h, hcb_bits(p->at.y));
         h = hcb_fnv(h, ((u32)p->move << 24) | ((u32)p->crouch << 16) | ((u32)p->duty << 8) | p->job);
         h = hcb_fnv(h, hcb_bits(p->via.x)); h = hcb_fnv(h, hcb_bits(p->via.y)); h = hcb_fnv(h, ((u32)p->act << 16) | ((u32)p->phase << 8) | p->why);
+        h = hcb_fnv(h, hcb_bits(p->via2.x)); h = hcb_fnv(h, hcb_bits(p->via2.y)); h = hcb_fnv(h, ((u32)p->sign << 16) | ((u32)p->climb << 8) | p->face);
     }
     h = hcb_fnv(h, ((u32)out->task << 24) | ((u32)out->umode << 16) | ((u32)out->n_ground_q << 8) | out->n_seg_q); h = hcb_fnv(h, out->target); h = hcb_fnv(h, out->n_path_q);
     h = hcb_fnv(h, ((u32)out->ow_ok << 8) | out->ow_ready);
@@ -637,7 +662,7 @@ API int hcb_rec_next(const u8 *buf, u32 end, u32 *offset, hcb_snapshot *s, u32 *
     len = rd32(buf + at); kind = rd32(buf + at + 4);
     if (len < 8 || len > end - at) return 0;
     if (kind == HCB_REC_STATE) {
-        if (len != 8 + sizeof(struct hcb_brain)) return 0;
+        if (len != 8 + sizeof(struct hcb_brain)) { *offset = at + len; return HCB_REC_OTHER; }    /* (1.3: a state of another brain: skipped) */
         if (state) copy(state, buf + at + 8, sizeof(struct hcb_brain));
         *offset = at + len;
         return HCB_REC_STATE;

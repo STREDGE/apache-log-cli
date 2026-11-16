@@ -137,7 +137,7 @@ for k in range(700):
     tasks.append(o.task)
     j = by_job(sc)
     if o.task == HCB_TASK_BOUND:
-        a1 = [j[n_] for n_ in ('close', 'point') if n_ in j]; a2 = [j[n_] for n_ in ('close2', 'point2') if n_ in j]
+        a1 = [j[n_] for n_ in ('point',) if n_ in j]; a2 = [j[n_] for n_ in ('point2',) if n_ in j]     # (1.3: the bodyguards stay with CJ)
         m1 = sum(1 for p in a1 if p.move); m2 = sum(1 for p in a2 if p.move)
         if m1 and m2: pair_both += 1
         if first_pos_t is None and any(p.phase >= HCB_PH_ARRIVED and d2(at(p), pos(sc, g)) < 40 for p in a1 + a2 + [j['rear'], j['rear2']]):
@@ -146,16 +146,19 @@ order = [t for i, t in enumerate(tasks) if i == 0 or tasks[i - 1] != t]
 assert order[:3] == [HCB_TASK_APPROACH, HCB_TASK_GATHER, HCB_TASK_BOUND], [TASK[t] for t in order]
 assert sc.last_out.target == g and d2((sc.last_out.target_at.x, sc.last_out.target_at.y), pos(sc, g)) < 0.5
 j = by_job(sc)
-ass = [d2(pos(sc, j[n_].who), pos(sc, g)) for n_ in ('close', 'point', 'close2', 'point2')]
-fire = [d2(pos(sc, j[n_].who), pos(sc, g)) for n_ in ('rear', 'rear2', 'delta')]
-assert max(ass) < 16 and min(ass) >= 7.5, ('the assault four have closed to 9-14 m, nobody ran INTO the target', ass)
+ass = [d2(pos(sc, j[n_].who), pos(sc, g)) for n_ in ('point', 'point2')]
+fire = [d2(pos(sc, j[n_].who), pos(sc, g)) for n_ in ('rear', 'rear2')]
+body = [d2(pos(sc, j[n_].who), sc.cj['pos']) for n_ in ('close', 'close2')]
+assert max(ass) < 16 and min(ass) >= 7.5, ('the assault pair has closed to 9-14 m, nobody ran INTO the target', ass)
 assert all(20 <= d_ <= 52 for d_ in fire), ('the fire team stayed back, 30-46 m', fire)
-left = [pos(sc, j[n_].who) for n_ in ('close', 'point')]; right = [pos(sc, j[n_].who) for n_ in ('close2', 'point2')]
+assert all(d_ < 4.0 for d_ in body), ('1.3: the two bodyguards never left CJ (the first 2.0 log: CJ died alone during an assault)', body)
+left = [pos(sc, j[n_].who) for n_ in ('point',)]; right = [pos(sc, j[n_].who) for n_ in ('point2',)]
 assert all(p_[0] < -2 for p_ in left) and all(p_[0] > 2 for p_ in right), ('the pairs came in on the two flanks, not down the fire team\'s line', left, right)
 bound_ticks = tasks.count(HCB_TASK_BOUND)
 assert pair_both <= 0.12 * bound_ticks, ('one pair at a time: both pairs on the move in %d of %d looks' % (pair_both, bound_ticks))
 assert all(d2(pos(sc, a_), pos(sc, b_)) > 1.5 for a_ in team for b_ in team if a_ < b_), 'no two men on one spot'
-assert d2(sc.cj['pos'], (0, 0)) < 0.1 and sum(1 for w in team if d2(pos(sc, w), sc.cj['pos']) < 6) == 0, 'CJ stood still: the squad went by itself'
+near_cj = sorted(JOB[sc.posts[w].job] for w in team if d2(pos(sc, w), sc.cj['pos']) < 6)
+assert d2(sc.cj['pos'], (0, 0)) < 0.1 and set(near_cj) >= {'close', 'close2'} and 'point' not in near_cj and 'point2' not in near_cj, ('CJ stood still: the squad went by itself - 1.3: with the two bodyguards (and the commander, CJ being 70 m from the squad) left at his side', near_cj)
 t_first = first_pos_t
 passed('ASSAULT on a man CJ points out 70 m off: APPROACH -> GATHER -> BOUND by itself (CJ did not move); the assault four close in pairs on the two flanks to 9-14 m, one pair at a time (both moving in %d of %d looks), the fire team holds 30-46 m back; nobody on the same spot' % (pair_both, bound_ticks))
 

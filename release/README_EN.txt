@@ -1,10 +1,53 @@
-HELICOVER 2.0 BETA 3 - support helicopter with an autonomous protective detail
-GTA San Andreas (Android, 64-bit), a CLEO mod + the Helicover Brain 1.2 mod. They only work together.
+HELICOVER 2.0 BETA 4 - support helicopter with an autonomous protective detail
+GTA San Andreas (Android, 64-bit), a CLEO mod + the Helicover Brain 1.3 mod. They only work together.
 
 WHAT IT IS
 Call a support helicopter: it flies in from far away, follows CJ and covers him with four door
 gunners. Drop a four-man team on foot, get picked up by rope, fly to the map marker or Grove
 Street and get out there by landing or by rope.
+
+NEW IN 2.0 BETA 4 (brain 1.3) - EVERYTHING FROM THE SECOND 2.0 LOG AND YOUR REQUESTS, IN ONE RELEASE
+IMPORTANT: replace EVERYTHING - the CLEO files and libHelicoverBrain64.so.
+Both of your black boxes (5472 looks) replayed here bit for bit; 16 causes found. Fixed:
+- HOLD FIRE no longer lets CJ be killed (in the log it was on for 290 s, a policeman shot CJ down to 2 HP and twelve rifles
+  stayed silent). Under HOLD FIRE the detail does not fire first but answers whoever hits or shoots at CJ or ours; so does
+  WHERE I SHOOT. The menu says which rule you chose; HOLD FIRE is the second rule of the list, not next to BACK; the commander says
+  once a fight "fire is held - we answer only those who hit".
+- Cars: half the fire in the log went at drivers of cars driving past (hence the stars). Now RAMMING is only a car that on
+  two looks running comes straight at CJ (missing by 0.8 m or less within 1.5 s) and is closing; its driver is fired at
+  only after it has hit somebody; a passer-by's car hitting a guard in the road is an accident. "CAR!" once a car. CJ's
+  own round past a car standing next to him no longer makes its driver "CJ's target".
+- Guards do not stand: the next point is never the spot he stands on; a blocked leg keeps the way; waiting for a way he
+  walks straight on (the game walks round houses and cars). The map's rays run at knee and waist height.
+- No jerks: the walk task aims past the waypoint and is not torn down at each; it is retargeted only when the aim moves
+  15 % of the way left. A margin round "there" and the pace: on a plain walk with CJ a man changed his action 40 times a
+  minute, now about 5.
+- ASSAULT does not leave CJ: the two bodyguards always stay with him; the commander goes with the squad only while you
+  are near; you run 35 m away from the squad, or are hurt - everybody back to you, for 8 s.
+- The commander really leads: he goes to the cover himself 4 m ahead of you, waits at its edge and waves you on (the
+  game's police gesture); the call once per cover and only near you; you do not come in 10 s - he comes back to you.
+- Fire on the move and backing away firing: a guard on his way with an enemy within 35 m goes facing him - backing,
+  sideways, firing (the game's go-and-shoot). At a sprint, where the game does not fire, the mod points his arms (the
+  game's PointArm) and fires his weapon (CWeapon::Fire, rounds from his magazine) in short bursts, with spread by pace
+  and a check that CJ and ours are clear. Its own crash step and an ini switch RunFireOff.
+- Out of the line: a guard whose line is blocked by CJ or one of ours for 0.7 s steps 2.5 m aside (away from CJ) and
+  fires; places whose line to the enemy passes CJ or ours are not taken any more.
+- The marksman: a roof while you are within 60 m; he climbs a wall up to ~2.8 m himself (the game's jump-and-climb, as
+  CJ does), a higher one by a parked car in two climbs; three failures - the next place; no roof - high ground on the
+  map, a bus or truck roof, in a fight a long look 28 m towards the enemy. He comes down (walks off the edge) when you are
+  60 m away for 10 s or on "to me". Switch ClimbOff.
+- The helicopter moves round when the gunners have had no line for 3 s; the gunners' tokens are apart from the squad's.
+- A medic aboard: while CJ sits in our helicopter, 5 HP a second up to his full health; ours aboard too. Messages
+  "MEDIC: hold still, patching you up" / "you are good to go". Switch MedicOff.
+- Mod Settings: "Brain markers" and "Brain report" are gone (markers removed, the report is written by itself).
+  "CLEO UI" and "4-Finger Touch" are other mods, left alone.
+- An honest summary: "standing though on his way" by real movement, "bodyguards within 2.5 m", "fire at the uninvolved",
+  "new tasks a minute", how long HOLD FIRE was on.
+NOT in this release (honestly): the helicopter does not pick up a marksman who could not climb - he takes the next place
+at once; the three at CJ (the commander and the bodyguards) do not step out from behind CJ - they shield him; one peak
+"think 6 ms" at the moment of the drop is left (a game frame is 33 ms; the game does not freeze on it).
+Checked: simulation (new scenes: climbing, coming down, a car as a step, kerbs), three windows of your black boxes on the
+new core, mutants, an emulator with your libGTASA.so. Not in the game. In the next summary look at the lines with "1.3".
 
 NEW IN 2.0 BETA 3 (brain 1.2) - A FIX BY YOUR LOG OF BETA 2
 IMPORTANT: replace EVERYTHING - the CLEO files and libHelicoverBrain64.so.

@@ -12,7 +12,7 @@
 #define HCB_H
 #include <stdint.h>
 
-#define HCB_VERSION 8          /* layout of the structs below; a black box says which version wrote it */
+#define HCB_VERSION 9          /* layout of the structs below; a black box says which version wrote it */
 
 #define HCB_MAX_PEDS 64        /* peds in one snapshot (nearest to CJ first) */
 #define HCB_MAX_VEHS 40
@@ -238,7 +238,15 @@ typedef struct hcb_post {
     uint8_t phase;      /* 1.0: HCB_PH_*: where that action stands */
     uint8_t why;        /* 1.0: HCB_WHY2_*: the reason of his last decision / failure */
     hcb_vec via;        /* 1.0: the next point on his way there (= at when the way is straight); the mod walks him to it */
+    hcb_vec via2;       /* 1.3: the point after via (= via when there is none): the game's walk is aimed past via, so it does not
+                           end at every point of the way */
+    uint8_t sign;       /* 1.3: HCB_SIGN_*: a gesture to make where he stands (the commander waves CJ on) */
+    uint8_t climb;      /* 1.3: 1 = he stands at a wall he can get up: the mod gives him the game's jump-and-climb */
+    uint8_t face;       /* 1.3: 1 = he moves facing his fire target (go-and-shoot; backing away, sideways, at any pace) */
+    uint8_t reserved0;
 } hcb_post;
+#define HCB_SIGN_NONE 0
+#define HCB_SIGN_COME 1         /* "to me": the commander waves CJ on to the cover */
 /* 1.0: what a man does (hcb_post.act) and how far he has got (hcb_post.phase) */
 #define HCB_ACT_HOLD 0          /* stay where he is */
 #define HCB_ACT_WALK 1
@@ -264,6 +272,8 @@ typedef struct hcb_post {
 #define HCB_WHY2_WAIT_TURN 8    /* his pair covers: he waits for his turn to move */
 #define HCB_WHY2_IN_AIR 9       /* on the rope: no orders until he stands */
 #define HCB_WHY2_CORNER 10      /* 1.1: stopped short of a blind corner to look round it */
+#define HCB_WHY2_CLIMB 12       /* 1.3: getting up a wall / onto a step on his way to a high place */
+#define HCB_WHY2_STEP_OUT 13    /* 1.3: CJ or one of ours in his line of fire: a step to the side */
 #define HCB_WHY2_DOORWAY 11     /* 1.1: waiting for another of ours to clear a doorway */
 /* 1.0: the mode the PLAYER has chosen (hcb_snapshot.umode) and what the squad is doing about it (hcb_out.task) */
 #define HCB_UMODE_PROTECT 0
@@ -296,6 +306,8 @@ typedef struct hcb_post {
 #define HCB_SAY_GRENADE 9       /* 0.8: "grenade - <dir>!" */
 #define HCB_SAY_WATER 10        /* 0.8: "CJ is in the water - the helicopter is over you, take the rope" */
 #define HCB_SAY_AHEAD 11        /* 0.8: "armed men ahead" (CJ drives, the helicopter scouts the way) */
+#define HCB_SAY_HOLD_FIRE 13    /* 1.3: "fire is held - we answer only those who hit you" (once a fight, under HOLD FIRE) */
+#define HCB_SAY_COVER_DIR 14    /* 1.3: "cover <dir>" - the commander is not at CJ's side to lead him there */
 #define HCB_SAY_CAR 12          /* 0.9: "car - <dir>!": a car on a collision course with CJ reaches him within 3 s */
 /* dangers (hcb_danger.kind) */
 #define HCB_DG_GRENADE 1        /* a thrown grenade / satchel / tear gas on its way or lying */
@@ -641,6 +653,7 @@ int hcb_shot_check(const hcb_brain *b, const hcb_shot *q);
  * the first such record in the file and reproduce every later decision exactly even though older records are gone. */
 #define HCB_REC_SNAPSHOT 1
 #define HCB_REC_STATE 2
+#define HCB_REC_OTHER 4         /* 1.3: a record this brain cannot use (a state of an earlier brain): skipped */
 #define HCB_REC_ROUND 3         /* one round of ours: asked for, and what the answer was */
 typedef struct hcb_round {
     uint32_t time;
