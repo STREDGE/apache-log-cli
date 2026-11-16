@@ -227,23 +227,34 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
     if (threat) { dt->threat_mem = threat->last.pos; dt->threat_mem_t = now ? now : 1; }
     else remembered = dt->threat_mem_t && now - dt->threat_mem_t < 12000 && b->alert >= HCB_ALERT_THREAT;
 
-    /* the helicopter's spot for the gunners: 28 m from CJ, 24 m up, on the far side from the threat first, where the
-       threat is seen from (asked of the game like a cover spot, two candidates a look) */
+    /* the helicopter's spot for the gunners. 0.5 (from the second whole-game log: the spot jumped from side to side with
+       every look and the helicopter never got there): 20 m from CJ and 16 m above him (or above the threat, if he is higher), abeam of the line CJ - threat
+       first (the side the helicopter is on already), so its rounds do not pass over CJ; the spot is KEPT while CJ is
+       9 - 34 m from it and the threat has not been out of its sight for 2 s; only then another is looked for */
     if (threat || remembered) {
+        static const u8 ORD[12] = {5, 6, 3, 4, 7, 8, 1, 2, 9, 10, 0, 11};   /* in pairs: +90 -90, +60 -60, +120 -120 ... far side, over the threat */
         hcb_vec Tc = threat ? threat->last.pos : dt->threat_mem, uu = unit2(v_sub(Tc, cjp), (hcb_vec){0, 1, 0});
-        int tries;
+        const vtrack *hv = s->heli ? hcb_vfind(b, s->heli) : 0;
+        int tries, flip = 0;
         Tc.z += 0.6f;
-        for (tries = 0; tries < 2; tries++) {
-            hcb_vec d = rot(v_mul(uu, -1.0f), dt->heli_k % 12), at = v_add(cjp, v_mul(d, 28.0f));
+        if (hv) { hcb_vec side = rot(v_mul(uu, -1.0f), 5), rel = flat(v_sub(hv->last.pos, cjp)); flip = rel.x * side.x + rel.y * side.y < 0; }
+        if (dt->heli_ok) {
+            float d = dist2d(dt->heli_at, cjp);
+            int h = cv_hidden(b, out, dt->heli_at, Tc, now);
+            if (h == 0) dt->heli_bad = 0; else if (h == 1 && !dt->heli_bad) dt->heli_bad = now ? now : 1;
+            if (d > 34.0f || d < 9.0f || (dt->heli_bad && now - dt->heli_bad > 2000)) { dt->heli_ok = 0; dt->heli_bad = 0; if (d <= 34.0f && d >= 9.0f) dt->heli_k = (u8)((dt->heli_k + 1) % 12); }
+        }
+        for (tries = 0; tries < 2 && !dt->heli_ok; tries++) {
+            hcb_vec d = rot(v_mul(uu, -1.0f), ORD[(dt->heli_k % 12) ^ flip]), at = v_add(cjp, v_mul(d, 20.0f));
             int h;
-            at.z = cjp.z + 24.0f;
+            at.z = (Tc.z > cjp.z + 3.0f ? Tc.z : cjp.z) + 16.0f;       /* (a shooter on a roof: above him) */
             h = cv_hidden(b, out, at, Tc, now);
-            if (h == 0) { dt->heli_at = at; dt->heli_ok = 1; dt->heli_t = now ? now : 1; break; }
-            if (h == 1) { dt->heli_k = (u8)((dt->heli_k + 1) % 12); if (dt->heli_ok && dist2d(dt->heli_at, at) < 1) dt->heli_ok = 0; continue; }
+            if (h == 0) { dt->heli_at = at; dt->heli_ok = 1; dt->heli_t = now ? now : 1; dt->heli_bad = 0; break; }
+            if (h == 1) { dt->heli_k = (u8)((dt->heli_k + 1) % 12); continue; }
             break;                                         /* asked: the answer comes with the next look */
         }
-        if (dt->heli_ok && now - dt->heli_t < 8000 && dist2d(dt->heli_at, cjp) < 40) { out->heli_ok = 1; out->heli_at = dt->heli_at; }
-    } else { dt->heli_ok = 0; dt->heli_k = 0; }
+        if (dt->heli_ok) { out->heli_ok = 1; out->heli_at = dt->heli_at; }
+    } else { dt->heli_ok = 0; dt->heli_k = 0; dt->heli_bad = 0; }
 
     if (!n || cj->vehicle || (cj->flags & HCB_PF_DEAD) || s->cutscene) {      /* nobody on foot with CJ, or CJ in a vehicle */
         dt->cj_cover_ok = 0; dt->duty = HCB_DUTY_CALM; out->duty = HCB_DUTY_CALM; dt->leading = 0;
@@ -362,7 +373,7 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
             if (job[i] == HCB_ROLE_CLOSE) at = v_add(base, v_mul(u, 1.3f));
             else if (i == lead && n > 1) {
                 hcb_vec d = unit2(v_sub(away, cjp), v_mul(u, -1.0f));
-                at = v_add(cjp, v_mul(d, f_min(2.5f, dist2d(away, cjp))));
+                at = v_add(cjp, v_mul(d, f_min(6.0f, dist2d(away, cjp))));
                 dt->leading = 1; dt->lead_to = away; out->leading = 1;
             } else {
                 hcb_vec d = rot(u, i % 12);                        /* round him, the threat's side first */
@@ -397,12 +408,14 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
            cover he takes cover next to him. */
         if (lead != close) {
             float dcj = dt->cj_cover_ok ? dist2d(cjp, dt->cj_cover) : 0;
-            if (dt->cj_cover_ok && !cj_in && !(dt->lead_gave_up && now - dt->lead_gave_up < 8000)) {
+            /* 0.5: he really leads - he runs to the spot itself (1 m past it; 12 m ahead at most), in CJ's sight, and waits
+               there; CJ has not come nearer for 5 s -> back to CJ's side, and after 4 s he sets off again */
+            if (dt->cj_cover_ok && !cj_in && !(dt->lead_gave_up && now - dt->lead_gave_up < 4000)) {
                 hcb_vec d = unit2(v_sub(dt->cj_cover, cjp), u);
                 if (!dt->leading) { dt->leading = 1; dt->lead_since = now ? now : 1; dt->lead_best = dcj; dt->lead_to = dt->cj_cover; }
                 if (dcj < dt->lead_best - 0.5f) { dt->lead_best = dcj; dt->lead_since = now ? now : 1; }
-                if (now - dt->lead_since > 3000) { dt->leading = 0; dt->lead_gave_up = now ? now : 1; }
-                at = v_add(v_add(cjp, v_mul(d, f_min(2.5f, dcj + 0.8f))), v_mul(pr, 0.4f));
+                if (now - dt->lead_since > 5000) { dt->leading = 0; dt->lead_gave_up = now ? now : 1; }
+                at = v_add(cjp, v_mul(d, f_min(12.0f, dcj + 1.0f)));
                 if (dt->leading) {
                     POST(lead, at, dist2d(at, men[lead]->pos) > 1.5f ? 3 : cj_speed > 2.2f ? 2 : 1, 0, HCB_DUTY_SHIELD, look);
                     out->leading = 1;
@@ -506,9 +519,10 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
             if (p->move == 0) p->move = 2;
         }
     }
-    /* 0.4.2: out of the way of a car. A vehicle doing over 6 m/s that will pass within 2.6 m of a man in the next 1.8 s:
-       he sprints straight out of its path, 3.5 m clear, whatever his post was (seven of the detail were run over in one
-       game while they held their posts on the road) */
+    /* out of the way of a car (0.4.2; 0.5: sooner, wider, and nobody runs across in front of one - in the second game the
+       men were hit while sprinting to posts on the other side of the road). A vehicle doing over 6 m/s:
+         - it will pass within 3 m of a man in the next 2.5 s: he sprints straight out of its path, 4.5 m clear;
+         - his way to his post crosses its path in that time: he waits where he is until it has passed. */
     for (i = 0; i < out->n_posts; i++) {
         hcb_post *p = &out->posts[i];
         int m, v;
@@ -516,18 +530,24 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         if (m == n) continue;
         for (v = 0; v < (int)s->n_vehs && v < HCB_MAX_VEHS; v++) {
             const hcb_veh *c = &s->vehs[v];
-            hcb_vec vel = flat(c->vel), rel, dir, side;
-            float sp = v_len(vel), along, lat;
+            hcb_vec vel = flat(c->vel), rel, rp, dir, side;
+            float sp = v_len(vel), along, lat, along_p, lat_p, reach;
             if (c->id == s->heli || sp < 6.0f || (c->flags & HCB_VF_WRECKED) || (c->driver && hcb_is_ours(s, c->driver)) || c->driver == cj->id) continue;
             if (c->cls == HCB_VC_HELI || c->cls == HCB_VC_PLANE || c->cls == HCB_VC_BOAT) continue;
-            dir = v_mul(vel, 1.0f / sp); side = right_of(dir);
-            rel = flat(v_sub(men[m]->pos, c->pos));
+            dir = v_mul(vel, 1.0f / sp); side = right_of(dir); reach = sp * 2.5f + 4.0f;
+            rel = flat(v_sub(men[m]->pos, c->pos)); rp = flat(v_sub(p->at, c->pos));
             along = rel.x * dir.x + rel.y * dir.y; lat = rel.x * side.x + rel.y * side.y;
-            if (along < -4.0f || along > sp * 1.8f + 3.0f || f_abs(lat) >= 2.6f) continue;
-            p->at = v_add(men[m]->pos, v_mul(side, lat < 0 ? -3.5f - lat : 3.5f - lat));
-            p->at.z = men[m]->pos.z;
-            p->move = 3; p->crouch = 0;
-            break;
+            along_p = rp.x * dir.x + rp.y * dir.y; lat_p = rp.x * side.x + rp.y * side.y;
+            if (along > -4.0f && along < reach && f_abs(lat) < 3.0f) {
+                p->at = v_add(men[m]->pos, v_mul(side, lat < 0 ? -4.5f - lat : 4.5f - lat));
+                p->at.z = men[m]->pos.z;
+                p->move = 3; p->crouch = 0;
+                break;
+            }
+            if (f_abs(lat) < 14.0f && ((along > -4.0f && along < reach) || (along_p > -4.0f && along_p < reach)) && (f_abs(lat_p) < 3.0f || (lat_p < 0) != (lat < 0))) {
+                p->at = men[m]->pos; p->move = 0;
+                break;
+            }
         }
     }
     /* a man who does not get nearer to his post (a fence, a car, a wall): 1.5 s without progress -> the post is turned 30

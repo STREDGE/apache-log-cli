@@ -1,10 +1,28 @@
-HELICOVER 1.4 BETA 2 - support helicopter with a smart crew
-GTA San Andreas (Android, 64-bit), a CLEO mod + the Helicover Brain 0.4.2 mod. They only work together.
+HELICOVER 1.4 BETA 3 - support helicopter with a smart crew
+GTA San Andreas (Android, 64-bit), a CLEO mod + the Helicover Brain 0.5 mod. They only work together.
 
 WHAT IT IS
 Call a support helicopter: it flies in from far away, follows CJ and covers him with four door
 gunners. Drop a four-man team on foot, get picked up by rope, fly to the map marker or Grove
 Street and get out there by landing or by rope.
+
+NEW IN 1.4 BETA 3 (brain 0.5) - FROM YOUR SECOND LOG AND REMARKS
+IMPORTANT: replace EVERYTHING this time - the CLEO files and libHelicoverBrain64.so.
+The detail on the ground
+- Tougher: 250 health and full armour (was 150 and 50). A car no longer kills a guard outright: it knocks him down.
+- They leave a car's path sooner and further (2.5 s ahead, 4.5 m aside) and no longer run across the road in front
+  of one (that is how they were hit in the last game).
+- The commander really leads CJ: he runs to the cover himself and waits there. CJ has not come in 5 s - he goes back
+  to CJ's side and sets off again 4 s later. The words are now "CJ, follow me! Cover on your right - run to me".
+The helicopter
+- In a fight it hung 50-65 m up and 40-70 m from its spot: the script gave a 70 m ceiling and the game's pilot went up
+  to it, and the spot jumped from side to side every second. Now the spot is 20 m from CJ and 16 m above him, abeam
+  of the line CJ - shooter (no rounds over CJ), and it is kept while CJ is near and the shooter is seen from it. The
+  ceiling of the flight is the spot's own height; it flies there faster.
+- The gunners are more accurate: half the scatter.
+- Landing is quicker: the approach hands over to the descent earlier; descent and landing speeds nearly doubled.
+Not done yet: the pilot does not turn the helicopter side-on to the target; the wait for your choice of landing or
+rope over the destination is as before.
 
 NEW IN BRAIN 0.4.2 - FIXED FROM YOUR LOG (a 14-minute game)
 - The door gunners had not fired one round of their own in the whole game: the brain waited for the wrong crew state.

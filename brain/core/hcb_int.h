@@ -109,6 +109,7 @@ typedef struct detail {
     u32 said_at;            /* when the commander last said anything */
     u32 in_since;           /* since when CJ has been in his cover (0 = he is not) */
     u32 nocover_since;      /* since when there has been no cover for CJ in this fight (0 = there is one) */
+    u32 heli_bad;           /* 0.5: since when the helicopter's spot has been known blind to the threat (0 = it sees) */
 } detail;
 struct hcb_brain {
     hcb_cfg cfg;

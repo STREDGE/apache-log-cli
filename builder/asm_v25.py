@@ -9,6 +9,7 @@ LIB[0x0df4]={'id':'0DF4','name':'GET_MENU_TOUCHED_ITEM_INDEX','num_params':2}
 LIB[0x0e48]={'id':'0E48','name':'HELICOVER_BRAIN','num_params':3}   # registered by libHelicoverBrain64.so through CLEO's plugin interface
 # Native SA command (self, x, y, z), absent from the trimmed library snapshot.
 LIB[0x00ab]={'id':'00AB','name':'SET_CAR_COORDINATES','num_params':4}
+LIB[0x02ab]={'id':'02AB','name':'SET_CHAR_PROOFS','num_params':6}   # actor, bullet, fire, explosion, collision, melee (a command of the game since GTA III; the library file leaves it out)
 LIB[0x0016]={'id':'0016','name':'DIV_INT_LVAR_BY_VAL','num_params':2}
 # CLEO Android: 0DD8 result = read_mem_addr addr size add_ib (destination first).
 LIB[0x0dd8]={'id':'0DD8','name':'READ_MEM_ADDR','num_params':4}

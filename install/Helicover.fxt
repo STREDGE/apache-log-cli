@@ -69,8 +69,8 @@ HCDSQ ~b~PILOT:~w~ picking the squad up first, then we leave.
 HCBURN ~r~CAR ON FIRE!~w~ Get away from it.
 HCEVADE ~r~TAKING HITS!~w~ Pilot breaking away.
 HCSHOT ~r~TAKING FIRE!~w~ Pilot breaking away.
-HCHELLO ~b~HELICOVER 1.4 BETA 2~w~ ready. CLEO menu > Helicover.
-HCHELLV ~b~HELICOVER 1.4 BETA 2~w~ ready. Map marker is off here.
+HCHELLO ~b~HELICOVER 1.4 BETA 3~w~ ready. CLEO menu > Helicover.
+HCHELLV ~b~HELICOVER 1.4 BETA 3~w~ ready. Map marker is off here.
 RGDEP ~b~PILOT:~w~ team going down the ropes.
 RGDONE ~g~SQUAD:~w~ team back aboard.
 RGFAIL ~r~HELICOVER:~w~ could not load the team.
@@ -118,10 +118,10 @@ SQCLR ~g~SQUAD:~w~ area secure, regrouping on CJ.
 SQDOWN ~r~MAN DOWN!~w~ We lost one.
 SQCAR ~g~SQUAD:~w~ mounting up.
 SQEVAC ~r~TOO HOT!~w~ CJ is hurt - call ROPE PICKUP.
-SQGOF ~g~ALPHA:~w~ CJ, cover - straight ahead! Go to the mark.
-SQGOR ~g~ALPHA:~w~ CJ, cover - on your right! Go to the mark.
-SQGOB ~g~ALPHA:~w~ CJ, cover - behind you! Go to the mark.
-SQGOL ~g~ALPHA:~w~ CJ, cover - on your left! Go to the mark.
+SQGOF ~g~ALPHA:~w~ CJ, follow me! Cover straight ahead - run to me.
+SQGOR ~g~ALPHA:~w~ CJ, follow me! Cover on your right - run to me.
+SQGOB ~g~ALPHA:~w~ CJ, follow me! Cover behind you - run to me.
+SQGOL ~g~ALPHA:~w~ CJ, follow me! Cover on your left - run to me.
 SQMEF ~g~ALPHA:~w~ no cover here - stay by your guard, move ahead!
 SQMER ~g~ALPHA:~w~ no cover here - stay by your guard, move right!
 SQMEB ~g~ALPHA:~w~ no cover here - stay by your guard, fall back!
