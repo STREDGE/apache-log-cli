@@ -457,6 +457,14 @@ class Scene:
         s.n_high = len(hg)
         for o, (x_, y_, z_, sees_) in zip(s.high, hg):
             o.at = vec(x_, y_, z_); o.height = z_ - (self.cj['pos'][2] - 1.); o.sees_cj = int(sees_)
+        # 1.1: the ways asked for by the last look - found on the brain's map as it is now (in the game: a thread of the mod)
+        pq = getattr(self, 'path_q', [])[:HCB_MAX_PATHQ]
+        s.n_paths = len(pq)
+        for o, (frm_, to_, key_) in zip(s.paths, pq):
+            wp = (hcb_vec * 10)()
+            o.n = LIB.hcb_nav_way(self.brain.mem, vec(*frm_), vec(*to_), wp, 10, self.time)
+            setattr(o, 'from', vec(*frm_)); o.to = vec(*to_); o.key = key_
+            for k_ in range(max(0, o.n)): o.wp[k_] = wp[k_]
         s.n_probes = len(self.probe_q)
         for o, (at, frm) in zip(s.probes, self.probe_q):
             o.at = vec(*at)
@@ -510,6 +518,7 @@ class Scene:
             self.posts = {p_.who: hcb_post.from_buffer_copy(bytes(p_)) for p_ in out.posts[:out.n_posts]}
             self.ground_q = [(q.x, q.y, q.z) for q in out.ground_q[:out.n_ground_q]]
             self.seg_q = [((q.a.x, q.a.y, q.a.z), (q.b.x, q.b.y, q.b.z)) for q in out.seg_q[:out.n_seg_q]]
+            self.path_q = [((getattr(q, 'from').x, getattr(q, 'from').y, getattr(q, 'from').z), (q.to.x, q.to.y, q.to.z), q.key) for q in out.path_q[:out.n_path_q]]
             self.last_out = out
             if out.say:
                 self.said.append((self.time, out.say, out.say_dir))

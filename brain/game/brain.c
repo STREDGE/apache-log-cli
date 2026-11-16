@@ -617,6 +617,7 @@ static int sane(const float *p) {
     for (i = 0; i < 3; i++) if (!(p[i] - p[i] == 0.0f)) return 0;
     return p[0] > -4000.0f && p[0] < 4000.0f && p[1] > -4000.0f && p[1] < 4000.0f && p[2] > -300.0f && p[2] < 3000.0f;
 }
+static int g_ray_cars = 1;          /* 1.1: 0 for the map's rays (what stands between two cells for good: buildings and objects, not a parked car) */
 static u64 now_us(void);
 static int ray_budget_left(void) { return g_frame_ray_us < RAY_FRAME_US; }
 static int ray(const float *p, const float *q, const u8 *ignore) {
@@ -629,7 +630,7 @@ static int ray(const float *p, const float *q, const u8 *ignore) {
     g_where = 2;
     t0 = now_us();
     if (g_ignore_ok) { old = *slot; *slot = ignore; }
-    r = ((los_fn)(G + G_LOS_CLEAR))(p, q, 1, 1, 0, 1, 0, 0, 0) != 0;
+    r = ((los_fn)(G + G_LOS_CLEAR))(p, q, 1, g_ray_cars, 0, 1, 0, 0, 0) != 0;
     if (g_ignore_ok) *slot = old;
     dt = now_us() - t0;
     g_frame_ray_us += dt;
@@ -994,6 +995,116 @@ static void ropes_keep(void) {
     }
     g_where = 4;
 }
+/* ---------- 1.1: the map kept between games, and the ways found by a thread of the mod's own ----------
+   The map's answers (height of the ground in a cell, what stands between it and the next one) are kept in a table - 16384
+   cells, the last ones asked - and in a file (configs/net.helicover.brain.map). A cell that is in the table is answered
+   from it without a single ray of the game's, so a place CJ has been to is known at once, in this game and the next.
+   (That is why the map's rays do not count cars: a wall is still there tomorrow, a parked car is not. A car in the way is
+   seen by the "straight leg" rays when a man walks.) The file is written by the thread, never by the game's thread.
+   The ways: the core asks (hcb_out.path_q), the game's thread copies the brain's map (38 KB) and the questions, the thread
+   runs the search and the answers go into the next look as inputs (hcb_snapshot.paths) - so they are in the black box and
+   a report replays exactly, whatever the thread's timing was. No thread (it could not be started): the search is done
+   at once, in the look, as in 1.0. */
+#define MAP_FILE GAME_DIR "configs/net.helicover.brain.map"
+#define MAP_MAGIC 0x504d4348U           /* "HCMP" */
+#define MCACHE 16384U
+struct mcell { short x, y; float z; u8 wall, used, pad[2]; };
+static struct mcell g_mc[MCACHE], g_mc_copy[MCACHE];
+static u32 g_mc_n, g_mc_dirty, g_mc_hits, g_mc_loaded, g_mc_saved, g_mc_save_at;
+static volatile int g_map_save, g_path_job;                              /* job: 0 none, 1 for the thread, 2 answers ready */
+static u8 g_nav_copy[48 * 1024] __attribute__((aligned(16)));
+static hcb_pathq g_pq[HCB_MAX_PATHQ];
+static hcb_patha g_pa[HCB_MAX_PATHQ];
+static u32 g_pq_n, g_pq_now, g_pa_n, g_paths_asked, g_paths_found, g_paths_dropped, g_path_us_max;
+static int g_path_thread;
+static u32 mc_slot(int x, int y) { return ((u32)x * 73856093U ^ (u32)y * 19349663U) & (MCACHE - 1); }
+static struct mcell *mc_find(int x, int y) {
+    u32 h = mc_slot(x, y), k;
+    for (k = 0; k < 16; k++) { struct mcell *c = &g_mc[(h + k) & (MCACHE - 1)]; if (!c->used) return 0; if (c->x == x && c->y == y) return c; }
+    return 0;
+}
+static void mc_put(int x, int y, float z, u8 wall) {
+    u32 h = mc_slot(x, y), k;
+    struct mcell *c = 0;
+    if (x < -4000 || x > 4000 || y < -4000 || y > 4000) return;
+    for (k = 0; k < 16 && !c; k++) { struct mcell *q = &g_mc[(h + k) & (MCACHE - 1)]; if (!q->used || (q->x == x && q->y == y)) c = q; }
+    if (!c) c = &g_mc[h];                                               /* (the neighbourhood is full: the oldest habit goes) */
+    if (!c->used) g_mc_n++;
+    if (!c->used || c->x != x || c->y != y || c->z != z || c->wall != wall) g_mc_dirty++;
+    c->x = (short)x; c->y = (short)y; c->z = z; c->wall = wall; c->used = 1;
+}
+static void map_load(void) {
+    u32 head[3], i; int fd = open(MAP_FILE, O_RDONLY);
+    struct { short x, y; float z; u8 wall, pad[3]; } r;
+    if (fd < 0) { lg("the map of earlier games: none yet\n"); return; }
+    if (read(fd, head, 12) == 12 && head[0] == MAP_MAGIC && head[1] == 1 && head[2] <= MCACHE)
+        for (i = 0; i < head[2] && read(fd, &r, 12) == 12; i++) {
+            if (!(r.z == r.z) || r.z < -200.0f || r.z > 2000.0f || r.wall > 3) continue;       /* (a damaged file: such a cell is left out) */
+            mc_put(r.x, r.y, r.z, r.wall); g_mc_loaded++;
+        }
+    close(fd);
+    g_mc_dirty = 0;
+    lg("the map of earlier games: "); tu(&g_log, g_mc_loaded); lg(" cells of ground known from the start\n");
+}
+static void map_write(void) {                                           /* (the thread's: from the copy the game's thread made) */
+    static struct { short x, y; float z; u8 wall, pad[3]; } out[MCACHE];
+    u32 head[3], i, n = 0; int fd;
+    for (i = 0; i < MCACHE; i++) if (g_mc_copy[i].used) { out[n].x = g_mc_copy[i].x; out[n].y = g_mc_copy[i].y; out[n].z = g_mc_copy[i].z; out[n].wall = g_mc_copy[i].wall; out[n].pad[0] = out[n].pad[1] = out[n].pad[2] = 0; n++; }
+    head[0] = MAP_MAGIC; head[1] = 1; head[2] = n;
+    fd = open(MAP_FILE, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd < 0) return;
+    write(fd, head, 12); write(fd, out, (u64)n * 12); close(fd);
+    g_mc_saved = n;
+}
+/* one turn of the thread's work (also called by the tests, and by the game's thread itself when there is no thread) */
+EXPORT void hcb_path_work(void) {
+    if (__atomic_load_n(&g_path_job, __ATOMIC_ACQUIRE) == 1) {
+        u32 i; u64 t0 = now_us();
+        for (i = 0; i < g_pq_n && i < HCB_MAX_PATHQ; i++) {
+            g_pa[i].from = g_pq[i].from; g_pa[i].to = g_pq[i].to; g_pa[i].key = g_pq[i].key;
+            g_pa[i].n = hcb_nav_solve(g_nav_copy, g_pq[i].from, g_pq[i].to, g_pa[i].wp, 10, g_pq_now);
+        }
+        g_pa_n = i;
+        t0 = now_us() - t0;
+        if (t0 > g_path_us_max) g_path_us_max = (u32)t0;
+        __atomic_store_n(&g_path_job, 2, __ATOMIC_RELEASE);
+    }
+    if (__atomic_exchange_n(&g_map_save, 0, __ATOMIC_ACQ_REL)) map_write();
+}
+static void *path_thread(void *arg) {
+    (void)arg;
+    for (;;) { hcb_path_work(); usleep(__atomic_load_n(&g_ready, __ATOMIC_ACQUIRE) && g_snap.n_ours ? 3000 : 100000); }
+    return 0;
+}
+/* after a look: the core's questions go to the thread (with a copy of the map as it is now); every 30 s a changed map is handed over to be written */
+static void path_post(u32 now) {
+    if (g_out.n_path_q) {
+        if (__atomic_load_n(&g_path_job, __ATOMIC_ACQUIRE) == 0 && hcb_nav_size() <= sizeof g_nav_copy) {
+            u32 i;
+            hcb_nav_copy(BRAIN, g_nav_copy);
+            g_pq_n = g_out.n_path_q < HCB_MAX_PATHQ ? g_out.n_path_q : HCB_MAX_PATHQ;
+            for (i = 0; i < g_pq_n; i++) g_pq[i] = g_out.path_q[i];
+            g_pq_now = now; g_paths_asked += g_pq_n;
+            __atomic_store_n(&g_path_job, 1, __ATOMIC_RELEASE);
+            if (!g_path_thread) hcb_path_work();
+        } else g_paths_dropped += g_out.n_path_q;                        /* (the thread is still on the last ones: the core asks again) */
+    }
+    if (g_mc_dirty && (now < g_mc_save_at || now - g_mc_save_at >= 30000) && !__atomic_load_n(&g_map_save, __ATOMIC_ACQUIRE)) {
+        memcpy(g_mc_copy, g_mc, sizeof g_mc); g_mc_dirty = 0; g_mc_save_at = now ? now : 1;
+        __atomic_store_n(&g_map_save, 1, __ATOMIC_RELEASE);
+        if (!g_path_thread) hcb_path_work();
+    }
+}
+/* before a look: the ways the thread has found */
+static void path_collect(hcb_snapshot *s) {
+    s->n_paths = 0;
+    if (__atomic_load_n(&g_path_job, __ATOMIC_ACQUIRE) == 2) {
+        u32 i;
+        for (i = 0; i < g_pa_n && i < HCB_MAX_PATHQ; i++) { s->paths[i] = g_pa[i]; if (g_pa[i].n > 0) g_paths_found++; }
+        s->n_paths = i;
+        __atomic_store_n(&g_path_job, 0, __ATOMIC_RELEASE);
+    }
+}
 static float ground_z(float x, float y, float z, int *found) {
     u8 f = 0; float g; u64 t0 = now_us(); u32 was = g_where;
     g_where = 24;
@@ -1041,16 +1152,28 @@ static void fill_map(hcb_snapshot *s, const hcb_out *prev, const float *cjp) {
         }
     }
     n = prev->n_ground_q < HCB_MAX_GROUND ? prev->n_ground_q : HCB_MAX_GROUND;
-    for (i = 0; i < n && g_map_us < MAP_LOOK_US; i++) {
-        hcb_ground *a = &s->ground[s->n_ground++];
-        int f, f2;
+    for (i = 0; i < n; i++) {
+        hcb_ground q0 = prev->ground_q[i], *a;
+        struct mcell *mc;
+        int f, f2, cx, cy;
         float g, p[3], q[3];
-        *a = prev->ground_q[i]; a->found = 0; a->wall = 0;
+        if (q0.x != q0.x || q0.y != q0.y || q0.z != q0.z || q0.x < -4000.0f || q0.x > 4000.0f || q0.y < -4000.0f || q0.y > 4000.0f || q0.z < -200.0f || q0.z > 2000.0f) continue;
+        cx = (int)q0.x - (q0.x < 0.0f); cy = (int)q0.y - (q0.y < 0.0f);
+        /* 1.1: known from before (this game or an earlier one), on the level asked about: answered without the game */
+        mc = mc_find(cx, cy);
+        if (mc && mc->z <= q0.z + 0.01f && q0.z - mc->z < 6.0f) {
+            a = &s->ground[s->n_ground++]; *a = q0; a->found = 1; a->z = mc->z; a->wall = mc->wall;
+            g_map_ground++; g_map_ground_ok++; g_mc_hits++;
+            continue;
+        }
+        if (g_map_us >= MAP_LOOK_US) { g_map_left++; continue; }
+        a = &s->ground[s->n_ground++];
+        *a = q0; a->found = 0; a->wall = 0;
         g_map_ground++;
-        if (a->x != a->x || a->y != a->y || a->z != a->z || a->x < -4000.0f || a->x > 4000.0f || a->y < -4000.0f || a->y > 4000.0f || a->z < -200.0f || a->z > 2000.0f) continue;
         g = ground_z(a->x, a->y, a->z, &f);
         if (!f) continue;
         p[0] = a->x; p[1] = a->y; p[2] = g + 0.7f;
+        g_ray_cars = 0;
         for (k = 0; k < 2; k++) {                                       /* what stands between this cell and the next one to +x, to +y */
             float g2;
             q[0] = a->x + (k == 0 ? 1.0f : 0.0f); q[1] = a->y + (k == 1 ? 1.0f : 0.0f);
@@ -1058,10 +1181,11 @@ static void fill_map(hcb_snapshot *s, const hcb_out *prev, const float *cjp) {
             q[2] = (f2 && g2 - g < 0.8f && g - g2 < 0.8f ? g2 : g) + 0.7f;
             if (!map_ray(p, q)) a->wall |= (u8)(1 << k);
         }
+        g_ray_cars = 1;
         a->found = 1; a->z = g;
         g_map_ground_ok++;
+        mc_put(cx, cy, g, a->wall);
     }
-    g_map_left += n - i;
     for (i = 0; i < 32 && s->n_high < HCB_MAX_HIGH; i++) {
         float at[3];
         if (!g_high[i].ok || s->time < g_high[i].time || s->time - g_high[i].time > 20000) continue;
@@ -1333,6 +1457,7 @@ static int build_snapshot(hcb_snapshot *s, const hcb_out *prev) {
     for (k = 0; k < HCB_MAX_OURS; k++) g_our_ent[2 + k] = k < s->n_ours ? obj_of(&pp, s->ours[k], PED_STRIDE) : 0;
     fill_more(s, cjp);
     fill_map(s, prev, cjp);
+    path_collect(s);
     return 1;
 }
 
@@ -1442,6 +1567,7 @@ static void think(void) {
     }
     if (fresh || g_ticks % 50 == 0) hcb_rec_push_state(&g_rec[g_cur], g_box[g_cur], BRAIN);
     hcb_think(BRAIN, &g_snap, &g_out);
+    path_post(now);
     if (g_out.say) { g_say_seq = g_out.say_seq; g_say = g_out.say; g_say_dir = g_out.say_dir; }
     if (hcb_places_changed(BRAIN)) places_save();
     if (g_out.say) speak(g_out.say, g_out.lead);
@@ -2043,7 +2169,8 @@ static void session_second(u32 now) {
     ts(D, " | weapons "); ts(D, g_gun_ok ? (g_gun_proved ? "MOD (rounds seen)" : "MOD (no round seen yet)") : "scripts"); ts(D, ": gun tasks "); tu(D, g_gun_new); ts(D, " commands "); tu(D, g_gun_cmd); ts(D, " magazines "); tu(D, g_reloads);
     ts(D, " | ropes kept alive "); tu(D, g_ropes_kept);
     ts(D, " | map: ground asked "); tu(D, g_map_ground); ts(D, " found "); tu(D, g_map_ground_ok); ts(D, " legs "); tu(D, g_map_segs); ts(D, " left for later "); tu(D, g_map_left);
-    ts(D, " max "); tu(D, g_map_us_max); ts(D, " us a look");
+    ts(D, " max "); tu(D, g_map_us_max); ts(D, " us a look; cells kept "); tu(D, g_mc_n); ts(D, " (from the file "); tu(D, g_mc_loaded); ts(D, ") answered from memory "); tu(D, g_mc_hits); ts(D, " written "); tu(D, g_mc_saved);
+    ts(D, " | ways: asked "); tu(D, g_paths_asked); ts(D, " found "); tu(D, g_paths_found); ts(D, " put off "); tu(D, g_paths_dropped); ts(D, g_path_thread ? " (own thread, longest " : " (in the look, longest "); tu(D, g_path_us_max); ts(D, " us)");
     ts(D, "\n  seen: peds "); tu(D, g_snap.n_peds); ts(D, " (+"); tu(D, g_snap.peds_lost); ts(D, " left out) vehicles "); tu(D, g_snap.n_vehs);
     ts(D, " ours "); tu(D, g_snap.n_ours); ts(D, " game cover points "); tu(D, g_snap.n_hints); ts(D, " (table: live "); tu(D, g_cover_live); ts(D, " read "); tu(D, g_cover_ok); ts(D, ") water asked "); tu(D, g_water_calls); ts(D, " in water "); tu(D, g_water_yes); ts(D, " voice lines "); tu(D, g_said_voice); ts(D, " | shots: ours "); tu(D, s_shots_ours); ts(D, " others "); tu(D, s_shots_other); ts(D, " at us "); tu(D, s_shots_at_us);
     if (s_ev_cut) { ts(D, " | event lines cut "); tu(D, s_ev_cut); }
@@ -2358,6 +2485,7 @@ static int try_install(void) {
     body_setup();
     mind_setup();
     places_load();
+    map_load();
     return 1;
 }
 static void *waiter(void *arg) {
@@ -2582,6 +2710,7 @@ EXPORT void OnModLoad(void) {
     add_menu_items();
     r = try_install();
     if (r != -1 && (r == 0 || !g_cleo)) { if (pthread_create(&th, 0, waiter, (void *)(long)r)) lg("cannot start the waiting thread\n"); else lg("waiting (for the game or for CLEO)\n"); }
+    if (r != -1) { if (pthread_create(&th, 0, path_thread, 0)) lg("cannot start the way-finding thread: the ways are found in the look\n"); else { g_path_thread = 1; lg("way-finding thread on\n"); } }
     if (r != -1) { if (pthread_create(&th, 0, watchdog, 0)) lg("cannot start the hang recorder\n"); else lg("hang recorder on\n"); }
     if (r != -1) { crash_recorder_on(); lg("crash recorder on\n"); if (g_last_crash == 20) { g_fire_off = 1; lg("the last game crashed in a gunner's shot: the game's weapon fire stays off from now on\n"); }
         if (g_last_crash == 23) { g_body_off = 1; g_body_ok = 0; lg("the last game crashed while the mod was giving a guard his task: from now on the scripts walk the guards\n"); }

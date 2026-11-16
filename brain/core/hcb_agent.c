@@ -134,15 +134,22 @@ HID void hcb_agent_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
             else {
                 int need = !a->n_path || now - a->plan_t > 2500 || d2(a->path[a->n_path - 1], p->at) > 2.0f;
                 if (need && plans < 2) {
-                    int n = hcb_nav_path(b, me->pos, p->at, a->path, AG_PATH, now);
+                    /* 1.1: the way is found outside the look (hcb_path_ask): asked now, it is here with the next look or the one
+                       after. Meanwhile he keeps the way he has; with none he waits where he is (never straight at a wall). */
+                    hcb_vec np[AG_PATH];
+                    int n = hcb_path_ask(b, out, p->who, me->pos, p->at, np, AG_PATH, now);
                     plans++;
+                    if (n == -2) {
+                        if (!a->n_path) { p->via = sg == 0 ? me->pos : p->at; a->prog_since = now; a->prog_pos = me->pos; }
+                    } else {
                     a->plan_t = now;
-                    if (n > 0) { a->n_path = (u8)n; a->i_path = 0; a->why = HCB_WHY2_ROUTE; }
+                    if (n > 0) { int q_; for (q_ = 0; q_ < n; q_++) a->path[q_] = np[q_]; a->n_path = (u8)n; a->i_path = 0; a->why = HCB_WHY2_ROUTE; }
                     else {
                         a->n_path = 0; a->why = n == 0 ? HCB_WHY2_NO_ROUTE : sg == 0 && d <= 14.0f ? HCB_WHY2_BLOCKED : HCB_WHY2_DIRECT;
                         /* (the map knows the ground and there is no way over it - a roof, a walled yard: that is three failures at
                            once, so the squad gives him another place within a few seconds instead of letting him run at a wall) */
                         if (n == 0) { p->stuck = 1; a->fails = (u8)(a->fails + 3 > 250 ? 250 : a->fails + 3); }
+                    }
                     }
                 }
                 if (a->n_path) {
@@ -168,7 +175,7 @@ HID void hcb_agent_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                             }
                         }
                     }
-                } else p->via = p->at;
+                } else if (!(need && d2(p->via, me->pos) < 0.01f)) p->via = p->at;
             }
         }
         if (a->fails >= 6) {                                         /* (no way on the map: failed at once, without a step) */

@@ -12,7 +12,7 @@
 #define HCB_H
 #include <stdint.h>
 
-#define HCB_VERSION 7          /* layout of the structs below; a black box says which version wrote it */
+#define HCB_VERSION 8          /* layout of the structs below; a black box says which version wrote it */
 
 #define HCB_MAX_PEDS 64        /* peds in one snapshot (nearest to CJ first) */
 #define HCB_MAX_VEHS 40
@@ -28,6 +28,7 @@
 #define HCB_MAX_GROUND 32       /* 1.0: ground questions per tick (the brain's own map of the ground round CJ): one ray down and four level
                                    rays each */
 #define HCB_MAX_SEGS 16         /* 1.0: "can a man walk straight from a to b" questions per tick */
+#define HCB_MAX_PATHQ 4         /* 1.1: ways asked for per tick */
 #define HCB_MAX_HIGH 8          /* 1.0: high places near CJ (roofs) the adapter has found for the marksman */
 
 /* ---- ped flags (hcb_ped.flags) */
@@ -341,6 +342,21 @@ typedef struct hcb_high {
     uint8_t sees_cj;    /* 1 = CJ can be seen from it */
     uint8_t pad[3];
 } hcb_high;
+/* 1.1: the way-finding is done outside the brain's own look (a thread of the mod; the tests do it between two looks). The brain
+   asks: a way from `from` to `to` on its map as it is now; the answer comes with the next look and is an INPUT like any other
+   (it is in the black box, so a report replays exactly whatever the thread did). */
+typedef struct hcb_pathq {
+    hcb_vec from;
+    hcb_vec to;
+    uint32_t key;       /* who asks (comes back with the answer) */
+} hcb_pathq;
+typedef struct hcb_patha {
+    hcb_vec from;
+    hcb_vec to;
+    uint32_t key;
+    int32_t n;          /* > 0: so many way points; 0: no way on the map; -1: the map does not know where `from` is */
+    hcb_vec wp[10];
+} hcb_patha;
 typedef struct hcb_snapshot {
     uint32_t time;      /* game time, ms */
     uint32_t frame;
@@ -394,6 +410,8 @@ typedef struct hcb_snapshot {
     hcb_ground ground[HCB_MAX_GROUND];
     hcb_seg segs[HCB_MAX_SEGS];
     hcb_high high[HCB_MAX_HIGH];
+    uint32_t n_paths;   /* 1.1: answers to path_q of an earlier hcb_out */
+    hcb_patha paths[HCB_MAX_PATHQ];
 } hcb_snapshot;
 
 typedef struct hcb_mark {
@@ -463,6 +481,8 @@ typedef struct hcb_out {
     hcb_vec ow_at;
     hcb_ground ground_q[HCB_MAX_GROUND];
     hcb_seg seg_q[HCB_MAX_SEGS];
+    uint32_t n_path_q;  /* 1.1: ways to be found before the next look */
+    hcb_pathq path_q[HCB_MAX_PATHQ];
 } hcb_out;
 
 /* Tunable numbers. hcb_init fills in the defaults; tests and the tuning runs change them. */
@@ -566,6 +586,10 @@ void hcb_think(hcb_brain *b, const hcb_snapshot *s, hcb_out *out);
    1 ground (*z its height), 2 nothing to stand on; *blocked = the ways out of the cell that are marked blocked (bit per
    direction, 0 = +x, counter-clockwise). */
 int hcb_nav_way(hcb_brain *b, hcb_vec from, hcb_vec to, hcb_vec *wp, int max, uint32_t now);
+/* 1.1, for the thread that finds the ways: a copy of the map (hcb_nav_size bytes), and a way on such a copy */
+uint32_t hcb_nav_size(void);
+void hcb_nav_copy(const hcb_brain *b, void *dst);
+int hcb_nav_solve(const void *map, hcb_vec from, hcb_vec to, hcb_vec *wp, int max, uint32_t now);
 int hcb_nav_cell(const hcb_brain *b, float x, float y, float *z, int *blocked, uint32_t now);
 
 /* What the brain knows about one contact, for tests and the log. Returns 0 when it does not know the id. */

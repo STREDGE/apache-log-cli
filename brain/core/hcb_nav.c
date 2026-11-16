@@ -108,7 +108,7 @@ HID void hcb_nav_update(hcb_brain *b, const hcb_snapshot *s, hcb_out *out, hcb_v
     u32 now = s->time;
     int k, r, i, j, fi, fj, ng = s->n_ground < HCB_MAX_GROUND ? s->n_ground : HCB_MAX_GROUND, ns = s->n_segs < HCB_MAX_SEGS ? s->n_segs : HCB_MAX_SEGS;
 
-    out->n_ground_q = 0; out->n_seg_q = 0;
+    out->n_ground_q = 0; out->n_seg_q = 0; out->n_path_q = 0;
     if (!(focus.x - focus.x == 0.0f) || !(focus.y - focus.y == 0.0f) || !(focus.z - focus.z == 0.0f)) return;
     recentre(n, focus);
     n->fz = focus.z - 1.0f;
@@ -135,6 +135,16 @@ HID void hcb_nav_update(hcb_brain *b, const hcb_snapshot *s, hcb_out *out, hcb_v
         }
     }
     for (i = 0; i < NAV_SEGS; i++) if (n->sg[i].used && now - (n->sg[i].answered ? n->sg[i].answered : n->sg[i].asked) > 4000) n->sg[i].used = 0;
+    /* 1.1: the ways found since the last look */
+    for (k = 0; k < (int)s->n_paths && k < HCB_MAX_PATHQ; k++) {
+        const hcb_patha *pa = &s->paths[k];
+        for (i = 0; i < NAV_PATHS; i++) {
+            pathent *e = &b->pa[i];
+            if (!e->used || e->key != pa->key || v_dist(e->from, pa->from) > 0.05f || v_dist(e->to, pa->to) > 0.05f) continue;
+            e->n = pa->n > AG_PATH ? AG_PATH : pa->n; e->answered = now ? now : 1;
+            for (j = 0; j < e->n; j++) e->wp[j] = pa->wp[j];
+        }
+    }
     /* (the map is only built while the mod walks somebody of the detail: every question costs the game a ray or three) */
     for (k = 0, r = 0; k < (int)s->n_ours && k < HCB_MAX_OURS; k++) if (s->our_role[k] >= HCB_ROLE_SQUAD && s->our_role[k] <= HCB_ROLE_SQUAD + 7) r = 1;
     if (!s->body || !r) return;
@@ -285,8 +295,7 @@ HID hcb_vec hcb_nav_centre(const hcb_brain *b, hcb_vec at) {
     return r;
 }
 
-HID int hcb_nav_path(hcb_brain *b, hcb_vec from, hcb_vec to, hcb_vec *wp, int max, u32 now) {
-    nav *n = &b->nv;
+static int path_on(nav *n, hcb_vec from, hcb_vec to, hcb_vec *wp, int max, u32 now) {
     static const float COST[2] = {1.0f, 1.41421f};
     float g[NAV_N * NAV_N];
     u16 par[NAV_N * NAV_N], open[NAV_OPEN], chain[NAV_N * 4];
@@ -394,7 +403,34 @@ HID int hcb_nav_path(hcb_brain *b, hcb_vec from, hcb_vec to, hcb_vec *wp, int ma
     return nw;
 }
 
+HID int hcb_nav_path(hcb_brain *b, hcb_vec from, hcb_vec to, hcb_vec *wp, int max, u32 now) { return path_on(&b->nv, from, to, wp, max, now); }
 API int hcb_nav_way(hcb_brain *b, hcb_vec from, hcb_vec to, hcb_vec *wp, int max, uint32_t now) { return hcb_nav_path(b, from, to, wp, max, now); }
+/* 1.1: the search runs outside the look - on a copy of the map (it only reads it) */
+API uint32_t hcb_nav_size(void) { return sizeof(nav); }
+API void hcb_nav_copy(const hcb_brain *b, void *dst) { copy(dst, &b->nv, sizeof(nav)); }
+API int hcb_nav_solve(const void *map, hcb_vec from, hcb_vec to, hcb_vec *wp, int max, uint32_t now) { return path_on((nav *)map, from, to, wp, max > AG_PATH ? AG_PATH : max, now); }
+/* A way from `from` to `to` for `key` (a man; a man and a place). An answer not older than 2.5 s for nearly the same two ends is
+   given at once; otherwise the question goes out (once in 0.6 s) and -2 is returned: "asked". */
+HID int hcb_path_ask(hcb_brain *b, hcb_out *out, u32 key, hcb_vec from, hcb_vec to, hcb_vec *wp, int max, u32 now) {
+    pathent *e = 0, *old = &b->pa[0];
+    int i;
+    for (i = 0; i < NAV_PATHS; i++) {
+        pathent *q = &b->pa[i];
+        if (q->used && q->key == key) { e = q; break; }
+        if (!q->used || (old->used && (q->asked > q->answered ? q->asked : q->answered) < (old->asked > old->answered ? old->asked : old->answered))) old = q;
+    }
+    if (e && e->answered && e->answered >= e->asked && now - e->answered <= 2500 && v_dist(e->from, from) < 1.5f && v_dist(e->to, to) < 1.0f) {
+        int n = e->n > max ? max : e->n;
+        for (i = 0; i < n; i++) wp[i] = e->wp[i];
+        return n;
+    }
+    if (e && e->asked > e->answered && now - e->asked < 600 && v_dist(e->to, to) < 1.0f) return -2;
+    if (out->n_path_q >= HCB_MAX_PATHQ) return -2;
+    if (!e) { e = old; zero(e, sizeof *e); e->used = 1; e->key = key; }
+    e->from = from; e->to = to; e->asked = now ? now : 1; e->answered = 0;
+    out->path_q[out->n_path_q].from = from; out->path_q[out->n_path_q].to = to; out->path_q[out->n_path_q].key = key; out->n_path_q++;
+    return -2;
+}
 API int hcb_nav_cell(const hcb_brain *b, float x, float y, float *z, int *blocked, uint32_t now) {
     const nav *n = &b->nv;
     int i = ci(n, x), j = cj_(n, y);

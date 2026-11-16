@@ -150,7 +150,7 @@ class Emu:
         self.water_level, self.water_calls, self.say_calls = None, 0, []
         self.new_tasks, self.set_tasks, self.abort_calls, self.abort_ok, self.pool_full, self.ground_calls, self.los_fn = [], [], [], True, False, 0, None
         self.ground = lambda x, y, z: (1, 0.)                                # flat ground at height 0 everywhere
-        self.ev_clears, self.sec_tasks, self.gun_cmds, self.reloads, self.gun_fires = [], [], [], [], True
+        self.ev_clears, self.sec_tasks, self.gun_cmds, self.reloads, self.gun_fires, self.thread_runs = [], [], [], [], True, True
         for addr, fn in ((F_TASK_NEW, self.g_task_new), (F_GOTO, self.g_goto), (F_SHOOT, self.g_shoot), (F_SET_TASK, self.g_set_task), (F_GROUND, self.g_ground),
                          (F_EV_CLEAR, self.g_ev_clear), (F_SET_SEC, self.g_set_sec), (F_GUN_CTOR, self.g_gun_ctor), (F_GUN_CTL, self.g_gun_ctl), (F_RELOAD, self.g_reload)):
             uc.hook_add(UC_HOOK_CODE, fn, begin=GTA + addr, end=GTA + addr)
@@ -510,6 +510,8 @@ class Emu:
             self.call(self.slot(GOT_SCRIPTS))
             if hud:
                 self.call(self.slot(GOT_HUD))
+            if self.thread_runs and self.syms.get('hcb_path_work'):       # (1.1: the mod's own thread - the ways, the map file - has its turn between two frames)
+                self.call(MODB + self.syms['hcb_path_work'])
 
     def gunshot(self, ped, to):
         m = self.r64(ped + 0x18)
@@ -567,7 +569,7 @@ assert 'the brain is running' in log and '%d instruction words match' % N_WORDS 
 assert sorted(changed_bytes(e)) == sorted([GOT_SCRIPTS, GOT_HUD, GOT_GUNSHOT]), 'exactly three GOT slots of the game differ, nothing else'
 rw = [p for p in e.prot if p[2] == 3]; ro = [p for p in e.prot if p[2] == 1]
 assert len(rw) == len(ro) == 3 and all(p[0] % 0x4000 == 0 and p[1] == 0x4000 for p in e.prot) and not [p for p in e.prot if p[2] & 4], e.prot
-assert [i['name'] for i in e.items] == ['Brain markers', 'Brain report'] and e.items[0]['init'] == 0 and len(e.threads) == 1 and 'hang recorder on' in log, (e.threads, log)
+assert [i['name'] for i in e.items] == ['Brain markers', 'Brain report'] and e.items[0]['init'] == 0 and len(e.threads) == 2 and 'hang recorder on' in log and 'way-finding thread on' in log, (e.threads, log)   # (1.1: + the way-finding thread)
 assert not e.cleo_changes(), 'CLEO is not touched before the game runs its scripts'
 passed('On the real libGTASA.so the mod finds all %d instruction words, changes exactly three GOT slots (page made writable, then read-only again; never executable) and nothing else in the game; two items in Mods Settings, the markers off by default' % N_WORDS)
 e.frame(n=3)
@@ -635,7 +637,7 @@ def no_bridge(text, **kw):
 
 
 e, ch = no_bridge('CLEO not recognised', cleo='CLEO ANDROID (64-999999)')
-assert len(e.threads) == 2 and not ch, [hex(c) for c in ch]     # waiting for CLEO, and the hang recorder
+assert len(e.threads) == 3 and not ch, [hex(c) for c in ch]     # waiting for CLEO, the way-finding thread and the hang recorder
 e, ch = no_bridge('CLEO\'s code is not the build the bridge was made for', tweak=lambda e: e.uc.mem_write(CI + I_REGISTER + 4, struct.pack('<I', 0xd503201f)))
 assert ch == [I_REGISTER & ~7]
 e, ch = no_bridge('CLEO\'s plugin table is not where it should be', tweak=lambda e: e.w64(CI + 0x27d9b8 + 8 * 19, CI + 0x38e80))
@@ -695,7 +697,7 @@ assert all(t['match'] for t in ticks) and len(ticks) >= 4 and ticks[0]['exact'],
 passed('The report written on the emulated arm64 CPU replays on this computer to the same decisions, digest for digest: the core is bit-exact across the two architectures')
 assert 'think time' in text and 'screen 2000x1250' in text and 'asked for in Mods Settings' in text and 'scripts bridge: opcode 0E48' in text, text
 los_to_cj = [c for c in e.los_calls if abs(c[1][2] - 1.6) < .01 and abs(c[1][0]) < .01 and abs(c[1][1]) < .01]
-assert los_to_cj and all(c[2] == [1, 1, 0, 1, 0, 0, 0] for c in e.los_calls), e.los_calls[:3]
+assert los_to_cj and all(c[2] in ([1, 1, 0, 1, 0, 0, 0], [1, 0, 0, 1, 0, 0, 0]) for c in e.los_calls) and all(c[2][1] == 1 for c in los_to_cj), e.los_calls[:3]   # (1.1: the map's own rays leave cars out)
 assert any(abs(c[0][0] - 4) < .01 and abs(c[1][0] - 20) < .01 for c in e.los_calls), 'the core\'s question "does our guard see the Balla" is answered with a real ray'
 to_driver = [c for c in e.los_calls if abs(c[1][0] + 40) < 1]
 assert to_driver and all(c[3] == rammer for c in to_driver) and all(c[3] == 0 for c in e.los_calls if c not in to_driver) and e.r64(GTA + IGNORE_ENTITY) == 0x5e17, 'a ray to the man at the wheel passes through his own car, every other ray ignores nothing, and the game\'s own value is put back'
@@ -1484,6 +1486,64 @@ assert b'GunOff = 1' in e3.fs[CFG_] and 'the scripts fire the guards\' weapons f
 e3 = Emu(gun=True); e3.fs[CFG_] = b'[Preferences]\nMarkers = 0\nMindOff = 1\nRopeOff = 1\nGunOff = 1\n'; lg3 = e3.load()
 assert 'the game AI kept off the guards: off in the settings; their weapons: the scripts (off in the settings); their ropes: the game\'s (off in the settings)' in lg3, lg3[-400:]
 passed('1.1 the settings file: every tactical number is written to configs/net.helicover.brain.ini ([Tactics], with what it means and its limits); a changed value is taken at the next start, one that is not a number or outside its limits is ignored and written back as the built-in one; MindOff / GunOff / RopeOff switch those parts off, and a crash inside one of them (steps 25-27) does it by itself')
+
+# ------------------------------------------------------------------ 1.1: the ways found by the mod's own thread; the map kept between games
+MAPF = '/storage/emulated/0/Android_unprotected/data/com.rockstargames.gtasa/configs/net.helicover.brain.map'
+def walled(e):
+    e.los_fn = lambda a, b: not (min(a[1], b[1]) < 3.0 < max(a[1], b[1]) and -12 < a[0] < 12 and a[2] < 3)   # a wall along y = 3, 24 m long: between the guard and CJ
+e, (g1,), lg_ = detail_world(tweak=walled)                          # (the wall stands from the start: the map asks about a cell once)
+assert 'the map of earlier games: none yet' in lg_ and 'way-finding thread on' in lg_
+e.move(g1, 0, 9)
+kinds = []
+gp, walked = [0., 9.], []
+for k in range(260):
+    e.frame(ms=100, hud=False); v = post(e, g1)
+    if v[1] == 5 and e.new_tasks:                                    # (what the game's task does: the man walks to the task's target - not through the wall)
+        tx, ty, _ = struct.unpack('<3f', bytes(e.uc.mem_read(e.new_tasks[-1]['task'] + 0x1c, 12))); d_ = math.hypot(tx - gp[0], ty - gp[1])
+        if d_ > 0.05:
+            st_ = min(d_, 0.45); nx, ny = gp[0] + (tx - gp[0]) * st_ / d_, gp[1] + (ty - gp[1]) * st_ / d_
+            if not (min(gp[1], ny) < 3.0 < max(gp[1], ny) and -12 < nx < 12): gp = [nx, ny]; e.move(g1, nx, ny)
+        walked.append(tuple(gp))
+head, text, ticks = replay_tool.replay(e.save())
+asked = sum(t['out'].n_path_q for t in ticks); answers = [p_ for t in ticks for p_ in t['snapshot'].paths[:t['snapshot'].n_paths]]
+assert asked >= 1 and answers and any(a.n >= 2 for a in answers) and all(t['match'] for t in ticks), (asked, [a.n for a in answers])
+ways = [[(round(a.wp[k].x, 1), round(a.wp[k].y, 1)) for k in range(a.n)] for a in answers if a.n >= 2]
+assert any(any(abs(x) > 11 for x, y in w_) for w_ in ways), ('once the map knows the wall, the way goes round its end', ways[-3:])
+assert max(abs(x) for x, y in walked) > 11.5 and gp[1] < 2.0 and math.hypot(gp[0] - fl(v[2]), gp[1] - fl(v[3])) < 2.0, ('walked along the way the thread found: round the end of the wall and on to his post', gp, max(abs(x) for x, y in walked))
+lg_ = e.log()
+passed('1.1 the ways: the straight way is blocked by a wall - the core asks for a way, the mod\'s thread finds it on a copy of the brain\'s map and the answer comes into a later look as an input (the report replays exactly); the way goes round the end of the wall and the guard is walked along it')
+# the thread is slow or absent: nothing waits for it
+e, (g1,), _ = detail_world(tweak=walled); e.thread_runs = False; e.move(g1, 0, 9)
+for k in range(40):
+    e.frame(ms=100, hud=False); post(e, g1)
+head, text, ticks = replay_tool.replay(e.save())
+late = ticks[-35:]                                                   # (the looks since the thread stopped having its turn)
+assert sum(t['snapshot'].n_paths for t in late) == 0 and all(t['match'] for t in ticks) and sum(t['out'].n_path_q for t in late) >= 1, ('asked, no answer, no fault: the guard waits, the game goes on', sum(t['snapshot'].n_paths for t in late), sum(t['out'].n_path_q for t in late))
+e.thread_runs = True
+for k in range(30):
+    e.frame(ms=100, hud=False); post(e, g1)
+head, text, ticks = replay_tool.replay(e.save())
+assert sum(t['snapshot'].n_paths for t in ticks[-33:]) >= 1, 'when the thread has its turn again the answers come'
+passed('1.1 the ways, a slow thread: while it has no turn the look is not held up and nothing breaks (the guard waits where he is); the answers come when it runs again')
+# the map: what was asked once is written to a file by the thread and known at once in the next game
+e, (g1,), _ = detail_world()
+e.frame(ms=100, n=60, hud=False)
+calls1 = e.ground_calls
+e.frame(ms=1000, n=32, hud=False)                                    # (30 s later the changed map goes to the thread)
+assert MAPF in e.fs and e.fs[MAPF][:4] == b'HCMP' and struct.unpack('<III', e.fs[MAPF][:12])[1:] == (1, (len(e.fs[MAPF]) - 12) // 12) and len(e.fs[MAPF]) > 12 + 12 * 300, len(e.fs.get(MAPF, b''))
+cars_flag = {c[2][1] for c in e.los_calls if abs(c[0][2] - 0.7) < 0.01 and abs(c[1][2] - 0.7) < 0.01 and abs(math.dist(c[0], c[1]) - 1.0) < 0.01}   # (cell centre to the next cell centre, knee high)
+assert cars_flag == {0}, ('the map\'s rays do not count cars', cars_flag)
+e2 = Emu(); e2.fs[MAPF] = e.fs[MAPF] + b''; lg2 = e2.load()
+g2 = e2.ped(9, 6, pedtype=8, weapon=31); e2.share(HC_STATE + 71, e2.handle(g2)); e2.share(HC_HELLO, 0); e2.share(HC_MODE, 0); e2.share(HC_RECALL, 0)
+e2.frame(ms=100, n=25, hud=False)
+head, text, ticks = replay_tool.replay(e2.save())
+known = sum(t['snapshot'].n_ground for t in ticks)
+assert 'cells of ground known from the start' in lg2 and known > 300 and e2.ground_calls < calls1 // 4 and all(t['match'] for t in ticks), (known, e2.ground_calls, calls1)
+e3 = Emu(); e3.fs[MAPF] = b'HCMP' + struct.pack('<II', 1, 3) + struct.pack('<hhfBxxx', 1, 1, float('nan'), 0) + struct.pack('<hhfBxxx', 2, 2, 5., 9) + struct.pack('<hhfBxxx', 3, 3, 5., 1); lg3 = e3.load()
+assert 'the map of earlier games: 1 cells' in lg3 and 'the brain is running' in lg3
+e4 = Emu(); e4.fs[MAPF] = b'junk' * 10; lg4 = e4.load()
+assert 'the map of earlier games: 0 cells' in lg4 and 'the brain is running' in lg4
+passed('1.1 the map between games: the cells asked about are kept (16384 of them) and written by the thread to configs/net.helicover.brain.map; in the next game the same ground is answered from the file - %d cells in 2.5 s with a quarter of the game\'s ground calls or fewer; the map\'s rays do not count cars; a damaged file or cell is left out' % known)
 
 text = '\n'.join(results) + '\nThe phone build on an emulated CPU with the real libGTASA.so and the real code of the CLEO library; the world in memory is laid out by the test. Not run in the game.\n'
 (h.OUT / 'brain_adapter_tests.txt').write_text(text)

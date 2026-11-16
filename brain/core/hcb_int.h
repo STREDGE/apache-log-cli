@@ -147,7 +147,16 @@ typedef struct nav {
     navcell c[NAV_N * NAV_N];
     segent sg[NAV_SEGS];
 } nav;
+/* 1.1: ways asked for and their answers (kept 2.5 s) */
+#define NAV_PATHS 12
 #define AG_PATH 10
+typedef struct pathent {
+    hcb_vec from, to;
+    u32 key, asked, answered;
+    int n;
+    u8 used, r0, r1, r2;
+    hcb_vec wp[AG_PATH];
+} pathent;
 typedef struct agent {
     u32 id;
     hcb_vec goal;           /* the place he is going to (the post as he took it) */
@@ -182,6 +191,7 @@ struct hcb_brain {
     cover cv[HCB_MAX_COVERS];
     detail dt;
     nav nv;
+    pathent pa[NAV_PATHS];
     agent ag[8];
     squad sq;
 };
@@ -229,6 +239,7 @@ HID int hcb_place_pick(hcb_brain *b, hcb_out *out, const place_in *in, u32 now, 
 HID int hcb_cv_state(hcb_brain *b, hcb_vec at, hcb_vec from, u32 now, int low);     /* 1 cover, 0 none, -1 not known, -2 asked */
 HID int hcb_cv_raw(hcb_brain *b, hcb_vec at, hcb_vec from, u32 now, int *hidden, int *hidden_hi, int *ground);   /* 1 known */
 HID void hcb_cv_ask(hcb_brain *b, hcb_out *out, hcb_vec at, hcb_vec from, u32 now);
+HID int hcb_path_ask(hcb_brain *b, hcb_out *out, u32 key, hcb_vec from, hcb_vec to, hcb_vec *wp, int max, u32 now);   /* 1.1: -2 asked (the answer comes with a later look); else as hcb_nav_path */
 HID int hcb_nav_narrow(const hcb_brain *b, hcb_vec at);                                     /* 1 = a doorway: walls on both sides of the cell */
 HID int hcb_nav_ground(const hcb_brain *b, hcb_vec at, float *z);                           /* 1 ground known there */
 /* hcb_agent.c */

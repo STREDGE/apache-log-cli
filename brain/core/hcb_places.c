@@ -117,7 +117,13 @@ HID int hcb_place_pick(hcb_brain *b, hcb_out *out, const place_in *in, u32 now, 
         for (i = 0; i < n; i++) if (sc[i] >= 0.0f && (best < 0 || sc[i] > sc[best])) best = i;
         if (best < 0) return 0;
         /* (the way there, for the best one or two: a place with no way to it on the map is no place) */
-        if (tries < 2 && d2(cand[best], in->man) > 2.5f && hcb_nav_path(b, in->man, cand[best], tmp, AG_PATH, now) == 0) { sc[best] = -1.0f; continue; }
+        if (tries < 2 && d2(cand[best], in->man) > 2.5f) {
+            /* (1.1: asked outside the look. Until the answer is here the place is taken on trust by a man who has none, and
+               left alone by a man who holds one) */
+            u32 key = 0x80000000u | (((u32)(int)(in->man.x * 0.5f) * 7919u) ^ ((u32)(int)(in->man.y * 0.5f) * 104729u) ^ ((u32)(int)cand[best].x * 31u) ^ ((u32)(int)cand[best].y * 1009u));
+            int r_ = hcb_path_ask(b, out, key, in->man, cand[best], tmp, AG_PATH, now);
+            if (r_ == 0 || (r_ == -2 && in->strict)) { sc[best] = -1.0f; continue; }
+        }
         hcb_place_score(b, out, in, cand[best], now, 2, &cv[best]);       /* (and the middle of that way is asked about) */
         *found = cand[best]; *score = sc[best]; *cover = cv[best];
         return 1;
