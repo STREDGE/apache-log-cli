@@ -139,7 +139,7 @@ a(0x0e48,V(23),I(9),I(5))   # 23@ number, 24@ what (HCB_SAY_*), 25@ direction fr
 s.get(19,b.SQ_SAY_SEQ);s.check(0x003b,[V(19),V(23)],'SAY_NEW');s.go('SAY_DONE')
 s.label('SAY_NEW');a(0xddc,I(b.SQ_SAY_SEQ),V(23));s.eq(19,-1,'SAY_WHAT');s.go('SAY_DONE')
 s.label('SAY_WHAT')
-for what,keys in [(1,['SQGO'+d for d in 'FRBL']),(2,['SQSAFE']),(3,['SQME'+d for d in 'FRBL']),(4,['SQEVAC']),(5,['SQCMD']),(6,['SQCLR'])]:
+for what,keys in [(1,['SQGO'+d for d in 'FRBL']),(2,['SQSAFE']),(3,['SQME'+d for d in 'FRBL']),(4,['SQEVAC']),(5,['SQCMD']),(6,['SQCLR']),(7,['SQS'+d for d in 'FRBL']),(8,['SQMEM'])]:   # 1.5.2: 7 sniper, 8 a place where the detail was attacked before
  nw=uid('SAY_W');s.eq(24,what,nw)
  if len(keys)==1:msg(keys[0],False);s.go('SAY_DONE')
  else:
@@ -339,6 +339,7 @@ TEXTS={'SQXF': '~r~SHOTS AT CJ - FRONT!~w~ Covering him.',
  'SQMEB': '~g~ALPHA:~w~ no cover here - stay by your guard, fall back!',
  'SQMEL': '~g~ALPHA:~w~ no cover here - stay by your guard, move left!',
  'SQSAFE': '~g~ALPHA:~w~ CJ is in cover. Stay there, we work.',
+ 'SQMEM': '~y~ALPHA:~w~ we were attacked here before. Eyes open.',
  'SQCMD': '~r~ALPHA DOWN!~w~ BRAVO: I have command.'}
 if __name__=='__main__':
  report=s.build('Helicover_Squad2' if TEAM else 'Helicover_Squad','csa');print(report)

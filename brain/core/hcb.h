@@ -237,6 +237,8 @@ typedef struct hcb_post {
 #define HCB_SAY_EVAC 4          /* "Too hot - we pull out, call the pickup" */
 #define HCB_SAY_TAKE_OVER 5     /* "the commander is down - I have command" */
 #define HCB_SAY_CLEAR 6         /* "clear - regroup on CJ" */
+#define HCB_SAY_SNIPER 7        /* 0.7: "sniper - <dir>!" (a man far off who has hit or fired at CJ) */
+#define HCB_SAY_BEEN_HERE 8     /* 0.7: "we were attacked here before - eyes open" (the brain remembers the places) */
 
 typedef struct hcb_los {
     uint32_t from;      /* one of ours */
@@ -394,6 +396,11 @@ uint32_t hcb_brain_size(void);
 uint32_t hcb_struct_size(int which);   /* 0 ped, 1 veh, 2 event, 3 snapshot, 4 out, 5 cfg, 6 mark, 7 track_info, 8 rec, 9 box_head, 10 los, 11 order, 12 shot, 13 round */
 void hcb_init(hcb_brain *b, uint32_t seed);
 hcb_cfg *hcb_config(hcb_brain *b);
+/* 0.7: the places where the detail was attacked (the adapter keeps them in a file between games). */
+#define HCB_MAX_PLACES 16
+int hcb_places_get(const hcb_brain *b, hcb_vec *at, uint16_t *count);   /* fills up to HCB_MAX_PLACES; returns how many */
+void hcb_places_set(hcb_brain *b, const hcb_vec *at, const uint16_t *count, int n);
+int hcb_places_changed(hcb_brain *b);   /* 1 once after the list has changed (the adapter saves it then) */
 void hcb_think(hcb_brain *b, const hcb_snapshot *s, hcb_out *out);
 
 /* What the brain knows about one contact, for tests and the log. Returns 0 when it does not know the id. */

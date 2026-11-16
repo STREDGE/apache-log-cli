@@ -303,7 +303,23 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
     }
 
     duty = (threat || remembered) ? (mode == HCB_MODE_PULLOUT ? HCB_DUTY_RING : HCB_DUTY_COVER) : suspect ? HCB_DUTY_WATCH : HCB_DUTY_CALM;
-    if (duty >= HCB_DUTY_COVER && dt->duty < HCB_DUTY_COVER) { dt->contact_since = now; dt->cover_said = 0; dt->safe_said = 0; dt->mover = 0; }
+    if (duty >= HCB_DUTY_COVER && dt->duty < HCB_DUTY_COVER) {
+        int best_i = -1, w;
+        dt->contact_since = now; dt->cover_said = 0; dt->safe_said = 0; dt->mover = 0;
+        /* 0.7: the place is remembered (one entry for 60 m round it; when the list is full the least attacked goes) */
+        for (i = 0; i < dt->places && i < 16; i++) if (dist2d(dt->place[i], cjp) < 60.0f) best_i = i;
+        if (best_i >= 0) { if (dt->place_n[best_i] < 60000) dt->place_n[best_i]++; }
+        else {
+            if (dt->places < 16) w = dt->places++;
+            else { w = 0; for (i = 1; i < 16; i++) if (dt->place_n[i] < dt->place_n[w]) w = i; }
+            dt->place[w] = cjp; dt->place_n[w] = 1;
+        }
+        dt->places_dirty = 1; dt->place_said = now ? now : 1;
+    }
+    /* ... and coming back to such a place in peace the commander says so, once in two minutes */
+    if (duty < HCB_DUTY_COVER && n && !cj->vehicle && say == HCB_SAY_NONE && (!dt->place_said || now - dt->place_said > 120000))
+        for (i = 0; i < dt->places && i < 16; i++)
+            if (dist2d(dt->place[i], cjp) < 45.0f) { say = HCB_SAY_BEEN_HERE; dt->place_said = now ? now : 1; break; }
     if (duty < HCB_DUTY_COVER && dt->duty >= HCB_DUTY_COVER && (!dt->clear_said || now - dt->clear_said > 10000) && say == HCB_SAY_NONE) { say = HCB_SAY_CLEAR; dt->clear_said = now ? now : 1; }
     if (duty < HCB_DUTY_COVER) { dt->cj_cover_ok = 0; dt->leading = 0; dt->in_since = 0; dt->nocover_since = 0; dt->cover_bad_since = 0; }
     dt->duty = duty; out->duty = duty;
@@ -350,7 +366,7 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
     {
         /* each outer man's corner: metres ahead (towards the threat in a fight, the way CJ goes in peace) and to the right */
         static const float CORNER[4][2] = {{0.62f, -0.78f}, {0.62f, 0.78f}, {-0.55f, -0.84f}, {-0.92f, 0.38f}};
-        static const float RAD_PEACE[4] = {10.0f, 10.0f, 9.0f, 12.0f}, RAD_FIGHT[4] = {14.0f, 14.0f, 12.0f, 18.0f};
+        static const float RAD_PEACE[4] = {10.0f, 10.0f, 9.0f, 12.0f}, RAD_FIGHT[4] = {14.0f, 14.0f, 12.0f, 16.0f};
         static const float RING_R[4] = {0.0f, 2.5f, 5.0f, 7.5f};
         int fight = duty >= HCB_DUTY_COVER, ring = duty == HCB_DUTY_RING, n_out = 0, turn;
         hcb_vec ahead = fight || duty == HCB_DUTY_WATCH ? u : f, side = right_of(ahead), away = cjp, lead_d = v_mul(ahead, -1.0f);
@@ -405,23 +421,28 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                         if (st == -1 && k == turn) cv_ask(b, out, dt->man[i].hold, T, now);
                         if (st == 0 && !dt->man[i].hold_bad) dt->man[i].hold_bad = now ? now : 1;
                         if (st == 1) dt->man[i].hold_bad = 0;
-                        if (dc > 26.0f || dc < 4.0f || (dt->man[i].hold_bad && now - dt->man[i].hold_bad > 1500)) hk = 0;
-                        else if (k == turn && st == 1) {               /* CJ's ground must be seen from it */
+                        if (dc > 30.0f || dc < 4.0f || (hk == 1 && dt->man[i].hold_bad && now - dt->man[i].hold_bad > 1500)) hk = 0;
+                        else if (k == turn && st == 1 && hk == 1) {    /* CJ's ground must be seen from it */
                             hcb_vec eye = cjp;
                             eye.z += 0.4f;
                             if (cv_hidden(b, out, dt->man[i].hold, eye, now) == 1) hk = 0;
                         }
                         dt->man[i].hold_ok = (u8)hk;
                     }
-                    if (!hk && k == turn) {
-                        hcb_vec found;
-                        if (find_cover(b, out, c0, u, T, RING_R, 4, 1.0f, now, &found)) {
+                    /* (0.7, from the fourth log: without a post behind cover a man ran after his corner, which moves with every
+                       look - two men in three were always on the move. Now: nothing solid found yet -> he takes the corner
+                       as it is NOW as an open post and keeps it like any other (hold_ok 2), and goes on looking for
+                       something solid near it) */
+                    if (hk != 1 && k == turn) {
+                        hcb_vec found, base = hk == 2 ? dt->man[i].hold : c0;
+                        if (find_cover(b, out, base, u, T, RING_R, 4, 1.0f, now, &found)) {
                             hcb_vec eye = cjp;
                             eye.z += 0.4f;
                             found.z = cjp.z;
                             if (cv_hidden(b, out, found, eye, now) != 1) { dt->man[i].hold = found; dt->man[i].hold_ok = 1; dt->man[i].hold_bad = 0; hk = 1; }
                         }
                     }
+                    if (!hk) { dt->man[i].hold = c0; dt->man[i].hold_ok = 2; dt->man[i].hold_bad = 0; hk = 2; }
                     at = hk ? dt->man[i].hold : c0;
                     crouch = dist2d(at, men[i]->pos) < 1.5f;
                     d_ = crouch ? HCB_DUTY_COVER : HCB_DUTY_BOUND;
@@ -459,6 +480,10 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
             /* what the commander tells CJ: 2.5 s between any two things said; "follow me" every 6 s at most whatever the
                spot; "in cover" when CJ has stayed there 1 s; "stay with me" after 2 s without any cover */
             if (say == HCB_SAY_NONE && (!dt->said_at || now - dt->said_at >= 2500)) {
+                /* 0.7: a man far off (45 m+) who has fired at CJ or hit him: "sniper - <dir>!", once in 20 s */
+                if (threat && dist2d(threat->last.pos, cjp) > 45.0f && (threat->shots_at_cj || threat->damage_cj > 0) && (!dt->sniper_said || now - dt->sniper_said >= 20000)) {
+                    say = HCB_SAY_SNIPER; say_dir = rel_dir(cj, threat->last.pos); dt->sniper_said = now ? now : 1;
+                } else
                 if (dt->cj_cover_ok && !cj_in && (!dt->cover_said || now - dt->cover_said >= SAY_COVER_MS)) { say = HCB_SAY_TAKE_COVER; say_dir = rel_dir(cj, dt->cj_cover); dt->cover_said = now ? now : 1; }
                 else if (cj_in && now - dt->in_since >= 1000 && (!dt->safe_said || now - dt->safe_said >= 15000)) { say = HCB_SAY_IN_COVER; dt->safe_said = now ? now : 1; }
                 else if (!dt->cj_cover_ok && now - dt->contact_since >= 1500 && dt->nocover_since && now - dt->nocover_since >= 2000 && (!dt->cover_said || now - dt->cover_said >= 8000)) {
@@ -481,6 +506,24 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
             if (along < 0.3f || along > 40.0f || f_abs(lat) >= need) continue;
             p->at = v_add(p->at, v_mul(side, (lat < 0 ? -need : need) - lat));
             if (p->move == 0) p->move = 2;
+        }
+    }
+    /* 0.7, stealth: CJ crouches and creeps while all is quiet - so does the detail (down, at a walk, no running about) */
+    if (duty < HCB_DUTY_COVER && (cj->flags & HCB_PF_DUCKING) && cj_speed < 2.5f)
+        for (i = 0; i < out->n_posts; i++) { out->posts[i].crouch = 1; if (out->posts[i].move > 1) out->posts[i].move = 1; }
+    /* 0.7: nobody is posted within 12 m of a burning vehicle (it blows up): such a post is moved straight out to 13 m */
+    for (k = 0; k < (int)s->n_vehs && k < HCB_MAX_VEHS; k++) {
+        const hcb_veh *c = &s->vehs[k];
+        if (!(c->flags & HCB_VF_BURNING) || (c->flags & HCB_VF_WRECKED) || c->id == s->heli) continue;
+        for (i = 0; i < out->n_posts; i++) {
+            hcb_post *p = &out->posts[i];
+            float d = dist2d(p->at, c->pos);
+            if (d < 12.0f) {
+                hcb_vec o = unit2(v_sub(p->at, c->pos), unit2(v_sub(cjp, c->pos), (hcb_vec){0, 1, 0}));
+                p->at.x = c->pos.x + o.x * 13.0f; p->at.y = c->pos.y + o.y * 13.0f;
+                if (p->move < 2) p->move = 2;
+                p->crouch = 0;
+            }
         }
     }
     /* out of the way of a car (0.4.2; 0.5: sooner, wider, and nobody runs across in front of one - in the second game the

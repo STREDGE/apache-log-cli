@@ -43,7 +43,7 @@ prio(ACTION,'HCNOBR','HCNEED','HCVER','HCNOMAP','HCIN','HCEXIT','HCNOSEA','HCNOS
 prio(DANGER,'HCBURN','HCSHOT','HCEVADE','SQDOWN','SQEVAC','SQLOST','HCDAMAG','HCEMERG','SQCMD',*['SQGO'+d for d in 'FRBL'],*['SQME'+d for d in 'FRBL'],
  *['SQ'+k+d for k in 'XSVR' for d in 'FLBR'])
 prio(TACTICAL,'HCLOAD','HCFOLL','HCHOLD','HCPAT','HCDEPT','HCROPE','HCRTEAM','HCRBACK','HCSWAP','HCCREW',
- 'HCFM0','HCFM2','HCFM3','HCFM4','HCCONT','HCCLEAR','SQCLR','SQSAFE','SQIN','SQBACK','SQCOVER','RGUP','RGABO','RGDEP','RGDONE','HCAVOID','HCEVAC','HCTEAM',
+ 'HCFM0','HCFM2','HCFM3','HCFM4','HCCONT','HCCLEAR','SQCLR','SQSAFE','SQMEM','SQIN','SQBACK','SQCOVER','RGUP','RGABO','RGDEP','RGDONE','HCAVOID','HCEVAC','HCTEAM',
  'HCBOARD','HCGROVE','HCHOME','HCARRIV','HCMUST','RGLATE','SQAWAY','SQSTAY',*['SQ'+k+d for k in 'CA' for d in 'FLBR'])
 prio(CHATTER,'SQCAR')
 # beta 6: the pilot's / gunners' acknowledgement of an order the player has just given. It is still a routine message for the MESSAGES

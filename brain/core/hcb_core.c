@@ -68,6 +68,19 @@ API u32 hcb_struct_size(int which) {
     return 0;
 }
 API hcb_cfg *hcb_config(hcb_brain *b) { return &b->cfg; }
+API int hcb_places_get(const hcb_brain *b, hcb_vec *at, u16 *count) {
+    int i, n = b->dt.places > 16 ? 16 : b->dt.places;
+    for (i = 0; i < n; i++) { at[i] = b->dt.place[i]; count[i] = b->dt.place_n[i]; }
+    return n;
+}
+API void hcb_places_set(hcb_brain *b, const hcb_vec *at, const u16 *count, int n) {
+    int i;
+    if (n < 0) n = 0;
+    if (n > 16) n = 16;
+    for (i = 0; i < n; i++) { b->dt.place[i] = at[i]; b->dt.place_n[i] = count[i]; }
+    b->dt.places = (u8)n; b->dt.places_dirty = 0;
+}
+API int hcb_places_changed(hcb_brain *b) { int d = b->dt.places_dirty; b->dt.places_dirty = 0; return d; }
 API void hcb_init(hcb_brain *b, u32 seed) {
     zero(b, sizeof *b);
     b->seed = seed;

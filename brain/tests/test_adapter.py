@@ -1139,6 +1139,25 @@ lg4 = e3.load()
 assert e3.fs.get(MODS + 'hcbrain_log_old.txt') == big and lg4.startswith('\n\n========== a new game') and len(lg4) < 20000
 passed('One log for the whole game (0.4.1): every start of the game adds to the same hcbrain_log.txt (never rewritten; over 24 MB it becomes hcbrain_log_old.txt); every second CJ, the brain\'s alert, the detail\'s duty, mode and commander, the helicopter\'s spot, each of ours (where, health, weapon, post and how far, order and why he holds), each contact (class, why, distance, where, weapon), the pilot, Helicover\'s shared values that changed, the 0E48 calls and the timing - %d seconds of a fight written; the writer thread adds the text twice a second and notes the pause menu' % len(secs))
 
+# 0.7: the places of earlier fights are kept in a file between games
+PLACES = '/storage/emulated/0/Android_unprotected/data/com.rockstargames.gtasa/configs/net.helicover.brain.places'
+e = Emu(); lg_ = e.load()
+assert 'places of earlier attacks: none remembered yet' in lg_
+gang = e.ped(20, 0, pedtype=7, weapon=30, face=(-1., 0.))
+s1 = e.ped(4, 2, pedtype=8, weapon=31)
+e.share(HC_STATE + 71, e.handle(s1)); e.share(HC_HELLO, 0)
+e.frame(n=3); e.gunshot(gang, (0., 0.5, 1.)); e.frame(ms=100, n=10, hud=False)
+assert PLACES in e.fs and struct.unpack('<I', e.fs[PLACES][:4])[0] == 1 and len(e.fs[PLACES]) == 20, len(e.fs.get(PLACES, b''))
+px, py, pz, pn = struct.unpack('<3fI', e.fs[PLACES][4:20])
+assert abs(px) < 1 and abs(py) < 1 and pn == 1, (px, py, pn)
+e2 = Emu(); e2.fs[PLACES] = e.fs[PLACES] + b''; lg2 = e2.load()
+assert 'places of earlier attacks remembered: 1' in lg2
+e3 = Emu(); e3.fs[PLACES] = struct.pack('<I', 2) + struct.pack('<3fI', float('nan'), 0., 0., 3) + struct.pack('<3fI', 100., 50., 10., 4); lg3 = e3.load()
+assert 'places of earlier attacks remembered: 1' in lg3, 'an entry that is not a number is left out'
+e4 = Emu(); e4.fs[PLACES] = struct.pack('<I', 999999) + b'x' * 40; lg4 = e4.load()
+assert 'the brain is running' in lg4 and 'remembered: 0' in lg4, 'a damaged file is ignored'
+passed('0.7 memory of places: a fight writes its place to configs/net.helicover.brain.places; the next game loads it; a damaged file or an entry that is not a number is left out')
+
 text = '\n'.join(results) + '\nThe phone build on an emulated CPU with the real libGTASA.so and the real code of the CLEO library; the world in memory is laid out by the test. Not run in the game.\n'
 (h.OUT / 'brain_adapter_tests.txt').write_text(text)
 print(text)
