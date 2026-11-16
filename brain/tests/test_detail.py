@@ -216,7 +216,9 @@ def fight8(walls, threat=(30., 0.)):
 # short walls (cars, corners) about the place: something to stand behind in every corner
 WALLS = [(10., -12., 10., -9.), (10., 9., 10., 12.), (-4., -11., -4., -8.), (-14., 5., -14., 8.), (11., -6., 11., -4.), (11., 4., 11., 6.)]
 sc, team, g = fight8(WALLS)
-sc.step(80)
+for _ in range(150):                                       # (1.1: the places are valued as the answers come in - a man may move ONCE to a place 20 % better after 4 s)
+    if _ % 9 == 0 and _: sc.shot(g, (0., 0., 1.), dst=1)
+    sc.step(1)
 j = by_job(sc); cjp = sc.cj['pos']
 assert d2(at(j['lead']), cjp) < 2.0, ('the commander stays at CJ\'s side', at(j['lead']))
 assert all(d2(at(j[k]), cjp) < 2.0 and at(j[k])[0] > cjp[0] for k in BODY) and d2(at(j['close']), (1.4, 0)) < 0.3, ('three bodies between CJ and the shooter', [at(j[k]) for k in BODY])
@@ -241,7 +243,7 @@ passed('A fight, eight men: the commander at CJ\'s side, three bodyguards betwee
 sc, team, g = fight8(WALLS)
 sc.step(3)
 j = by_job(sc)
-assert all(j[k].duty == HCB_DUTY_BOUND and not j[k].crouch and j[k].move in (2, 3) for k in OUTER if d2(sc.peds[j[k].who]['pos'], at(j[k])) > 3), [(k, j[k].duty) for k in OUTER]
+assert all(j[k].duty == HCB_DUTY_BOUND and not j[k].crouch and (j[k].move in (2, 3) or j[k].why == HCB_WHY2_WAIT_TURN) for k in OUTER if d2(sc.peds[j[k].who]['pos'], at(j[k])) > 3), [(k, j[k].duty, j[k].move, j[k].why) for k in OUTER]   # (1.1: no more than three on the move - the fourth waits his turn)
 sc.step(60); sc.cj['pos'] = [0., 60., 1.]; sc.step(60)
 j = by_job(sc)
 assert all(d2(at(j[k]), sc.cj['pos']) <= 26 for k in OUTER) and all(d2(at(j[k]), sc.cj['pos']) < 2.2 for k in BODY + ('lead',)), 'CJ has moved 60 m: everybody\'s place is with him again'
@@ -303,7 +305,7 @@ for _ in range(30):
     sc.step(1)
     counts.append(len(sc.probe_q))
     for q_at, q_from in sc.probe_q:
-        key = (round(q_at[0], 1), round(q_at[1], 1))
+        key = (round(q_at[0], 1), round(q_at[1], 1), round(q_from[0]), round(q_from[1]))      # (1.1: a spot is asked about against each threat and against CJ - one question each)
         if key in seen:
             assert sc.time - seen[key] >= 6000, ('an answered spot is not asked about again while the answer is fresh', key)
         seen[key] = sc.time

@@ -11,6 +11,8 @@ P = 'core/hcb_pilot.c'
 N = 'core/hcb_nav.c'
 A = 'core/hcb_agent.c'
 Q = 'core/hcb_squad.c'
+L = 'core/hcb_places.c'
+F = 'core/hcb_fire.c'
 M = [
  (C, "hostile && armed && on_foot && dist <= c->near_m && (facing >= c->facing_cos || hunting) && !blocked", "hostile && armed && on_foot && (facing >= c->facing_cos || hunting) && !blocked", 'armed facing: close only'),
  (C, "hostile && armed && on_foot && dist <= c->near_m && (facing >= c->facing_cos || hunting) && !blocked", "hostile && armed && on_foot && dist <= c->near_m && !blocked", 'armed facing: turned to CJ'),
@@ -220,6 +222,26 @@ M += [
  (Q, "if (q->task == HCB_TASK_WITHDRAW || q->pad0 >= n + 3) {", "if (q->task == HCB_TASK_WITHDRAW) {", 'assault: three down - fall back'),
  (Q, "if (q->umode == HCB_UMODE_PROTECT || !n || s->recall ||", "if (q->umode == HCB_UMODE_PROTECT || !n ||", 'assault: "to me" brings everybody back'),
  (D, "else { at = at_off(cjp, f, -0.8f, r, 1.2f);", "else { at = at_off(cjp, f, -6.8f, r, 6.2f);", 'protect: the commander at CJ\'s right shoulder'),
+ # ---- 1.1: places by weights, tokens, corners and doorways, what the half-hour run found
+ (L, "if (hid && !hi) { sc += c->place_w_fire; *cover = 1; }", "if (hid && !hi) { *cover = 1; }", 'places: low cover with a line of fire is worth most'),
+ (L, "else sc += 0.05f;", "else sc += 0.9f;", 'places: a blind wall is worth next to nothing'),
+ (L, "sc += c->place_w_others * (float)hidden / (float)in->n_other;", "", 'places: hidden from the other threats counts'),
+ (L, "if (hcb_cv_raw(b, at, eye, now, &h2, &x2, &g2)) { if (h2) return -1.0f; }", "if (hcb_cv_raw(b, at, eye, now, &h2, &x2, &g2)) { }", 'places: CJ must be seen from it'),
+ (L, "for (k = 0; k < in->n_taken; k++) if (d2(at, in->taken[k]) < 3.0f) { sc -= c->place_w_crowd; break; }", "", 'places: not within 3 m of another of ours'),
+ (L, "if (v_len(off) < 2.0f + along * 0.05f) return -1.0f;", "", 'places: never in front of CJ\'s weapon'),
+ (D, "(sc > cur * b->cfg.place_better + 0.02f && now - dt->man[i].hold_at >= (u32)b->cfg.place_keep_ms && dist2d(found, dt->man[i].hold) > 1.0f)", "(sc > cur && dist2d(found, dt->man[i].hold) > 1.0f)", 'places: a place is kept (20 % better, 4 s)'),
+ (F, "cs[j].taken >= per_target) continue;", "cs[j].taken >= 4) continue;", 'token: so many rifles on one man'),
+ (F, "(!b->reload_who || now >= b->reload_until) && now - b->reload_last >= 2500", "1", 'token: magazines one man at a time'),
+ (A, "&& movers >= (int)b->cfg.movers_max && !hcb_nav_narrow(b, me->pos)) {", "&& 0) {", 'token: three on the move at most'),
+ (A, "if (now < a->corner_until) {", "if (0) {", 'corner: stop short of it and look'),
+ (A, "                if (busy) {\n", "                if (0) {\n", 'doorway: one man at a time'),
+ (N, "for (m = k; m >= 0; m--) if (narrow_ij(n, chain[m] % NAV_N, chain[m] / NAV_N)) { stop = m; break; }", "", 'doorway: walked through its middle'),
+ (N, "return r == 0 ? path_on(n, from, to, wp, max, 0xffffffffu) : r;", "return r;", 'way: impossible only by the walls the map has seen'),
+ (A, "            if (jam && !force) {", "            if (0) {", 'jam: a man held up by one of ours waits, no mark on the map'),
+ (A, "if (o && d2(o->pos, me->pos) < 0.6f) { ra = 0.3f; if (d > 0.3f && d < 2.5f && p->move == 0) p->move = 1; }", "", 'two on one spot: on to his own place'),
+ (D, "                at = reachable(b, out, cjp, at, now, &dt->man[i].pad);\n", "", 'inner place beyond a wall is pulled in'),
+ (A, "if (a->off_map && a->fails >= 2) { p->move = 4;", "if (0) { p->move = 4;", 'off the map: the game\'s path network'),
+ (Q, "if (have_marksman && mk_roping && q->ow_ok && s->heli) { out->heli_ok = 1;", "if (0) { out->heli_ok = 1;", 'overwatch: the helicopter stays while he is on the rope'),
 ]
 only = sys.argv[1:]
 missed = 0
@@ -238,7 +260,7 @@ for fname, old, new, name in M:
     p.write_text(t.replace(old, new))
     env = dict(os.environ, HCB_OUT=str(ROOT / 'out'))
     caught = False
-    for test in ('test_nav.py', 'test_squad.py', 'test_detail.py', 'test_core.py', 'test_fire.py', 'test_pilot.py'):
+    for test in ('test_places.py', 'test_drills.py', 'test_nav.py', 'test_squad.py', 'test_detail.py', 'test_core.py', 'test_fire.py', 'test_pilot.py'):
         r = subprocess.run([sys.executable, str(ROOT / 'brain' / 'tests' / test)], capture_output=True, text=True, env=env)
         if r.returncode:
             caught = True

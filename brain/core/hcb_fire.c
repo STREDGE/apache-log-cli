@@ -95,7 +95,7 @@ static int check(hcb_brain *b, const hcb_snapshot *s, const hcb_ped *me, int rol
     if (!hcb_is_firearm(me->weapon) || dist > range) return HCB_HOLD_RANGE;
     /* 0.8, proportionate force: a man on foot within 12 m of CJ (a brawler) with nothing in his hands, who has never held a firearm, is not shot while
        CJ is not in a bad way - a guard takes him down by hand (hcb_squad_state says so to the man nearest) */
-    if (!t->last.vehicle && t->last.weapon == 0 && !hcb_is_firearm(t->best_weapon) && v_dist(t->last.pos, s->player.pos) < 12.0f && s->player.health >= 40.0f && !(t->last.flags & HCB_PF_SHOOTING) && s->roe != HCB_ROE_FOLLOW) return HCB_HOLD_FISTS;   /* (WHERE I SHOOT is CJ's own decision) */
+    if (!t->last.vehicle && t->last.weapon == 0 && !hcb_is_firearm(t->best_weapon) && v_dist(t->last.pos, s->player.pos) < 12.0f && s->player.health >= b->cfg.cj_low_hp && !(t->last.flags & HCB_PF_SHOOTING) && s->roe != HCB_ROE_FOLLOW) return HCB_HOLD_FISTS;   /* (WHERE I SHOOT is CJ's own decision) */
     /* the sight of his own man is asked even while a rule holds the fire (CJ or a mate in the line): the answer is fresh
        the moment the line clears, and an old "clear" is never used for a man who may have hidden meanwhile */
     l = los_find(b, me->id, t->last.id);
@@ -147,8 +147,8 @@ static int check(hcb_brain *b, const hcb_snapshot *s, const hcb_ped *me, int rol
 
 /* 0.9: with CJ under 40 health an armed hostile man within 20 m is a target already, turned to CJ or not - the first shot of a
    pistol takes 8 of the little that is left (one who is turned to CJ is a threat anyway) */
-static int low_hp_aim(const hcb_snapshot *s, const track *t) {
-    return s->player.health < 40.0f && t->cls == HCB_CLS_WATCH && t->why == HCB_WHY_ARMED_NEAR && v_dist(t->last.pos, s->player.pos) < 20.0f;
+static int low_hp_aim(const hcb_brain *b, const hcb_snapshot *s, const track *t) {
+    return s->player.health < b->cfg.cj_low_hp && t->cls == HCB_CLS_WATCH && t->why == HCB_WHY_ARMED_NEAR && v_dist(t->last.pos, s->player.pos) < 20.0f;
 }
 HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
     const hcb_cfg *c = &b->cfg;
@@ -158,7 +158,7 @@ HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
     int choice[HCB_MAX_OURS];
     hcb_vec dummy;
     u32 now = s->time;
-    int n_ours = s->n_ours < HCB_MAX_OURS ? s->n_ours : HCB_MAX_OURS, n = 0, i, j, k, round;
+    int n_ours = s->n_ours < HCB_MAX_OURS ? s->n_ours : HCB_MAX_OURS, n = 0, i, j, k, round, per_target;
 
     for (i = 0; i < s->n_los && i < HCB_MAX_LOS; i++) los_store(b, s->los[i].from, s->los[i].to, s->los[i].clear, now);
     for (i = 0; i < HCB_LOS_CACHE; i++) if (b->los[i].used && now - b->los[i].time > 5000) b->los[i].used = 0;
@@ -170,7 +170,7 @@ HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         if (!t->used || !t->seen || t->friendly || (t->last.flags & HCB_PF_DEAD)) continue;
         armed_hostile = t->cls == HCB_CLS_WATCH && (t->why == HCB_WHY_ARMED_NEAR || t->why == HCB_WHY_ARMED_FACING);
         switch (s->roe) {
-        case HCB_ROE_DEFEND: fire = t->cls >= HCB_CLS_THREAT || low_hp_aim(s, t); break;
+        case HCB_ROE_DEFEND: fire = t->cls >= HCB_CLS_THREAT || low_hp_aim(b, s, t); break;
         }
         /* 1.0, ASSAULT: the man CJ has pointed out (aimed or fired at in the last 6 s) is the squad's target whatever he is doing */
         if (!fire && s->umode == HCB_UMODE_ASSAULT && s->roe != HCB_ROE_HOLD && b->sq.target == t->last.id && t->cj_marked && now - t->cj_marked < 6000) fire = 1;
@@ -185,7 +185,7 @@ HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         /* "answer": a policeman is fired at only once he has attacked */
         /* 0.9 (fifth log: CJ at 17 HP, a policeman aimed at him for 0.8 s and was fired at only after his shot, which took half the
            rest): with CJ under 40 health "answer" no longer waits for the first shot from a man who has his weapon on CJ */
-        if (fire && s->police == HCB_POLICE_ANSWER && t->last.pedtype == 6 && t->cls < HCB_CLS_ATTACKER && s->roe != HCB_ROE_FOLLOW && !(s->player.health < 40.0f && t->cls >= HCB_CLS_THREAT)) fire = 0;
+        if (fire && s->police == HCB_POLICE_ANSWER && t->last.pedtype == 6 && t->cls < HCB_CLS_ATTACKER && s->roe != HCB_ROE_FOLLOW && !(s->player.health < b->cfg.cj_low_hp && t->cls >= HCB_CLS_THREAT)) fire = 0;
         if (!fire && t->cls < HCB_CLS_WATCH) continue;
         /* kept sorted, most dangerous first and those that may be fired at before the rest: when the questions about
            lines of sight do not all fit into one tick, the ones that matter most are asked */
@@ -212,6 +212,7 @@ HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         else { why[i][j] = HCB_HOLD_ROE; aim_at[i][j] = HCB_AIM_BODY; }
     }
 
+    per_target = (int)c->shooters_per_target; if (per_target < 1) per_target = 1; if (per_target > 4) per_target = 4;   /* 1.1: a token - so many rifles on one man */
     /* (3) hand the targets out: always the pair that takes most danger off CJ; each further shooter on the same man
        counts for less, so fire spreads, but the worst threat still gets two */
     /* who is firing at a man he may still fire at */
@@ -235,7 +236,7 @@ HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
             for (j = 0; j < n; j++) {
                 static const float share[4] = {1.0f, 0.55f, 0.3f, 0.15f};
                 float v;
-                if ((why[i][j] != HCB_HOLD_NONE && why[i][j] != SOFT_LOS) || cs[j].taken >= 3) continue;
+                if ((why[i][j] != HCB_HOLD_NONE && why[i][j] != SOFT_LOS) || cs[j].taken >= per_target) continue;
                 v = cs[j].value * share[cs[j].taken];
                 if (why[i][j] == SOFT_LOS) v *= 0.9f;                         /* a man he is known to see comes first */
                 if (sh && sh->target == cs[j].t->last.id) v *= 1.3f;         /* stay on your man */
@@ -293,6 +294,19 @@ HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                 sh->burst_until = 0; sh->pause_until = 0;
             }
             o->target = t->last.id; o->aim = t->last.pos; o->aim_at = aim_at[i][choice[i]]; o->ready = 1;
+            /* 1.1, a token: magazines are changed one man at a time. A guard on foot whose magazine is down to reload_clip rounds
+               takes the turn if nobody has it, stops firing for 1.8 s (the adapter changes his magazine) and gives it back;
+               the others fire on meanwhile - the detail never goes quiet all at once because everybody opened fire together. */
+            if (!is_gunner(sh->role) && now >= sh->fire_from) {
+                u8 clip = s->our_clip[i];
+                if (b->reload_who == me[i]->id && now < b->reload_until) { o->hold = HCB_HOLD_RELOAD; sh->hold = o->hold; sh->aim = o->target; sh->ready = 1; continue; }
+                if (b->reload_who == me[i]->id) b->reload_who = 0;
+                if (clip != 255 && clip <= (u8)c->reload_clip && (!b->reload_who || now >= b->reload_until) && now - b->reload_last >= 2500) {
+                    b->reload_who = me[i]->id; b->reload_until = now + 1800; b->reload_last = now;
+                    o->hold = HCB_HOLD_RELOAD; sh->hold = o->hold; sh->aim = o->target; sh->ready = 1;
+                    continue;
+                }
+            }
             if (why[i][choice[i]] == SOFT_LOS) o->hold = HCB_HOLD_NO_LOS;           /* the answer is on its way; the reaction clock is running */
             else if (now < sh->fire_from) o->hold = HCB_HOLD_REACTING;
             /* a guard on foot fires the game's own weapon and the game makes his bursts: for him it is fire or cease fire */
@@ -444,6 +458,7 @@ API int hcb_squad_state(const hcb_brain *cb, const hcb_shot *q) {
     if (!sh || !sh->aim) return 0;
     if (sh->hold == HCB_HOLD_COVERING) return sh->ready ? 1 : 0;
     if (sh->hold == HCB_HOLD_FISTS) return 5;                           /* 0.8: by hand */
+    if (sh->hold == HCB_HOLD_RELOAD) return 3;                          /* 1.1: his magazine: weapon on the man, no fire */
     /* (the check below refuses by itself when his order is not "fire" or the man asked about is not his) */
     return shot_check(cb, q, 1) == HCB_HOLD_NONE ? 2 : 3;
 }

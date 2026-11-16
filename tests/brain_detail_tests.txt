@@ -13,7 +13,7 @@ PASS: Rotation: an outer man who is badly hurt changes places with the fittest b
 PASS: The commander falls: the next man takes command and says so; the three left share the roles (bodyguard and fire team)
 PASS: Too hot (CJ badly hurt under fire): the detail pulls out - the commander and the bodyguards come in (5 m at most), the outer man holds 8-12 m off, the bodyguards towards the shooter, the commander at CJ's side a step away from the shooter, taking him out; "we pull out - call the pickup", not repeated for 20 s
 PASS: The shooter is down and it stays quiet: "clear - regroup on CJ", once, and the detail is back in its formation
-PASS: Cover questions: at most 8 a look (two rays each in the game), and a spot already answered is not asked about again while the answer is fresh
+PASS: Cover questions: at most 16 a look (two rays each in the game), and a spot already answered is not asked about again while the answer is fresh
 PASS: CJ in a vehicle: the detail gives no posts on foot (the scripts take the free seats or follow)
 PASS: Under fire the commander takes CJ to the cover like by the hand: at CJ's side, a step towards the cover, all the way, crouching next to him there; if CJ stays where he is, so does the commander
 PASS: The threat is remembered (the attacker 20 s, his place 12 s more): between bursts the detail does not stand down; then it does
@@ -23,8 +23,8 @@ PASS: The brain picks how to fight by itself: 5 stars (or too many / too strong,
 PASS: The helicopter gets a spot 20 m from CJ and 16 m up, abeam of the line to the shooter on the side it is already, where the gunners see him; it is kept for 10 s of a fight with shooters moving and firing in turn and replaced only when CJ has gone far; the gunners sit on the skid when all is quiet and kneel at the door over a fight
 PASS: The same fight twice gives the same posts, the same words and the same questions (a recorded fight replays exactly)
 PASS: A car at speed coming at a guard: he sprints out of its path (never within 2 m of it as it passes; closest 3.0 m) and returns to his post after
-PASS: A post on the other side of a road with a car coming: the man waits for it to pass (closest 3.3 m to its path) and crosses after
-PASS: 30 s with the shooter circling CJ, a second one firing in turn and CJ shifting about: the commander says 5 things, never two within 2.5 s, "into cover" 6 s apart at least; he starts or stops leading 8 times
+PASS: A post on the other side of a road with a car coming: the man waits for it to pass (closest 5.0 m to its path) and crosses after
+PASS: 30 s with the shooter circling CJ, a second one firing in turn and CJ shifting about: the commander says 5 things, never two within 2.5 s, "into cover" 6 s apart at least; he starts or stops leading 6 times
 PASS: Two shooters on opposite sides firing in turn: the detail keeps the one it fights (3 s at least, then until another is half again as dangerous) - it turned round 0 times in 2.5 s
 PASS: No cover anywhere: each outer man still takes a place of his own and keeps it while the shooter shifts about for 10 s (all four are on their posts, none is running after a moving corner)
 PASS: A shooter 70 m off who has fired at CJ: the commander calls "sniper" with the direction, once in 20 s

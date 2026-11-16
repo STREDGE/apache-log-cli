@@ -14,7 +14,7 @@
  * Everything is deterministic: the same snapshots give the same map and the same ways. */
 #include "hcb_int.h"
 
-#define NAV_EXPAND 1700
+#define NAV_EXPAND (NAV_N * NAV_N)   /* 1.1: the whole map if need be (the search runs in a thread of its own now): a gap in a long wall is found however far the flood has to go */
 #define NAV_OPEN 512
 #define STEP_UP 0.75f
 #define STEP_DOWN 1.5f
@@ -48,6 +48,54 @@ static void recentre(nav *n, hcb_vec f) {
     n->ox = nox; n->oy = noy;
 }
 
+HID int hcb_nav_inside(const hcb_brain *b, hcb_vec at) { const nav *n = &b->nv; int i = ci(n, at.x), j = cj_(n, at.y); return n->ok && i >= 0 && j >= 0 && i < NAV_N && j < NAV_N; }
+/* 1.1: a doorway, a gap in a fence, a narrow passage: the cell has something solid on both sides (east and west, or north and south) */
+static int narrow_ij(nav *n, int i, int j);
+HID int hcb_nav_narrow(const hcb_brain *b, hcb_vec at) { nav *n = (nav *)&b->nv; return narrow_ij(n, ci(n, at.x), cj_(n, at.y)); }
+static int narrow_ij(nav *n, int i, int j) {
+    const navcell *a = cell(n, i, j), *w = cell(n, i - 1, j), *s_ = cell(n, i, j - 1);
+    int k;
+    if (!a || a->st != 1) return 0;
+    if (((a->fix & 1) && w && (w->fix & 1)) || ((a->fix & 2) && s_ && (s_->fix & 2))) return 1;   /* a passage one cell wide */
+    /* a gap in a thin wall: the way across is open here and shut in the cells on both sides (seen from either side of the wall) */
+    for (k = 0; k < 2; k++) {
+        const navcell *c0 = cell(n, i, j - k), *l = cell(n, i - 1, j - k), *r = cell(n, i + 1, j - k);
+        if (c0 && c0->st == 1 && !(c0->fix & 2) && l && r && (l->fix & 2) && (r->fix & 2)) return 1;
+        c0 = cell(n, i - k, j); l = cell(n, i - k, j - 1); r = cell(n, i - k, j + 1);
+        if (c0 && c0->st == 1 && !(c0->fix & 1) && l && r && (l->fix & 1) && (r->fix & 1)) return 1;
+    }
+    return 0;
+}
+/* 1.1: places behind something solid, seen from the threat: ground cells within r of c with a wall on the side the threat is on
+   (nearest to c first). The map only knows what its level rays found - the cover questions decide whether it really hides a man. */
+HID int hcb_nav_walls(const hcb_brain *b, hcb_vec c, float r, hcb_vec threat, hcb_vec *pts, int max) {
+    const nav *n = &b->nv;
+    int i, j, k, m, got = 0, ci0 = ci(n, c.x), cj0 = cj_(n, c.y), rr = (int)r + 1;
+    float d[16];
+    if (max > 16) max = 16;
+    for (j = cj0 - rr; j <= cj0 + rr; j++) for (i = ci0 - rr; i <= ci0 + rr; i++) {
+        const navcell *a = cell((nav *)n, i, j), *w;
+        hcb_vec at;
+        float dx, dy, dd;
+        int wall = 0;
+        if (!a || a->st != 1) continue;
+        at.x = (float)(n->ox + i) + 0.5f; at.y = (float)(n->oy + j) + 0.5f; at.z = a->z + 1.0f;
+        dx = threat.x - at.x; dy = threat.y - at.y;
+        if (dx > 1.0f && (a->fix & 1)) wall = 1;
+        if (dy > 1.0f && (a->fix & 2)) wall = 1;
+        if (dx < -1.0f && (w = cell((nav *)n, i - 1, j)) && (w->fix & 1)) wall = 1;
+        if (dy < -1.0f && (w = cell((nav *)n, i, j - 1)) && (w->fix & 2)) wall = 1;
+        if (!wall) continue;
+        dd = (at.x - c.x) * (at.x - c.x) + (at.y - c.y) * (at.y - c.y);
+        if (dd > r * r) continue;
+        for (k = 0; k < got && d[k] <= dd; k++) {}
+        if (k >= max) continue;
+        if (got < max) got++;
+        for (m = got - 1; m > k; m--) { d[m] = d[m - 1]; pts[m] = pts[m - 1]; }
+        d[k] = dd; pts[k] = at;
+    }
+    return got;
+}
 HID int hcb_nav_ground(const hcb_brain *b, hcb_vec at, float *z) {
     const nav *n = &b->nv;
     int i = ci(n, at.x), j = cj_(n, at.y);
@@ -61,7 +109,7 @@ HID void hcb_nav_update(hcb_brain *b, const hcb_snapshot *s, hcb_out *out, hcb_v
     u32 now = s->time;
     int k, r, i, j, fi, fj, ng = s->n_ground < HCB_MAX_GROUND ? s->n_ground : HCB_MAX_GROUND, ns = s->n_segs < HCB_MAX_SEGS ? s->n_segs : HCB_MAX_SEGS;
 
-    out->n_ground_q = 0; out->n_seg_q = 0;
+    out->n_ground_q = 0; out->n_seg_q = 0; out->n_path_q = 0;
     if (!(focus.x - focus.x == 0.0f) || !(focus.y - focus.y == 0.0f) || !(focus.z - focus.z == 0.0f)) return;
     recentre(n, focus);
     n->fz = focus.z - 1.0f;
@@ -88,6 +136,16 @@ HID void hcb_nav_update(hcb_brain *b, const hcb_snapshot *s, hcb_out *out, hcb_v
         }
     }
     for (i = 0; i < NAV_SEGS; i++) if (n->sg[i].used && now - (n->sg[i].answered ? n->sg[i].answered : n->sg[i].asked) > 4000) n->sg[i].used = 0;
+    /* 1.1: the ways found since the last look */
+    for (k = 0; k < (int)s->n_paths && k < HCB_MAX_PATHQ; k++) {
+        const hcb_patha *pa = &s->paths[k];
+        for (i = 0; i < NAV_PATHS; i++) {
+            pathent *e = &b->pa[i];
+            if (!e->used || e->key != pa->key || v_dist(e->from, pa->from) > 0.05f || v_dist(e->to, pa->to) > 0.05f) continue;
+            e->n = pa->n > AG_PATH ? AG_PATH : pa->n; e->answered = now ? now : 1;
+            for (j = 0; j < e->n; j++) e->wp[j] = pa->wp[j];
+        }
+    }
     /* (the map is only built while the mod walks somebody of the detail: every question costs the game a ray or three) */
     for (k = 0, r = 0; k < (int)s->n_ours && k < HCB_MAX_OURS; k++) if (s->our_role[k] >= HCB_ROLE_SQUAD && s->our_role[k] <= HCB_ROLE_SQUAD + 7) r = 1;
     if (!s->body || !r) return;
@@ -157,6 +215,9 @@ HID void hcb_nav_block(hcb_brain *b, hcb_vec at, hcb_vec toward, u32 now, u32 tt
     hcb_vec d = v_sub(toward, at);
     float len, t;
     int pi, pj;
+    /* 1.1: a doorway (a gap in a wall, a passage one cell wide) is never marked shut by a man who did not get through it this time or by
+       a short leg that brushed its jamb: it is the only way through, and a real door shut shows in the map's own rays */
+    if (hcb_nav_narrow(b, at) || hcb_nav_narrow(b, toward)) return;
     if (!n->ok) return;
     d.z = 0; len = v_len(d);
     if (len < 0.01f) return;
@@ -238,8 +299,7 @@ HID hcb_vec hcb_nav_centre(const hcb_brain *b, hcb_vec at) {
     return r;
 }
 
-HID int hcb_nav_path(hcb_brain *b, hcb_vec from, hcb_vec to, hcb_vec *wp, int max, u32 now) {
-    nav *n = &b->nv;
+static int path_on(nav *n, hcb_vec from, hcb_vec to, hcb_vec *wp, int max, u32 now) {
     static const float COST[2] = {1.0f, 1.41421f};
     float g[NAV_N * NAV_N];
     u16 par[NAV_N * NAV_N], open[NAV_OPEN], chain[NAV_N * 4];
@@ -325,14 +385,17 @@ HID int hcb_nav_path(hcb_brain *b, hcb_vec from, hcb_vec to, hcb_vec *wp, int ma
            he is - a corner between them - he goes to the middle of his own cell first) */
         {
             float kx = (float)(n->ox + chain[k] % NAV_N) + 0.5f, ky = (float)(n->oy + chain[k] / NAV_N) + 0.5f;
-            if ((off_cell || !line_ok(n, px, py, kx, ky, now)) && nw < max) {
+            if ((off_cell || narrow_ij(n, si, sj) || !line_ok(n, px, py, kx, ky, now)) && nw < max) {
                 wp[nw].x = (float)(n->ox + si) + 0.5f; wp[nw].y = (float)(n->oy + sj) + 0.5f; wp[nw].z = n->c[start].z + 1.0f;
                 px = wp[nw].x; py = wp[nw].y; nw++;
             }
         }
         while (k >= 0 && nw < max) {
-            int far = k, m;
-            for (m = 0; m < k; m++) {
+            int far = k, m, stop = 0;
+            /* 1.1: a doorway is walked through its middle - the straight line never jumps past a doorway cell of the chain (cutting
+               the corner there takes a man into the jamb) */
+            for (m = k; m >= 0; m--) if (narrow_ij(n, chain[m] % NAV_N, chain[m] / NAV_N)) { stop = m; break; }
+            for (m = stop; m < k; m++) {
                 float mx = (float)(n->ox + chain[m] % NAV_N) + 0.5f, my = (float)(n->oy + chain[m] / NAV_N) + 0.5f;
                 if (m == 0) { mx = to.x; my = to.y; if (ci(n, mx) != gi || cj_(n, my) != gj) { mx = (float)(n->ox + gi) + 0.5f; my = (float)(n->oy + gj) + 0.5f; } }
                 if (line_ok(n, px, py, mx, my, now)) { far = m; break; }
@@ -347,7 +410,41 @@ HID int hcb_nav_path(hcb_brain *b, hcb_vec from, hcb_vec to, hcb_vec *wp, int ma
     return nw;
 }
 
+/* 1.1 (the half-hour run): what men have marked "I did not get through here" (for a few seconds) makes a way longer, never
+   impossible. With no way round those marks the search is done again on the walls the map itself has seen - "no way" is said
+   only when they say so. */
+static int path_twice(nav *n, hcb_vec from, hcb_vec to, hcb_vec *wp, int max, u32 now) {
+    int r = path_on(n, from, to, wp, max, now);
+    return r == 0 ? path_on(n, from, to, wp, max, 0xffffffffu) : r;
+}
+HID int hcb_nav_path(hcb_brain *b, hcb_vec from, hcb_vec to, hcb_vec *wp, int max, u32 now) { return path_twice(&b->nv, from, to, wp, max, now); }
 API int hcb_nav_way(hcb_brain *b, hcb_vec from, hcb_vec to, hcb_vec *wp, int max, uint32_t now) { return hcb_nav_path(b, from, to, wp, max, now); }
+/* 1.1: the search runs outside the look - on a copy of the map (it only reads it) */
+API uint32_t hcb_nav_size(void) { return sizeof(nav); }
+API void hcb_nav_copy(const hcb_brain *b, void *dst) { copy(dst, &b->nv, sizeof(nav)); }
+API int hcb_nav_solve(const void *map, hcb_vec from, hcb_vec to, hcb_vec *wp, int max, uint32_t now) { return path_twice((nav *)map, from, to, wp, max > AG_PATH ? AG_PATH : max, now); }
+/* A way from `from` to `to` for `key` (a man; a man and a place). An answer not older than 2.5 s for nearly the same two ends is
+   given at once; otherwise the question goes out (once in 0.6 s) and -2 is returned: "asked". */
+HID int hcb_path_ask(hcb_brain *b, hcb_out *out, u32 key, hcb_vec from, hcb_vec to, hcb_vec *wp, int max, u32 now) {
+    pathent *e = 0, *old = &b->pa[0];
+    int i;
+    for (i = 0; i < NAV_PATHS; i++) {
+        pathent *q = &b->pa[i];
+        if (q->used && q->key == key) { e = q; break; }
+        if (!q->used || (old->used && (q->asked > q->answered ? q->asked : q->answered) < (old->asked > old->answered ? old->asked : old->answered))) old = q;
+    }
+    if (e && e->answered && e->answered >= e->asked && now - e->answered <= 2500 && v_dist(e->from, from) < 1.5f && v_dist(e->to, to) < 1.0f) {
+        int n = e->n > max ? max : e->n;
+        for (i = 0; i < n; i++) wp[i] = e->wp[i];
+        return n;
+    }
+    if (e && e->asked > e->answered && now - e->asked < 600 && v_dist(e->to, to) < 1.0f) return -2;
+    if (out->n_path_q >= HCB_MAX_PATHQ) return -2;
+    if (!e) { e = old; zero(e, sizeof *e); e->used = 1; e->key = key; }
+    e->from = from; e->to = to; e->asked = now ? now : 1; e->answered = 0;
+    out->path_q[out->n_path_q].from = from; out->path_q[out->n_path_q].to = to; out->path_q[out->n_path_q].key = key; out->n_path_q++;
+    return -2;
+}
 API int hcb_nav_cell(const hcb_brain *b, float x, float y, float *z, int *blocked, uint32_t now) {
     const nav *n = &b->nv;
     int i = ci(n, x), j = cj_(n, y);
@@ -358,3 +455,5 @@ API int hcb_nav_cell(const hcb_brain *b, float x, float y, float *z, int *blocke
     if (blocked) *blocked = c->blk_until > now ? c->blk : 0;
     return c->st == 3 ? 0 : c->st;
 }
+
+API void hcb_nav_mark(hcb_brain *b, hcb_vec at, hcb_vec toward, uint32_t now, uint32_t ttl) { hcb_nav_block(b, at, toward, now, ttl); }

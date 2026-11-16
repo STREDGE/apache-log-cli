@@ -76,7 +76,7 @@ typedef struct losent {
     u8 used, clear, reserved0, reserved1;
 } losent;
 /* the protective detail: what the cover questions have shown, and the detail's own memory */
-#define HCB_MAX_COVERS 192
+#define HCB_MAX_COVERS 320
 typedef struct cover {
     hcb_vec at, from;       /* a spot, and the threat it was tested against */
     u32 asked, answered;    /* when the question went out, when the answer came (0 = not yet) */
@@ -102,7 +102,7 @@ typedef struct detail {
     u32 heli_t;
     u8 heli_ok, heli_k, mode, leading, pose, pad_[3];
     u32 mode_since;
-    struct { hcb_vec post; float best; u32 since; u8 alt, stuck, hold_ok, pad; hcb_vec hold; u32 hold_id, hold_bad; } man[8];   /* each man's progress to his post; 0.6: an outer man's own post in a fight */
+    struct { hcb_vec post; float best; u32 since; u8 alt, stuck, hold_ok, pad; hcb_vec hold; u32 hold_id, hold_bad; float hold_score; u32 hold_at; } man[8];   /* each man's progress to his post; 0.6: an outer man's own post in a fight */
     u16 say_seq;
     u8 cj_cover_ok, duty, last_say, say_dir;
     /* 0.4.2 (from the first whole-game log): the detail keeps its threat, its cover and its tongue */
@@ -147,7 +147,16 @@ typedef struct nav {
     navcell c[NAV_N * NAV_N];
     segent sg[NAV_SEGS];
 } nav;
+/* 1.1: ways asked for and their answers (kept 2.5 s) */
+#define NAV_PATHS 12
 #define AG_PATH 10
+typedef struct pathent {
+    hcb_vec from, to;
+    u32 key, asked, answered;
+    int n;
+    u8 used, r0, r1, r2;
+    hcb_vec wp[AG_PATH];
+} pathent;
 typedef struct agent {
     u32 id;
     hcb_vec goal;           /* the place he is going to (the post as he took it) */
@@ -157,6 +166,10 @@ typedef struct agent {
     u32 goal_since, prog_since, plan_t, side_until, arrived_since, last_seen, failed_at;
     float prog_best;
     u8 used, phase, act, why, fails, n_path, i_path, moves;   /* moves: changes of action (for the log) */
+    hcb_vec corner_at;      /* 1.1: the corner he has looked round last (he does not stop at it twice) */
+    u32 corner_until;       /* ... he stands short of a corner until then */
+    u32 door_since;         /* ... since when he has waited for a doorway to clear */
+    u8 off_map, r_[3];      /* 1.1: the map does not reach where he stands (he is far from CJ / the target) */
 } agent;
 typedef struct squad {
     u8 umode, task, ow_ok, ow_ready, mover, gathered, pad0, pad1;
@@ -171,6 +184,7 @@ struct hcb_brain {
     hcb_cfg cfg;
     u32 time, ticks, rng, seed, alert_since, calm_since, kills;
     u8 alert, started, cj_in_heli, reserved1;   /* cj_in_heli: CJ sits in our helicopter (this tick) */
+    u32 reload_who, reload_until, reload_last;   /* 1.1: who changes his magazine now (one man at a time), until when, when the last turn began */
     track tr[HCB_MAX_TRACKS];
     vtrack vt[HCB_MAX_VTRACKS];
     shooter sh[HCB_MAX_OURS];
@@ -178,6 +192,7 @@ struct hcb_brain {
     cover cv[HCB_MAX_COVERS];
     detail dt;
     nav nv;
+    pathent pa[NAV_PATHS];
     agent ag[8];
     squad sq;
 };
@@ -203,6 +218,31 @@ HID int hcb_nav_line(hcb_brain *b, hcb_vec a, hcb_vec c, u32 now);
 HID hcb_vec hcb_nav_centre(const hcb_brain *b, hcb_vec at);
 HID int hcb_nav_seg(hcb_brain *b, hcb_out *out, hcb_vec a, hcb_vec c, u32 now);              /* 1 free, 0 blocked, -1 asked */
 HID void hcb_nav_block(hcb_brain *b, hcb_vec at, hcb_vec toward, u32 now, u32 ttl);
+HID int hcb_nav_walls(const hcb_brain *b, hcb_vec c, float r, hcb_vec threat, hcb_vec *pts, int max);   /* cells behind a wall, seen from the threat */
+/* hcb_places.c (1.1): a firing place chosen by weights */
+typedef struct place_in {
+    hcb_vec anchor;         /* where the man is wanted (his corner of the ring, his place in the fire team) */
+    hcb_vec man;            /* where he is */
+    hcb_vec cj;             /* CJ */
+    hcb_vec threat;         /* the main threat */
+    hcb_vec other[2];       /* other threats */
+    hcb_vec taken[8];       /* places the others of ours hold */
+    hcb_vec cj_dir;         /* the way CJ fires / faces (unit, flat) */
+    float reach;            /* how far from the anchor a place may be */
+    float cj_min, cj_max;   /* how near to CJ and how far from him it may be (0, 0 = does not matter) */
+    float threat_min;       /* never nearer to the main threat than this (6 m at the least) */
+    u8 n_other, n_taken, need_cj, cj_fires;   /* need_cj: CJ must be seen from it; cj_fires: nobody in CJ's line of fire */
+    u8 strict, pad[3];      /* 1 = only places everything is KNOWN about (the man holds a place already: no moving on a guess) */
+} place_in;
+HID float hcb_place_score(hcb_brain *b, hcb_out *out, const place_in *in, hcb_vec at, u32 now, int ask, int *cover);   /* < 0: not a place */
+HID int hcb_place_pick(hcb_brain *b, hcb_out *out, const place_in *in, u32 now, hcb_vec *found, float *score, int *cover);
+/* hcb_detail.c: the cover questions (shared with hcb_places.c) */
+HID int hcb_cv_state(hcb_brain *b, hcb_vec at, hcb_vec from, u32 now, int low);     /* 1 cover, 0 none, -1 not known, -2 asked */
+HID int hcb_cv_raw(hcb_brain *b, hcb_vec at, hcb_vec from, u32 now, int *hidden, int *hidden_hi, int *ground);   /* 1 known */
+HID void hcb_cv_ask(hcb_brain *b, hcb_out *out, hcb_vec at, hcb_vec from, u32 now);
+HID int hcb_path_ask(hcb_brain *b, hcb_out *out, u32 key, hcb_vec from, hcb_vec to, hcb_vec *wp, int max, u32 now);   /* 1.1: -2 asked (the answer comes with a later look); else as hcb_nav_path */
+HID int hcb_nav_inside(const hcb_brain *b, hcb_vec at);                                    /* 1 = within the square the map covers now */
+HID int hcb_nav_narrow(const hcb_brain *b, hcb_vec at);                                     /* 1 = a doorway: walls on both sides of the cell */
 HID int hcb_nav_ground(const hcb_brain *b, hcb_vec at, float *z);                           /* 1 ground known there */
 /* hcb_agent.c */
 HID void hcb_agent_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out);

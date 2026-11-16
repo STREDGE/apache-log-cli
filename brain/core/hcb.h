@@ -12,7 +12,7 @@
 #define HCB_H
 #include <stdint.h>
 
-#define HCB_VERSION 6          /* layout of the structs below; a black box says which version wrote it */
+#define HCB_VERSION 8          /* layout of the structs below; a black box says which version wrote it */
 
 #define HCB_MAX_PEDS 64        /* peds in one snapshot (nearest to CJ first) */
 #define HCB_MAX_VEHS 40
@@ -21,13 +21,14 @@
 #define HCB_MAX_MARKS 48       /* contacts reported back for the debug markers */
 #define HCB_MAX_TRACKS 96      /* people the brain remembers at one time */
 #define HCB_MAX_VTRACKS 48
-#define HCB_MAX_PROBES 8        /* cover questions per tick (a point, and where the threat is: is the point hidden from it, is there ground?) */
+#define HCB_MAX_PROBES 16        /* cover questions per tick (a point, and where the threat is: is the point hidden from it, is there ground?) */
 #define HCB_MAX_LOS 96          /* line-of-sight questions per tick (answered by the adapter in the next snapshot) */
 #define HCB_MAX_HINTS 12        /* 0.8: the game's own cover points near CJ */
 #define HCB_MAX_DANGERS 8       /* 0.8: live grenades, rockets, fires and fresh explosions near CJ */
 #define HCB_MAX_GROUND 32       /* 1.0: ground questions per tick (the brain's own map of the ground round CJ): one ray down and four level
                                    rays each */
 #define HCB_MAX_SEGS 16         /* 1.0: "can a man walk straight from a to b" questions per tick */
+#define HCB_MAX_PATHQ 4         /* 1.1: ways asked for per tick */
 #define HCB_MAX_HIGH 8          /* 1.0: high places near CJ (roofs) the adapter has found for the marksman */
 
 /* ---- ped flags (hcb_ped.flags) */
@@ -133,6 +134,7 @@
 #define HCB_HOLD_PAUSE 11      /* between two bursts */
 #define HCB_HOLD_COVERING 12   /* weapon on a suspect, finger off the trigger */
 #define HCB_HOLD_ENOUGH 13     /* a man to fire at, but three of ours are on him already: weapon on him, no fire */
+#define HCB_HOLD_RELOAD 15     /* 1.1: his magazine is nearly empty and it is his turn: he changes it now (one man at a time) */
 #define HCB_HOLD_FISTS 14      /* 0.8, proportionate force: an unarmed man on foot is not shot - a guard near him takes him down by hand */
 
 typedef struct hcb_vec {
@@ -261,6 +263,8 @@ typedef struct hcb_post {
 #define HCB_WHY2_ARRIVED 7
 #define HCB_WHY2_WAIT_TURN 8    /* his pair covers: he waits for his turn to move */
 #define HCB_WHY2_IN_AIR 9       /* on the rope: no orders until he stands */
+#define HCB_WHY2_CORNER 10      /* 1.1: stopped short of a blind corner to look round it */
+#define HCB_WHY2_DOORWAY 11     /* 1.1: waiting for another of ours to clear a doorway */
 /* 1.0: the mode the PLAYER has chosen (hcb_snapshot.umode) and what the squad is doing about it (hcb_out.task) */
 #define HCB_UMODE_PROTECT 0
 #define HCB_UMODE_ASSAULT 1
@@ -338,6 +342,21 @@ typedef struct hcb_high {
     uint8_t sees_cj;    /* 1 = CJ can be seen from it */
     uint8_t pad[3];
 } hcb_high;
+/* 1.1: the way-finding is done outside the brain's own look (a thread of the mod; the tests do it between two looks). The brain
+   asks: a way from `from` to `to` on its map as it is now; the answer comes with the next look and is an INPUT like any other
+   (it is in the black box, so a report replays exactly whatever the thread did). */
+typedef struct hcb_pathq {
+    hcb_vec from;
+    hcb_vec to;
+    uint32_t key;       /* who asks (comes back with the answer) */
+} hcb_pathq;
+typedef struct hcb_patha {
+    hcb_vec from;
+    hcb_vec to;
+    uint32_t key;
+    int32_t n;          /* > 0: so many way points; 0: no way on the map; -1: the map does not know where `from` is */
+    hcb_vec wp[10];
+} hcb_patha;
 typedef struct hcb_snapshot {
     uint32_t time;      /* game time, ms */
     uint32_t frame;
@@ -387,9 +406,12 @@ typedef struct hcb_snapshot {
     uint8_t reserved2;
     uint8_t reserved3;
     uint8_t our_state[HCB_MAX_OURS];    /* HCB_OS_* per entry of ours */
+    uint8_t our_clip[HCB_MAX_OURS];     /* 1.1: rounds left in the magazine of the weapon in his hands (255 = not known / no magazine) */
     hcb_ground ground[HCB_MAX_GROUND];
     hcb_seg segs[HCB_MAX_SEGS];
     hcb_high high[HCB_MAX_HIGH];
+    uint32_t n_paths;   /* 1.1: answers to path_q of an earlier hcb_out */
+    hcb_patha paths[HCB_MAX_PATHQ];
 } hcb_snapshot;
 
 typedef struct hcb_mark {
@@ -459,6 +481,8 @@ typedef struct hcb_out {
     hcb_vec ow_at;
     hcb_ground ground_q[HCB_MAX_GROUND];
     hcb_seg seg_q[HCB_MAX_SEGS];
+    uint32_t n_path_q;  /* 1.1: ways to be found before the next look */
+    hcb_pathq path_q[HCB_MAX_PATHQ];
 } hcb_out;
 
 /* Tunable numbers. hcb_init fills in the defaults; tests and the tuning runs change them. */
@@ -509,6 +533,39 @@ typedef struct hcb_cfg {
                                bursts paced by the brain); 0 = the rounds are made by the script along a checked line (1.3) */
     float cabin_skip_m;     /* a door gunner's own cabin: CJ inside the same helicopter, this close to the gunner's end of the
                                line, is behind the cabin wall (firing across the cabin is refused anyway) */
+    /* 1.1: the detail's and the squad's numbers (every one of them can be set in the settings file) */
+    float outer_peace_m;    /* PROTECT: how far out the four outer men stand in peace ... */
+    float outer_fight_m;    /* ... and in a fight */
+    float cj_low_hp;        /* CJ under this health: armed men near him are targets at once, the bodyguards come back to him */
+    float gather_m;         /* ASSAULT: the squad gathers this far short of the target */
+    float rush_m;           /* ... a rush of an assault pair is this long */
+    float assault_near_m;   /* ... and nobody goes nearer to the target than this */
+    float fire_first_ms;    /* ... the fire team fires this long before a pair moves */
+    float search_ms;        /* ... a target unseen this long is searched for */
+    float target_keep_ms;   /* ... and dropped after this long */
+    float consolidate_ms;   /* ... all-round watch for this long after the target is down */
+    float withdraw_down;    /* ... this many of ours down since the task began: fall back */
+    float ow_min_h;         /* the marksman's roof: at least this high above CJ's feet ... */
+    float ow_max_h;
+    float ow_min_d;         /* ... and at least this far from him */
+    float ow_max_d;
+    float ow_try_ms;        /* ... one try of this long for each commander */
+    /* 1.1: how a firing place is valued (hcb_places.c) */
+    float place_w_fire;     /* hidden when crouching, a line of fire on the main threat when standing */
+    float place_w_open;     /* a line of fire with no cover at all */
+    float place_w_others;   /* hidden from the other threats */
+    float place_w_dist;     /* a good range to the main threat */
+    float place_w_near;     /* near the man who is to take it */
+    float place_w_crowd;    /* taken off: another of ours within 3 m */
+    float place_w_path;     /* taken off: the way there lies open to the threat */
+    float place_better;     /* a new place must be this many times better than the one he holds ... */
+    float place_keep_ms;    /* ... and he keeps a place at least this long */
+    /* 1.1: tokens */
+    float shooters_per_target;  /* how many of the detail fire at one man at a time */
+    float movers_max;       /* how many of the outer men / the squad are on the move at a time */
+    float reload_clip;      /* a man with this many rounds or fewer in his magazine reloads - one at a time */
+    float corner_ms;        /* a man stops this long before a blind corner and looks round it */
+    float door_ms;          /* nobody stands in a doorway longer than this */
 } hcb_cfg;
 
 /* The brain itself is one opaque block of hcb_brain_size() bytes that the caller provides (no allocation). */
@@ -529,6 +586,15 @@ void hcb_think(hcb_brain *b, const hcb_snapshot *s, hcb_out *out);
    1 ground (*z its height), 2 nothing to stand on; *blocked = the ways out of the cell that are marked blocked (bit per
    direction, 0 = +x, counter-clockwise). */
 int hcb_nav_way(hcb_brain *b, hcb_vec from, hcb_vec to, hcb_vec *wp, int max, uint32_t now);
+/* 1.1, for tests and tools: what a firing place is worth to a man (hcb_places.c; < 0 = not a place) with what the brain knows about
+   it now (nothing is asked), and a mark "nobody gets through here" on the map as a man who made no progress leaves it */
+float hcb_place_value(hcb_brain *b, hcb_vec anchor, hcb_vec man, hcb_vec cj, hcb_vec threat, const hcb_vec *others, int n_others,
+                      const hcb_vec *taken, int n_taken, hcb_vec cj_dir, int cj_fires, hcb_vec at, uint32_t now);
+void hcb_nav_mark(hcb_brain *b, hcb_vec at, hcb_vec toward, uint32_t now, uint32_t ttl);
+/* 1.1, for the thread that finds the ways: a copy of the map (hcb_nav_size bytes), and a way on such a copy */
+uint32_t hcb_nav_size(void);
+void hcb_nav_copy(const hcb_brain *b, void *dst);
+int hcb_nav_solve(const void *map, hcb_vec from, hcb_vec to, hcb_vec *wp, int max, uint32_t now);
 int hcb_nav_cell(const hcb_brain *b, float x, float y, float *z, int *blocked, uint32_t now);
 
 /* What the brain knows about one contact, for tests and the log. Returns 0 when it does not know the id. */

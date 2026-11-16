@@ -1,0 +1,9 @@
+PASS: Low cover near each corner: all four outer men take a place a crouching man is hidden in and a standing one fires over, 12-32 m from CJ, CJ in sight
+PASS: A blind wall is next to worthless: the man whose nearest "cover" is a full wall takes a place he can fire from instead
+PASS: The weights decide: with place_w_fire = 0 and place_w_open = 1 (as the settings file can set them) the same men stand in the open
+PASS: Two shooters: the man takes the place hidden from both (the weight of "the other threats") rather than one hidden from the main threat only
+PASS: Places apart (3 m or more between any two men) and clear of CJ's line of fire while he shoots
+PASS: A place hidden from the shooter but with a wall between it and CJ is not taken: the outer man must keep CJ in sight
+PASS: A place is kept: when CJ shifts a step and every value changes a little, nobody moves (a new place must be 20 % better and 4 s must have passed)
+PASS: What a place is worth, weight by weight: hidden from a second shooter +0.20, another of ours within 3 m -0.20 (within 1.2 m - no place), in front of CJ's weapon while he fires - no place
+The core only. Nothing here has run in the game.

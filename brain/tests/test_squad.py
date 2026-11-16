@@ -264,6 +264,19 @@ sc.high = [(25., 5., 9., 1)]; sc.step(10)
 assert sc.last_out.ow_ok == 1, sc.last_out.ow_ok
 passed('Overwatch: a high place counts from 4 m above CJ\'s feet - a wall top 2 m up is not offered to the marksman')
 
+# ------------------------------------------------------------------ the marksman is on the rope over his roof: the helicopter stays where it hangs
+sc = Scene(); team = squad(sc, 7); hl = sc.veh(25., 5., z=26., cls=HCB_VC_HELI); sc.heli = hl
+sc.high = [(25., 5., 15., 1)]; sc.step(40)
+assert sc.last_out.ow_ok == 1 and sc.last_out.ow_ready == 1 and sc.last_out.heli_ok == 1, (sc.last_out.ow_ok, sc.last_out.ow_ready)
+mk = sc.our(25., 5., SQ + 7, weapon=34, z=24.); sc.roping = {mk}       # he is put on the rope
+held = []
+for k in range(20):
+    o = sc.step(1); held.append(o.heli_ok == 1 and abs(o.heli_at.x - 25.) < 1 and abs(o.heli_at.z - 26.) < 1.5)
+assert all(held), 'the helicopter\'s spot stays over the roof while he comes down'
+sc.roping = set(); sc.peds[mk]['pos'] = [25., 5., 16.]; sc.step(10)
+assert sc.last_out.ow_ok == 0, 'he stands on the roof: the roof is not looked for any more'
+passed('The marksman on the rope: the helicopter\'s spot stays over the roof until he stands on it (it used to be given up the moment he appeared)')
+
 text = '\n'.join(results) + '\nThe core only. Nothing here has run in the game.\n'
 (hcb_py.OUT / 'brain_squad_tests.txt').write_text(text)
 print(text)

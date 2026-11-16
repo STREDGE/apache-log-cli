@@ -21,6 +21,6 @@ clang $T -O2 -fPIC -ffreestanding -fno-builtin -fno-stack-protector -fvisibility
   -Wall -Wextra -Wno-unused-parameter -Wno-unused-function \
   -nostdlib -shared -fuse-ld=lld -Wl,-soname,libHelicoverBrain64.so \
   -Wl,-z,max-page-size=16384 -Wl,--hash-style=both -Wl,-z,now -Wl,--no-undefined \
-  -o "$OUT/libHelicoverBrain64.so" game/brain.c core/hcb_core.c core/hcb_fire.c core/hcb_detail.c core/hcb_pilot.c core/hcb_nav.c core/hcb_agent.c core/hcb_squad.c core/hcb_libc.c -L"$OUT/stubs" -lc -ldl
+  -o "$OUT/libHelicoverBrain64.so" game/brain.c core/hcb_core.c core/hcb_fire.c core/hcb_detail.c core/hcb_pilot.c core/hcb_nav.c core/hcb_agent.c core/hcb_squad.c core/hcb_places.c core/hcb_libc.c -L"$OUT/stubs" -lc -ldl
 llvm-strip --strip-unneeded "$OUT/libHelicoverBrain64.so" 2>/dev/null || true
 echo "built $OUT/libHelicoverBrain64.so"
