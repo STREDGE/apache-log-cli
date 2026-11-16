@@ -39,6 +39,19 @@ static void set_task(squad *q, u8 task, u32 now) {
     if (q->task != task) { q->task = task; q->task_since = now ? now : 1; q->gathered = 0; q->bound_since = now; }
 }
 
+/* 1.1: a man's place in the assault is chosen by weights among what lies within `reach` of the spot the drill wants him at
+   (hcb_places.c): low cover with a line of fire first, clear of the others' places, never on the line CJ - target */
+static int place_near(hcb_brain *b, hcb_out *out, const squad *q, int slot, hcb_vec c0, hcb_vec man, hcb_vec cjp, hcb_vec T, float reach, u32 now, hcb_vec *found) {
+    place_in in;
+    float sc;
+    int cv, k;
+    zero(&in, sizeof in);
+    in.anchor = c0; in.man = man; in.cj = cjp; in.threat = T; in.reach = reach; in.threat_min = b->cfg.assault_near_m;
+    for (k = 0; k < 8 && in.n_taken < 8; k++) if (k != slot && q->apost_ok[k]) in.taken[in.n_taken++] = q->apost[k];
+    if (!hcb_place_pick(b, out, &in, now, found, &sc, &cv)) return 0;
+    found->z = c0.z;
+    return 1;
+}
 /* the marksman's high place, and the helicopter that takes him there */
 static void overwatch(hcb_brain *b, const hcb_snapshot *s, hcb_out *out, int n_ground, int have_marksman, int mk_roping) {
     squad *q = &b->sq;
@@ -222,6 +235,11 @@ HID void hcb_squad_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                 hcb_vec c = v_add(T, v_mul(side, 12.0f));
                 want.x = c.x + CC[i & 7] * 7.0f; want.y = c.y + CS[i & 7] * 7.0f; want.z = men[i]->pos.z;
                 p->look.x = c.x + CC[i & 7] * 40.0f; p->look.y = c.y + CS[i & 7] * 40.0f; p->look.z = men[i]->pos.z + 0.8f;
+                {   /* (nobody walks over the spot itself on his way there: round it, 6 m short of it on CJ's side) */
+                    float t_;
+                    hcb_vec m2 = flat(men[i]->pos), w2 = flat(want), t2 = flat(T);
+                    if (seg_dist(t2, m2, w2, &t_) < 4.0f) { hcb_vec mid = v_sub(T, v_mul(u, 6.0f)); mid.z = men[i]->pos.z; if (d2(men[i]->pos, mid) > 1.5f) want = mid; }
+                }
                 duty = HCB_DUTY_HOLD; crouch = d2(men[i]->pos, want) < 1.5f;
             } else if (fire_team) {
                 /* the base of fire: both sides of the line, the marksman behind; placed once, then kept */
@@ -231,7 +249,7 @@ HID void hcb_squad_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                 else {
                     hcb_vec c0 = v_add(v_sub(T, v_mul(u, back)), v_mul(side, FX[w])), found;
                     c0.z = men[i]->pos.z;
-                    want = hcb_cover_near(b, out, c0, u, T, now, &found) ? found : c0;
+                    want = place_near(b, out, q, slot, c0, men[i]->pos, cjp, T, 7.5f, now, &found) ? found : c0;
                     q->apost[slot] = want; q->apost_ok[slot] = 1; q->apost_t[slot] = now;
                 }
                 duty = d2(men[i]->pos, want) < 1.5f ? HCB_DUTY_COVER : HCB_DUTY_BOUND; crouch = d2(men[i]->pos, want) < 1.5f && p->job != HCB_ROLE_MARKSMAN;
@@ -255,7 +273,7 @@ HID void hcb_squad_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                         c0.z = me.z;
                         /* (the first rush takes him from wherever he is on to the flank line: at most 14 m at a time) */
                         if (d2(c0, me) > 14.0f) { hcb_vec dr = unit2(v_sub(c0, me), u); c0 = v_add(me, v_mul(dr, 14.0f)); c0.z = me.z; }
-                        want = hcb_cover_near(b, out, c0, u, T, now, &found) && d2(found, c0) < 5.0f ? found : c0;
+                        want = place_near(b, out, q, slot, c0, me, cjp, T, 5.0f, now, &found) ? found : c0;
                         q->apost[slot] = want; q->apost_t[slot] = now;
                     }
                     q->apost_ok[slot] = hold ? 3 : 2;

@@ -125,6 +125,13 @@ API void hcb_init(hcb_brain *b, u32 seed) {
     b->cfg.scatter_per_ms = 0.02f;
     b->cfg.gunner_weapon = 1;
     b->cfg.cabin_skip_m = 1.5f;
+    b->cfg.outer_peace_m = 15; b->cfg.outer_fight_m = 18; b->cfg.cj_low_hp = 40;
+    b->cfg.gather_m = 32; b->cfg.rush_m = 8; b->cfg.assault_near_m = 9; b->cfg.fire_first_ms = 2000; b->cfg.search_ms = 6000;
+    b->cfg.target_keep_ms = 20000; b->cfg.consolidate_ms = 8000; b->cfg.withdraw_down = 3;
+    b->cfg.ow_min_h = 4; b->cfg.ow_max_h = 35; b->cfg.ow_min_d = 12; b->cfg.ow_max_d = 70; b->cfg.ow_try_ms = 40000;
+    b->cfg.place_w_fire = 0.40f; b->cfg.place_w_open = 0.20f; b->cfg.place_w_others = 0.20f; b->cfg.place_w_dist = 0.20f;
+    b->cfg.place_w_near = 0.15f; b->cfg.place_w_crowd = 0.20f; b->cfg.place_w_path = 0.12f; b->cfg.place_better = 1.2f; b->cfg.place_keep_ms = 4000;
+    b->cfg.shooters_per_target = 3; b->cfg.movers_max = 3; b->cfg.reload_clip = 5; b->cfg.corner_ms = 800; b->cfg.door_ms = 1000;
 }
 
 HID track *hcb_find(hcb_brain *b, u32 id) {

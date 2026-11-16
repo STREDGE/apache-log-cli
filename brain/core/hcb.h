@@ -12,7 +12,7 @@
 #define HCB_H
 #include <stdint.h>
 
-#define HCB_VERSION 6          /* layout of the structs below; a black box says which version wrote it */
+#define HCB_VERSION 7          /* layout of the structs below; a black box says which version wrote it */
 
 #define HCB_MAX_PEDS 64        /* peds in one snapshot (nearest to CJ first) */
 #define HCB_MAX_VEHS 40
@@ -21,7 +21,7 @@
 #define HCB_MAX_MARKS 48       /* contacts reported back for the debug markers */
 #define HCB_MAX_TRACKS 96      /* people the brain remembers at one time */
 #define HCB_MAX_VTRACKS 48
-#define HCB_MAX_PROBES 8        /* cover questions per tick (a point, and where the threat is: is the point hidden from it, is there ground?) */
+#define HCB_MAX_PROBES 16        /* cover questions per tick (a point, and where the threat is: is the point hidden from it, is there ground?) */
 #define HCB_MAX_LOS 96          /* line-of-sight questions per tick (answered by the adapter in the next snapshot) */
 #define HCB_MAX_HINTS 12        /* 0.8: the game's own cover points near CJ */
 #define HCB_MAX_DANGERS 8       /* 0.8: live grenades, rockets, fires and fresh explosions near CJ */
@@ -509,6 +509,39 @@ typedef struct hcb_cfg {
                                bursts paced by the brain); 0 = the rounds are made by the script along a checked line (1.3) */
     float cabin_skip_m;     /* a door gunner's own cabin: CJ inside the same helicopter, this close to the gunner's end of the
                                line, is behind the cabin wall (firing across the cabin is refused anyway) */
+    /* 1.1: the detail's and the squad's numbers (every one of them can be set in the settings file) */
+    float outer_peace_m;    /* PROTECT: how far out the four outer men stand in peace ... */
+    float outer_fight_m;    /* ... and in a fight */
+    float cj_low_hp;        /* CJ under this health: armed men near him are targets at once, the bodyguards come back to him */
+    float gather_m;         /* ASSAULT: the squad gathers this far short of the target */
+    float rush_m;           /* ... a rush of an assault pair is this long */
+    float assault_near_m;   /* ... and nobody goes nearer to the target than this */
+    float fire_first_ms;    /* ... the fire team fires this long before a pair moves */
+    float search_ms;        /* ... a target unseen this long is searched for */
+    float target_keep_ms;   /* ... and dropped after this long */
+    float consolidate_ms;   /* ... all-round watch for this long after the target is down */
+    float withdraw_down;    /* ... this many of ours down since the task began: fall back */
+    float ow_min_h;         /* the marksman's roof: at least this high above CJ's feet ... */
+    float ow_max_h;
+    float ow_min_d;         /* ... and at least this far from him */
+    float ow_max_d;
+    float ow_try_ms;        /* ... one try of this long for each commander */
+    /* 1.1: how a firing place is valued (hcb_places.c) */
+    float place_w_fire;     /* hidden when crouching, a line of fire on the main threat when standing */
+    float place_w_open;     /* a line of fire with no cover at all */
+    float place_w_others;   /* hidden from the other threats */
+    float place_w_dist;     /* a good range to the main threat */
+    float place_w_near;     /* near the man who is to take it */
+    float place_w_crowd;    /* taken off: another of ours within 3 m */
+    float place_w_path;     /* taken off: the way there lies open to the threat */
+    float place_better;     /* a new place must be this many times better than the one he holds ... */
+    float place_keep_ms;    /* ... and he keeps a place at least this long */
+    /* 1.1: tokens */
+    float shooters_per_target;  /* how many of the detail fire at one man at a time */
+    float movers_max;       /* how many of the outer men / the squad are on the move at a time */
+    float reload_clip;      /* a man with this many rounds or fewer in his magazine reloads - one at a time */
+    float corner_ms;        /* a man stops this long before a blind corner and looks round it */
+    float door_ms;          /* nobody stands in a doorway longer than this */
 } hcb_cfg;
 
 /* The brain itself is one opaque block of hcb_brain_size() bytes that the caller provides (no allocation). */

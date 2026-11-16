@@ -48,6 +48,36 @@ static void recentre(nav *n, hcb_vec f) {
     n->ox = nox; n->oy = noy;
 }
 
+/* 1.1: places behind something solid, seen from the threat: ground cells within r of c with a wall on the side the threat is on
+   (nearest to c first). The map only knows what its level rays found - the cover questions decide whether it really hides a man. */
+HID int hcb_nav_walls(const hcb_brain *b, hcb_vec c, float r, hcb_vec threat, hcb_vec *pts, int max) {
+    const nav *n = &b->nv;
+    int i, j, k, m, got = 0, ci0 = ci(n, c.x), cj0 = cj_(n, c.y), rr = (int)r + 1;
+    float d[16];
+    if (max > 16) max = 16;
+    for (j = cj0 - rr; j <= cj0 + rr; j++) for (i = ci0 - rr; i <= ci0 + rr; i++) {
+        const navcell *a = cell((nav *)n, i, j), *w;
+        hcb_vec at;
+        float dx, dy, dd;
+        int wall = 0;
+        if (!a || a->st != 1) continue;
+        at.x = (float)(n->ox + i) + 0.5f; at.y = (float)(n->oy + j) + 0.5f; at.z = a->z + 1.0f;
+        dx = threat.x - at.x; dy = threat.y - at.y;
+        if (dx > 1.0f && (a->fix & 1)) wall = 1;
+        if (dy > 1.0f && (a->fix & 2)) wall = 1;
+        if (dx < -1.0f && (w = cell((nav *)n, i - 1, j)) && (w->fix & 1)) wall = 1;
+        if (dy < -1.0f && (w = cell((nav *)n, i, j - 1)) && (w->fix & 2)) wall = 1;
+        if (!wall) continue;
+        dd = (at.x - c.x) * (at.x - c.x) + (at.y - c.y) * (at.y - c.y);
+        if (dd > r * r) continue;
+        for (k = 0; k < got && d[k] <= dd; k++) {}
+        if (k >= max) continue;
+        if (got < max) got++;
+        for (m = got - 1; m > k; m--) { d[m] = d[m - 1]; pts[m] = pts[m - 1]; }
+        d[k] = dd; pts[k] = at;
+    }
+    return got;
+}
 HID int hcb_nav_ground(const hcb_brain *b, hcb_vec at, float *z) {
     const nav *n = &b->nv;
     int i = ci(n, at.x), j = cj_(n, at.y);
