@@ -157,12 +157,14 @@ sc, team, g = assault()
 sc.cj['target'] = g; sc.step(3); sc.cj['target'] = 0
 tasks, first_pos_t, movers_max, pair_both = [], None, 0, 0
 front0 = None
+lead_far = 0.0
 for k in range(700):
     if k % 30 == 0: sc.cj['target'] = g
     elif k % 30 == 3: sc.cj['target'] = 0
     o = sc.step(1)
     tasks.append(o.task)
     j = by_job(sc)
+    if k >= 20: lead_far = max(lead_far, d2(pos(sc, j['lead'].who), sc.cj['pos']), d2(at(j['lead']), sc.cj['pos']))
     if o.task == HCB_TASK_BOUND:
         a1 = [j[n_] for n_ in ('point',) if n_ in j]; a2 = [j[n_] for n_ in ('point2',) if n_ in j]     # (1.3: the bodyguards stay with CJ)
         m1 = sum(1 for p in a1 if p.move); m2 = sum(1 for p in a2 if p.move)
@@ -179,6 +181,7 @@ body = [d2(pos(sc, j[n_].who), sc.cj['pos']) for n_ in ('close', 'close2')]
 assert max(ass) < 16 and min(ass) >= 7.5, ('the assault pair has closed to 9-14 m, nobody ran INTO the target', ass)
 assert all(20 <= d_ <= 52 for d_ in fire), ('the fire team stayed back, 30-46 m', fire)
 assert all(d_ < 4.0 for d_ in body), ('1.3: the two bodyguards never left CJ (the first 2.0 log: CJ died alone during an assault)', body)
+assert lead_far < 5.0, ('1.5 (the player: "only the bodyguards and the commander at my side"): the commander never goes with the assault', lead_far)
 left = [pos(sc, j[n_].who) for n_ in ('point',)]; right = [pos(sc, j[n_].who) for n_ in ('point2',)]
 assert all(p_[0] < -2 for p_ in left) and all(p_[0] > 2 for p_ in right), ('the pairs came in on the two flanks, not down the fire team\'s line', left, right)
 bound_ticks = tasks.count(HCB_TASK_BOUND)
