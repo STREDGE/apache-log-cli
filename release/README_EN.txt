@@ -23,7 +23,7 @@ Both black boxes (811 and 1695 ticks) replay bit for bit here. What is done:
   behind cover in his quarter from which you are seen, gets down and watches his side. In a fight: behind cover from the
   enemy, down, firing from there; no place from which the line of fire passes you. To a new place they go round you on an
   arc, never across. "We pull out": 14-19 m, no heap. In ASSAULT the commander stays with you too - the four attack.
-  In the 30-minute simulations an outer man is within 12 m of you 2-4 % of the time and down at his place 98-99 %.
+  In the 30-minute simulations an outer man is within 12 m of you 3 % of the time and down at his place 98-99 %.
 - The marksman. In the log he was never on a roof over 4 m: the map's "high ground" was roofs with no way up and he
   stood at the wall with "no route"; the helicopter took him only with all quiet; after a pickup the script at once
   dropped a new marksman on the same spot. Now roofs are looked for every look all round you (32 fixed points before),
