@@ -886,7 +886,7 @@ assert 0 <= v[5] <= 100 and abs(f32(v[6]) - 0.6) < .01 and abs(f32(v[7]) - 0.8) 
 # 1.4: the protective detail through the same opcode - a post for each guard on foot (10 variables), the commander's words (9)
 n_rays = len(e.los_calls); e.frame(ms=50, n=4, hud=False)
 handled, v, used = e.opcode(10, 10, CMD_POST, handle=H_(s1))
-assert handled == 1 and used == 7 and v[0] == H_(s1) and v[1] in (0, 1, 2, 3), v
+assert handled == 1 and used == 7 and v[0] == H_(s1) and v[1] in (0, 1, 2, 3, 5), v   # (1.2: no way known on the map yet is not "stand": the mod walks him - 5)
 spot = [f32(x) for x in v[2:5]]; look = [f32(x) for x in v[6:9]]
 assert all(abs(x) < 4000 for x in spot + look) and math.dist(spot[:2], (0., 0.)) < 20 and v[5] in (0, 1) and v[9] >= h.HCB_DUTY_WATCH, (spot, look, v)
 assert e.opcode(10, 10, CMD_POST, handle=H_(gang))[1][1] == -1 and e.opcode(10, 10, CMD_POST, handle=0x7fffff01)[1][1] == -1, 'no post for a stranger or a handle that names nobody'
@@ -1418,11 +1418,25 @@ for k in range(30):
 assert len(e.reloads) == 1 and e.reloads[0] == (g1 + 0x730, g1) and e.r32(g1 + 0x738) > 20, e.reloads
 passed('1.1 magazines: with 3 rounds left the guard takes the core\'s turn to reload - the mod calls the game\'s CWeapon::Reload for his weapon once and he fires on with a full magazine')
 # fire on the move. With the mod's gun task: a plain walk and the gun task beside it. Without it: the game's go-and-shoot task, once.
+# 1.2 (the first log of 2.0 from the game: a man with the mod's gun task did not move): a man on his way has no gun task of the mod's
 e, g1, gang, _ = fight_world(far=True)
+mgr = e.r64(g1 + 0x538) + 8
 for k in range(8):
-    e.frame(ms=50, hud=False); squad(e, g1); v = post(e, g1)
+    e.frame(ms=50, hud=False); st_ = squad(e, g1); v = post(e, g1)
 kinds = [t['kind'] for t in e.new_tasks]
-assert v[1] == 5 and kinds.count('goto') == 1 and kinds.count('gun') == 1 and 'shoot' not in kinds, (v, kinds)
+assert v[1] == 5 and st_[1] == 6, (v, st_)
+assert kinds.count('gun') <= 1 and (not kinds.count('gun') or e.sec_tasks[-1] == (mgr, 0, 0)), ('the gun task he had is taken out of its slot the moment he is told to walk', kinds, e.sec_tasks)
+assert e.r64(mgr + 0x28) == 0, 'nothing in his attack slot while he walks'
+assert 'shoot' in kinds, ('with leave to fire he walks by the game\'s own go-and-shoot task', kinds)
+for k in range(110):                                                # he does not get on (the emulator's man stands): 1.2 s each time, then a plain walk
+    if k % 12 == 0: e.gunshot(gang, (0., 0.5, 1.))
+    e.frame(ms=50, hud=False); squad(e, g1); post(e, g1)
+e.frame(ms=100, n=35, hud=False)
+kinds = [t['kind'] for t in e.new_tasks]
+m_ = re.findall(r'go-and-shoot: walked (\d+) stood (\d+)', e.log())[-1]
+assert m_[0] == '0' and int(m_[1]) >= 1, ('he stood with the go-and-shoot task: counted in the log', m_)
+last_shoot = max(i for i, k_ in enumerate(kinds) if k_ == 'shoot')
+assert 'goto' in kinds[last_shoot + 1:] and kinds.count('shoot') <= 4, kinds
 e, g1, gang, _ = fight_world(gun=False, far=True)
 for k in range(8):
     e.frame(ms=50, hud=False); st_ = squad(e, g1); v = post(e, g1)
@@ -1441,7 +1455,7 @@ e.share(HC_STATE + 7, 0)                                             # HOLD FIRE
 for k in range(10):
     e.frame(ms=50, hud=False); squad(e, g1); v = post(e, g1)
 assert e.new_tasks[-1]['kind'] == 'goto' and v[1] == 5, (e.new_tasks[-1]['kind'], v)
-passed('1.1 fire on the move: with the mod\'s gun task a guard walks by the plain go-to task and fires by the gun task beside it; where that task is refused he gets the game\'s go-and-shoot task ONCE (the man the brain gave him), a new one for another man, and a plain walk again when fire is forbidden')
+passed('1.2 a man on his way: the mod\'s gun task is taken out of his attack slot the moment he is told to walk (in the game it held him where he stood), with leave to fire he walks by the game\'s go-and-shoot task, and a man who stands with that task for 1.2 s gets a plain walk; where the gun task is refused he gets the game\'s go-and-shoot task ONCE (the man the brain gave him), a new one for another man, and a plain walk again when fire is forbidden')
 # the game AI kept off: the empty decision maker is put back, a flight in his event slot is removed, a walk is left alone
 e, (g1,), _ = detail_world()
 intel = e.r64(g1 + 0x538); e.w32(intel + 0x160, 5); post(e, g1)

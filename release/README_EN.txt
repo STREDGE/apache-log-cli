@@ -1,10 +1,25 @@
-HELICOVER 2.0 BETA 2 - support helicopter with an autonomous protective detail
-GTA San Andreas (Android, 64-bit), a CLEO mod + the Helicover Brain 1.1 mod. They only work together.
+HELICOVER 2.0 BETA 3 - support helicopter with an autonomous protective detail
+GTA San Andreas (Android, 64-bit), a CLEO mod + the Helicover Brain 1.2 mod. They only work together.
 
 WHAT IT IS
 Call a support helicopter: it flies in from far away, follows CJ and covers him with four door
 gunners. Drop a four-man team on foot, get picked up by rope, fly to the map marker or Grove
 Street and get out there by landing or by rope.
+
+NEW IN 2.0 BETA 3 (brain 1.2) - A FIX BY YOUR LOG OF BETA 2
+IMPORTANT: replace EVERYTHING - the CLEO files and libHelicoverBrain64.so.
+What the log showed (140 seconds of a fight): STUCK 80 %, "gave his post up" 72 %. The guards landed in a yard and stood
+there in a heap while you walked away. Two causes, both mine, both new in beta 2:
+1. A guard with the mod's gun task (aim / fire) does not move in the game at all. From the log: 173 samples "on his way,
+   aiming" - 1 cm a second on average; without that task 1.3 m a second. The simulation did not show it.
+   Fixed: a guard told to walk loses the gun task at once; standing, he aims and fires as before. Fire on the move is the
+   game's own go-and-shoot task; the mod watches it: 0.4 m in 1.2 s or he gets a plain walk, and after three such cases
+   with none that walked it is off for the rest of the game.
+2. In a real yard the brain's map answered "no way" to three questions out of four (82 ways found of 290), and by my rule
+   a guard stood for 8 seconds after such an answer. Fixed: "no way on the map" is no longer "stand" - he goes straight
+   at his place, then by the game's path network; "failed" is 2.5 seconds now, then he starts again.
+Checked in simulation and on an emulator with your libGTASA.so; not in the game. In the next log look at the line
+"weapons ... taken off men on the move N | go-and-shoot: walked N stood N" and at the summary's percentages.
 
 NEW IN 2.0 BETA 2 (brain 1.1) - EVERYTHING THAT WAS LEFT OF THE 2.0 PLAN
 IMPORTANT: replace EVERYTHING - the CLEO files and libHelicoverBrain64.so.

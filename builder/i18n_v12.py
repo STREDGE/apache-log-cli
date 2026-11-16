@@ -96,8 +96,8 @@ RU_MESSAGES={
  'HCBURN':'~r~МАШИНА ГОРИТ!~w~ Отойдите от нее.',
  'HCEVADE':'~r~ПОПАДАНИЯ!~w~ Пилот уходит от огня.',
  'HCSHOT':'~r~ОБСТРЕЛ!~w~ Пилот уходит от огня.',
- 'HCHELLO':'~b~HELICOVER 2.0 БЕТА 2~w~ готов. Меню CLEO > Helicover.',
- 'HCHELLV':'~b~HELICOVER 2.0 БЕТА 2~w~ готов. Метка на карте отключена.',
+ 'HCHELLO':'~b~HELICOVER 2.0 БЕТА 3~w~ готов. Меню CLEO > Helicover.',
+ 'HCHELLV':'~b~HELICOVER 2.0 БЕТА 3~w~ готов. Метка на карте отключена.',
  'RGDEP':'~b~ПИЛОТ:~w~ отряд спускается по веревкам.',
  'RGDONE':'~g~ОТРЯД:~w~ отряд на борту.',
  'RGFAIL':'~r~HELICOVER:~w~ не удалось загрузить отряд.',
@@ -243,7 +243,7 @@ MENU={
  'DISMISS_NO':('NO, KEEP IT','НЕТ, ОСТАВИТЬ'),
  'OFFLINE_TITLE':('HELICOVER / OFFLINE','HELICOVER / НЕТ ФАЙЛОВ'),
  'OFFLINE_ROW':('COPY ALL FILES, RESTART GAME','СКОПИРУЙТЕ ВСЕ ФАЙЛЫ, ПЕРЕЗАПУСТИТЕ'),
- 'TITLE_READY':('HELICOVER 2.0 BETA 2','HELICOVER 2.0 БЕТА 2'),
+ 'TITLE_READY':('HELICOVER 2.0 BETA 3','HELICOVER 2.0 БЕТА 3'),
 }
 # menu title tail for every helicopter state (English names are in build_v25.STATES)
 STATE_RU={0:'ГОТОВ',1:'ЗАГРУЗКА',2:'ЛЕТИТ ЗА ВАМИ',3:'ЖДЕТ',4:'УЛЕТАЕТ',5:'ОШИБКА ЗАГРУЗКИ',6:'ВЫЙДИТЕ НА УЛИЦУ',7:'ЛЕТИТ НА ПОСАДКУ',

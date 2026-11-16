@@ -36,7 +36,7 @@ HID int hcb_agent_fails(const hcb_brain *b, u32 id) {
 /* has this man's action failed (six tries), and for at least three seconds (so that he has said so, and the squad does not hand out a new place every second)? */
 HID int hcb_agent_failed(const hcb_brain *b, u32 id, u32 now) {
     int i;
-    for (i = 0; i < 8; i++) if (b->ag[i].used && b->ag[i].id == id) return b->ag[i].failed_at && now - b->ag[i].failed_at >= 3000;
+    for (i = 0; i < 8; i++) if (b->ag[i].used && b->ag[i].id == id) return b->ag[i].failed_at && now - b->ag[i].failed_at >= 1500;
     return 0;
 }
 HID void hcb_agent_forgive(hcb_brain *b, u32 id) {
@@ -118,16 +118,16 @@ HID void hcb_agent_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
             continue;
         }
         a->arrived_since = 0;
-        /* FAILED (six tries): he stops trying the same thing - he stands and watches for 8 s, then tries again from the
+        /* FAILED (six tries): he stops trying the same thing - he stands and watches for 2.5 s (1.1: 8 s), then tries again from the
            beginning (the world may have changed: a car gone, a gate open). The squad may have given him another place by then. */
         if (a->fails >= 6) {
             if (!a->failed_at) a->failed_at = now ? now : 1;
-            if (now - a->failed_at < 8000) {
+            if (now - a->failed_at < 2500) {
                 p->via = me->pos; p->move = 0; p->stuck = 1;
                 set_act(a, p, HCB_ACT_HOLD, HCB_PH_FAILED, HCB_WHY2_NO_ROUTE);
                 continue;
             }
-            a->fails = 2; a->failed_at = 0; a->n_path = 0; a->prog_since = now; a->prog_best = 1e9f;
+            a->fails = 0; a->failed_at = 0; a->n_path = 0; a->prog_since = now; a->prog_best = 1e9f; a->prog_pos = me->pos;
         } else a->failed_at = 0;
         /* 1.1, the token: in a fight no more than movers_max of the outer men / the squad move at a time - the others hold
            and cover until one of them is in place. Never for the three with CJ, a man who is dodging (a grenade, a car), a
@@ -171,7 +171,12 @@ HID void hcb_agent_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                         a->off_map = (u8)(n == -1 && !hcb_nav_inside(b, me->pos));   /* (not a man on a roof or a ledge inside the map: he stays) */
                         /* (the map knows the ground and there is no way over it - a roof, a walled yard: that is three failures at
                            once, so the squad gives him another place within a few seconds instead of letting him run at a wall) */
-                        if (n == 0) { p->stuck = 1; a->fails = (u8)(a->fails + 3 > 250 ? 250 : a->fails + 3); }
+                        /* 1.2 (the first log from the game): in a real yard the map said "no way" for three ways out of four, and
+                           each such answer stood the man still for 8 s - 72 % of the time. The map may be wrong (a gate it takes
+                           for a wall, a ledge a man steps down from). So "no way on the map" is not "stand": he goes straight
+                           at his place, and if that does not get him on - by the game's own path network (move 4), like a man
+                           off the map. Only the marksman on his roof stays where he is. */
+                        if (n == 0) { p->stuck = 1; if (p->job != HCB_ROLE_MARKSMAN) a->off_map = 2; else a->fails = (u8)(a->fails + 3 > 250 ? 250 : a->fails + 3); }
                     }
                     }
                 }
@@ -313,7 +318,7 @@ HID void hcb_agent_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
             /* 1.1: he stands where the brain's map does not reach (40 m from CJ and more) and has not got on by the straight way:
                the game's own path network takes him towards his place (move 4 - the script walks him by it, as before 2.0)
                until the map has him. That is not a failure of his. */
-            if (a->off_map && a->fails >= 2) { p->move = 4; a->why = HCB_WHY2_NO_ROUTE; p->why = a->why; p->via = p->at; if (a->fails > 3) a->fails = 3; }
+            if (a->off_map && a->fails >= 2) { p->move = 4; a->why = HCB_WHY2_NO_ROUTE; p->why = a->why; p->via = p->at; if (a->fails > 3 && a->off_map == 1) a->fails = 3; }
         }
     }
     out->n_moving = (u8)moving;
