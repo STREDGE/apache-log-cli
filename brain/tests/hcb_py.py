@@ -488,6 +488,7 @@ class Scene:
         for i, (id, role) in enumerate(self.ours.items()):
             s.ours[i], s.our_role[i] = id, role
             s.our_state[i] = (HCB_OS_ROPING if id in self.roping else 0) | (HCB_OS_NATIVE if self.body else 0)
+            s.our_clip[i] = getattr(self, 'clips', {}).get(id, 255)
         return s
 
     def step(self, n=1, ms=100):

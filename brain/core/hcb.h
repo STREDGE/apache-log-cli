@@ -133,6 +133,7 @@
 #define HCB_HOLD_PAUSE 11      /* between two bursts */
 #define HCB_HOLD_COVERING 12   /* weapon on a suspect, finger off the trigger */
 #define HCB_HOLD_ENOUGH 13     /* a man to fire at, but three of ours are on him already: weapon on him, no fire */
+#define HCB_HOLD_RELOAD 15     /* 1.1: his magazine is nearly empty and it is his turn: he changes it now (one man at a time) */
 #define HCB_HOLD_FISTS 14      /* 0.8, proportionate force: an unarmed man on foot is not shot - a guard near him takes him down by hand */
 
 typedef struct hcb_vec {
@@ -261,6 +262,8 @@ typedef struct hcb_post {
 #define HCB_WHY2_ARRIVED 7
 #define HCB_WHY2_WAIT_TURN 8    /* his pair covers: he waits for his turn to move */
 #define HCB_WHY2_IN_AIR 9       /* on the rope: no orders until he stands */
+#define HCB_WHY2_CORNER 10      /* 1.1: stopped short of a blind corner to look round it */
+#define HCB_WHY2_DOORWAY 11     /* 1.1: waiting for another of ours to clear a doorway */
 /* 1.0: the mode the PLAYER has chosen (hcb_snapshot.umode) and what the squad is doing about it (hcb_out.task) */
 #define HCB_UMODE_PROTECT 0
 #define HCB_UMODE_ASSAULT 1
@@ -387,6 +390,7 @@ typedef struct hcb_snapshot {
     uint8_t reserved2;
     uint8_t reserved3;
     uint8_t our_state[HCB_MAX_OURS];    /* HCB_OS_* per entry of ours */
+    uint8_t our_clip[HCB_MAX_OURS];     /* 1.1: rounds left in the magazine of the weapon in his hands (255 = not known / no magazine) */
     hcb_ground ground[HCB_MAX_GROUND];
     hcb_seg segs[HCB_MAX_SEGS];
     hcb_high high[HCB_MAX_HIGH];

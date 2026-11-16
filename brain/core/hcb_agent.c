@@ -54,7 +54,7 @@ static void set_act(agent *a, hcb_post *p, u8 act, u8 phase, u8 why) {
 HID void hcb_agent_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
     u32 now = s->time;
     float cj_speed = v_len(flat(s->player.vel));
-    int i, plans = 0, moving = 0;
+    int i, plans = 0, moving = 0, movers = 0, hot = b->alert >= HCB_ALERT_THREAT;
 
     if (!s->body) {                                                  /* the script body (the fallback) walks to `at` its own way */
         for (i = 0; i < out->n_posts; i++) out->posts[i].via = out->posts[i].at;
@@ -110,6 +110,17 @@ HID void hcb_agent_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
             }
             a->fails = 2; a->failed_at = 0; a->n_path = 0; a->prog_since = now; a->prog_best = 1e9f;
         } else a->failed_at = 0;
+        /* 1.1, the token: in a fight no more than movers_max of the outer men / the squad move at a time - the others hold
+           and cover until one of them is in place. Never for the three with CJ, a man who is dodging (a grenade, a car), a
+           shield or a pull-out, and never while CJ himself is moving (then everybody goes with him). */
+        if (!inner && fight && p->act != HCB_ACT_SPRINT && p->duty != HCB_DUTY_SHIELD && p->duty != HCB_DUTY_RING && cj_speed < 1.0f
+            && movers >= (int)b->cfg.movers_max && !hcb_nav_narrow(b, me->pos)) {
+            p->via = me->pos; p->move = 0;
+            a->prog_since = now; a->prog_pos = me->pos; a->prog_best = 1e9f;
+            set_act(a, p, HCB_ACT_HOLD, HCB_PH_CHOSEN, HCB_WHY2_WAIT_TURN);
+            continue;
+        }
+        if (!inner) movers++;
         moving++;
         /* the way */
         feet = me->pos; feet.z -= 0.6f; gfeet = p->at; gfeet.z = feet.z + (p->at.z - me->pos.z);
@@ -166,6 +177,48 @@ HID void hcb_agent_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
             set_act(a, p, HCB_ACT_HOLD, HCB_PH_FAILED, HCB_WHY2_NO_ROUTE);
             moving--;
             continue;
+        }
+        /* 1.1, corners and doorways (only when there is somebody to be afraid of):
+           - a blind corner: the way turns by 45 degrees or more at its next point and what lies beyond cannot be seen from here.
+             He stops 2 m short of it for corner_ms with his weapon on the way he is about to go, then goes on (once a corner);
+           - a doorway (a cell with walls on both sides): one man at a time. Another of ours within 2.5 m of the one ahead of
+             him and himself in such a cell or moving: he waits, 3 s at most. Nobody stops inside a doorway. */
+        if (hot && a->n_path && !(a->side_until && now < a->side_until) && !force) {
+            hcb_vec cpt = a->path[a->i_path];
+            int narrow_here = hcb_nav_narrow(b, me->pos);
+            if (a->i_path + 1 < a->n_path && !narrow_here) {
+                hcb_vec d1 = flat(v_sub(cpt, me->pos)), d2_ = flat(v_sub(a->path[a->i_path + 1], cpt));
+                float l1 = v_len(d1), l2 = v_len(d2_);
+                if (l1 > 0.2f && l2 > 0.5f && (d1.x * d2_.x + d1.y * d2_.y) / (l1 * l2) < 0.7071f && d2(cpt, a->corner_at) > 6.0f
+                    && l1 < 2.2f && !hcb_nav_line(b, me->pos, a->path[a->i_path + 1], now)) {
+                    if (!a->corner_until) a->corner_until = now + (u32)b->cfg.corner_ms;
+                    if (now < a->corner_until) {
+                        p->via = me->pos; p->move = 0; p->look = a->path[a->i_path + 1]; p->look.z += 0.8f;
+                        a->prog_since = now; a->prog_pos = me->pos;
+                        set_act(a, p, HCB_ACT_HOLD, HCB_PH_MOVING, HCB_WHY2_CORNER);
+                        moving++;
+                        continue;
+                    }
+                    a->corner_at = cpt; a->corner_until = 0;
+                }
+            }
+            if (!narrow_here && hcb_nav_narrow(b, cpt) && d2(me->pos, cpt) < 3.0f) {
+                int k, busy = 0;
+                for (k = 0; k < out->n_posts; k++) {
+                    const hcb_ped *o = k != i ? hcb_ped_of(s, out->posts[k].who) : 0;
+                    if (o && d2(o->pos, cpt) < 2.5f && d2(o->pos, cpt) < d2(me->pos, cpt) && (out->posts[k].phase == HCB_PH_MOVING || hcb_nav_narrow(b, o->pos))) busy = 1;
+                }
+                if (busy) {
+                    if (!a->door_since) a->door_since = now ? now : 1;
+                    if (now - a->door_since < 3000) {
+                        p->via = me->pos; p->move = 0;
+                        a->prog_since = now; a->prog_pos = me->pos;
+                        set_act(a, p, HCB_ACT_HOLD, HCB_PH_MOVING, HCB_WHY2_DOORWAY);
+                        moving++;
+                        continue;
+                    }
+                } else a->door_since = 0;
+            } else a->door_since = 0;
         }
         /* does it work? */
         /* (progress is his own movement - half a metre in 1.5 s - not the distance to a place that may itself be moving

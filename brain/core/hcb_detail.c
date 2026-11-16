@@ -479,7 +479,7 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                 /* the outer four */
                 int c = job[i] == HCB_ROLE_POINT ? 0 : job[i] == HCB_ROLE_POINT2 ? 1 : job[i] == HCB_ROLE_REAR ? 2 : job[i] == HCB_ROLE_REAR2 ? 3 : 4;
                 int up = job[i] == HCB_ROLE_MARKSMAN && men[i]->pos.z > cjp.z + 3.0f && dist2d(men[i]->pos, cjp) < 130.0f;   /* 1.0: the marksman on his roof */
-                float R = ring ? 8.0f + 1.3f * (float)(c > 3 ? 3 : c) : fight ? RAD_FIGHT[c] : RAD_PEACE[c] * (cj_speed > 3.5f ? 0.8f : 1.0f);
+                float R = ring ? 8.0f + 1.3f * (float)(c > 3 ? 3 : c) : fight ? RAD_FIGHT[c] * b->cfg.outer_fight_m / 18.0f : RAD_PEACE[c] * b->cfg.outer_peace_m / 15.0f * (cj_speed > 3.5f ? 0.8f : 1.0f);
                 hcb_vec off0 = v_add(v_mul(ahead, CORNER[c][0] * R), v_mul(side, CORNER[c][1] * R)), c0;
                 /* (1.0: a man whose place could not be reached is given the next one round CJ - 30 degrees on, then the other way) */
                 if (s->body && i < MAXD && !fight && hcb_agent_failed(b, ids[i], now)) { hcb_agent_forgive(b, ids[i]); if (dt->man[i].alt < 250) dt->man[i].alt++; }

@@ -157,6 +157,9 @@ typedef struct agent {
     u32 goal_since, prog_since, plan_t, side_until, arrived_since, last_seen, failed_at;
     float prog_best;
     u8 used, phase, act, why, fails, n_path, i_path, moves;   /* moves: changes of action (for the log) */
+    hcb_vec corner_at;      /* 1.1: the corner he has looked round last (he does not stop at it twice) */
+    u32 corner_until;       /* ... he stands short of a corner until then */
+    u32 door_since;         /* ... since when he has waited for a doorway to clear */
 } agent;
 typedef struct squad {
     u8 umode, task, ow_ok, ow_ready, mover, gathered, pad0, pad1;
@@ -171,6 +174,7 @@ struct hcb_brain {
     hcb_cfg cfg;
     u32 time, ticks, rng, seed, alert_since, calm_since, kills;
     u8 alert, started, cj_in_heli, reserved1;   /* cj_in_heli: CJ sits in our helicopter (this tick) */
+    u32 reload_who, reload_until, reload_last;   /* 1.1: who changes his magazine now (one man at a time), until when, when the last turn began */
     track tr[HCB_MAX_TRACKS];
     vtrack vt[HCB_MAX_VTRACKS];
     shooter sh[HCB_MAX_OURS];
@@ -225,6 +229,7 @@ HID int hcb_place_pick(hcb_brain *b, hcb_out *out, const place_in *in, u32 now, 
 HID int hcb_cv_state(hcb_brain *b, hcb_vec at, hcb_vec from, u32 now, int low);     /* 1 cover, 0 none, -1 not known, -2 asked */
 HID int hcb_cv_raw(hcb_brain *b, hcb_vec at, hcb_vec from, u32 now, int *hidden, int *hidden_hi, int *ground);   /* 1 known */
 HID void hcb_cv_ask(hcb_brain *b, hcb_out *out, hcb_vec at, hcb_vec from, u32 now);
+HID int hcb_nav_narrow(const hcb_brain *b, hcb_vec at);                                     /* 1 = a doorway: walls on both sides of the cell */
 HID int hcb_nav_ground(const hcb_brain *b, hcb_vec at, float *z);                           /* 1 ground known there */
 /* hcb_agent.c */
 HID void hcb_agent_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out);

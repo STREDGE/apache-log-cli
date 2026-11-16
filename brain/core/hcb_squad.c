@@ -69,14 +69,14 @@ static void overwatch(hcb_brain *b, const hcb_snapshot *s, hcb_out *out, int n_g
     for (i = 0; i < n; i++) {
         const hcb_high *h = &s->high[i];
         float d = d2(h->at, cjp), sc;
-        if (!h->sees_cj || h->height < 4.0f || h->height > 35.0f || d < 12.0f || d > 70.0f) continue;
+        if (!h->sees_cj || h->height < b->cfg.ow_min_h || h->height > b->cfg.ow_max_h || d < b->cfg.ow_min_d || d > b->cfg.ow_max_d) continue;
         sc = (h->height > 15.0f ? 15.0f : h->height) * 0.1f - f_abs(d - 30.0f) / 30.0f;
         if (q->ow_ok && d2(h->at, q->ow_at) < 3.0f) sc += 1.0f;        /* the one already chosen is kept */
         if (sc > bs) { bs = sc; best = i; }
     }
     if (best < 0) { if (q->ow_ok && now - q->ow_since > 3000) q->ow_ok = 0; if (!q->ow_ok) return; }
     else { if (!q->ow_ok) q->ow_since = now ? now : 1; q->ow_at = s->high[best].at; q->ow_ok = 1; }
-    if (now - q->ow_since > 40000) { q->ow_ok = 0; q->ow_done_for = out->lead; return; }
+    if (now - q->ow_since > (u32)b->cfg.ow_try_ms) { q->ow_ok = 0; q->ow_done_for = out->lead; return; }
     out->ow_ok = 1; out->ow_at = q->ow_at;
     out->heli_ok = 1; out->heli_at = q->ow_at; out->heli_at.z += 11.0f;
     {
@@ -130,7 +130,7 @@ HID void hcb_squad_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         if (v > best) { best = v; tg = t; }
     }
     if (tg) { q->target = tg->last.id; q->target_at = tg->last.pos; q->target_seen = now ? now : 1; q->lost_since = 0; seen = 1; }
-    else if (q->target_seen && now - q->target_seen < 20000) { if (!q->lost_since) q->lost_since = now ? now : 1; }
+    else if (q->target_seen && now - q->target_seen < (u32)b->cfg.target_keep_ms) { if (!q->lost_since) q->lost_since = now ? now : 1; }
     else { q->target = 0; q->target_seen = 0; }
     /* the man the squad was after is seen dead: that task is done at once (no 20 s of looking for him) - all-round watch if
        the squad is already close, else straight back */
@@ -143,12 +143,12 @@ HID void hcb_squad_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
     }
     if (!q->target_seen) {
         if (q->task != HCB_TASK_REGROUP && q->task != HCB_TASK_CONSOLIDATE) set_task(q, HCB_TASK_REGROUP, now);
-        if (q->task == HCB_TASK_CONSOLIDATE && now - q->task_since >= 8000) set_task(q, HCB_TASK_REGROUP, now);
+        if (q->task == HCB_TASK_CONSOLIDATE && now - q->task_since >= (u32)b->cfg.consolidate_ms) set_task(q, HCB_TASK_REGROUP, now);
         if (q->task == HCB_TASK_REGROUP) { for (i = 0; i < 8; i++) q->apost_ok[i] = 0; out->task = q->task; return; }
     }
     /* three of ours down since this task began: enough - back to CJ (the detail's own places stand) until the target is gone */
     if (q->task < HCB_TASK_APPROACH || q->task == HCB_TASK_REGROUP) q->pad0 = (u8)n;
-    if (q->task == HCB_TASK_WITHDRAW || q->pad0 >= n + 3) {
+    if (q->task == HCB_TASK_WITHDRAW || q->pad0 >= n + (int)b->cfg.withdraw_down) {
         set_task(q, HCB_TASK_WITHDRAW, now);
         for (i = 0; i < 8; i++) q->apost_ok[i] = 0;
         out->task = q->task; out->target = seen ? q->target : 0; out->target_at = q->target_at;
@@ -156,7 +156,7 @@ HID void hcb_squad_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
     }
     T = q->target_at;
     /* the squad's front: the middle of the men who are out (the bodyguards of a hurt CJ do not count) */
-    danger_cj = cj->health < 40.0f || b->alert >= HCB_ALERT_EVACUATE;
+    danger_cj = cj->health < b->cfg.cj_low_hp || b->alert >= HCB_ALERT_EVACUATE;
     front.x = front.y = front.z = 0; k = 0;
     for (i = 0; i < n; i++) if (!(danger_cj && (post[i]->job == HCB_ROLE_CLOSE || post[i]->job == HCB_ROLE_CLOSE2))) { front = v_add(front, men[i]->pos); k++; }
     if (!k) { out->task = q->task; return; }
@@ -176,7 +176,7 @@ HID void hcb_squad_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         if ((q->gathered && there * 4 >= n * 3) || now - q->task_since >= 15000) set_task(q, HCB_TASK_BOUND, now);
         q->gathered = 1;                                               /* (counted from the second look: the posts are this task's) */
     }
-    if ((q->task == HCB_TASK_BOUND || q->task == HCB_TASK_SEARCH) && !seen && q->lost_since && now - q->lost_since >= 6000) set_task(q, HCB_TASK_SEARCH, now);
+    if ((q->task == HCB_TASK_BOUND || q->task == HCB_TASK_SEARCH) && !seen && q->lost_since && now - q->lost_since >= (u32)b->cfg.search_ms) set_task(q, HCB_TASK_SEARCH, now);
     if (q->task == HCB_TASK_SEARCH && seen) set_task(q, HCB_TASK_BOUND, now);
     if ((q->task == HCB_TASK_SEARCH || q->task == HCB_TASK_BOUND) && !seen && D < 10.0f) { set_task(q, HCB_TASK_CONSOLIDATE, now); q->target_seen = 0; q->target = 0; }
     if (q->task == HCB_TASK_CONSOLIDATE && seen) set_task(q, HCB_TASK_BOUND, now);
@@ -198,7 +198,7 @@ HID void hcb_squad_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
             for (m = 0; m < 8; m++) if (q->apost_ok[m] && q->apost_id[m] == post[i]->who && d2(men[i]->pos, q->apost[m]) > 1.6f) moved_all = 0;
         }
         if (q->task == HCB_TASK_BOUND || q->task == HCB_TASK_SEARCH) {
-            if ((moved_all && now - q->bound_since >= 2000) || now - q->bound_since >= 8000) { q->mover ^= 1; q->bound_since = now ? now : 1; for (i = 0; i < 8; i++) if (q->apost_ok[i] == 2) q->apost_ok[i] = 3; }
+            if ((moved_all && now - q->bound_since >= (u32)b->cfg.fire_first_ms) || now - q->bound_since >= 8000) { q->mover ^= 1; q->bound_since = now ? now : 1; for (i = 0; i < 8; i++) if (q->apost_ok[i] == 2) q->apost_ok[i] = 3; }
         }
         for (i = 0; i < n; i++) {
             hcb_post *p = post[i];
@@ -227,7 +227,7 @@ HID void hcb_squad_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
             } else if (q->task == HCB_TASK_GATHER) {
                 static const float GX[8] = {-3, -7, 3, 7, -12, 12, 0, 0}, GY[8] = {0, 2, 0, 2, -4, -4, -12, -5};
                 int idx = is_lead ? 7 : pair == 0 ? w : pair == 1 ? 2 + w : 4 + w;
-                want = v_add(v_sub(T, v_mul(u, 32.0f)), v_add(v_mul(u, GY[idx]), v_mul(side, GX[idx])));
+                want = v_add(v_sub(T, v_mul(u, b->cfg.gather_m)), v_add(v_mul(u, GY[idx]), v_mul(side, GX[idx])));
                 duty = HCB_DUTY_COVER; crouch = d2(men[i]->pos, want) < 1.5f;
             } else if (q->task == HCB_TASK_CONSOLIDATE) {
                 /* all-round watch, 12 m to the side of the spot (never ON it) */
@@ -265,9 +265,9 @@ HID void hcb_squad_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                 else {
                     hcb_vec me = men[i]->pos, rel = flat(v_sub(me, T)), c0, found;
                     float along = rel.x * ax.x + rel.y * ax.y;         /* how far out on the flank line he is */
-                    dd = along - 8.0f;
-                    if (dd < 9.0f) dd = 9.0f;
-                    if (along <= 9.5f && q->apost_ok[slot]) { want = q->apost[slot]; }
+                    dd = along - b->cfg.rush_m;
+                    if (dd < b->cfg.assault_near_m) dd = b->cfg.assault_near_m;
+                    if (along <= b->cfg.assault_near_m + 0.5f && q->apost_ok[slot]) { want = q->apost[slot]; }
                     else {
                         c0 = v_add(T, v_add(v_mul(ax, dd), v_mul(right_of(ax), w ? 4.0f : -4.0f)));
                         c0.z = me.z;

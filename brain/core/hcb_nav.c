@@ -48,6 +48,23 @@ static void recentre(nav *n, hcb_vec f) {
     n->ox = nox; n->oy = noy;
 }
 
+/* 1.1: a doorway, a gap in a fence, a narrow passage: the cell has something solid on both sides (east and west, or north and south) */
+HID int hcb_nav_narrow(const hcb_brain *b, hcb_vec at) {
+    nav *n = (nav *)&b->nv;
+    int i = ci(n, at.x), j = cj_(n, at.y);
+    const navcell *a = cell(n, i, j), *w = cell(n, i - 1, j), *s_ = cell(n, i, j - 1);
+    int k;
+    if (!a || a->st != 1) return 0;
+    if (((a->fix & 1) && w && (w->fix & 1)) || ((a->fix & 2) && s_ && (s_->fix & 2))) return 1;   /* a passage one cell wide */
+    /* a gap in a thin wall: the way across is open here and shut in the cells on both sides (seen from either side of the wall) */
+    for (k = 0; k < 2; k++) {
+        const navcell *c0 = cell(n, i, j - k), *l = cell(n, i - 1, j - k), *r = cell(n, i + 1, j - k);
+        if (c0 && c0->st == 1 && !(c0->fix & 2) && l && r && (l->fix & 2) && (r->fix & 2)) return 1;
+        c0 = cell(n, i - k, j); l = cell(n, i - k, j - 1); r = cell(n, i - k, j + 1);
+        if (c0 && c0->st == 1 && !(c0->fix & 1) && l && r && (l->fix & 1) && (r->fix & 1)) return 1;
+    }
+    return 0;
+}
 /* 1.1: places behind something solid, seen from the threat: ground cells within r of c with a wall on the side the threat is on
    (nearest to c first). The map only knows what its level rays found - the cover questions decide whether it really hides a man. */
 HID int hcb_nav_walls(const hcb_brain *b, hcb_vec c, float r, hcb_vec threat, hcb_vec *pts, int max) {
