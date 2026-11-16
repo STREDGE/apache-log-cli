@@ -104,19 +104,36 @@ passed('Heights: a step of 0.6 m is walked over; a platform 2 m high is a wall -
 
 # ------------------------------------------------------------------ no way at all: it fails, says why, and stops trying the same thing
 sc = Scene(); sc.walls = [(-8., -8., 8., -8.), (8., -8., 8., 8.), (8., 8., -8., 8.), (-8., 8., -8., -8.)]       # CJ in a closed yard
-team = team_at(sc, SOUTH)
+team = team_at(sc, SOUTH); sc.net_blocked = True                       # (and the game's path network has no way in either)
 hist = {w: [] for w in team}
 for k in range(600):
     sc.step(1)
     for w in team:
-        hist[w].append((sc.posts[w].act, sc.posts[w].phase, sc.posts[w].why, sc.posts[w].stuck))
+        hist[w].append((sc.posts[w].act, sc.posts[w].phase, sc.posts[w].why, sc.posts[w].stuck, sc.posts[w].move))
 inner = [w for w in team if sc.posts[w].job in (HCB_ROLE_LEAD, HCB_ROLE_CLOSE, HCB_ROLE_CLOSE2)]
 assert all(any(h[1] == HCB_PH_FAILED for h in hist[w]) and any(h[3] for h in hist[w]) for w in inner), 'the three whose places are inside the yard: the action FAILS and the game\'s path network is asked'
+assert all(any(h[4] == 4 for h in hist[w]) for w in inner), 'and before that the game\'s path network was tried (move 4)'
+stood = max(max((len(list(g)) for k_, g in __import__('itertools').groupby(hist[w], key=lambda h: h[1] == HCB_PH_FAILED) if k_), default=0) for w in inner)
+assert stood <= 30, ('1.2: "failed" is 2.5 s of standing, then he tries again from the beginning (it was 8 s)', stood)
 assert all(any(h[2] in (HCB_WHY2_NO_PROGRESS, HCB_WHY2_BLOCKED, HCB_WHY2_NO_ROUTE) for h in hist[w]) for w in inner), 'with the reason'
 assert all(d2(sc.peds[w]['pos'], (0, 0)) > 7.5 for w in team), 'nobody went through the wall'
 changes = max(sum(1 for a_, b_ in zip(hist[w], hist[w][1:]) if a_[0] != b_[0]) for w in team)
 assert changes <= 80, ('no frantic switching: at most %d changes of action in a minute' % changes)
 passed('A place that cannot be reached (CJ in a closed yard): the men try another way, a step round, the game\'s path network - then the action is marked FAILED with its reason; in that whole minute no man changed his action more than %d times' % changes)
+
+# ------------------------------------------------------------------ 1.2: "no way on the map" is not "stand"
+# (the first log of 2.0 from the game: the map said "no way" for three ways out of four and every such answer stood the man for 8 s)
+sc = Scene(); sc.walls = [(-8., -8., 8., -8.), (8., -8., 8., 8.), (8., 8., -8., 8.), (-8., 8., -8., -8.)]       # the same yard; the game's path network has a way in
+team = team_at(sc, SOUTH)
+first_fail, asked4 = None, None
+for k in range(400):
+    sc.step(1)
+    if first_fail is None and any(sc.posts[w].phase == HCB_PH_FAILED for w in team): first_fail = k
+    if asked4 is None and any(sc.posts[w].move == 4 for w in team): asked4 = k
+inner = [w for w in team if sc.posts[w].job in (HCB_ROLE_LEAD, HCB_ROLE_CLOSE, HCB_ROLE_CLOSE2)]
+assert asked4 is not None and asked4 < 150 and (first_fail is None or first_fail > asked4), ('the path network is asked within seconds, before anybody "fails"', asked4, first_fail)
+assert all(d2(sc.peds[w]['pos'], sc.cj['pos']) < 3.5 for w in inner), 'and the three are with CJ in the yard'
+passed('1.2 "no way on the map" is not "stand still": the men go straight at their places, then by the game\'s path network (asked after %.1f s) - the three are with CJ inside the yard the map takes for closed' % (asked4 / 10.))
 
 # ------------------------------------------------------------------ the map goes with CJ
 sc = Scene(); sc.blocks = [(90., -12., 110., -6., 4.)]; team = team_at(sc, ((-2., -3.), (2., -3.), (-4., 4.), (4., 4.)))

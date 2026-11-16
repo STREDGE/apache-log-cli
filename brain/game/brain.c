@@ -55,7 +55,7 @@ extern void *memset(void *d, int c, u64 n);
 
 #define HIDDEN __attribute__((visibility("hidden")))
 #define EXPORT __attribute__((visibility("default")))
-#define VERSION "1.1 (places by weights, corners and doorways, tokens; the mod keeps the game AI off its men, fires their weapons, holds their ropes; map cache, path thread, numbers in the settings)"
+#define VERSION "1.2 (a man on his way has no gun task holding him; \"no way on the map\" is not \"stand\": straight, then the game's path network)"
 #define GAME_DIR "/storage/emulated/0/Android_unprotected/data/com.rockstargames.gtasa/"
 
 /* ---------- the game (offsets from libGTASA base; see brain/research/game_facts.md) ---------- */
@@ -721,10 +721,11 @@ typedef void (*set_task_fn)(void *mgr, void *task, int slot, int unused);
 typedef float (*ground_fn)(float x, float y, float z, u8 *found, void **ent);
 typedef int (*abort_fn)(void *task, void *ped, int priority, const void *event);
 typedef int (*type_fn)(const void *task);
-struct bod { u32 who, at, target; const u8 *task; float via[3]; u8 kind, ms; };
+struct bod { u32 who, at, target; const u8 *task; float via[3]; u8 kind, ms; u32 walk_at, chk_at, plain_until; float chk[3]; };
 static struct bod g_bod[16];
 static struct { u32 who, target, at; u8 state; } g_sq[16];             /* each guard's last fire order as the script was told it */
 static int g_body_ok, g_map_ok, g_gun_ok;
+static u32 g_shoot_stood, g_shoot_moved, g_shoot_off, g_gun_dropped;
 static u32 g_soft_falls, g_body_new, g_body_turn, g_body_refused, g_body_nomem, g_body_kept, g_recall_until;
 static u32 g_map_ground, g_map_ground_ok, g_map_segs, g_map_left, g_map_us_max, g_high_i;
 static u64 g_map_us;
@@ -785,12 +786,30 @@ static int body_walk(u32 who, const hcb_post *p) {
     dx = p->via.x - p->at.x; dy = p->via.y - p->at.y;
     final = dx * dx + dy * dy < 0.01f;
     ms = p->act == HCB_ACT_SPRINT ? 7 : p->act == HCB_ACT_RUN || (p->act == HCB_ACT_FASTWALK && d > 4.0f) ? 6 : 4;
-    /* (1.0: fire on the move by the game's go-and-shoot task; 1.1: the mod's own gun task fires while he walks - a plain walk is enough) */
-    for (k = 0; k < 16 && !g_gun_ok; k++) if (g_sq[k].who == who && g_sq[k].state == 2 && now >= g_sq[k].at && now - g_sq[k].at < 400 && g_sq[k].target) {
+    /* (fire on the move: the game's go-and-shoot task) */
+    /* 1.2 (the first log of 2.0 from the game): a man with the mod's gun task in his hands did not move at all - 173 samples
+       "on his way, aiming", 1 cm a second; without the gun task 1.3 m a second. So: a man on his way has NO gun task of the
+       mod's (body_gun takes it off him); fire on the move is the game's own go-and-shoot task again, and that one is watched:
+       0.4 m in 1.2 s or it is a plain walk for him for 6 s; three such with none that walked - never again this game. */
+    b = bod_of(who);
+    if (b->chk_at && now >= b->chk_at && now - b->chk_at < 5000) {
+        if (now - b->chk_at >= 1200) {
+            int moved = dist2(b->chk, pos_of(me)) > 0.16f;
+            if (b->kind == 2 && b->task && b->task == RD(u8 *, mgr + 24)) {
+                if (moved) g_shoot_moved++;
+                else {
+                    g_shoot_stood++; b->plain_until = now + 6000;
+                    if (g_shoot_stood >= 3 && !g_shoot_moved && !g_shoot_off) { g_shoot_off = 1; log_begin(); lg("the body: a man with the game's go-and-shoot task does not move here - plain walks only from now on\n"); log_end(); }
+                }
+            }
+            b->chk_at = now; memcpy(b->chk, pos_of(me), 12);
+        }
+    } else { b->chk_at = now ? now : 1; memcpy(b->chk, pos_of(me), 12); }
+    b->walk_at = now ? now : 1;
+    for (k = 0; k < 16 && !g_shoot_off && now >= b->plain_until; k++) if (g_sq[k].who == who && g_sq[k].state == 2 && now >= g_sq[k].at && now - g_sq[k].at < 400 && g_sq[k].target) {
         him = obj_of(&pp, g_sq[k].target, PED_STRIDE);
         if (him && !is_dead(him)) { kind = 2; tgt = g_sq[k].target; } else him = 0;
     }
-    b = bod_of(who);
     t3 = RD(u8 *, mgr + 24);
     if (t3 && t3 == b->task && b->kind == kind && RD(u64, t3) == G + (kind == 1 ? VT_GOTO : VT_GOTO_SHOOT)) {
         if (kind == 1) {                                                /* still on his way: only the target moves */
@@ -941,6 +960,18 @@ static int body_gun(u32 who, int state, u32 target, int reload) {
     t = RD(u8 *, mgr + 0x28);
     cmd = !him || state == 0 ? 6 /* END_LEISURE */ : state == 2 && !reload ? 3 /* FIREBURST */ : 1 /* AIM */;
     g_where = 26;
+    /* 1.2: on his way (the mod's walk asked for within the last 0.4 s) - no gun task of the mod's: it holds him where he
+       stands. The one he has is ended at once, the way the game ends a task, and taken out of its slot. */
+    for (i = 0; i < 16; i++) if (g_bod[i].who == who && g_bod[i].walk_at && now >= g_bod[i].walk_at && now - g_bod[i].walk_at < 400) {
+        if (t && t == g_gun[old].task && RD(u64, t) == G + VT_USE_GUN) {
+            ((abort_fn)RD(u64, G + VT_USE_GUN + 0x38))(t, me, 2, 0);
+            ((sec_fn)(G + SET_SECONDARY))(mgr, 0, 0);
+            g_gun_dropped++;
+        }
+        g_gun[old].task = 0; g_gun[old].cmd = 6; g_gun[old].target = 0; g_gun[old].at = now ? now : 1; g_gun[old].fire_ms = 0;
+        g_where = was;
+        return 1;
+    }
     /* the self-check: fire ordered, and rounds leaving the weapon? */
     ammo = RD(u32, w + 0xc) + RD(u32, w + 8);
     if (ammo != g_gun[old].ammo) { if (g_gun[old].cmd == 3) g_gun_proved = 1; g_gun[old].ammo = ammo; g_gun[old].fire_ms = 0; }
@@ -2166,7 +2197,7 @@ static void session_second(u32 now) {
     ts(D, " | body "); ts(D, g_snap.body ? "MOD" : "scripts"); ts(D, ": new tasks "); tu(D, g_body_new); ts(D, " retargets "); tu(D, g_body_turn); ts(D, " kept "); tu(D, g_body_kept);
     ts(D, " refused "); tu(D, g_body_refused); ts(D, " no memory "); tu(D, g_body_nomem); ts(D, " falls slowed "); tu(D, g_soft_falls);
     ts(D, "\n  mind: decision maker "); ti(D, g_dm); ts(D, " put back "); tu(D, g_dm_fixed); ts(D, " AI reactions removed "); tu(D, g_ev_cleared); ts(D, " (last type "); tu(D, g_ev_last); ts(D, ") refused "); tu(D, g_ev_refused);
-    ts(D, " | weapons "); ts(D, g_gun_ok ? (g_gun_proved ? "MOD (rounds seen)" : "MOD (no round seen yet)") : "scripts"); ts(D, ": gun tasks "); tu(D, g_gun_new); ts(D, " commands "); tu(D, g_gun_cmd); ts(D, " magazines "); tu(D, g_reloads);
+    ts(D, " | weapons "); ts(D, g_gun_ok ? (g_gun_proved ? "MOD (rounds seen)" : "MOD (no round seen yet)") : "scripts"); ts(D, ": gun tasks "); tu(D, g_gun_new); ts(D, " commands "); tu(D, g_gun_cmd); ts(D, " magazines "); tu(D, g_reloads); ts(D, " taken off men on the move "); tu(D, g_gun_dropped); ts(D, " | go-and-shoot: walked "); tu(D, g_shoot_moved); ts(D, " stood "); tu(D, g_shoot_stood); if (g_shoot_off) ts(D, " OFF");
     ts(D, " | ropes kept alive "); tu(D, g_ropes_kept);
     ts(D, " | map: ground asked "); tu(D, g_map_ground); ts(D, " found "); tu(D, g_map_ground_ok); ts(D, " legs "); tu(D, g_map_segs); ts(D, " left for later "); tu(D, g_map_left);
     ts(D, " max "); tu(D, g_map_us_max); ts(D, " us a look; cells kept "); tu(D, g_mc_n); ts(D, " (from the file "); tu(D, g_mc_loaded); ts(D, ") answered from memory "); tu(D, g_mc_hits); ts(D, " written "); tu(D, g_mc_saved);
@@ -2684,7 +2715,7 @@ static void *watchdog(void *arg) {
 }
 
 struct ModInfo { char guid[48]; char name[48]; char version[24]; char author[48]; u16 ver[4]; u8 reserved[336]; };
-static struct ModInfo g_info __attribute__((aligned(16))) = {"net.helicover.brain", "Helicover Brain", "1.1", "Helicover", {1, 1, 0, 0}, {0}};
+static struct ModInfo g_info __attribute__((aligned(16))) = {"net.helicover.brain", "Helicover Brain", "1.2", "Helicover", {1, 2, 0, 0}, {0}};
 static int g_done;
 EXPORT struct ModInfo *__GetModInfo(void) { return &g_info; }
 EXPORT void OnModPreLoad(void) {}

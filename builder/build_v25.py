@@ -190,8 +190,8 @@ MESSAGES={'HCLOAD': '~b~PILOT:~w~ inbound to your position.',
  'HCBURN': '~r~CAR ON FIRE!~w~ Get away from it.',
  'HCEVADE': '~r~TAKING HITS!~w~ Pilot breaking away.',
  'HCSHOT': '~r~TAKING FIRE!~w~ Pilot breaking away.',
- 'HCHELLO': '~b~HELICOVER 2.0 BETA 2~w~ ready. CLEO menu > Helicover.',
- 'HCHELLV': '~b~HELICOVER 2.0 BETA 2~w~ ready. Map marker is off here.'}
+ 'HCHELLO': '~b~HELICOVER 2.0 BETA 3~w~ ready. CLEO menu > Helicover.',
+ 'HCHELLV': '~b~HELICOVER 2.0 BETA 3~w~ ready. Map marker is off here.'}
 # Generate state updates; panel prints messages when the state changes.
 # beta 6: our people do not cower. CREATE_CHAR gives a mission ped the built-in "normal" decision maker (m_norm.ped): punched, shot at or
 # aimed at, it picks "duck and cover" / "flee" like any passer-by. 65542 is the game's built-in EMPTY decision maker (slot 6 | 1<<16, loaded
@@ -1227,7 +1227,7 @@ p.label('CLOSE');p.call('UNLOAD');a(0xdf3);p.set(OPEN,0);p.set(0,0);a(6,V(10),I(
 VERSION='1.4'
 for st,sit,x in MAIN_VARIANTS:
  for prof,suf in zip(PROFILES,SUFFIX):
-  title=(i18n.encode('HELICOVER 2.0 BETA 2','en') if prof=='en' else i18n.menu_text('TITLE_READY',prof)) if st==0 else i18n.state_title(st,STATES[st],prof)
+  title=(i18n.encode('HELICOVER 2.0 BETA 3','en') if prof=='en' else i18n.menu_text('TITLE_READY',prof)) if st==0 else i18n.state_title(st,STATES[st],prof)
   p.blob('MAIN_%d_%d_%d'%(st,sit,x)+suf,title,main_rows(st,sit,x,prof))
 for prof,suf in zip(PROFILES,SUFFIX):
  if prof=='en':p.blob('OFFLINE_MENU',i18n.menu_text('OFFLINE_TITLE',prof),[i18n.menu_text('OFFLINE_ROW',prof)])   # the core is missing, so the language is unknown: English only

@@ -72,8 +72,8 @@ HCRCL ~g~ALPHA:~w~ all back to CJ!
 HCBURN ~r~CAR ON FIRE!~w~ Get away from it.
 HCEVADE ~r~TAKING HITS!~w~ Pilot breaking away.
 HCSHOT ~r~TAKING FIRE!~w~ Pilot breaking away.
-HCHELLO ~b~HELICOVER 2.0 BETA 2~w~ ready. CLEO menu > Helicover.
-HCHELLV ~b~HELICOVER 2.0 BETA 2~w~ ready. Map marker is off here.
+HCHELLO ~b~HELICOVER 2.0 BETA 3~w~ ready. CLEO menu > Helicover.
+HCHELLV ~b~HELICOVER 2.0 BETA 3~w~ ready. Map marker is off here.
 RGDEP ~b~PILOT:~w~ team going down the ropes.
 RGDONE ~g~SQUAD:~w~ team back aboard.
 RGFAIL ~r~HELICOVER:~w~ could not load the team.

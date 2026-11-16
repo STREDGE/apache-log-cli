@@ -543,7 +543,7 @@ class Scene:
                         step = min(d, spd * ms / 1000.)
                         if d > 1e-6:
                             nw = [me[0] + (to[0] - me[0]) * step / d, me[1] + (to[1] - me[1]) * step / d, me[2]]
-                            if self.body and self.walls_stop and p_.move != 4 and self.walk_blocked(me, nw):   # (4: the game's path network takes him round - simulated as a walk that walls do not stop)
+                            if self.body and self.walls_stop and (p_.move != 4 or getattr(self, 'net_blocked', False)) and self.walk_blocked(me, nw):   # (4: the game's path network takes him round - simulated as a walk that walls do not stop)
                                 nw = me                              # a wall, a ledge: he does not get through
                             g_ = self.ground_at(nw[0], nw[1]) if self.body else None
                             if g_ is not None and self.body:

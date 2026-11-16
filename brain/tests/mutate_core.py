@@ -242,6 +242,8 @@ M += [
  (D, "                at = reachable(b, out, cjp, at, now, &dt->man[i].pad);\n", "", 'inner place beyond a wall is pulled in'),
  (A, "if (a->off_map && a->fails >= 2) { p->move = 4;", "if (0) { p->move = 4;", 'off the map: the game\'s path network'),
  (Q, "if (have_marksman && mk_roping && q->ow_ok && s->heli) { out->heli_ok = 1;", "if (0) { out->heli_ok = 1;", 'overwatch: the helicopter stays while he is on the rope'),
+ (A, "if (p->job != HCB_ROLE_MARKSMAN) a->off_map = 2; else a->fails", "if (0) a->off_map = 2; else a->fails", '1.2: no way on the map is not "stand"'),
+ (A, "            if (now - a->failed_at < 2500) {", "            if (now - a->failed_at < 8000) {", '1.2: "failed" is 2.5 s of standing'),
 ]
 only = sys.argv[1:]
 missed = 0

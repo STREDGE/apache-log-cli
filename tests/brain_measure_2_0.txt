@@ -4,6 +4,6 @@ guard farther than 20 m from his post while CJ stands: 3 %   (0.9 in the game: 4
 STUCK: 0 %   (0.9 in the game: 21 %; goal 5 % or less)
 gave his post up for a while (FAILED): 0 %
 sprinting with no threat: 0 %   (0.9 in the game: 50 %; goal 10 % or less)
-changes of action per guard per minute: 4.8   (goal 6 or less)
+changes of action per guard per minute: 4.7   (goal 6 or less)
 guards within 4 m of CJ in PROTECT, average: 2.8   (0.9 in the game: 6 of 8; goal 3)
 an outer man at his place sees both CJ and an attacker: 100 %   (goal 80 % or more)
