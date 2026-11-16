@@ -253,7 +253,6 @@ M = [
  (A, 'if (!inner && fight && ff && p->job != HCB_ROLE_MARKSMAN', 'if (!inner && fight && p->job != HCB_ROLE_MARKSMAN', '1.3 token: a firefight only'),
  (A, 'if (cj_speed > 0.5f && a->phase == HCB_PH_MOVING', 'if (0 && a->phase == HCB_PH_MOVING', '1.3 arrival margin: on his way he goes on'),
  (A, '(act == a->act + 1 || act + 1 == a->act)', '1', '1.3 pace band: the pace next to the edge only'),
- (A, 'if (!a->n_path) p->via = a->phase == HCB_PH_MOVING && d2(a->via, me->pos) > 0.5f && d2(a->via, p->at) < d ? a->via : p->at;', 'if (!a->n_path) p->via = me->pos;', '1.3 waiting for a way: he goes on'),
  (A, '                                a->plan_t = 0; a->why = HCB_WHY2_BLOCKED;\n                                hcb_path_forget(b, p->who);', '                                a->n_path = 0; p->via = me->pos; a->why = HCB_WHY2_BLOCKED;', '1.3 a blocked leg does not stop him'),
  (Q, 'if (!q->mk_far_since || now - q->mk_far_since < 10000) {', 'if (0) {', '1.3 marksman: stays up while CJ is near'),
  (Q, '            q->mk_climb_t = now ? now : 1; q->mk_z0 = here; p->climb = 1;\n        }', '        }', '1.3 marksman: climbs at the wall'),

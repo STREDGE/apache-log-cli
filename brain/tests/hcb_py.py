@@ -485,6 +485,10 @@ class Scene:
             o.at = vec(x_, y_, z_); o.height = z_ - (self.cj['pos'][2] - 1.); o.sees_cj = int(sees_)
         # 1.1: the ways asked for by the last look - found on the brain's map as it is now (in the game: a thread of the mod)
         pq = getattr(self, 'path_q', [])[:HCB_MAX_PATHQ]
+        if getattr(self, 'path_delay', 0):          # (1.3: the mod's thread answers some looks later, as in a busy game)
+            hist = self.__dict__.setdefault('_pq_hist', [])
+            hist.append(list(pq))
+            pq = hist.pop(0) if len(hist) > self.path_delay else []
         s.n_paths = len(pq)
         for o, (frm_, to_, key_) in zip(s.paths, pq):
             wp = (hcb_vec * 10)()

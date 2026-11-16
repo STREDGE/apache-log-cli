@@ -136,9 +136,13 @@ sc.blocks = [(18., 8., 26., 16., 2.5)]
 sc.high = [(22., 12., 3.5, True)]
 g = sc.ped(-10., -60., pedtype=GANG, weapon=AK, face=(0., 1.))
 sc.step(2); sc.shot(g, (0., 0., 1.), dst=1)
+at_wall, left_at = None, None
 for k in range(450):
     if k % 15 == 0: sc.shot(g, (0., 0., 1.), dst=1)
     sc.step(1)
+    if at_wall is None and d2(pos(sc, mk), (22., 12.)) < 5.: at_wall = k
+    if at_wall is not None and left_at is None and d2(pos(sc, mk), (22., 12.)) > 7.: left_at = k
+assert left_at is not None and left_at - at_wall < 160, ('three tries of 3.5 s and he leaves the wall - not the 20 s timeout', at_wall, left_at)
 assert feet(sc, mk) < 0.5 and d2(pos(sc, mk), (18., 12.)) > 6. and pos(sc, mk)[1] < -12., ('gave up the shed, a long look towards the fire instead', pos(sc, mk), getattr(sc, 'climbs', 0))
 passed('A wall the game will not let him climb: three tries (3.5 s each), then the shed is marked no good for a minute and he takes the next place - in a fight a long look towards the fire - instead of standing at the wall')
 
@@ -257,8 +261,18 @@ for k in range(400):
         if p_.move and d2(was[w], (p_.at.x, p_.at.y)) > 2.5:
             moving += 1
             bad += d2(was[w], (p_.via.x, p_.via.y)) < 0.3
+# (and CJ suddenly 30 m off behind a long wall: every man needs a way round, asked of the map's thread - while it is being found he goes on)
+sc.cj['vel'] = [0., 0., 0.]; sc.cj['pos'] = [0., 32., 1.]; sc.walls = sc.walls + [(-25., 18., 25., 18.)]
+sc.path_delay = 6                                                # (the way comes 0.6 s later: meanwhile nobody stands)
+for k in range(120):
+    was = {w: list(pos(sc, w)) for w in team}
+    sc.step(1)
+    for w, p_ in sc.posts.items():
+        if p_.move and d2(was[w], (p_.at.x, p_.at.y)) > 2.5 and p_.act != HCB_ACT_SIDESTEP:   # (a step round that is made: a moment at its point)
+            moving += 1
+            bad += d2(was[w], (p_.via.x, p_.via.y)) < 0.3
 assert moving > 100 and bad == 0, ('on his way, his next point is never where he stands (the second 2.0 log: 68 % of "blocked" answers left him standing)', bad, moving)
-passed('Walls about and CJ walking: in %d looks of a man on his way his next point was never the spot he stands on (the second 2.0 log: "leg blocked" left the man standing in 68 %% of cases)' % moving)
+passed('Walls about and CJ walking, then CJ 30 m off behind a long wall with the ways coming 0.6 s late: in %d looks of a man on his way his next point was never the spot he stands on (the second 2.0 log: "leg blocked" or "a way is being looked for" left the man standing - 68 %% of "blocked" answers)' % moving)
 
 # ================================================================== the detail with CJ (plan items D, E)
 # ------------------------------------------------------------------ ASSAULT, CJ runs away from the squad: everybody back to him - and that holds for 8 s
