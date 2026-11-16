@@ -733,6 +733,14 @@ hostile=950;w.exists.add(hostile);w.pos[hostile]=[20.,0.,0.];w.pedtype[hostile]=
 w.calls.clear();steps(w,V,40)
 assert any(firing(w,t) for t in team) and not [x for x in w.calls if x[1] in (0x5d3,0x5f5,0x850) and x[2][0] in team],'fire from the post is the script\'s; walking is still the mod\'s'
 passed('2.0 at his post the script is his body again: crouch, aim and fire tasks as before (only the walking moved to the mod)')
+# 2.0 beta 2: the mod has their weapons too (answer 6): the script gives no aim or fire task at all - only the crouch at the post
+w.brain.gun=True;w.calls.clear();steps(w,V,40)
+WEAPON_TASKS=FIRING+(0x667,)
+assert not [x for x in w.calls if x[1] in WEAPON_TASKS and x[2][0] in team],('no aim / fire task from the script',[(hex(x[1]),x[2][0]) for x in w.calls if x[1] in WEAPON_TASKS and x[2][0] in team][:4])
+assert {st for _,who_,st in w.brain.gun_states if who_ in team}&{2},'while the brain did order fire (it went to the mod\'s gun task)'
+assert all(w.shared[b.SQ_SLOT+k*b.SQ_SLOT_SIZE] in (20,21) for k in range(4)),[w.shared[b.SQ_SLOT+k*b.SQ_SLOT_SIZE] for k in range(4)]
+passed('2.0 beta 2 the mod has the guards\' weapons: the squad worker is answered 6 and gives no aim or fire task (074D, 0634, 0637, 0667...) - walking and firing are both the mod\'s, the script keeps the crouch, the cars and the words')
+w.brain.gun=False
 # the script falls back by itself when the mod stops walking them (the answer is no longer 5)
 w.brain.body=False;w.dead.add(hostile)
 for t in team:w.pos[t]=[0.,-14.,0.]
@@ -748,7 +756,7 @@ assert 'SQTAP' in w.messages,w.messages
 d0=min(math.dist(w.pos[t][:2],w.pos[hostile][:2]) for t in team);steps(w,V,60);d1=min(math.dist(w.pos[t][:2],w.pos[hostile][:2]) for t in team)
 assert d1<d0-10,('the squad closes on him',d0,d1)
 w.shared[b.RECALL]=1;steps(w,V,6);assert w.shared[b.RECALL]==0 and w.brain.out.task==H.HCB_TASK_REGROUP and 'SQTRG' in w.messages,(w.brain.out.task,w.messages)
-steps(w,V,60);assert max(math.dist(w.pos[t][:2],w.player[:2]) for t in team)<22,'"to me": everybody is back with CJ'
+steps(w,V,60);assert max(math.dist(w.pos[t][:2],w.player[:2]) for t in team)<30 and sum(math.dist(w.pos[t][:2],w.player[:2])<5 for t in team)==3,'"to me": everybody is back - three at CJ, the outer man at his place 12-30 m out'
 passed('2.0 ASSAULT: with the mode switched on the menu the squad goes for the man CJ aims at ("target marked - moving up"), closes on him by its own way-finding, and CANCEL: TO ME brings everybody back to CJ ("back to CJ")')
 
 text='\n'.join(results)+'\nMocked script execution only: real pathing, cover and gunfire are not tested.\n'

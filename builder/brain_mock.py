@@ -40,6 +40,9 @@ class BrainSim:
         self.say = (0, 0, 0)        # the commander's last words: (seq, HCB_SAY_*, direction)
         self.words = []             # (time, HCB_SAY_*, direction): everything the commander said
         self.body = False           # 2.0: True = the mod walks the guards itself (post command answers 5, this file moves the man)
+        self.gun = False            # 2.0 beta 2: True (with body) = the mod has the guards' weapons: command 2 answers 6 where it would say 1, 2 or 3
+        self.gun_states = []        # (time, guard, what the core said) while the mod has his weapon
+        self.path_q = []
         self.recall_until = 0
         self.ground_q, self.seg_q, self.high = [], [], []   # the map's questions of the last look; high places [(x, y, z, sees CJ)]
         self.walked = {}            # who -> metres this file walked him (body mode)
@@ -170,6 +173,13 @@ class BrainSim:
             self.recall_until = w.now + 10000; w.shared[b.RECALL] = 0
         s.recall = int(w.now < self.recall_until)
         s.body = int(self.body)
+        pq = self.path_q[:h.HCB_MAX_PATHQ]                      # 2.0 beta 2: the ways asked for by the last look (the mod's thread)
+        s.n_paths = len(pq)
+        for o, (frm_, to_, key_) in zip(s.paths, pq):
+            wp = (h.hcb_vec * 10)()
+            o.n = h.LIB.hcb_nav_way(self.brain.mem, h.vec(*frm_), h.vec(*to_), wp, 10, w.now & 0xffffffff)
+            setattr(o, 'from', h.vec(*frm_)); o.to = h.vec(*to_); o.key = key_
+            for k_ in range(max(0, o.n)): o.wp[k_] = wp[k_]
         gz = lambda x_, y_, z_=1000.: w.ground_fn(x_, y_, z_) if hasattr(w, 'ground_fn') else 0.
         walk = lambda p_, q_: self.sight(w, [p_[0], p_[1], p_[2] - .4], [q_[0], q_[1], q_[2] - .4])
         gq = self.ground_q[:h.HCB_MAX_GROUND]
@@ -203,6 +213,7 @@ class BrainSim:
         for i, (who, role) in enumerate(ours):
             s.ours[i], s.our_role[i] = who, role
             s.our_state[i] = (h.HCB_OS_ROPING if self.roping(w, who) else 0) | (h.HCB_OS_NATIVE if self.body else 0)
+            s.our_clip[i] = getattr(w, 'clips', {}).get(who, 255)
         cj = w.coords(1)
         mine = {o for o, _ in ours}
         people = sorted(self.peds(w), key=lambda p: 0. if p in mine else math.dist(w.coords(p), cj))
@@ -282,6 +293,7 @@ class BrainSim:
         self.probe_q = [((q.at.x, q.at.y, q.at.z), (getattr(q, 'from').x, getattr(q, 'from').y, getattr(q, 'from').z)) for q in self.out.probe_q[:self.out.n_probe_q]]
         self.ground_q = [(q.x, q.y, q.z) for q in self.out.ground_q[:self.out.n_ground_q]]
         self.seg_q = [((q.a.x, q.a.y, q.a.z), (q.b.x, q.b.y, q.b.z)) for q in self.out.seg_q[:self.out.n_seg_q]]
+        self.path_q = [((getattr(q, 'from').x, getattr(q, 'from').y, getattr(q, 'from').z), (q.to.x, q.to.y, q.to.z), q.key) for q in self.out.path_q[:self.out.n_path_q]]
         if not self.plans or self.plans[-1][1:] != (self.out.umode, self.out.task):
             self.plans.append((w.now, self.out.umode, self.out.task))
         if self.out.say:
@@ -296,7 +308,7 @@ class BrainSim:
             if p.who == who:
                 v[f + 1], v[f + 2], v[f + 3], v[f + 4], v[f + 5] = p.move, p.at.x, p.at.y, p.at.z, p.crouch
                 if self.body:      # the mod's body_walk: on his way his legs are the mod's (5); arrived he stays (0)
-                    mine = p.phase <= h.HCB_PH_MOVING and (h.HCB_ACT_WALK <= p.act <= h.HCB_ACT_SPRINT or p.act == h.HCB_ACT_SIDESTEP) and who in w.pos and who not in w.dead and who not in w.incar
+                    mine = p.phase <= h.HCB_PH_MOVING and (h.HCB_ACT_WALK <= p.act <= h.HCB_ACT_SPRINT or p.act == h.HCB_ACT_SIDESTEP) and who in w.pos and who not in w.dead and who not in w.incar and p.move != 4
                     v[f + 1] = 5 if mine else 0 if p.phase >= h.HCB_PH_ARRIVED else p.move
                     if mine: self.mine_last.add(who)
                 v[f + 6], v[f + 7], v[f + 8], v[f + 9] = p.look.x, p.look.y, p.look.z, p.duty
@@ -419,6 +431,9 @@ class BrainSim:
         v[f + 2] = o.target
         v[f + 1] = self.brain.squad(who, o.target, w.now & 0xffffffff, w.coords(who), w.coords(o.target), w.coords(1), self.friends(w, who))
         self.said.append((w.now, who, v[f + 1], o.target))
+        # 2.0 beta 2: the mod has his weapon (its own gun task): the script is told 6 and gives him no aim or fire task
+        if self.body and self.gun and v[f + 1] in (1, 2, 3) and who in w.pos and who not in w.incar and any(r >= h.HCB_ROLE_SQUAD for o_, r in self.ours(w) if o_ == who):
+            self.gun_states.append((w.now, who, v[f + 1])); v[f + 1] = 6
 
     def status(self, w, v, f, count):
         o = self.out

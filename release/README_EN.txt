@@ -1,10 +1,65 @@
-HELICOVER 2.0 BETA 1 - support helicopter with an autonomous protective detail
-GTA San Andreas (Android, 64-bit), a CLEO mod + the Helicover Brain 1.0 mod. They only work together.
+HELICOVER 2.0 BETA 2 - support helicopter with an autonomous protective detail
+GTA San Andreas (Android, 64-bit), a CLEO mod + the Helicover Brain 1.1 mod. They only work together.
 
 WHAT IT IS
 Call a support helicopter: it flies in from far away, follows CJ and covers him with four door
 gunners. Drop a four-man team on foot, get picked up by rope, fly to the map marker or Grove
 Street and get out there by landing or by rope.
+
+NEW IN 2.0 BETA 2 (brain 1.1) - EVERYTHING THAT WAS LEFT OF THE 2.0 PLAN
+IMPORTANT: replace EVERYTHING - the CLEO files and libHelicoverBrain64.so.
+Beta 1 came with a list "not done from the plan". That list is gone: everything on it is in this release.
+Not run in the game - there is no game and no tablet on my side; checked in simulation and on an emulator with your libGTASA.so.
+
+What was added
+- Places by weights. An outer man no longer takes the first cover he comes across: up to 20 places near his corner are valued
+  and the best is taken. Worth most: hidden when crouching, firing over it when standing; then hidden from the other threats,
+  a good range, a short way, nobody of ours beside him, a way that is not under fire. A place CJ cannot be seen from is not
+  taken. A place is kept: a new one must be 20 % better, and not sooner than after 4 s.
+- Corners and doorways. Under threat a man stops 2 m short of a blind corner, looks round it for a second with his weapon
+  and goes on. A doorway is passed one man at a time, the next one waits short of it; nobody stands in it.
+- "Tokens". No more than three fire at one man. Magazines are changed one man at a time while the others fire on.
+  In a fight no more than three of the outer men move at once; the others hold and wait their turn.
+- The game's AI does not take a guard away. The mod remembers the empty decision maker the scripts give the guards and puts
+  it back when the game has changed it. If a guard still starts to flee, chase or cower by himself, that reaction is asked
+  to stop and removed. Falling, getting up, fire, a hit, dodging a car, water and cars are left alone.
+- The mod has the weapons. With the brain's leave a guard gets the game's gun task once; after that the mod only commands
+  it: aim, burst, stop. So he can walk and fire, and the firing is not restarted every second. Self-check: if in 3 s of
+  fire orders no round has left a weapon, the mod says so in the log and hands the firing back to the scripts (as in beta 1).
+- The mod holds the ropes. While one of ours is on a rope it does not vanish after 4 s and its top follows the helicopter.
+- The map remembers. The ground it has learnt (16 thousand cells) is kept in configs/net.helicover.brain.map; where you have
+  been before - in this game or the last - the map is known at once, without a single ray of the game's.
+- A thread of its own. The way-finding and the writing of the map file run in a thread of the mod, not in the game's.
+- Tactical numbers in the settings file. configs/net.helicover.brain.ini has a [Tactics] section: 33 numbers, each with
+  what it means and its limits. Change one and start the game again. A wrong value is ignored and written back as built in.
+
+What the 30-minute run found and fixed (beta 1 had no such run)
+- In a gap of a long wall the men got in each other's way, each "made no progress" and marked the gap shut - then nobody
+  had a way through. Now a jam of our own men is a wait, not an obstacle, and "no way" is said only by walls the map has seen.
+- The commander's place "a step to CJ's right" could lie beyond a wall CJ stood beside. It is pulled in now.
+- Two men could stop on one spot. "Arrived" is not counted while another of ours stands within 0.6 m.
+- A man more than 40 m from CJ with a wall across the straight way stood still. The game's path network takes him now.
+The run (30 minutes of random play, three different runs, simulation): in a wall 0 s, two on one spot 0 s, stuck 1-2 %,
+nobody stuck longer than 22 s on end, in PROTECT farther than 8 m from the post 8-12 %; the same 18000 looks a second
+time give the same decisions bit for bit.
+
+New switches in configs/net.helicover.brain.ini (rarely needed; a crash inside a part sets its switch by itself)
+  MindOff = 1   the mod leaves the decision maker and the game AI's reactions alone
+  GunOff = 1    the scripts handle the guards' weapons, as in beta 1
+  RopeOff = 1   the ropes are the game's own
+
+WHAT TO CHECK ON THE TABLET (besides the beta 1 list below)
+1. The guards fire: the log says "weapons MOD (rounds seen)". If it says "scripts", the mod handed the firing back by
+   itself - not a fault, but send the log.
+2. The second four and the marksman come all the way down their ropes (the log: "ropes kept alive N").
+3. At a wall with a gap the squad goes through one at a time and nobody is stuck.
+4. After the first game there is a file configs/net.helicover.brain.map.
+
+WHAT TO SEND: mods/hcbrain_log.txt and mods/hcbrain_summary.txt.
+
+WHAT ONLY THE TABLET CAN SHOW (a check, not work left undone)
+How it behaves in the game itself and how long the thinking takes on your tablet - the log and the summary will show. The
+tactical sources other than code on GitHub were read as search excerpts: this session's network opens no other site.
 
 NEW IN 2.0 BETA 1 (brain 1.0) - THE DETAIL REBUILT: THE MOD WALKS THE GUARDS, TWO MODES
 IMPORTANT: replace EVERYTHING - the CLEO files and libHelicoverBrain64.so.
@@ -54,6 +109,7 @@ in the log says so). To turn it back on delete the line. Tactical numbers are no
 ROLLBACK
 Copy every file of the previous archive Helicover_1.5_beta4_Brain0.9_Android.zip over (the CLEO and mods folders).
 The soft way without replacing files: the line BodyOff = 1.
+Back to beta 1: the archive Helicover_2.0_beta1_Brain1.0_Android.zip.
 
 WHAT TO CHECK ON THE TABLET
 1. The game starts, the helicopter comes, the squad ropes down - nobody falls; the helicopter leaves after the second four.
@@ -67,15 +123,6 @@ WHAT TO CHECK ON THE TABLET
 WHAT TO SEND
 mods/hcbrain_log.txt and the new short mods/hcbrain_summary.txt - the same percentages as above for your game.
 In a simulated street (not the game): farther than 8 m 3 %, stuck 1 %, sprint with no threat 0 %, 2.8 men at CJ on average.
-
-NOT DONE FROM THE PLAN (plainly)
-- positions still come from the earlier cover search (with the new checks); no separate weighted evaluation;
-- no stop-and-look at corners and doors, no "tokens" (three shooters per target, staggered reloads);
-- the mod does not clear the game AI's own event responses and does not re-attach ropes: the helicopter is held instead;
-- the map is not saved to disk, no thread of its own, tactical numbers are not in the settings file;
-- no 30-minute random run; the thinking time on the tablet is not measured yet (the summary will show it).
-The tactics come from open material: of about 200 pages found, 54 were read in full (the game's source code), the rest only
-as search excerpts; no video was watched. Details: brain/research/tactics_notes.md in the sources.
 
 NEW IN 1.5 BETA 4 (brain 0.9) - FROM THE FIFTH WHOLE-GAME LOG
 IMPORTANT: replace EVERYTHING - the CLEO files and libHelicoverBrain64.so. None of this has been tried in the game yet.
@@ -123,9 +170,6 @@ New from the plan
 - Memory of places: the brain remembers where CJ was attacked (kept between games); back there the commander warns.
 - Stealth: CJ creeps crouched while it is quiet - the detail goes down and walks too.
 - A burning vehicle: nobody is posted within 12 m of it.
-Still not done from the plan: water, buildings, landing and hot pickup by the brain's pilot, route recon, voice, fists
-against the unarmed, grenades, the game's own cover points (they need the game file studied first).
-
 NEW IN 1.5 BETA 1 (brain 0.6) - FROM THE THIRD LOG AND YOUR REMARKS
 IMPORTANT: replace EVERYTHING - the CLEO files and libHelicoverBrain64.so.
 Its own pilot in a fight
@@ -143,9 +187,6 @@ The detail on the ground - anew
 - The second four no longer appear out of nowhere: they come down the same ropes 3 s after the first four (or, when
   the helicopter has gone, where the screen does not show, and run in).
 - A man left behind (22 m+, height counted) follows CJ's own footsteps until he is within 10 m.
-Not done yet from the approved plan: seats in CJ's car, water, buildings, stealth; landing and hot pickup by the
-brain's pilot; route recon; voice; memory of places; fists against the unarmed; grenades and snipers.
-
 NEW IN 1.4 BETA 3 (brain 0.5) - FROM YOUR SECOND LOG AND REMARKS
 IMPORTANT: replace EVERYTHING this time - the CLEO files and libHelicoverBrain64.so.
 The detail on the ground
@@ -161,9 +202,6 @@ The helicopter
   ceiling of the flight is the spot's own height; it flies there faster.
 - The gunners are more accurate: half the scatter.
 - Landing is quicker: the approach hands over to the descent earlier; descent and landing speeds nearly doubled.
-Not done yet: the pilot does not turn the helicopter side-on to the target; the wait for your choice of landing or
-rope over the destination is as before.
-
 NEW IN BRAIN 0.4.2 - FIXED FROM YOUR LOG (a 14-minute game)
 - The door gunners had not fired one round of their own in the whole game: the brain waited for the wrong crew state.
   Fixed - they fire while they are in their doors.

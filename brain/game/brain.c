@@ -773,7 +773,7 @@ static int body_walk(u32 who, const hcb_post *p) {
     u32 now = RD(u32, G + TIME_MS), k, tgt = 0, was = g_where;
     int ms, kind = 1, final;
     float via[3], dx, dy, d;
-    if (!g_body_ok || !g_snap.body || p->phase > HCB_PH_MOVING) return 0;
+    if (!g_body_ok || !g_snap.body || p->phase > HCB_PH_MOVING || p->move == 4) return 0;   /* (4: outside the brain's map - the script takes him by the game's path network) */
     if (!(p->act >= HCB_ACT_WALK && p->act <= HCB_ACT_SPRINT) && p->act != HCB_ACT_SIDESTEP) return 0;
     if (!get_pool(PED_POOL, &pp) || !(me = obj_of(&pp, who, PED_STRIDE)) || is_dead(me) || vehicle_of(me)) return 0;
     intel = RD(u8 *, me + 0x538);

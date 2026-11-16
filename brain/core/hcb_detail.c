@@ -558,6 +558,10 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                 k++;
             }
             if (!fight) lk.z += 0.8f;
+            /* 1.1 (the half-hour run: the commander's place "a step to CJ's right" lay on the far side of a wall CJ stood beside - he
+               stood 8 s with no way to it): a place of one of the three that CJ cannot be seen from is pulled in to CJ's side */
+            if ((job[i] == HCB_ROLE_LEAD || job[i] == HCB_ROLE_CLOSE || job[i] == HCB_ROLE_CLOSE2) && i < MAXD && dist2d(at, cjp) > 0.7f && dist2d(at, cjp) < 6.0f)
+                at = reachable(b, out, cjp, at, now, &dt->man[i].pad);
             POST(i, at, mv, crouch, d_, lk);
         }
         if (fight && !ring) {

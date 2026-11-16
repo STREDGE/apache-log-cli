@@ -62,6 +62,18 @@ HID void hcb_agent_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         return;
     }
     for (i = 0; i < 8; i++) if (b->ag[i].used && now - b->ag[i].last_seen > 3000 && b->ag[i].last_seen) b->ag[i].used = 0;
+    /* 1.1 (the half-hour run: two bodyguards' places came out 0.8 m apart beside a wall and the men stood shoulder in shoulder):
+       no two places nearer than 0.8 m (shoulder to shoulder) - the later one of a pair is moved off along the line between them */
+    for (i = 1; i < out->n_posts; i++) {
+        int j;
+        for (j = 0; j < i; j++) {
+            hcb_vec dv_ = flat(v_sub(out->posts[i].at, out->posts[j].at));
+            float l_ = v_len(dv_);
+            if (l_ >= 0.8f) continue;
+            if (l_ < 0.05f) { dv_.x = 1.0f; dv_.y = 0.0f; l_ = 1.0f; }
+            out->posts[i].at.x = out->posts[j].at.x + dv_.x / l_ * 0.8f; out->posts[i].at.y = out->posts[j].at.y + dv_.y / l_ * 0.8f;
+        }
+    }
     for (i = 0; i < out->n_posts; i++) {
         hcb_post *p = &out->posts[i];
         const hcb_ped *me = hcb_ped_of(s, p->who);
@@ -90,6 +102,13 @@ HID void hcb_agent_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         urgent = p->act == HCB_ACT_SPRINT || p->duty == HCB_DUTY_SHIELD || p->duty == HCB_DUTY_RING || p->duty == HCB_DUTY_BOUND;
         ra = inner ? 0.9f : 1.3f;
         d = d2(me->pos, p->at);
+        {   /* 1.1 (the half-hour run): "there" within a step of his place - unless another of ours stands within 0.6 m of him: then on to the place itself */
+            int k_;
+            for (k_ = 0; k_ < out->n_posts; k_++) {
+                const hcb_ped *o = k_ != i ? hcb_ped_of(s, out->posts[k_].who) : 0;
+                if (o && d2(o->pos, me->pos) < 0.6f) { ra = 0.3f; if (d > 0.3f && d < 2.5f && p->move == 0) p->move = 1; }   /* ("near enough" is not enough here) */
+            }
+        }
         if (p->move == 0 || d < ra) {                                  /* there (or told to stay) */
             if (!a->arrived_since) a->arrived_since = now ? now : 1;
             a->n_path = 0; a->fails = 0; a->prog_since = now; a->prog_best = 1e9f; a->side_until = 0; a->prog_pos = me->pos;
@@ -114,6 +133,7 @@ HID void hcb_agent_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
            and cover until one of them is in place. Never for the three with CJ, a man who is dodging (a grenade, a car), a
            shield or a pull-out, and never while CJ himself is moving (then everybody goes with him). */
         if (!inner && fight && p->act != HCB_ACT_SPRINT && p->duty != HCB_DUTY_SHIELD && p->duty != HCB_DUTY_RING && cj_speed < 1.0f
+            && !s->recall && !(b->sq.umode == HCB_UMODE_ASSAULT && (b->sq.task == HCB_TASK_REGROUP || b->sq.task == HCB_TASK_WITHDRAW))   /* ("to me", falling back: everybody at once) */
             && movers >= (int)b->cfg.movers_max && !hcb_nav_narrow(b, me->pos)) {
             p->via = me->pos; p->move = 0;
             a->prog_since = now; a->prog_pos = me->pos; a->prog_best = 1e9f;
@@ -130,7 +150,7 @@ HID void hcb_agent_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         else {
             int sg = d <= 14.0f ? hcb_nav_seg(b, out, feet, gfeet, now) : 0;
             a->side_until = 0;
-            if (d < 2.5f || sg == 1) { p->via = p->at; a->n_path = 0; a->why = HCB_WHY2_DIRECT; }
+            if (d < 2.5f || sg == 1) { p->via = p->at; a->n_path = 0; a->why = HCB_WHY2_DIRECT; a->off_map = 0; }
             else {
                 int need = !a->n_path || now - a->plan_t > 2500 || d2(a->path[a->n_path - 1], p->at) > 2.0f;
                 if (need && plans < 2) {
@@ -140,12 +160,15 @@ HID void hcb_agent_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                     int n = hcb_path_ask(b, out, p->who, me->pos, p->at, np, AG_PATH, now);
                     plans++;
                     if (n == -2) {
-                        if (!a->n_path) { p->via = sg == 0 ? me->pos : p->at; a->prog_since = now; a->prog_pos = me->pos; }
+                        /* (no way of his own yet: he goes on to where he was going; only a man who has just been told the straight
+                           way is shut stands and waits for the answer) */
+                        if (!a->n_path) { if (sg == 0 && d <= 14.0f) { p->via = me->pos; a->prog_since = now; a->prog_pos = me->pos; } else p->via = a->phase == HCB_PH_MOVING && d2(a->via, me->pos) > 0.5f ? a->via : p->at; }
                     } else {
                     a->plan_t = now;
-                    if (n > 0) { int q_; for (q_ = 0; q_ < n; q_++) a->path[q_] = np[q_]; a->n_path = (u8)n; a->i_path = 0; a->why = HCB_WHY2_ROUTE; }
+                    if (n > 0) { int q_; for (q_ = 0; q_ < n; q_++) a->path[q_] = np[q_]; a->n_path = (u8)n; a->i_path = 0; a->why = HCB_WHY2_ROUTE; a->off_map = 0; }
                     else {
                         a->n_path = 0; a->why = n == 0 ? HCB_WHY2_NO_ROUTE : sg == 0 && d <= 14.0f ? HCB_WHY2_BLOCKED : HCB_WHY2_DIRECT;
+                        a->off_map = (u8)(n == -1 && !hcb_nav_inside(b, me->pos));   /* (not a man on a roof or a ledge inside the map: he stays) */
                         /* (the map knows the ground and there is no way over it - a roof, a walled yard: that is three failures at
                            once, so the squad gives him another place within a few seconds instead of letting him run at a wall) */
                         if (n == 0) { p->stuck = 1; a->fails = (u8)(a->fails + 3 > 250 ? 250 : a->fails + 3); }
@@ -236,9 +259,28 @@ HID void hcb_agent_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         else if (now - a->prog_since > 1500 || force) {
             hcb_vec dir = flat(v_sub(p->via, me->pos));
             float l = v_len(dir);
+            int k_, jam = 0;
+            /* 1.1 (the half-hour run: three men met in a gap in a wall, each "made no progress", each marked the gap blocked on
+               the map - and then nobody had a way through it): a man held up by ANOTHER OF OURS in front of him is in a jam,
+               not at an obstacle. He waits a moment; nothing goes on the map and it does not count as a failure. And a doorway
+               is never marked blocked by a man who merely did not get through it this time. */
+            for (k_ = 0; k_ < out->n_posts && l > 0.1f; k_++) {
+                const hcb_ped *o = k_ != i ? hcb_ped_of(s, out->posts[k_].who) : 0;
+                hcb_vec rel;
+                if (!o) continue;
+                rel = flat(v_sub(o->pos, me->pos));
+                /* (the man in front must be on the move himself - one who stands there is something to walk round - and nobody waits in a doorway) */
+                if (v_len(rel) < 1.6f && (rel.x * dir.x + rel.y * dir.y) > 0.0f && out->posts[k_].phase == HCB_PH_MOVING && out->posts[k_].act != HCB_ACT_HOLD && !hcb_nav_narrow(b, me->pos)) jam = 1;
+            }
+            if (jam && !force) {
+                a->prog_since = now - 900; a->prog_pos = me->pos; a->why = HCB_WHY2_WAIT_TURN;
+                p->via = me->pos; p->move = 0;
+                set_act(a, p, HCB_ACT_HOLD, HCB_PH_MOVING, HCB_WHY2_WAIT_TURN);
+                continue;
+            }
             if (a->fails < 250) a->fails++;
             a->why = HCB_WHY2_NO_PROGRESS; a->last_pos = me->pos;
-            hcb_nav_block(b, me->pos, p->via, now, 8000);
+            if (!hcb_nav_narrow(b, me->pos) && !hcb_nav_narrow(b, p->via)) hcb_nav_block(b, me->pos, p->via, now, 8000);
             a->n_path = 0; a->plan_t = 0; a->prog_best = 1e9f; a->prog_since = now;
             if (l > 0.1f) {                             /* a step round: left, then right, then left ... */
                 hcb_vec side;
@@ -268,6 +310,10 @@ HID void hcb_agent_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
             }
             p->move = act == HCB_ACT_SPRINT ? 3 : act == HCB_ACT_RUN || act == HCB_ACT_SIDESTEP ? 2 : 1;
             set_act(a, p, act, HCB_PH_MOVING, 0);
+            /* 1.1: he stands where the brain's map does not reach (40 m from CJ and more) and has not got on by the straight way:
+               the game's own path network takes him towards his place (move 4 - the script walks him by it, as before 2.0)
+               until the map has him. That is not a failure of his. */
+            if (a->off_map && a->fails >= 2) { p->move = 4; a->why = HCB_WHY2_NO_ROUTE; p->why = a->why; p->via = p->at; if (a->fails > 3) a->fails = 3; }
         }
     }
     out->n_moving = (u8)moving;

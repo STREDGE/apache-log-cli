@@ -1,15 +1,15 @@
 PASS: The map: 48 x 48 one-metre cells round CJ, asked for nearest first, at most 32 questions a look - known in about 8 s, and nothing is asked twice
 PASS: Open ground: all eight walk straight to their places (30 m in 12 s) and STOP there - the order is finished, not repeated
-PASS: A block 20 x 10 m between the men and CJ: all eight go round it and arrive (17 s; 12 s on open ground) - nobody runs at the wall
+PASS: A block 20 x 10 m between the men and CJ: all eight go round it and arrive (19 s; 12 s on open ground) - nobody runs at the wall
 PASS: A fence 28 m long (nothing a ray straight down can see): the map has it from the level rays between cells, and all eight go round its ends (14 s)
 PASS: A hole 12 m across (nothing to stand on) on the straight line: the ways go round it, nobody steps in
 PASS: Heights: a step of 0.6 m is walked over; a platform 2 m high is a wall - the men go round it
-PASS: A place that cannot be reached (CJ in a closed yard): the men try another way, a step round, the game's path network - then the action is marked FAILED with its reason; in that whole minute no man changed his action more than 29 times
+PASS: A place that cannot be reached (CJ in a closed yard): the men try another way, a step round, the game's path network - then the action is marked FAILED with its reason; in that whole minute no man changed his action more than 33 times
 PASS: CJ runs 100 m: the map moves with him (only the new ground is asked about) and the detail is round him at the end
 PASS: Deterministic: the same world twice gives the same map, the same ways and the same decisions, tick for tick
 PASS: The pace: CJ strolls - the detail walks with him (100 % walking or standing, nobody sprints); he sprints - they run; he stops - they stop
 PASS: A man on the rope is given no place and no order until he stands on the ground; then he takes his place in the detail
-PASS: Cost on this computer (the whole step of the test scene, Python included): median 0.40 ms, worst 8.86 ms a look - the phone has its own counters in the log
+PASS: Cost on this computer (the whole step of the test scene, Python included): median 0.33 ms, worst 3.86 ms a look - the phone has its own counters in the log
 PASS: Heights: a ledge 1.6 m high is not a step - the way goes round the block (the man never stands on it) and he arrives
 PASS: Heights: a drop of 5 m is not a way - a man on a roof stays on it (his post on the ground is given up, he is not walked off the edge)
 PASS: Arriving: within a step of his post the man has ARRIVED and stands - he is not sent on for the last centimetres for ever

@@ -56,14 +56,19 @@ short excerpts. So:
 | Position evaluation as a weighted sum: cover from the main threat, line of fire, distance, neighbours | cover search in `hcb_detail.c` (not yet a separate weighted evaluator: see "not done") | source (Killzone "tactical position evaluation"); the weights of the plan were NOT implemented as such |
 | Explicit action life cycle with failure reasons and a failure ladder | `hcb_agent.c`: CHOSEN - MOVING - ARRIVED - ACTING / FAILED, reasons in the log | assumption (common practice) |
 
-## Not done from the plan (said plainly)
+## What 2.0 beta 1 left out and 1.1 added
 
-- no separate `hcb_places.c` with the plan's weights: positions are still found by the detail's own cover search (with the new
-  "crouching hidden / standing sees over" test and the check that CJ is seen);
-- no stop-and-look drill at corners and doors, no "tokens" (three shooters per target, staggered reloads);
-- the mod does not clear the game's event responses and does not re-register ropes: instead the guards keep the scripts' empty
-  decision maker, the helicopter is held for the second four and a fall is slowed by the mod;
-- no disk cache of the map, no background thread; no tunable numbers in the ini file (only the off-switches).
+Beta 1 shipped with a list of what was not done. The player had asked for everything at once, so 1.1 (Helicover 2.0 beta 2)
+closes that list:
+
+| Left out in 1.0 | In 1.1 | Basis |
+|---|---|---|
+| a separate weighted position evaluator | `hcb_places.c`: candidates, hard filters, the plan's weights, a place kept until one is 20 % better and 4 s have passed | source (Killzone "tactical position evaluation": a weighted sum over candidate points); the weights are the plan's starting values, an **assumption** to be tuned from the settings file |
+| the drill at corners and doors | `hcb_agent.c`: stop 2 m short of a blind corner for 0.8 s with the weapon on the way round it; a doorway one man at a time, nobody standing in it | source ("pie the corner", "do not stand in the fatal funnel" - police and infantry room entry); the metres and times are an **assumption** |
+| "tokens" | no more than three rifles on one man, magazines changed one man at a time, no more than three of the outer men moving at once | source (fire discipline: "talking guns", staggered reloads; bounding by a part of the element); the numbers are an **assumption** |
+| the game AI's own reactions | the adapter keeps the scripts' empty decision maker in place and removes a flight / chase / cower response from a guard's event slot | from the game's code |
+| ropes | kept alive and moved with the helicopter while one of ours is on them | from the game's code |
+| the map on disk, a thread, numbers in the settings file | done in the adapter | engineering |
 
 ## Pages found by search (excerpts only; listed so the trail is not lost)
 

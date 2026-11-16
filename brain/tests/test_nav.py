@@ -194,13 +194,13 @@ def crosses(p, q):
     return any(BOX[0] + .3 < p[0] + (q[0] - p[0]) * t / 20. < BOX[2] - .3 and BOX[1] + .3 < p[1] + (q[1] - p[1]) * t / 20. < BOX[3] - .3 for t in range(21))
 assert way and not any(crosses(a_, b_) for a_, b_ in zip([(0., -22., 1.)] + way, way)), ('the map\'s own way from one side of the block to the other goes round it', way)
 passed('Heights: a ledge 1.6 m high is not a step - the way goes round the block (the man never stands on it) and he arrives')
-sc = Scene(); ROOF = (-4., -34., 4., -26., 5.); sc.ground_fn = ground_blocks([ROOF]); team = team_at(sc, ((0., -30.),)); sc.peds[team[0]]['pos'][2] = 6.
+sc = Scene(); ROOF = (-4., -20., 4., -12., 5.); sc.ground_fn = ground_blocks([ROOF]); team = team_at(sc, ((0., -16.),)); sc.peds[team[0]]['pos'][2] = 6.   # (a roof inside the brain's map: 1.1 sends a man who is OUTSIDE it by the game's path network, drop or no drop)
 left = 0
 for k in range(250):
     sc.step(1); x, y, _ = sc.peds[team[0]]['pos']
     left += not (ROOF[0] - .1 <= x <= ROOF[2] + .1 and ROOF[1] - .1 <= y <= ROOF[3] + .1)
 p_ = sc.posts[team[0]]
-assert left == 0 and (p_.phase == HCB_PH_FAILED or p_.stuck or p_.act in (HCB_ACT_HOLD, HCB_ACT_OVERWATCH)), ('a man on a roof 5 m up does not walk off its edge', left, p_.phase, p_.act)
+assert left == 0 and d2(sc.peds[team[0]]['pos'], (p_.at.x, p_.at.y)) > 5, ('a man on a roof 5 m up does not walk off its edge', left, p_.phase, p_.act)
 passed('Heights: a drop of 5 m is not a way - a man on a roof stays on it (his post on the ground is given up, he is not walked off the edge)')
 sc = Scene(); team = team_at(sc, ((3., -9.),)); ph = []
 for k in range(120):

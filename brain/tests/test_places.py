@@ -110,6 +110,24 @@ for k in range(200):
 assert moves <= 1, ('a place is kept: a small change of the picture moves nobody', moves)
 passed('A place is kept: when CJ shifts a step and every value changes a little, nobody moves (a new place must be 20 % better and 4 s must have passed)')
 
+# ------------------------------------------------------------------ the single weights, by what a place is worth (hcb_place_value)
+sc, team, gs, j = fight(low=LOW2 + LOW[1:], threats=TWO, ticks=220)
+me = j['point']; man = sc.peds[me.who]['pos']; p3 = (me.at.x, me.at.y, me.at.z)
+cjp, a_, b_ = sc.cj['pos'], sc.peds[gs[0]]['pos'], sc.peds[gs[1]]['pos']
+args = (sc.brain, p3, tuple(man), tuple(cjp), tuple(a_), p3, sc.time)
+alone = hcb_py.place_value(*args)
+both = hcb_py.place_value(*args, others=[tuple(b_)])
+assert alone > 0 and abs((both - alone) - sc.brain.cfg.place_w_others) < 0.01, ('hidden from the second shooter too: worth place_w_others more', alone, both)
+crowded = hcb_py.place_value(*args, taken=[(p3[0] + 2.0, p3[1], p3[2])])
+assert abs((alone - crowded) - sc.brain.cfg.place_w_crowd) < 0.01, ('another of ours 2 m off: worth place_w_crowd less', alone, crowded)
+on_top = hcb_py.place_value(*args, taken=[(p3[0] + 0.8, p3[1], p3[2])])
+assert on_top < 0, 'and within 1.2 m of his place it is no place at all'
+dx, dy = p3[0] - cjp[0], p3[1] - cjp[1]; l_ = math.hypot(dx, dy)
+in_line = hcb_py.place_value(*args, cj_dir=(dx / l_, dy / l_, 0.), cj_fires=1)
+beside = hcb_py.place_value(*args, cj_dir=(-dy / l_, dx / l_, 0.), cj_fires=1)
+assert in_line < 0 and abs(beside - alone) < 0.01, ('in front of CJ\'s weapon it is no place; with CJ firing another way it is worth the same', in_line, beside)
+passed('What a place is worth, weight by weight: hidden from a second shooter +%.2f, another of ours within 3 m -%.2f (within 1.2 m - no place), in front of CJ\'s weapon while he fires - no place' % (sc.brain.cfg.place_w_others, sc.brain.cfg.place_w_crowd))
+
 text = '\n'.join(results) + '\nThe core only. Nothing here has run in the game.\n'
 (hcb_py.OUT / 'brain_places_tests.txt').write_text(text)
 print(text)

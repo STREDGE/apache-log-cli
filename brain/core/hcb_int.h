@@ -169,6 +169,7 @@ typedef struct agent {
     hcb_vec corner_at;      /* 1.1: the corner he has looked round last (he does not stop at it twice) */
     u32 corner_until;       /* ... he stands short of a corner until then */
     u32 door_since;         /* ... since when he has waited for a doorway to clear */
+    u8 off_map, r_[3];      /* 1.1: the map does not reach where he stands (he is far from CJ / the target) */
 } agent;
 typedef struct squad {
     u8 umode, task, ow_ok, ow_ready, mover, gathered, pad0, pad1;
@@ -240,6 +241,7 @@ HID int hcb_cv_state(hcb_brain *b, hcb_vec at, hcb_vec from, u32 now, int low); 
 HID int hcb_cv_raw(hcb_brain *b, hcb_vec at, hcb_vec from, u32 now, int *hidden, int *hidden_hi, int *ground);   /* 1 known */
 HID void hcb_cv_ask(hcb_brain *b, hcb_out *out, hcb_vec at, hcb_vec from, u32 now);
 HID int hcb_path_ask(hcb_brain *b, hcb_out *out, u32 key, hcb_vec from, hcb_vec to, hcb_vec *wp, int max, u32 now);   /* 1.1: -2 asked (the answer comes with a later look); else as hcb_nav_path */
+HID int hcb_nav_inside(const hcb_brain *b, hcb_vec at);                                    /* 1 = within the square the map covers now */
 HID int hcb_nav_narrow(const hcb_brain *b, hcb_vec at);                                     /* 1 = a doorway: walls on both sides of the cell */
 HID int hcb_nav_ground(const hcb_brain *b, hcb_vec at, float *z);                           /* 1 ground known there */
 /* hcb_agent.c */

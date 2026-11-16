@@ -130,3 +130,15 @@ HID int hcb_place_pick(hcb_brain *b, hcb_out *out, const place_in *in, u32 now, 
     }
     return 0;
 }
+
+API float hcb_place_value(hcb_brain *b, hcb_vec anchor, hcb_vec man, hcb_vec cj, hcb_vec threat, const hcb_vec *others, int n_others,
+                          const hcb_vec *taken, int n_taken, hcb_vec cj_dir, int cj_fires, hcb_vec at, uint32_t now) {
+    static hcb_out none;
+    place_in in;
+    int k, cover;
+    zero(&in, sizeof in); zero(&none, sizeof none);
+    in.anchor = anchor; in.man = man; in.cj = cj; in.threat = threat; in.reach = 7.5f; in.cj_dir = cj_dir; in.cj_fires = (u8)(cj_fires != 0);
+    for (k = 0; k < n_others && k < 2; k++) in.other[in.n_other++] = others[k];
+    for (k = 0; k < n_taken && k < 8; k++) in.taken[in.n_taken++] = taken[k];
+    return hcb_place_score(b, &none, &in, at, now, 0, &cover);
+}

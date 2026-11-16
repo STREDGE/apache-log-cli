@@ -34,6 +34,7 @@ else:
 from msg_v42 import say
 s=Script();a=s.add
 FIELDS={'TASK':0,'NEXT':1,'TX':2,'TY':3,'LX':4,'LY':5,'LT':6,'DEAD':7,'TGT':8,'COVER':9}
+# (2.0: 20 = the mod walks him, 21 = the mod has his weapon)
 # TASK values: -1 not set up, 0 idle, 1 moving, 2 sector watch, 3 shooting, 4 entering car,
 # 5 riding, 6 leaving car, 7 path-node move, 8 crouched assault, 9 medic, 10 timed attack,
 # 11 climbing an obstacle, 12 moving while shooting, 13 turning to the sector (assault),
@@ -322,7 +323,9 @@ def guard(k):
  # ---- at his spot: crouched or standing as the post says (crouched in cover the game's own duck-and-fire takes over)
  s.label(P+'AT');s.get(31,fk(k,'COVER'));s.check(0x003b,[V(31),V(26)],P+'CR_SET');s.go(P+'CR_OK')
  s.label(P+'CR_SET');a(0x04eb,V(G),V(26));setk(k,'COVER',26)
- s.label(P+'CR_OK');s.check(0x0039,[V(20),I(2)],P+'NO_FIRE');alive(21,P+'NO_FIRE')
+ # 2.0 beta 2: state 6 = his weapon is the mod's (one gun task of the game's, commanded every look): the script gives him no aim or fire task
+ s.label(P+'CR_OK');mine=uid(P+'GUN');s.eq(20,6,mine);setk_lit(k,'TASK',21);s.ret();s.label(mine)
+ s.check(0x0039,[V(20),I(2)],P+'NO_FIRE');alive(21,P+'NO_FIRE')
  s.eq(26,1,P+'FIRE_STAND')
  issue=uid(P+'DUCK');same_order(k,8,21,issue);s.label(issue);a(0x0634,V(G),V(21),I(1),I(1000),I(60));order(k,8,21,2500)
  s.label(P+'FIRE_STAND');issue=uid(P+'SHOOT');same_order(k,3,21,issue);s.label(issue);a(0x074d,V(G),V(21),I(1500));order(k,3,21,1200)

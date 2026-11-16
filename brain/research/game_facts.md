@@ -641,3 +641,33 @@ second four fell: the ground worker let the helicopter go the moment the first f
 were put on its ropes.
 Not verified in the game (no device here): everything in this section runs on the emulator with recorders in place of the
 game functions; the first real proof is the tablet's log (`body MOD: new tasks ... retargets ... refused ...`, `game tasks`).
+
+
+## M. 1.1 (Helicover 2.0 beta 2): the game AI kept off the guards, the gun task, ropes, task types
+
+All from the player's `libGTASA.so` (symbols, DWARF, disassembly). Checked at start-up by first words (MIND_WORDS, GUN_WORDS,
+RELOAD_WORDS, ROPE_WORDS in `brain/game/brain.c`).
+
+| What | Address | Proof / notes |
+|---|---|---|
+| `CPedIntelligence::SetPedDecisionMakerType(int)` | 0x5ba338 | 14 instructions of plain field logic: +0x160 the type in force, +0x164 the stored one (when +0x160 is 0 the new type is only stored; type 0 stores the current one and clears it; type 7 also sets +0x170) |
+| `CTaskManager::ClearTaskEventResponse()` | 0x64e734 | deletes the temporary event task (slot 1, mgr+8) if there is one, ELSE the event task (slot 2, mgr+0x10), and clears the slot - so it is called only with slot 1 empty, after the task agreed to stop (vtable +0x38) |
+| `CTaskManager::SetTaskSecondary(CTask*, int)` | 0x64e5c8 | secondary slots from mgr+0x28: 0 attack, 1 duck; deletes the old one, builds sub-tasks like SetTask |
+| `CTaskSimpleUseGun(CEntity *target, CVector pos, signed char cmd, short burst, bool aimNow)` | 0x5dd83c | 0x58 bytes; +0x17 next command, +0x18 last command, +0x28 target entity, +0x50 burst length |
+| `CTaskSimpleUseGun::ControlGun(CPed*, CEntity*, signed char)` | 0x5dfb64 | sets +0x11 "in control", swaps the target (with entity references), raises +0x17 to the command if it is higher; returns 1 |
+| eGunCommand | | NONE 0, AIM 1, FIRE 2, FIREBURST 3, RELOAD 4, PISTOLWHIP 5, END_LEISURE 6, END_NOW 7 |
+| `CWeapon::Reload(CPed*)` | 0x700a2c | clip (+8) = min(total (+0xc), the weapon info's clip size); nothing when total is 0 |
+| CWeapon in the ped | ped+0x730 + slot*0x20 | +0 type, +4 state, +8 clip, +0xc total; active slot ped+0x8dc |
+| `CRopes::aRopes` | 0xbd3e50 | 8 x 0x340: +0 node positions (32 x CVector, node 0 = top), +0x180 node speeds, +0x300 id (u64), +0x318 connected to, +0x334 TimeToBeKeptAliveTill, +0x339 type (0 = free), +0x338 fixed at node |
+| `CRopes::CreateRopeForSwatPed(const CVector&)` | 0x4fa678 | id = counter (0xbd5854) + 100; RegisterRope(id, type 8, pos, true, 0, false, holder 0, 4000 ms) - the rope of the script command lives 4 s and has no holder |
+| `CRopes::RegisterRope` | 0x4f96d8 | for an id already in the table: writes the position to node 0, clears its speed - the top is moved, the life is NOT renewed (that is `+0x334`, compared with the game clock in `CRope::Update` 0x4f7d1c) |
+| `CTaskComplexUseSwatRope` | ctors 0x623d84 (id), 0x623dcc (id, CHeli*) | 0x30 bytes: +0x18 rope id (int), +0x20 bit 0 "from a helicopter", +0x28 the helicopter |
+| eTaskType (the whole enum is in the DWARF) | | 108 USE_SWAT_ROPE, 203 STAND_STILL, 208 FALL_AND_GET_UP, 217 DIE, 240 IN_AIR_AND_LAND, 250 ON_FIRE, 412 COWER, 413 HANDS_UP, 415 DUCK, 500-512 hits and evasive steps, 601 REACT_TO_GUN_AIMED_AT, 900 GO_TO_POINT, 901 GO_TO_POINT_SHOOTING, 903 GO_TO_POINT_AND_STAND_STILL, 905-940 routes / seek / flee / wander / investigate, 1000-1032 kill ped ..., 1017 USE_GUN, 1100-1105 arrest / pursuit, 1200-1219 gang, 1500-1505 group follow |
+
+What the mod removes from a guard's event slot ("wanders"): types 412, 413, 600-699, 905-940, 1000-1299, 1500-1599. Left alone:
+everything else - falling, getting up, in the air, fire, hits, evasive steps and dives, water, cars.
+
+The gun task for an NPC in the attack slot with nothing in his main slot is the way the game itself has peds fire (its gun
+control tasks create a CTaskSimpleUseGun); whether it FIRES for a task made by the mod could not be proved here - so the mod
+checks it in the game: fire ordered for 3 s and the weapon's rounds (clip + total) unchanged for every guard means "no", is
+logged, and the scripts fire as before.

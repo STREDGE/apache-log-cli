@@ -1,0 +1,13 @@
+PASS: Token "movers": the fight starts with everybody in a heap - never more than three of the outer men run at once (the rest hold and wait their turn), and all are in place after 6 s
+PASS: Token "rifles": eight men and one shooter - three fire at him, the rest keep their sectors; with shooters_per_target = 2 in the settings, two
+PASS: Token "magazines": every magazine runs low at the same moment - the men change them one at a time (7 turns), the others fire on meanwhile
+PASS: A blind corner under threat: the man stops short of it for 2.2 s with his weapon on the way round it, then goes on and arrives; in peace he just walks round
+PASS: A doorway (a gap one metre wide) under threat: three men go through one at a time - the next one waits short of it - and nobody stands in it longer than 0.4 s
+PASS: A gap two metres wide in a long wall, four men from both sides of it: all are through after 5 s and nobody gives up - men who hold each other up wait a moment (a jam is not an obstacle), and a way is called impossible only by walls the map has seen, never by the marks of men who did not get through
+PASS: The commander's place beyond a wall CJ stands beside is pulled in to CJ's side of it (he does not stand 8 s with "no way")
+PASS: Two of ours on one spot: each walks on to his own place (within a step of it is "there" only with nobody on top of him), and no two places are given nearer than 0.8 m
+PASS: A man 58 m off, outside the brain's map, with a wall across the straight way: after two tries he is sent by the game's own path network (move 4, the script walks him) and it is not counted against him; he is at CJ's side after 18 s
+PASS: Marks on the map ("I did not get through here") never make a way impossible: with the only gap in a wall marked on every side the way still goes through it
+PASS: A jam: the man behind one of ours who is held up waits (it is not his failure and he marks nothing on the map) for as long as the one in front is still on the move
+PASS: Two men on one spot, each within a step of his own place: they do not stay there - each goes on to his place (0.7 m apart)
+The core only. Nothing here has run in the game.

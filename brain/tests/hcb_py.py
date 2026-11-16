@@ -64,6 +64,9 @@ LIB.hcb_gunner_blocked.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_ui
 LIB.hcb_pilot_reset.argtypes = [ctypes.c_void_p, hcb_vec, hcb_vec, hcb_vec]
 LIB.hcb_pilot_step.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
 LIB.hcb_nav_way.argtypes = [ctypes.c_void_p, hcb_vec, hcb_vec, ctypes.c_void_p, ctypes.c_int, ctypes.c_uint32]
+LIB.hcb_place_value.restype = ctypes.c_float
+LIB.hcb_place_value.argtypes = [ctypes.c_void_p, hcb_vec, hcb_vec, hcb_vec, hcb_vec, ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, ctypes.c_int, hcb_vec, ctypes.c_int, hcb_vec, ctypes.c_uint32]
+LIB.hcb_nav_mark.argtypes = [ctypes.c_void_p, hcb_vec, hcb_vec, ctypes.c_uint32, ctypes.c_uint32]
 LIB.hcb_nav_cell.argtypes = [ctypes.c_void_p, ctypes.c_float, ctypes.c_float, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint32]
 
 
@@ -72,6 +75,12 @@ def nav_way(brain, a, b, now, n=10):
     wp = (hcb_vec * n)()
     k = LIB.hcb_nav_way(brain.mem, vec(*a), vec(*b), wp, n, now)
     return None if k < 0 else [(wp[i].x, wp[i].y, wp[i].z) for i in range(k)]
+
+
+def place_value(brain, anchor, man, cj, threat, at, now, others=(), taken=(), cj_dir=(1., 0., 0.), cj_fires=0):
+    """What the place `at` is worth to the man (hcb_places.c), with what the brain knows now; < 0 = not a place."""
+    oth = (hcb_vec * max(1, len(others)))(*[vec(*o) for o in others]); tk = (hcb_vec * max(1, len(taken)))(*[vec(*t) for t in taken])
+    return LIB.hcb_place_value(brain.mem, vec(*anchor), vec(*man), vec(*cj), vec(*threat), oth, len(others), tk, len(taken), vec(*cj_dir), cj_fires, vec(*at), now)
 
 
 def nav_cell(brain, x, y, now):
@@ -534,7 +543,7 @@ class Scene:
                         step = min(d, spd * ms / 1000.)
                         if d > 1e-6:
                             nw = [me[0] + (to[0] - me[0]) * step / d, me[1] + (to[1] - me[1]) * step / d, me[2]]
-                            if self.body and self.walls_stop and self.walk_blocked(me, nw):
+                            if self.body and self.walls_stop and p_.move != 4 and self.walk_blocked(me, nw):   # (4: the game's path network takes him round - simulated as a walk that walls do not stop)
                                 nw = me                              # a wall, a ledge: he does not get through
                             g_ = self.ground_at(nw[0], nw[1]) if self.body else None
                             if g_ is not None and self.body:

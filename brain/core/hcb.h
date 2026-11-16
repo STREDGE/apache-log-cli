@@ -586,6 +586,11 @@ void hcb_think(hcb_brain *b, const hcb_snapshot *s, hcb_out *out);
    1 ground (*z its height), 2 nothing to stand on; *blocked = the ways out of the cell that are marked blocked (bit per
    direction, 0 = +x, counter-clockwise). */
 int hcb_nav_way(hcb_brain *b, hcb_vec from, hcb_vec to, hcb_vec *wp, int max, uint32_t now);
+/* 1.1, for tests and tools: what a firing place is worth to a man (hcb_places.c; < 0 = not a place) with what the brain knows about
+   it now (nothing is asked), and a mark "nobody gets through here" on the map as a man who made no progress leaves it */
+float hcb_place_value(hcb_brain *b, hcb_vec anchor, hcb_vec man, hcb_vec cj, hcb_vec threat, const hcb_vec *others, int n_others,
+                      const hcb_vec *taken, int n_taken, hcb_vec cj_dir, int cj_fires, hcb_vec at, uint32_t now);
+void hcb_nav_mark(hcb_brain *b, hcb_vec at, hcb_vec toward, uint32_t now, uint32_t ttl);
 /* 1.1, for the thread that finds the ways: a copy of the map (hcb_nav_size bytes), and a way on such a copy */
 uint32_t hcb_nav_size(void);
 void hcb_nav_copy(const hcb_brain *b, void *dst);

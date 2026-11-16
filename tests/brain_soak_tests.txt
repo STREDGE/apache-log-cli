@@ -1,0 +1,11 @@
+PASS: 30 minutes of random play, seed 2026 (host build of the core; NOT the game): 27 fights, 759 s in ASSAULT mode, 58 s in a car, 4 men of ours replaced
+PASS: PROTECT, guard farther than 8 m from his post while CJ stands: 7.6 %   (goal 15 % or less)
+PASS: ASSAULT, the same (men on the move to and from the target by design; no goal): 23.4 %
+PASS: STUCK: 1.1 %   (goal 5 % or less); gave his post up for a while: 0.5 %
+PASS: the longest anybody was stuck or without his post on end: 16 s   (must be under 60)
+PASS: sprinting with no threat: 2.1 %   (goal 10 % or less)
+PASS: changes of action per guard per minute: 12.5   (goal 6 or less in peace; this half hour is mostly fights and marches)
+PASS: guards within 4 m of CJ in quiet PROTECT, average: 2.7   (goal 3)
+PASS: seconds with one of ours inside a wall: 0; seconds with two of ours on one spot: 0   (must be 0)
+PASS: the same 18000 looks a second time: every decision the same (checksum f9c2990094d353a2)
+The core only. Nothing here has run in the game.
