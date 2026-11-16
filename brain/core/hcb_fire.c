@@ -93,6 +93,9 @@ static int check(hcb_brain *b, const hcb_snapshot *s, const hcb_ped *me, int rol
 
     *aim_at = HCB_AIM_BODY; *aim = to;
     if (!hcb_is_firearm(me->weapon) || dist > range) return HCB_HOLD_RANGE;
+    /* 0.8, proportionate force: a man on foot within 12 m of CJ (a brawler) with nothing in his hands, who has never held a firearm, is not shot while
+       CJ is not in a bad way - a guard takes him down by hand (hcb_squad_state says so to the man nearest) */
+    if (!t->last.vehicle && t->last.weapon == 0 && !hcb_is_firearm(t->best_weapon) && v_dist(t->last.pos, s->player.pos) < 12.0f && s->player.health >= 40.0f && !(t->last.flags & HCB_PF_SHOOTING) && s->roe != HCB_ROE_FOLLOW) return HCB_HOLD_FISTS;   /* (WHERE I SHOOT is CJ's own decision) */
     /* the sight of his own man is asked even while a rule holds the fire (CJ or a mate in the line): the answer is fresh
        the moment the line clears, and an old "clear" is never used for a man who may have hidden meanwhile */
     l = los_find(b, me->id, t->last.id);
@@ -427,6 +430,7 @@ API int hcb_squad_state(const hcb_brain *cb, const hcb_shot *q) {
     const shooter *sh = shooter_find((hcb_brain *)cb, q->who);
     if (!sh || !sh->aim) return 0;
     if (sh->hold == HCB_HOLD_COVERING) return sh->ready ? 1 : 0;
+    if (sh->hold == HCB_HOLD_FISTS) return 5;                           /* 0.8: by hand */
     /* (the check below refuses by itself when his order is not "fire" or the man asked about is not his) */
     return shot_check(cb, q, 1) == HCB_HOLD_NONE ? 2 : 3;
 }

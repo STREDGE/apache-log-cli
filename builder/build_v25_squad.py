@@ -95,8 +95,8 @@ a(0xddc,I(b.SQ_CARH),V(6));s.set(b.SQ_DRIVES,0);s.eq(6,-1,'DRV_CHECK');s.go('DRV
 s.label('DRV_CHECK');a(0x046c,V(6),V(26));s.check(0x003b,[V(26),V(0)],'DRV_DONE');s.set(b.SQ_DRIVES,1)
 s.label('DRV_DONE')
 s.get(7,b.TACTICS)
-# CJ inside an interior: the team waits outside (no teleport into interior coordinates)
-a(0x077e,V(19));s.eq(19,0,'LOOP')
+# 1.5.3: CJ inside a building - the brain lays the detail out round the door he went in by (it never follows him into interior
+# coordinates); the guards take those posts like any others. Only the catch-up by his footsteps is left out (see ON_FOOT).
 (s.call('PERCEIVE') if not TEAM else a(6,V(18),I(0)))   # (the second four: no speech, no radio calls)
 # each guard's man: the one the brain has him firing at (or holding fire on). A suspect he is only told to cover does not take him out
 # of the formation.
@@ -139,9 +139,15 @@ a(0x0e48,V(23),I(9),I(5))   # 23@ number, 24@ what (HCB_SAY_*), 25@ direction fr
 s.get(19,b.SQ_SAY_SEQ);s.check(0x003b,[V(19),V(23)],'SAY_NEW');s.go('SAY_DONE')
 s.label('SAY_NEW');a(0xddc,I(b.SQ_SAY_SEQ),V(23));s.eq(19,-1,'SAY_WHAT');s.go('SAY_DONE')
 s.label('SAY_WHAT')
-for what,keys in [(1,['SQGO'+d for d in 'FRBL']),(2,['SQSAFE']),(3,['SQME'+d for d in 'FRBL']),(4,['SQEVAC']),(5,['SQCMD']),(6,['SQCLR']),(7,['SQS'+d for d in 'FRBL']),(8,['SQMEM'])]:   # 1.5.2: 7 sniper, 8 a place where the detail was attacked before
+for what,keys in [(1,['SQGO'+d for d in 'FRBL']),(2,['SQSAFE']),(3,['SQME'+d for d in 'FRBL']),(4,['SQEVAC']),(5,['SQCMD']),(6,['SQCLR']),(7,['SQS'+d for d in 'FRBL']),(8,['SQMEM']),(9,['SQG'+d for d in 'FRBL']),(10,['SQWATER']),(11,['SQAHEAD'])]:   # 1.5.3: 9 grenade, 10 CJ in the water, 11 armed men ahead   # 1.5.2: 7 sniper, 8 a place where the detail was attacked before
  nw=uid('SAY_W');s.eq(24,what,nw)
- if len(keys)==1:msg(keys[0],False);s.go('SAY_DONE')
+ if len(keys)==1:
+  msg(keys[0],False)
+  if what==4 and not TEAM:
+   # 1.5.3, the hot pickup: "we pull out" is also the order to the pilot - while the helicopter escorts CJ (state 2) and CJ is on
+   # foot, the rope pickup is asked for at once (the same command as CLIMB ABOARD BY ROPE on the menu); CJ only has to take the rope
+   s.get(19,b.STATE);s.eq(19,2,'SAY_DONE');s.check(0x80df,[V(0)],'SAY_DONE');s.get(19,b.CMD);s.eq(19,0,'SAY_DONE');s.set(b.CMD,10)
+  s.go('SAY_DONE')
  else:
   for d,key in enumerate(keys):
    nd=uid('SAY_D');s.eq(25,d,nd);msg(key,False);s.go('SAY_DONE');s.label(nd)
@@ -192,6 +198,9 @@ def post_spot(G,fail):
  s.get(31,b.BRAIN_HELLO);s.check(0x0039,[V(31),I(b.BRAIN_MAGIC)],fail)
  a(0x0085,V(21),V(G));a(0x0e48,V(21),I(10),I(4));s.check(0x8039,[V(22),I(-1)],fail)
  a(0x0087,V(26),V(23));a(0x0087,V(27),V(24));a(0x0087,V(28),V(25))
+import build_v25_ground as _gr
+import build_v25_team2 as _t2
+GUNS=[w_ for w_,_m in (_t2.WEAPONS if TEAM else _gr.TEAM_WEAPONS)]   # each guard's own gun, to put back in his hands after a fist fight
 def same_order(k,task,target_var,issue):
  """Return from the guard routine while the guard already runs `task` on target_var and the order
  has not expired; otherwise continue at `issue` (placed right after this call)."""
@@ -238,7 +247,8 @@ def guard(k):
  # follows CJ's own footsteps (the game's follower task, the one mission companions use), the way CJ really went, until he is
  # within 10 m again; then the brain's posts apply as before. (1.2 sent him by the path network at 40 m: in the canal under
  # the bridge the whole detail stood 60-80 m away for half a minute - the third whole-game log.) Never a teleport.
- s.label(P+'ON_FOOT');s.check(0x0021,[V(24),F(22)],P+'FS_NEAR');s.get(25,fk(k,'TASK'));s.eq(25,13,P+'FS_ISSUE');s.get(25,fk(k,'NEXT'));s.check(0x001d,[V(12),V(25)],R)
+ s.label(P+'ON_FOOT');a(0x077e,V(25));s.eq(25,0,P+'NEAR')   # (CJ is inside a building: no following him - the post at the door)
+ s.check(0x0021,[V(24),F(22)],P+'FS_NEAR');s.get(25,fk(k,'TASK'));s.eq(25,13,P+'FS_ISSUE');s.get(25,fk(k,'NEXT'));s.check(0x001d,[V(12),V(25)],R)
  s.label(P+'FS_ISSUE');a(0x0850,V(G),V(0));setk_lit(k,'TASK',13);later(k,4000);s.ret()
  s.label(P+'FS_NEAR');s.get(25,fk(k,'TASK'));s.eq(25,13,P+'NEAR');s.check(0x0021,[V(24),F(10)],P+'FS_DONE');s.ret()
  s.label(P+'FS_DONE');setk_lit(k,'TASK',0)
@@ -266,7 +276,13 @@ def guard(k):
  a(0x0085,V(21),V(G));a(0x0e48,V(21),I(10),I(4))   # 22@ move (-1 no post, 0 stay, 1 walk, 2 run, 3 sprint), 23-25@ the spot, 26@ crouch, 27-29@ look, 30@ duty
  s.check(0x8039,[V(22),I(-1)],R)                     # no post (the brain does not have him): nothing new
  a(0x00a0,V(G),V(19),V(20),V(31));a(0x0509,V(19),V(20),V(23),V(24),V(19))   # 19@ how far he is from his spot
- s.get(20,BR_ST+k);s.get(21,BR_TG+k)       # 20@ 0 nothing / 1 cover / 2 fire / 3 his man, no fire; 21@ the man (-1 none)
+ s.get(20,BR_ST+k);s.get(21,BR_TG+k)       # 20@ 0 nothing / 1 cover / 2 fire / 3 his man, no fire / 5 by hand; 21@ the man (-1 none)
+ # 1.5.3, proportionate force: an unarmed man on foot - the brain says "by hand" (5). The guard puts his gun away (fists in his
+ # hands, the gun stays his) and goes for the man; when it is over (any other state) the gun is back in his hands.
+ nofist=uid(P+'NOFIST');rearmed=uid(P+'REARMED');s.eq(20,5,nofist);alive(21,nofist)
+ issue=uid(P+'FIST');same_order(k,19,21,issue);s.label(issue);a(0x04eb,V(G),I(0));a(0x01b9,V(G),I(0));a(0x05e2,V(G),V(21));setk_lit(k,'COVER',0);order(k,19,21,3000)
+ s.label(nofist);s.get(31,fk(k,'TASK'));s.eq(31,19,rearmed);a(0x01b9,V(G),I(GUNS[k]));setk_lit(k,'TASK',0)
+ s.label(rearmed)
  s.eq(22,0,P+'GO');s.go(P+'AT')
  s.label(P+'GO');s.check(0x0021,[V(19),F(.9)],P+'AT')
  # 1.4.1: the brain says he has not got nearer for a while (move 4): the game's path network takes him round
@@ -329,7 +345,7 @@ TEXTS={'SQXF': '~r~SHOTS AT CJ - FRONT!~w~ Covering him.',
  'SQCLR': '~g~SQUAD:~w~ area secure, regrouping on CJ.',
  'SQDOWN': '~r~MAN DOWN!~w~ We lost one.',
  'SQCAR': '~g~SQUAD:~w~ mounting up.',
- 'SQEVAC': '~r~TOO HOT!~w~ CJ is hurt - call ROPE PICKUP.',
+ 'SQEVAC': '~r~TOO HOT!~w~ We pull out - the helicopter is coming with the rope.',
  'SQGOF': '~g~ALPHA:~w~ CJ, follow me! Cover straight ahead - run to me.',
  'SQGOR': '~g~ALPHA:~w~ CJ, follow me! Cover on your right - run to me.',
  'SQGOB': '~g~ALPHA:~w~ CJ, follow me! Cover behind you - run to me.',
@@ -340,6 +356,9 @@ TEXTS={'SQXF': '~r~SHOTS AT CJ - FRONT!~w~ Covering him.',
  'SQMEL': '~g~ALPHA:~w~ no cover here - stay by your guard, move left!',
  'SQSAFE': '~g~ALPHA:~w~ CJ is in cover. Stay there, we work.',
  'SQMEM': '~y~ALPHA:~w~ we were attacked here before. Eyes open.',
+ 'SQGF': '~r~GRENADE - FRONT!~w~ Get away from it!', 'SQGR': '~r~GRENADE - RIGHT!~w~ Get away from it!', 'SQGB': '~r~GRENADE - BEHIND!~w~ Get away from it!', 'SQGL': '~r~GRENADE - LEFT!~w~ Get away from it!',
+ 'SQWATER': '~y~ALPHA:~w~ CJ in the water - helicopter over you, take the rope.',
+ 'SQAHEAD': '~y~PILOT:~w~ armed men ahead on your way.',
  'SQCMD': '~r~ALPHA DOWN!~w~ BRAVO: I have command.'}
 if __name__=='__main__':
  report=s.build('Helicover_Squad2' if TEAM else 'Helicover_Squad','csa');print(report)

@@ -62,7 +62,7 @@ class World:
   d=math.dist(old,new)
   if d>3.:self.teleports.append({'op':op,'who':who,'dist':d,'visible':self.visible(who),'time':self.now,'from':list(old),'to':list(new)})
  FIRE_OPS={0x74d:1,0x634:1,0x7a5:1,0x713:1,0x637:7}
- TASK_OPS=(0x850,0x667,0x687,0x5d3,0x5f5,0x5ca,0x633,0x792,0x5c5,0x173,0x78f,0x464,0x465,0x5d4,0x6e1)
+ TASK_OPS=(0x5e2,0x850,0x667,0x687,0x5d3,0x5f5,0x5ca,0x633,0x792,0x5c5,0x173,0x78f,0x464,0x465,0x5d4,0x6e1)
  def task_op(self,op,vals):
   """Which task a man is on: a firing task stays until another task replaces it."""
   if not vals:return
@@ -166,6 +166,7 @@ class VM:
    elif base in [0x118,0x119]:cond(vals[0] in w.dead)
    elif base in [0x2ca,0x2cb]:cond(w.visible(vals[0]))
    elif base==0xc2:cond(getattr(w,'point_on_screen',lambda p:False)(vals[:3]))
+   elif op==0x5e2:w.fist_fights=getattr(w,'fist_fights',[])+[(w.now,vals[0],vals[1])]
    elif op==0x850:w.walk[vals[0]]={'to':list(w.coords(vals[1])),'speed':6.5,'until':w.now+4000};w.follows=getattr(w,'follows',[])+[(w.now,vals[0],vals[1])]
    elif base in [0xdb,0x448]:cond(w.incar.get(vals[0])==vals[1] or (base==0xdb and w.attached_reports_incar and vals[0] in w.attach and w.attach[vals[0]][0]==vals[1]))
    elif base==0xdf:cond(vals[0] in w.incar or (w.attached_reports_incar and vals[0] in w.attach))
@@ -943,9 +944,10 @@ for _ in range(200):
 assert w.shared[b.DEST_NATIVE]==1 and not w.frozen.get(c.v[5]) and w.shared[b.FROZEN]==0
 assert math.dist(w.car[:2],[w.shared[b.DEST_X],w.shared[b.DEST_Y]])<4.1   # (1.4.3: the pilot hands over 4 m out, the native descent takes the last metres)
 mission=calls(w,0x4a2)[-1][2];assert mission[1:4]==[w.shared[b.DEST_X],w.shared[b.DEST_Y],w.shared[b.DEST_Z]+18.] and calls(w,0x853)[-1][2][1]==10 and calls(w,0x4ba)[-1][2][1]==0.
-w.step(c,n=5);assert w.shared[b.STATE]==22,'still descending'
+# 1.5.3: the brain's pilot has come down on the way in (flag 8, a landing approach), so the game's pilot has only metres left
+assert w.brain.land_flown>0 and w.car[2]<=w.shared[b.DEST_Z]+26.,(getattr(w.brain,'land_flown',0),w.car[2])
 w.car=list(mission[1:4]);w.speed=0.;w.step(c,n=3);assert w.shared[b.STATE]==23 and not w.frozen.get(c.v[5])
-passed('Destination: scripted cruise to overhead, then native vertical descent to 18 m')
+passed('Destination: the brain\'s pilot flies to overhead and comes down on the way in (a landing approach, to about 15 m over the pad); the game\'s pilot takes the last metres to 18 m and the landing')
 # v37: if the native descent stalls, the hover is accepted after 25 s when close enough.
 w,c,_=setup();summon(w,c);start_grove(w,c);w.car=[b.GROVE_X+60,b.GROVE_Y,75];w.step(c,n=8)
 for _ in range(200):

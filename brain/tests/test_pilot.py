@@ -106,6 +106,26 @@ for target, ground, dt in [((float('nan'), 0., 0.), 0., .03), ((100., 100., 0.),
     assert all(v == v and abs(v) < 1e5 for v in vals) and math.dist((o.pos.x, o.pos.y), (10., 10.)) < 10, (target, ground, dt, vals)
 passed('Nonsense in (a point, a roof height or a frame time that is not a number, a 5 s frame, a negative one): no number that is not a number comes out, and the helicopter does not jump')
 
+# 0.8: a landing approach - it comes down to the height asked (15 m) over the pad on the way in, gently near the ground
+def approach():
+    p = hcb_pilot()
+    LIB.hcb_pilot_reset(ctypes.byref(p), vec(0., 0., 60.), vec(0., 0., 0.), vec(1., 0., 0.))
+    i, o = hcb_pilot_in(), hcb_pilot_out()
+    i.target, i.dt, i.stop, i.land, i.hover, i.ground = vec(300., 0., 0.), 1 / 30., 1, 1, 15., 0.
+    out = []
+    for k in range(30 * 60):
+        LIB.hcb_pilot_step(ctypes.byref(p), ctypes.byref(i), ctypes.byref(o))
+        out.append((k / 30., o.pos.x, o.pos.z, p.vel.z, o.dist))
+        if o.arrived and abs(o.pos.z - 15.) < 1.5: break
+    return out
+ap = approach()
+end = ap[-1]
+assert abs(end[1] - 300.) < 3 and abs(end[2] - 15.) < 1.5 and end[0] < 45., end
+near_ = [f for f in ap if f[4] < 25.]
+assert min(f[3] for f in near_) > -6.6 and all(f[3] > -3.0 for f in near_ if f[2] < 26.), ('within 25 m of the pad never faster down than 6 m/s, 2.5 m/s in the last metres', min(f[3] for f in near_))
+assert all(f[2] > 13.4 for f in ap), 'never under the height asked for (the roofs on the way are in `ground`)'
+passed('A landing approach (0.8): 300 m to the pad and down to 15 m over it in %.0f s - never faster down than 6 m/s, gently in the last metres, never under the height asked for' % end[0])
+
 text = '\n'.join(results) + '\nThe core only. Nothing here has run in the game.\n'
 (hcb_py.OUT / 'brain_pilot_tests.txt').write_text(text)
 print(text)

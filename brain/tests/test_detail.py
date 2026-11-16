@@ -516,6 +516,60 @@ sc.step(3)
 assert all(d2(at(p), (px + 2., py)) >= 12.0 for p in sc.posts.values() if p.job != HCB_ROLE_LEAD and d2(at(p), sc.cj['pos']) > 4), [at(p) for p in sc.posts.values()]
 passed('A burning vehicle: no outer man is posted within 12 m of it (his post is moved straight out)')
 
+# ---- 0.8: the rest of the plan ----
+# a grenade lands among the detail: everybody within its radius sprints out of it, the commander calls it
+sc = Scene(); team = detail8(sc); sc.step(20)
+sc.dangers = [((3., -1., 1.), HCB_DG_GRENADE, 10.)]
+sc.step(1)
+near = [w_ for w_ in team if d2(sc.peds[w_]['pos'], (3., -1.)) < 10.]
+assert near and all(d2(at(sc.posts[w_]), (3., -1.)) >= 12.9 and sc.posts[w_].move == 3 for w_ in near), [(at(sc.posts[w_]), sc.posts[w_].move) for w_ in near]
+assert [s_ for s_ in sc.said if s_[1] == HCB_SAY_GRENADE and s_[2] == 1], ('"grenade - right!" (3 m east of CJ, who faces north)', sc.said)
+sc.step(25)
+assert all(d2(sc.peds[w_]['pos'], (3., -1.)) >= 9.9 for w_ in team), 'two and a half seconds later nobody is within 10 m of it'
+sc.dangers = []; sc.step(40)
+assert d2(sc.peds[sc.last_out.lead]['pos'], sc.cj['pos']) < 2.5, 'it is gone: back to their places'
+passed('A grenade among the detail: every man within 10 m of it sprints straight out (13 m clear), the commander calls "grenade" with the side; when it is gone they come back')
+
+# CJ in the water: nobody follows him in, the helicopter comes over him, the commander says so
+sc = Scene(); team = detail8(sc); sc.heli = sc.veh(30, 30, z=25.); sc.step(20)
+where = {w_: list(sc.peds[w_]['pos']) for w_ in team}
+sc.cj['pos'] = [0., 40., 0.]; sc.in_water = 1
+sc.step(20)
+assert all(d2(sc.peds[w_]['pos'], where[w_]) < 0.5 and sc.posts[w_].move == 0 for w_ in team), 'each man stays where he stood (on the bank)'
+o = sc.last_out
+assert o.heli_ok and d2((o.heli_at.x, o.heli_at.y), sc.cj['pos']) < 0.5 and abs(o.heli_at.z - 12.) < 0.1 and [s_ for s_ in sc.said if s_[1] == HCB_SAY_WATER], (o.heli_ok, sc.said)
+passed('CJ in the water: nobody follows him in (each man holds where he stands), the helicopter is sent over him 12 m up for the rope, the commander says so')
+
+# a building: the detail holds the door CJ went in by
+sc = Scene(); team = detail8(sc); sc.cj['pos'] = [10., 5., 1.]; sc.step(30)
+sc.interior = 5; sc.cj['pos'] = [2000., 2000., 1000.]
+sc.step(30)
+j = by_job(sc)
+assert d2(at(j['lead']), (10., 5.)) < 1.6 and all(d2(at(j[k]), (10., 5.)) <= 12.5 for k in j), ('everybody\'s place is round the door, not 2 km away', [at(p) for p in j.values()])
+assert all(d2(sc.peds[w_]['pos'], (10., 5.)) < 14 for w_ in team) and sc.last_out.duty == HCB_DUTY_CALM
+sc.interior = 0; sc.cj['pos'] = [10., 6., 1.]; sc.step(10)
+assert d2(at(by_job(sc)['lead']), sc.cj['pos']) < 1.6, 'out again: with him as before'
+passed('CJ goes into a building: the detail holds the door he went in by (the commander at the door, the outer men at the corners round it) until he is out again')
+
+# CJ drives: the helicopter scouts 50 m ahead of him, and armed men on his way are called
+sc = Scene(); team = detail8(sc); sc.heli = sc.veh(0, -40, z=25.); sc.step(5)
+car = sc.veh(0, 0, vel=(0., 20., 0.)); sc.cj['vehicle'] = car; sc.cj['vel'] = [0., 20., 0.]
+sc.step(3)
+o = sc.last_out
+assert o.heli_ok and o.heli_at.y - sc.cj['pos'][1] > 45 and abs(o.heli_at.x - sc.cj['pos'][0]) < 2, ('the spot is 50 m ahead on his way', o.heli_at.x, o.heli_at.y, sc.cj['pos'])
+amb = sc.ped(sc.cj['pos'][0] + 5., sc.cj['pos'][1] + 80., pedtype=GANG, weapon=AK, face=(0., -1.))
+sc.step(6)
+assert [s_ for s_ in sc.said if s_[1] == HCB_SAY_AHEAD], sc.said
+passed('CJ drives: the helicopter\'s spot is 50 m ahead of him along his way (it scouts the road), and armed men ahead on his way are called once')
+
+# the game's own cover points are tried first
+sc, team, g = contact(walls=[(-9., -2.5, -9., 2.5)])          # a wall 9 m west: further than the nearest ring of the brain's own search
+sc.hints = [(-9., 0., 1.)]                                         # the game marks it as cover
+sc.step(12)
+o = sc.last_out
+assert o.cover_ok and -11.5 < o.cover_at.x < -9 and abs(o.cover_at.y) < 2.6, ('the spot behind the thing the game calls cover', o.cover_ok, o.cover_at.x, o.cover_at.y)
+passed('The game\'s own cover points (walls, corners, cars it marks near CJ) are tried first: CJ is taken behind one the brain\'s rings had not reached yet')
+
 text = '\n'.join(results) + '\nThe core only. Nothing here has run in the game.\n'
 (hcb_py.OUT / 'brain_detail_tests.txt').write_text(text)
 print(text)

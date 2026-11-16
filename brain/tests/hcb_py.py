@@ -354,6 +354,16 @@ class Scene:
         s.wanted, s.on_mission, s.cutscene, s.roe, s.police = self.wanted, self.on_mission, self.cutscene, self.roe, self.police
         s.mission_free = self.mission_free
         s.tactics = self.tactics
+        # 0.8: a building, water, grenades, the game's cover points
+        s.interior, s.in_water = int(getattr(self, 'interior', 0)), int(getattr(self, 'in_water', 0))
+        dg = list(getattr(self, 'dangers', []))[:HCB_MAX_DANGERS]
+        s.n_dangers = len(dg)
+        for k_, (pos_, kind_, rad_) in enumerate(dg):
+            s.dangers[k_].at = vec(*pos_); s.dangers[k_].kind = kind_; s.dangers[k_].radius = rad_
+        hn = list(getattr(self, 'hints', []))[:HCB_MAX_HINTS]
+        s.n_hints = len(hn)
+        for k_, pos_ in enumerate(hn):
+            s.hints[k_] = vec(*pos_)
         s.n_probes = len(self.probe_q)
         for o, (at, frm) in zip(s.probes, self.probe_q):
             o.at = vec(*at)

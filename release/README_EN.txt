@@ -1,10 +1,24 @@
-HELICOVER 1.5 BETA 2 - support helicopter with a smart crew
-GTA San Andreas (Android, 64-bit), a CLEO mod + the Helicover Brain 0.7 mod. They only work together.
+HELICOVER 1.5 BETA 3 - support helicopter with a smart crew
+GTA San Andreas (Android, 64-bit), a CLEO mod + the Helicover Brain 0.8 mod. They only work together.
 
 WHAT IT IS
 Call a support helicopter: it flies in from far away, follows CJ and covers him with four door
 gunners. Drop a four-man team on foot, get picked up by rope, fly to the map marker or Grove
 Street and get out there by landing or by rope.
+
+NEW IN 1.5 BETA 3 (brain 0.8) - THE WHOLE REST OF THE PLAN
+IMPORTANT: replace EVERYTHING - the CLEO files and libHelicoverBrain64.so. None of this has run in the game yet.
+- Grenades: the brain sees a thrown grenade, fire bottle or rocket. Everybody within 10 m runs clear; "GRENADE - LEFT!".
+- Water: CJ in the water - the detail stays on the bank, the helicopter comes over him 12 m up, take the rope.
+- Buildings: CJ goes inside - the detail holds the door (commander at the door, the rest at the corners round it).
+- Landing: the brain's pilot flies the approach and comes down to 15 m over the pad; the game's pilot sets it down.
+- Hot pickup: on "we pull out" the helicopter comes with the rope by itself.
+- Scouting: CJ drives - the helicopter flies 50 m ahead along his way; armed men ahead are called.
+- Voice: the commander speaks his orders with the game's own voice lines (silent if the model has none).
+- By hand: an unarmed brawler at CJ is not shot - the nearest guard puts his gun away and takes him down. A knife, a
+  bat, any weapon, or CJ badly hurt - fire as before.
+- The game's cover: the places the game itself marks as cover are tried first.
+Should the game crash in the voice or the water-level call, that part turns itself off from the next start (logged).
 
 NEW IN 1.5 BETA 2 (brain 0.7) - FROM THE FOURTH LOG + PART OF THE REST OF THE PLAN
 IMPORTANT: replace EVERYTHING - the CLEO files and libHelicoverBrain64.so.

@@ -10,6 +10,7 @@ LIB[0x0e48]={'id':'0E48','name':'HELICOVER_BRAIN','num_params':3}   # registered
 # Native SA command (self, x, y, z), absent from the trimmed library snapshot.
 LIB[0x00ab]={'id':'00AB','name':'SET_CAR_COORDINATES','num_params':4}
 LIB[0x00c2]={'id':'00C2','name':'IS_POINT_ON_SCREEN','num_params':4}   # x y z radius (a command of the game since GTA III; absent from the trimmed library)
+LIB[0x05e2]={'id':'05E2','name':'TASK_KILL_CHAR_ON_FOOT','num_params':2}   # actor, whom (with the weapon in his hand; absent from the trimmed library)
 LIB[0x0850]={'id':'0850','name':'TASK_FOLLOW_FOOTSTEPS','num_params':2}   # actor, whom to follow (the game's own follower task; absent from the trimmed library)
 LIB[0x02ab]={'id':'02AB','name':'SET_CHAR_PROOFS','num_params':6}   # actor, bullet, fire, explosion, collision, melee (a command of the game since GTA III; the library file leaves it out)
 LIB[0x0016]={'id':'0016','name':'DIV_INT_LVAR_BY_VAL','num_params':2}

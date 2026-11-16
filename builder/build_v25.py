@@ -69,6 +69,7 @@ SQ_TICK=STATE+464
 # 1.4.1: the second four of the ground team (guards 5-8) and their own squad worker (Helicover_Squad2) and lifecycle (Helicover_Team2)
 GROUND_PUB2=STATE+480;SQ_SLOT2=STATE+500;SQ_BR_ST2=STATE+540;SQ_BR_TG2=STATE+544;SQ_PACE2=STATE+548;SQ_T2=STATE+552
 SQ_HEART2=STATE+556;SQ_GROUP2=STATE+557;SQ_TICK2=STATE+558;TEAM2_STATE=STATE+559
+CR_LAND=STATE+566   # 1.5.3: 1 while the pilot is asked for a landing approach (flag 8: down to 15 m over the pad on the way in)
 DEPLOY_T0=STATE+565   # 1.5: when the first four went down the ropes (the second four follow them down the same ropes 3 s later)
 COMBAT_PILOT=STATE+564   # 1.5: 1 while the brain's own pilot holds the helicopter on its station in a fight (escort, state 2)
 HELI_SPOT_X=STATE+561;HELI_SPOT_Y=STATE+562;HELI_SPOT_Z=STATE+563   # 1.4.1: the brain's spot for the helicopter in a fight (floats; x = 0 none)
@@ -182,8 +183,8 @@ MESSAGES={'HCLOAD': '~b~PILOT:~w~ inbound to your position.',
  'HCBURN': '~r~CAR ON FIRE!~w~ Get away from it.',
  'HCEVADE': '~r~TAKING HITS!~w~ Pilot breaking away.',
  'HCSHOT': '~r~TAKING FIRE!~w~ Pilot breaking away.',
- 'HCHELLO': '~b~HELICOVER 1.5 BETA 2~w~ ready. CLEO menu > Helicover.',
- 'HCHELLV': '~b~HELICOVER 1.5 BETA 2~w~ ready. Map marker is off here.'}
+ 'HCHELLO': '~b~HELICOVER 1.5 BETA 3~w~ ready. CLEO menu > Helicover.',
+ 'HCHELLV': '~b~HELICOVER 1.5 BETA 3~w~ ready. Map marker is off here.'}
 # Generate state updates; panel prints messages when the state changes.
 # beta 6: our people do not cower. CREATE_CHAR gives a mission ped the built-in "normal" decision maker (m_norm.ped): punched, shot at or
 # aimed at, it picks "duck and cover" / "flee" like any passer-by. 65542 is the game's built-in EMPTY decision maker (slot 6 | 1<<16, loaded
@@ -204,7 +205,7 @@ def healthcheck(s,fail):
 c=Script();a=c.add
 c.label('INIT');a(0);c.set(GAME_OK,0)
 for _ofs,_val in GAME_SIG:a(0x0dd8,V(19),I(_ofs),I(4),I(1));c.check(0x0039,[V(19),I(_val)],'GAME_SIG_BAD')
-c.set(GAME_OK,1);c.label('GAME_SIG_BAD');c.set(COMBAT_PILOT,0);c.set(NOTICE_SKIP,-1);c.set(HELLO_AT,0);c.set(MSG_UNTIL,0);c.set(MSG_PRIO,0);c.set(MSG_HOLD,0);c.set(BANNER_ARMED,0);c.set(AVOID_STAGE,0);c.set(AVOID_NEXT,0);c.set(BUSY,0);c.set(FROZEN,0);c.set(LSTAGE,0);c.set(CREWGEN,0);c.set(FIRE_TARGET,-1);c.set(FIRE_ACTIVE,0);c.set(TRACKED_TARGET,-1);c.set(STUCK_SINCE,0)
+c.set(GAME_OK,1);c.label('GAME_SIG_BAD');c.set(COMBAT_PILOT,0);c.set(CR_LAND,0);c.set(NOTICE_SKIP,-1);c.set(HELLO_AT,0);c.set(MSG_UNTIL,0);c.set(MSG_PRIO,0);c.set(MSG_HOLD,0);c.set(BANNER_ARMED,0);c.set(AVOID_STAGE,0);c.set(AVOID_NEXT,0);c.set(BUSY,0);c.set(FROZEN,0);c.set(LSTAGE,0);c.set(CREWGEN,0);c.set(FIRE_TARGET,-1);c.set(FIRE_ACTIVE,0);c.set(TRACKED_TARGET,-1);c.set(STUCK_SINCE,0)
 for key in range(PUB,PUB+7):c.set(key,-1)
 for key in range(GROUND_PUB,GROUND_PUB+5):c.set(key,-1)
 c.set(ROPE_COMMAND,0)
@@ -583,7 +584,7 @@ c.label('MAP_NO_PAD');c.get(19,AUTO_EXIT);c.eq(19,1,'MAP_NO_PAD_PLAIN');c.get(19
 c.label('MAP_NO_PAD_PLAIN');msg(c,'HCNOPAD')
 c.label('DEST_HOVER_GO');c.set(DBG_CODE,4);c.set(DEST_NATIVE,0);a(0x01bd,V(21));state(c,22);c.go('TICK')
 # v31: cruise to the pad at altitude, then sink vertically to 18 m above it (no native circling).
-c.label('DEST_APPROACH_TICK');c.get(26,DEST_X);c.get(27,DEST_Y);c.get(28,DEST_Z);c.get(19,DEST_NATIVE);c.eq(19,0,'DEST_DESCEND');a(0x00aa,V(5),V(9),V(10),V(11));a(0x0509,V(9),V(10),V(26),V(27),V(31));c.check(0x0021,[V(31),F(4)],'DEST_DESCEND');c.call('CRUISE_STEP');c.go('TICK')
+c.label('DEST_APPROACH_TICK');c.get(26,DEST_X);c.get(27,DEST_Y);c.get(28,DEST_Z);c.get(19,DEST_NATIVE);c.eq(19,0,'DEST_DESCEND');a(0x00aa,V(5),V(9),V(10),V(11));a(0x0509,V(9),V(10),V(26),V(27),V(31));c.check(0x0021,[V(31),F(4)],'DEST_DESCEND');c.set(CR_LAND,1);c.call('CRUISE_STEP');c.set(CR_LAND,0);c.go('TICK')   # 1.5.3: the brain's pilot comes down on the way in
 # v37: the in-game freezes happened during the frozen, teleported descent next to roofs
 # (DBG 2205). Now the scripted cruise only brings the helicopter exactly overhead at its safe
 # altitude; then it is unfrozen, its residual speed zeroed, and the native pilot descends to
@@ -637,7 +638,7 @@ for var in [4,13,14,15,16]:
  if var==4:c.label('CLEANUP_KEEP')
  a(0x048f,V(var));a(0x01c2,V(var));c.label(skip)
 c.check(0x056e,[V(5)],'RESET');a(0x01c3,V(5))
-c.label('RESET');c.set(FROZEN,0);c.set(COMBAT_PILOT,0);c.set(LSTAGE,0);c.set(BUSY,0);state(c,0)
+c.label('RESET');c.set(FROZEN,0);c.set(COMBAT_PILOT,0);c.set(CR_LAND,0);c.set(LSTAGE,0);c.set(BUSY,0);state(c,0)
 for weapon_model in [353,355,356,358]:a(0x0249,I(weapon_model))
 for key in range(PUB,PUB+7):c.set(key,-1)
 c.set(CMD,0);c.set(HP,0);c.go('IDLE')
@@ -865,7 +866,7 @@ for ahead in [30,80,150,250]:
 c.label('CR_ROOFS_DONE')
 # ask the pilot: 26@ helicopter, 27/28@ the point, 29@ the roofs, 30@ 1 = stop there (+2: the last step was refused) ->
 # 27-29@ where to be now, 30@ metres left, 31@ speed (-1: the brain has no pilot for this helicopter)
-a(0x0087,V(28),V(27));a(0x0087,V(27),V(26));a(0x0085,V(26),V(5));c.get(30,CR_BLK);a(0x0012,V(30),I(2));a(0x000a,V(30),I(1));c.get(31,COMBAT_PILOT);a(0x0012,V(31),I(4));a(0x005a,V(30),V(31))   # (+4: on station in a fight)
+a(0x0087,V(28),V(27));a(0x0087,V(27),V(26));a(0x0085,V(26),V(5));c.get(30,CR_BLK);a(0x0012,V(30),I(2));a(0x000a,V(30),I(1));c.get(31,COMBAT_PILOT);a(0x0012,V(31),I(4));a(0x005a,V(30),V(31));c.get(31,CR_LAND);a(0x0012,V(31),I(8));a(0x005a,V(30),V(31))   # (+4: on station in a fight, +8: a landing approach)
 c.get(31,BRAIN_HELLO);c.check(0x0039,[V(31),I(BRAIN_MAGIC)],'CR_NO_PILOT');a(6,V(31),I(-1));a(0x0e48,V(26),I(6),I(6))   # (31@ stays -1 when the brain does not answer)
 c.check(0x0039,[V(31),I(-1)],'CR_FLY')
 c.label('CR_NO_PILOT');c.get(26,CR_DX);c.get(27,CR_DY);a(0x0509,V(9),V(10),V(26),V(27),V(19));c.ret()   # (no brain: the helicopter hangs where it is)
@@ -1210,7 +1211,7 @@ p.label('CLOSE');p.call('UNLOAD');a(0xdf3);p.set(OPEN,0);p.set(0,0);a(6,V(10),I(
 VERSION='1.4'
 for st,sit,x in MAIN_VARIANTS:
  for prof,suf in zip(PROFILES,SUFFIX):
-  title=(i18n.encode('HELICOVER 1.5 BETA 2','en') if prof=='en' else i18n.menu_text('TITLE_READY',prof)) if st==0 else i18n.state_title(st,STATES[st],prof)
+  title=(i18n.encode('HELICOVER 1.5 BETA 3','en') if prof=='en' else i18n.menu_text('TITLE_READY',prof)) if st==0 else i18n.state_title(st,STATES[st],prof)
   p.blob('MAIN_%d_%d_%d'%(st,sit,x)+suf,title,main_rows(st,sit,x,prof))
 for prof,suf in zip(PROFILES,SUFFIX):
  if prof=='en':p.blob('OFFLINE_MENU',i18n.menu_text('OFFLINE_TITLE',prof),[i18n.menu_text('OFFLINE_ROW',prof)])   # the core is missing, so the language is unknown: English only

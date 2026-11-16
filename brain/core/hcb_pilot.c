@@ -81,6 +81,8 @@ API void hcb_pilot_step(hcb_pilot *p, const hcb_pilot_in *in, hcb_pilot_out *out
     if (dist > 20.0f) vdes *= f_clamp(1.0f - f_abs(err) / 1.7f, 0.25f, 1.0f);
     clear = hover + (CLEAR - hover) * f_clamp((dist - 60.0f) / 200.0f, 0.0f, 1.0f);
     if (!in->stop) clear = CLEAR;
+    /* 0.8, a landing approach: near the point he comes down to `hover` over the ground itself */
+    if (in->land && dist < 25.0f) clear = hover;
     /* far too high for the point (after a tall roof): slow down enough to be down at hovering height when he gets there */
     if (in->stop && p->pos.z - (ground + clear) > 3.0f) {
         float excess = p->pos.z - (ground + clear), sink = f_min(excess > 40.0f ? SINK_FAST : SINK, 0.6f * excess);
@@ -88,7 +90,7 @@ API void hcb_pilot_step(hcb_pilot *p, const hcb_pilot_in *in, hcb_pilot_out *out
     }
     /* below the roofs ahead (the script looks 250 m ahead) or a wall in the way: he brakes hard and climbs (fast, he
        zooms up on his speed), then goes on over them */
-    if (p->pos.z < ground + 10.0f || in->blocked) vdes = 0.0f;
+    if ((p->pos.z < ground + 10.0f && !(in->land && dist < 25.0f)) || in->blocked) vdes = 0.0f;
 
     /* the nose: towards the point while travelling; over the point it keeps its heading. The turn rate is what a bank
        of 34 degrees gives at this speed (on the spot: a pedal turn) */
@@ -131,7 +133,12 @@ API void hcb_pilot_step(hcb_pilot *p, const hcb_pilot_in *in, hcb_pilot_out *out
     /* (fast, he can zoom up: speed traded for height, up to 26 m/s at full speed) */
     climb = CLIMB + 0.35f * f_clamp(speed - 20.0f, 0.0f, 40.0f);
     vz_want = f_clamp((z_want - p->pos.z) * 0.6f, z_want - p->pos.z < -40.0f ? -SINK_FAST : -SINK, climb);
-    if (in->blocked || p->pos.z < ground + 10.0f) vz_want = climb;
+    if (in->blocked || (p->pos.z < ground + 10.0f && !(in->land && dist < 25.0f))) vz_want = climb;
+    if (in->land && dist < 25.0f && vz_want < 0) {              /* down at 6 m/s, at 2.5 m/s below 12 m, and not before he is over the point */
+        float hgt = p->pos.z - ground, lim = hgt < 12.0f ? 2.5f : 6.0f;
+        if (dist > 6.0f) lim = hgt > 20.0f ? lim : 0.0f;
+        if (vz_want < -lim) vz_want = -lim;
+    }
     p->vel.z += f_clamp(vz_want - p->vel.z, -VACC * dt, (deficit > 40.0f ? 2.0f * VACC : VACC) * dt);
 
     p->pos = v_add(p->pos, v_mul(p->vel, dt));
