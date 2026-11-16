@@ -48,6 +48,9 @@ VT_USE_GUN, VT_KILL = 0x8338c8 + 0x10, 0x833c80 + 0x10
 F_SCRIPTS, F_HUD, F_GUNSHOT, F_LOS, F_POLY, F_SCREEN = 0x3f3ad8, 0x51f6f0, 0x442854, 0x5075a4, 0x6ee4a4, 0x6e9df8
 F_WATER, F_SAY = 0x6ba834, 0x5a57c4       # CWaterLevel::GetWaterLevel, CPed::Say (0.8)
 EXPLOSIONS_T, PROJ_T, COVER_T = 0xd28c78, 0xd29508, 0xc9b390   # the game's tables the mod reads (0.8)
+F_TASK_NEW, F_GOTO, F_SHOOT, F_SET_TASK, F_GROUND = 0x5d7414, 0x632400, 0x633510, 0x64e084, 0x50f408   # 1.0: the body and the map
+VT_GOTO, VT_SHOOT, VT_ROPE = 0x839040 + 0x10, 0x839b98 + 0x10, 0x8381f8 + 0x10
+HC_MODE, HC_RECALL, CMD_PLAN = 0x48456A00 + 573, 0x48456A00 + 574, 7
 F_FIRE, F_FLASH = 0x700c64, 0x59bcb0   # CWeapon::Fire, CPed::DoGunFlash (1.4.1: the gunners' own weapon fire)
 GOT_SCRIPTS, GOT_HUD, GOT_GUNSHOT = 0x845438, 0x845ec8, 0x843f10
 GOT_IGNORE, IGNORE_ENTITY, F_COLLECT, F_VARPTR, SCRIPT_PARAMS = 0x84b180, 0xbdcaf8, 0x3f1fcc, 0x3f2654, 0xa001ac
@@ -144,6 +147,13 @@ class Emu:
         uc.hook_add(UC_HOOK_CODE, self.on_stub, begin=STUB, end=STUB + 0xffff)
         self.fire_calls, self.flash_calls = [], []
         self.water_level, self.water_calls, self.say_calls = None, 0, []
+        self.new_tasks, self.set_tasks, self.abort_calls, self.abort_ok, self.pool_full, self.ground_calls, self.los_fn = [], [], [], True, False, 0, None
+        self.ground = lambda x, y, z: (1, 0.)                                # flat ground at height 0 everywhere
+        for addr, fn in ((F_TASK_NEW, self.g_task_new), (F_GOTO, self.g_goto), (F_SHOOT, self.g_shoot), (F_SET_TASK, self.g_set_task), (F_GROUND, self.g_ground)):
+            uc.hook_add(UC_HOOK_CODE, fn, begin=GTA + addr, end=GTA + addr)
+        # the virtual functions the mod calls on a task: its type (+0x28) and "can you stop now?" (+0x38)
+        for vt, typ in ((VT_USE_GUN, 1017), (VT_KILL, 1000), (VT_GOTO, 903), (VT_SHOOT, 911), (VT_ROPE, 1407)):
+            uc.mem_write(GTA + vt + 0x28, struct.pack('<Q', self.stub('type:%d' % typ))); uc.mem_write(GTA + vt + 0x38, struct.pack('<Q', self.stub('abort')))
         for addr, fn in ((F_SCRIPTS, self.g_scripts), (F_HUD, self.g_hud), (F_GUNSHOT, self.g_gunshot), (F_LOS, self.g_los), (F_POLY, self.g_poly), (F_SCREEN, self.g_screen), (F_FIRE, self.g_fire), (F_FLASH, self.g_flash), (F_WATER, self.g_water), (F_SAY, self.g_say)):
             uc.hook_add(UC_HOOK_CODE, fn, begin=GTA + addr, end=GTA + addr)
         names = [b'/data/app/x/lib/arm64/libGTASA.so\0', b'/data/app/x/lib/arm64/libSAcleo64.so\0']
@@ -324,7 +334,9 @@ class Emu:
         n = names[addr]; x = [uc.reg_read(r) for r in X]; ret = x[0]
         if n == 'dl_iterate_phdr':
             return
-        if n == 'open':
+        if n.startswith('type:'): ret = int(n[5:])
+        elif n == 'abort': self.abort_calls.append((x[0], x[1], x[2] & 0xffffffff)); ret = 1 if self.abort_ok else 0
+        elif n == 'open':
             path = self.cstr(x[0])
             if x[1] & 3 == 0:
                 ret = (1 << 64) - 1 if path not in self.fs else self._fd(path)
@@ -407,7 +419,33 @@ class Emu:
         a = struct.unpack('<3f', bytes(uc.mem_read(uc.reg_read(X[0]), 12))); b = struct.unpack('<3f', bytes(uc.mem_read(uc.reg_read(X[1]), 12)))
         flags = [uc.reg_read(r) & 0xff for r in X[2:8]] + [bytes(uc.mem_read(uc.reg_read(UC_ARM64_REG_SP), 1))[0]]
         self.los_calls.append((a, b, flags, self.r64(GTA + IGNORE_ENTITY)))
-        self._ret(uc, 0 if self.walls else 1)
+        self._ret(uc, (0 if self.walls else 1) if self.los_fn is None else int(bool(self.los_fn(a, b))))
+
+    def g_task_new(self, uc, *_):
+        n = uc.reg_read(X[0]); a = 0 if self.pool_full else self.alloc(n)
+        if a: uc.mem_write(a, bytes(n))
+        self._ret(uc, a)
+    def g_goto(self, uc, *_):
+        t, ms, tp = uc.reg_read(X[0]), uc.reg_read(X[1]) & 0xffffffff, uc.reg_read(X[2])
+        tg = struct.unpack('<3f', bytes(uc.mem_read(tp, 12))); rad, slow = fl(uc.reg_read(S[0])), fl(uc.reg_read(S[1]))
+        self.w64(t, GTA + VT_GOTO); self.w32(t + 0x18, ms); self.wf(t + 0x1c, *tg); self.wf(t + 0x28, rad, slow)
+        self.new_tasks.append(dict(kind='goto', task=t, ms=ms, target=tg, radius=round(rad, 2), slow=round(slow, 2), flags=(uc.reg_read(X[3]) & 0xff, uc.reg_read(X[4]) & 0xff)))
+        self._ret(uc, t)
+    def g_shoot(self, uc, *_):
+        t, ms, tp, ent = uc.reg_read(X[0]), uc.reg_read(X[1]) & 0xffffffff, uc.reg_read(X[2]), uc.reg_read(X[3])
+        tg = struct.unpack('<3f', bytes(uc.mem_read(tp, 12)))
+        self.w64(t, GTA + VT_SHOOT); self.w32(t + 0x18, ms); self.w64(t + 0x20, ent); self.wf(t + 0x34, *tg)
+        self.new_tasks.append(dict(kind='shoot', task=t, ms=ms, target=tg, ent=ent, radius=round(fl(uc.reg_read(S[3])), 2), slow=round(fl(uc.reg_read(S[4])), 2)))
+        self._ret(uc, t)
+    def g_set_task(self, uc, *_):
+        mgr, t, slot = uc.reg_read(X[0]), uc.reg_read(X[1]), uc.reg_read(X[2]) & 0xffffffff
+        self.w64(mgr + 8 * slot, t); self.set_tasks.append((mgr, t, slot)); self._ret(uc)
+    def g_ground(self, uc, *_):
+        x, y, z = (fl(uc.reg_read(r)) for r in S[:3]); f, g = self.ground(x, y, z)
+        self.ground_calls += 1
+        if uc.reg_read(X[0]): uc.mem_write(uc.reg_read(X[0]), bytes([1 if f else 0]))
+        uc.reg_write(UC_ARM64_REG_S0, struct.unpack('<I', struct.pack('<f', g if f else 0.))[0])
+        uc.reg_write(UC_ARM64_REG_PC, uc.reg_read(UC_ARM64_REG_LR))
 
     def g_poly(self, uc, *_):
         self.polys.append(dict(c=tuple(uc.mem_read(uc.reg_read(X[0]), 4)), p=[round(fl(uc.reg_read(r)), 1) for r in S]))
@@ -1000,7 +1038,7 @@ for t in ticks:
     o, s_ = t['out'], t['snapshot']
     asked_pairs |= {(getattr(q, 'from'), q.to) for q in o.queries[:o.n_queries]}
     answered |= {(getattr(l, 'from'), l.to) for l in s_.los[:s_.n_los]}
-assert max(per_frame) <= 2500 // 300 + 2, ('a frame never spends much more than 2.5 ms on rays', max(per_frame))
+assert max(per_frame) <= (2500 + 1200) // 300 + 3, ('a frame never spends much more than 2.5 ms on rays of sight and 1.2 ms on the map (1.0)', max(per_frame))
 assert len(asked_pairs) > 40 and len(asked_pairs - answered) <= 4, ('every question is answered in turn', len(asked_pairs), len(asked_pairs - answered))
 looks = len(ticks); share_ = sum(per_frame) * 300 / (60 * 50000.)
 assert 'looks put off to keep the brain under a quarter of the time' in text and share_ < 0.3 and all(t['match'] for t in ticks), (share_, looks)
@@ -1200,6 +1238,104 @@ CFG_ = '/storage/emulated/0/Android_unprotected/data/com.rockstargames.gtasa/con
 e = Emu(); e.fs[CFG_] = b'[Preferences]\nMarkers = 0\nLastCrash = 22\nWaterOff = 1\n'; lg_ = e.load(); e.frame(n=3)
 assert 'water level off (the game crashed in it once)' in lg_ and e.water_calls == 0
 passed('0.8 safety: each of those parts is checked against the game\'s code at the start and left out when it differs; a part the game once crashed in (water level, voice) stays off from the next start on')
+
+# ------------------------------------------------------------------ 1.0: the body (the mod walks the guards) and the map
+def detail_world(tweak=None, cfg=None, n=1):
+    e = Emu(tweak=tweak)
+    if cfg: e.fs[CFG_] = cfg
+    lg_ = e.load()
+    guards = [e.ped(9 + 2 * k, 6, pedtype=8, weapon=31) for k in range(n)]
+    for k, g in enumerate(guards): e.share(HC_STATE + 71 + k, e.handle(g))
+    e.share(HC_HELLO, 0); e.share(HC_MODE, 0); e.share(HC_RECALL, 0)
+    e.frame(n=6, hud=False)
+    return e, guards, lg_
+def post(e, g): return e.opcode(0, 10, CMD_POST, handle=e.handle(g))[1]
+e, (g1,), lg_ = detail_world()
+assert 'the body: the mod walks the guards itself (the game\'s go-to task, given once); the map: on' in lg_, lg_[-400:]
+v = post(e, g1)
+assert v[1] == 5 and len(e.new_tasks) == 1 and e.new_tasks[0]['kind'] == 'goto', (v, e.new_tasks)
+t0 = e.new_tasks[0]; mgr = e.r64(g1 + 0x538) + 8
+assert e.set_tasks == [(mgr, t0['task'], 3)] and e.r64(mgr + 24) == t0['task'], e.set_tasks          # the game's own SetTask, his main slot
+assert t0['ms'] in (4, 6) and t0['radius'] == 0.5 and t0['flags'] == (0, 0) and math.dist(t0['target'][:2], (9., 6.)) > 2, t0   # a walk or a run towards CJ, never a sprint in peace
+assert math.dist(t0['target'][:2], (0., 0.)) < 6, t0
+for k in range(5):                                                   # ten times a second the script asks again: the task is NOT made anew
+    e.frame(ms=100, hud=False); v = post(e, g1)
+assert v[1] == 5 and len(e.new_tasks) == 1 and len(e.set_tasks) == 1, (v, len(e.new_tasks))
+e.move(e.cj, -6, -3); e.frame(ms=100, n=3, hud=False); v = post(e, g1)                                # CJ walks off: only the target of the same task moves
+tg = struct.unpack('<3f', bytes(e.uc.mem_read(t0['task'] + 0x1c, 12)))
+assert len(e.new_tasks) == 1 and math.dist(tg[:2], t0['target'][:2]) > 3 and bytes(e.uc.mem_read(t0['task'] + 0x30, 1))[0] & 4, (tg, t0['target'])
+e.move(g1, fl(v[2]), fl(v[3])); e.frame(ms=100, n=12, hud=False); v = post(e, g1)                         # he is there: the script has him again (0 = stay, crouch / look / fire are its)
+assert v[1] == 0 and len(e.new_tasks) == 1, v
+passed('1.0 the body: a guard on his way gets the game\'s own task ONCE (CTask::operator new, CTaskComplexGoToPointAndStandStill, CTaskManager::SetTask into his main slot) and the script is told 5 = "his legs are the mod\'s"; asked again ten times a second no new task is made; when CJ moves only the target of the same task is moved (its new-target flag set); arrived, the script has him again')
+# another task of the game's in his main slot: asked to stop first, as the game does it; refused - nothing is replaced
+e, (g1,), _ = detail_world()
+other = e.alloc(0x60); e.w64(other, GTA + VT_USE_GUN); e.w64(e.r64(g1 + 0x538) + 8 + 24, other)
+e.abort_ok = False; v = post(e, g1)
+assert v[1] == 5 and not e.new_tasks and e.abort_calls and e.abort_calls[-1][:2] == (other, g1) and e.abort_calls[-1][2] == 1, (v, e.abort_calls)
+e.abort_ok = True; e.frame(ms=100, hud=False); v = post(e, g1)
+assert v[1] == 5 and len(e.new_tasks) == 1, v
+# the game's task pool is full: the script walks him this time (the old way)
+e, (g1,), _ = detail_world(); e.pool_full = True; v = post(e, g1)
+assert v[1] in (1, 2, 3, 4) and not e.set_tasks, v
+# a man coming down the rope, in the air, dead or in a car is never given a task
+e, (g1,), _ = detail_world(); rope = e.alloc(0x40); e.w64(rope, GTA + VT_ROPE); e.w64(e.r64(g1 + 0x538) + 8 + 24, rope)
+e.frame(ms=100, n=3, hud=False); v = post(e, g1)
+assert not e.new_tasks and not e.abort_calls, (v, e.new_tasks)
+head, text, ticks = replay_tool.replay(e.save())
+sn = ticks[-1]['snapshot']
+assert sn.body == 1 and sn.our_state[0] == (h.HCB_OS_ROPING | h.HCB_OS_NATIVE) and all(t['match'] for t in ticks), (sn.body, sn.our_state[0])
+passed('1.0 the body, care: a task of the game\'s in his main slot is asked to stop first (MakeAbortable, urgent) and nothing is replaced while it refuses; no room in the game\'s task pool - the script walks him as before; a man on the rope or in the air is left alone and the core is told (no post until he stands)')
+# the code differs / it crashed there once: the scripts walk the guards as before 1.0
+e, (g1,), lg_ = detail_world(tweak=lambda e_: e_.uc.mem_write(GTA + F_SET_TASK, b'\0\0\0\0'))
+v = post(e, g1)
+assert 'the body: off (the code differs): the scripts walk the guards' in lg_ and v[1] in (1, 2, 3, 4) and not e.new_tasks and 'the brain is running' in lg_, (v, lg_[-300:])
+head, text, ticks = replay_tool.replay(e.save())
+assert ticks[-1]['snapshot'].body == 0 and all(t['match'] for t in ticks)
+e, (g1,), lg_ = detail_world(cfg=b'[Preferences]\nMarkers = 0\nLastCrash = 23\n')
+v = post(e, g1)
+assert 'from now on the scripts walk the guards' in lg_ and not e.new_tasks and b'BodyOff = 1' in e.fs[CFG_] and v[1] != 5, (v, e.fs[CFG_])
+e, (g1,), lg_ = detail_world(cfg=b'[Preferences]\nMarkers = 0\nBodyOff = 1\n')
+assert 'the body: off (the game crashed in it once)' in lg_ and post(e, g1)[1] != 5 and b'BodyOff = 1' in e.fs[CFG_]
+e, (g1,), lg_ = detail_world(cfg=b'[Preferences]\nMarkers = 0\nLastCrash = 24\n')
+assert b'MapOff = 1' in e.fs[CFG_] and e.ground_calls == 0 and post(e, g1)[1] != 5, e.fs[CFG_]
+passed('1.0 the body, safety: every function is checked by its first words - when one differs the mod does not walk anybody and the scripts do it as before; a crash while giving a task (step 23) or in a ground question (step 24) turns that part off for good (BodyOff / MapOff in the settings file)')
+# the map: the ground cell by cell, what stands between cells, straight legs; a high place for the marksman
+e, (g1,), _ = detail_world()
+e.ground = lambda x, y, z: (1, 14.) if 20 < x < 30 and -5 < y < 5 and z > 14 else (1, 0.)            # a flat roof 14 m up, east of CJ
+e.los_fn = lambda a, b: not (min(a[0], b[0]) < 3.0 < max(a[0], b[0]) and abs(a[1]) < 30 and a[2] < 3)   # a wall along x = 3
+e.frame(ms=100, n=60, hud=False)
+head, text, ticks = replay_tool.replay(e.save())
+cells, walls, highs, legs = {}, set(), set(), 0
+for t in ticks:
+    sn = t['snapshot']
+    for g in sn.ground[:sn.n_ground]:
+        cells[(g.x, g.y)] = (g.found, g.z)
+        if g.wall & 1: walls.add((g.x, g.y))
+    highs |= {(round(q.at.x), round(q.at.y), round(q.height), q.sees_cj) for q in sn.high[:sn.n_high]}
+    legs += sn.n_segs
+assert len(cells) > 150 and all(f == 1 for f, z in cells.values()) and all(t['match'] for t in ticks), len(cells)
+assert walls and all(x == 2.5 for x, y in walls), sorted(walls)[:5]                              # only the cells whose +x neighbour lies behind the wall
+assert highs and all(20 < x < 30 and hh_ == 14 and sees == 1 for x, y, hh_, sees in highs), highs
+assert e.ground_calls > 400
+passed('1.0 the map: the core\'s ground questions are answered with the game\'s FindGroundZFor3DCoord and a level ray to the next cell (a wall along x = 3 marks exactly the cells before it); straight legs with two rays; a flat roof 14 m up from which CJ is seen is found and told as a high place; all of it within its own 1.2 ms a look; the report replays exactly')
+# the player's mode and "to me"; what the scripts are told about the squad
+e, (g1,), _ = detail_world()
+v = e.opcode(0, 10, CMD_PLAN)[1]
+assert v[0] == h.HCB_UMODE_PROTECT and v[1] == h.HCB_TASK_ESCORT and v[9] == 1, v
+e.share(HC_MODE, 1); e.frame(ms=100, n=3, hud=False); v = e.opcode(0, 10, CMD_PLAN)[1]
+assert v[0] == h.HCB_UMODE_ASSAULT and v[1] == h.HCB_TASK_REGROUP, v                                 # nobody to go for: with CJ
+e.share(HC_RECALL, 1); e.frame(ms=100, n=2, hud=False)
+assert e.shared_value(HC_RECALL) == 0                                                              # taken
+head, text, ticks = replay_tool.replay(e.save())
+assert ticks[-1]['snapshot'].recall == 1 and ticks[-1]['snapshot'].umode == 1 and all(t['match'] for t in ticks)
+e.frame(ms=1000, n=11, hud=False)
+head, text, ticks = replay_tool.replay(e.save())
+assert ticks[-1]['snapshot'].recall == 0
+lg_ = e.log()
+assert 'squad: mode ASSAULT' in lg_ and '(TO ME)' in lg_ and 'body MOD: new tasks' in lg_ and 'map: ground asked' in lg_ and ' why ' in lg_ and 'game tasks' in lg_, [l_ for l_ in lg_.splitlines() if 'squad:' in l_][-2:]
+SUM = MODS + 'hcbrain_summary.txt'
+assert SUM in e.fs and b'guard farther than 8 m from his post while CJ stands' in e.fs[SUM] and b'the body: the mod' in e.fs[SUM], e.fs.get(SUM)
+passed('1.0 the mode: PROTECT / ASSAULT is read from the scripts\' shared value, "to me" is taken once and holds ten seconds; command 7 tells the scripts the mode, the squad\'s task, the marksman\'s roof and whether the mod walks the men; the log has a line for the squad, the body and the map every second and every guard\'s action, stage, reason and the game\'s own task types; mods/hcbrain_summary.txt keeps the session\'s numbers (far from post, stuck, sprint, changes of action)')
 
 text = '\n'.join(results) + '\nThe phone build on an emulated CPU with the real libGTASA.so and the real code of the CLEO library; the world in memory is laid out by the test. Not run in the game.\n'
 (h.OUT / 'brain_adapter_tests.txt').write_text(text)

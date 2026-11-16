@@ -8,6 +8,9 @@ ROOT = Path(os.environ.get('HCB_MUT_ROOT') or Path(tempfile.gettempdir()) / 'hcb
 C = 'core/hcb_core.c'
 D = 'core/hcb_detail.c'
 P = 'core/hcb_pilot.c'
+N = 'core/hcb_nav.c'
+A = 'core/hcb_agent.c'
+Q = 'core/hcb_squad.c'
 M = [
  (C, "hostile && armed && on_foot && dist <= c->near_m && (facing >= c->facing_cos || hunting) && !blocked", "hostile && armed && on_foot && (facing >= c->facing_cos || hunting) && !blocked", 'armed facing: close only'),
  (C, "hostile && armed && on_foot && dist <= c->near_m && (facing >= c->facing_cos || hunting) && !blocked", "hostile && armed && on_foot && dist <= c->near_m && !blocked", 'armed facing: turned to CJ'),
@@ -203,6 +206,20 @@ M += [
  (D, "if (closing < 4.0f || d / closing > 3.0f) continue;", "if (1) continue;", 'detail: a car on a collision course is called'),
  (P, "2.0f * (in->land ? 1.1f : BRAKE)", "2.0f * BRAKE", 'pilot: a landing approach brakes gently'),
  (D, "if (a_ >= 3 || d > 20.0f) p->move = 4;", "if (a_ >= 3) p->move = 4;", 'detail: a man far from his post goes by the path network'),
+ # ---- 1.0: the map, the men's action cycle, the squad's two modes
+ (N, "#define STEP_UP 0.75f", "#define STEP_UP 9.0f", 'map: a ledge higher than a step is not walked up'),
+ (N, "#define STEP_DOWN 1.5f", "#define STEP_DOWN 90.0f", 'map: a drop is not walked off'),
+ (N, "c->st = 1; c->z = g->z; c->fix = g->wall & 3;", "c->st = 1; c->z = g->z; c->fix = 0;", 'map: a wall between two cells is learnt with the ground'),
+ (A, "if (a->fails >= 6) {                                         /* (no way on the map", "if (0) {                                         /* (no way on the map", 'agent: no way on the map - he gives the post up'),
+ (A, "if (a->fails >= 4) { p->stuck = 1; a->why = HCB_WHY2_NO_ROUTE; }", "", 'agent: four failures - the squad is told he is stuck'),
+ (Q, "if (!h->sees_cj || h->height < 4.0f || h->height > 35.0f || d < 12.0f || d > 70.0f) continue;", "if (h->height < 4.0f || h->height > 35.0f || d < 12.0f || d > 70.0f) continue;", 'overwatch: CJ must be seen from the roof'),
+ (Q, "if (!h->sees_cj || h->height < 4.0f || h->height > 35.0f || d < 12.0f || d > 70.0f) continue;", "if (!h->sees_cj || h->height > 35.0f || d < 12.0f || d > 70.0f) continue;", 'overwatch: a roof is 4 m up or more'),
+ (Q, "if (now - q->ow_since > 40000) { q->ow_ok = 0; q->ow_done_for = out->lead; return; }", "", 'overwatch: one try of 40 s'),
+ (Q, "if (t->cj_marked && now - t->cj_marked < 6000) v = 10000.0f", "if (0) v = 10000.0f", 'assault: the man CJ points out comes first'),
+ (Q, "else if (q->target_seen && now - q->target_seen < 20000) {", "else if (q->target_seen) {", 'assault: a target unseen for 20 s is dropped'),
+ (Q, "if (q->task == HCB_TASK_WITHDRAW || q->pad0 >= n + 3) {", "if (q->task == HCB_TASK_WITHDRAW) {", 'assault: three down - fall back'),
+ (Q, "if (q->umode == HCB_UMODE_PROTECT || !n || s->recall ||", "if (q->umode == HCB_UMODE_PROTECT || !n ||", 'assault: "to me" brings everybody back'),
+ (D, "else { at = at_off(cjp, f, -0.8f, r, 1.2f);", "else { at = at_off(cjp, f, -6.8f, r, 6.2f);", 'protect: the commander at CJ\'s right shoulder'),
 ]
 only = sys.argv[1:]
 missed = 0
@@ -221,7 +238,7 @@ for fname, old, new, name in M:
     p.write_text(t.replace(old, new))
     env = dict(os.environ, HCB_OUT=str(ROOT / 'out'))
     caught = False
-    for test in ('test_core.py', 'test_fire.py', 'test_detail.py', 'test_pilot.py'):
+    for test in ('test_nav.py', 'test_squad.py', 'test_detail.py', 'test_core.py', 'test_fire.py', 'test_pilot.py'):
         r = subprocess.run([sys.executable, str(ROOT / 'brain' / 'tests' / test)], capture_output=True, text=True, env=env)
         if r.returncode:
             caught = True

@@ -606,3 +606,38 @@ Homie test without a call: `g = base + 0xc89c20 + playerGroup*0x4a0; for i in 0.
 | 0x5bdf20 | `320007e1` | `mov w1, #3` | `CPedIntelligence::IsThreatenedBy` | CPedIntelligence::IsThreatenedBy: acquaintance id 3 (dislike) ... |
 | 0x5bdf34 | `321e03e1` | `mov w1, #4` | `CPedIntelligence::IsThreatenedBy` | ... and id 4 (hate) |
 
+
+
+## L. 1.0 (Helicover 2.0): the body and the map - functions the mod calls itself
+
+Found in the player's `libGTASA.so` by symbol name, sizes and fields from the DWARF the file carries, behaviour read from the
+disassembly (scratch tools: `dis.py`, `dwarf_dump.py`). `gta-reversed` / `aml-psdk` were used as a guide to WHAT to look for;
+every address and offset below is from this binary. Checked at start-up by the first words (BODY_WORDS, GROUND_WORDS in
+`brain/game/brain.c`); nothing is called when a word differs.
+
+| What | Address | Proof / notes |
+|---|---|---|
+| `CTask::operator new(unsigned long)` | 0x5d7414 | takes from `CPools::ms_pTaskPool` (GOT 0x84a330); returns 0 when the pool is full (handled) |
+| `CTaskComplexGoToPointAndStandStill(int moveState, const CVector&, float radius, float slowDown, bool, bool)` | 0x632400 | 0x38 bytes: +0x18 moveState, +0x1c target, +0x28 radius, +0x2c slowDownDistance, +0x30 bits (0x1 overshoot, 0x2 stop exactly, **0x4 new target**) |
+| its `ControlSubTask` | 0x63296c | `tbnz w8,#2` at 0x632988: with the new-target bit it asks the sub-task to stop (vtable +0x38, priority 1) and calls CreateFirstSubTask (vtable +0x58) - so writing +0x1c / +0x18 and setting 0x4 re-aims the SAME task. It also turns RUN (6) into WALK (4) inside slowDownDistance and SPRINT (7) into RUN near the target |
+| `CTaskComplexGoToPointShooting(int moveState, const CVector&, CEntity *aim, CVector aimPos, float radius, float slowDown)` | 0x633510 | 0x50 bytes (base GoToPointAiming: +0x18 moveState, +0x20 aim entity, +0x34 move target); CVector by value = v0-v2 |
+| `CTaskManager::SetTask(CTask*, int slot, bool)` | 0x64e084 | deletes the old task of the slot (vtable +8), stores, builds the sub-task chain (+0x58 CreateFirstSubTask, +0x48 SetSubTask) |
+| task vtable layout | | +0x08 deleting destructor, +0x18 GetSubTask, +0x20 IsSimple, +0x28 GetTaskType, +0x38 MakeAbortable(ped, priority, event), +0x58 CreateFirstSubTask |
+| vtables (object vptr = symbol + 0x10) | | GoToPointAndStandStill 0x839040, GoToPointShooting 0x839b98, UseSwatRope 0x8381f8, SimpleUseGun 0x8338c8 |
+| `CPedIntelligence` | ped +0x538 | task manager at +0x8: main slots 0 physical response, 1 event (temporary), 2 event, **3 primary**, 4 default; secondary from +0x28 (0 attack, 1 duck); manager +0x58 = ped |
+| `CWorld::FindGroundZFor3DCoord(float x, float y, float z, bool *found, CEntity **)` | 0x50f408 | a vertical line check (buildings only) from z down; returns the height in s0 |
+| ped flags | +0x584.. | +0x584 bit 0 standing; +0x585 bit 0 in a vehicle (used since 0.1), **bit 1 in the air** |
+| velocity | entity +0x68 | per frame at 50 fps (x 50 = m/s) |
+| pools | 0xbc3bc8 buildings (0x60), 0xbc3bd0 objects (0x1f8), 0xbc3bd8 dummies (0x60) | sizes from the DWARF; used to check the entity of a cover point (the kernel read of 0.8 was refused on the tablet: "live 23-86, read 0") |
+
+Known and NOT used (kept for later): `CTaskManager::SetTaskSecondary` 0x64e5c8, `CTaskSimpleUseGun` ctor 0x5dd83c (0x58),
+`CTaskSimpleDuck` ctor 0x660900 (0x38), `CTaskComplexUseSwatRope` ctors 0x623d84 / 0x623dcc (0x30), `CRopes::RegisterRope`
+0x4f96d8, `CPedIntelligence::SetPedDecisionMakerType` 0x5ba338, `CPathFind::DoPathSearch` 0x3dbc30, `CTaskSimpleClimb::TestForClimb`
+0x645c20, `CWorld::FindRoofZFor3DCoord` 0x50f4a4. Enums: eMoveState STILL 1, WALK 4, JOG 5, RUN 6, SPRINT 7.
+
+Why the guards were late everywhere until 0.9 (the sixth log): the script gave a new go-to command every 0.1 s and the game
+started the walk anew each time; a SPRINT move state keeps sprinting while the target is more than about 10 m off. Why the
+second four fell: the ground worker let the helicopter go the moment the first four stood - the same moment the second four
+were put on its ropes.
+Not verified in the game (no device here): everything in this section runs on the emulator with recorders in place of the
+game functions; the first real proof is the tablet's log (`body MOD: new tasks ... retargets ... refused ...`, `game tasks`).

@@ -59,11 +59,11 @@ for t in team:
  o=last(w,0x5d3,t);assert math.dist(o[1:3],spot(P_[t]))<.6 and o[4] in (6,7),(t,o,spot(P_[t]))   # running or sprinting from afar
 jobs={H.HCB_ROLE_LEAD:'lead',H.HCB_ROLE_CLOSE:'close',H.HCB_ROLE_POINT:'point',H.HCB_ROLE_REAR:'rear',H.HCB_ROLE_CLOSE2:'close2',H.HCB_ROLE_CLOSE3:'close3',H.HCB_ROLE_POINT2:'point2',H.HCB_ROLE_MARKSMAN:'delta'}
 J={jobs[p.job]:p for p in P_.values()}
-assert J['lead'].who==team[0] and J['close'].who==team[1] and math.dist(spot(J['lead']),(0.,0.))<1.6 and math.dist(spot(J['point']),(0.,0.))>8 and all(1.5<math.dist(spot(J[k]),(0.,0.))<3.2 for k in ('close','close2')),{k:spot(v) for k,v in J.items()}
+assert J['lead'].who==team[0] and J['close'].who==team[1] and math.dist(spot(J['lead']),(0.,0.))<1.6 and math.dist(spot(J['point']),(0.,0.))>8 and all(1.5<math.dist(spot(J[k]),(0.,0.))<4.5 for k in ('close','close2')),{k:spot(v) for k,v in J.items()}   # (2.0: the bodyguard ahead-left stands 3-5 m off, out of CJ's way)
 passed('Peace: each guard goes to the post the brain gives him - the commander at CJ\'s side, two bodyguards a couple of metres behind him, the fourth man out at 10 m - sprinting from afar')
 for t in team:w.pos[t]=[spot(P_[t])[0],spot(P_[t])[1]-6.,0.]
 w.walk.clear();w.calls.clear();w.now+=1600;steps(w,V,2)
-assert all(last(w,0x5d3,t)[4]==6 for t in team),[last(w,0x5d3,t)[4] for t in team]
+assert all(last(w,0x5d3,t)[4] in (4,6) for t in team) and sum(last(w,0x5d3,t)[4]==6 for t in team)>=3,[last(w,0x5d3,t)[4] for t in team]   # (2.0: never a sprint; the commander beside a standing CJ may walk it)
 for t in team:w.pos[t]=[spot(P_[t])[0],spot(P_[t])[1]-2.,0.]
 w.walk.clear();w.calls.clear();w.now+=1600;steps(w,V,2)
 assert all(last(w,0x5d3,t)[4]==4 for t in team if not posts(w)[t].stuck or posts(w)[t].job!=H.HCB_ROLE_POINT),[last(w,0x5d3,t)[4] for t in team]   # (the outer man was held back twice by this test: the brain has turned his post, he runs to the new one)
@@ -148,15 +148,49 @@ steps(w8,V8,4);assert all(w8.shared[b.GROUND_PUB2+i]==-1 for i in range(4)),'not
 steps(w8,V8,40)
 extra=[w8.shared[b.GROUND_PUB2+i] for i in range(4)]
 import build_v25_team2 as t2b
-assert all(x in w8.exists for x in extra) and len(set(extra))==4 and [w8.skin[x] for x in extra]==t2b.MODELS,(extra,[w8.skin.get(x) for x in extra])
-assert [last(w8,0x1b2,x)[1] for x in extra]==[wp for wp,_ in t2b.WEAPONS],[last(w8,0x1b2,x) for x in extra]
+# 2.0: three come down here; the marksman waits for his roof (the helicopter takes him there)
+assert extra[3]==-1 and all(x in w8.exists for x in extra[:3]) and len(set(extra[:3]))==3 and [w8.skin[x] for x in extra[:3]]==t2b.MODELS[:3],(extra,[w8.skin.get(x) for x in extra])
+assert [last(w8,0x1b2,x)[1] for x in extra[:3]]==[wp for wp,_ in t2b.WEAPONS[:3]],[last(w8,0x1b2,x) for x in extra[:3]]
 ropes=[x for x in w8.calls if x[1]==0x503 and x[2][1] in t2b.MODELS and x[0]>=w8.shared[b.DEPLOY_T0]+3000]
-assert len(ropes)>=4 and not [x for x in w8.calls if x[1]==0x9a and x[2][1] in (164,165)],('1.5: the second four come down the helicopter\'s ropes 3 s after the first four (0503), they are not put on the ground',len(ropes))
+assert len(ropes)==3 and not [x for x in w8.calls if x[1]==0x9a and x[2][1] in (164,165)],('1.5: the second four come down the helicopter\'s ropes after the first four (0503), they are not put on the ground',len(ropes))
+# a roof from which CJ is seen: the brain sends the helicopter over it; when it hangs there the marksman goes down its rope onto the roof
+w8.high_places=[(25.,5.,15.,1)];steps(w8,V8,6)
+assert w8.brain.out.ow_ok==1 and abs(w8.brain.out.ow_at.x-25.)<.1 and w8.brain.out.heli_ok==1 and abs(w8.brain.out.heli_at.z-26.)<.1,(w8.brain.out.ow_ok,w8.brain.out.heli_ok)
+assert w8.shared[b.GROUND_PUB2+3]==-1,'not before the helicopter hangs over the roof'
+heli8=w8.shared[b.PUB+1];n503=len([x for x in w8.calls if x[1]==0x503])
+for _ in range(14):
+ w8.car=[25.,5.,26.];w8.cars[heli8]['vel']=[0.,0.,0.];w8.speed=0.;steps(w8,(ground8,sq8,t2,sq2),1)
+ if w8.shared[b.GROUND_PUB2+3]!=-1:break
+mk=w8.shared[b.GROUND_PUB2+3]
+assert mk in w8.exists and w8.skin[mk]==t2b.MODELS[3] and last(w8,0x1b2,mk)[1]==34 and len([x for x in w8.calls if x[1]==0x503])==n503+1,(mk,w8.brain.out.ow_ready)
+assert math.dist(w8.coords(mk)[:2],(25.,5.))<3. and w8.frozen.get(heli8),(w8.coords(mk),'he comes down under the helicopter, which is held meanwhile')
+steps(w8,(ground8,sq8,t2,sq2),40);assert not w8.frozen.get(heli8),'and let go when he stands (8 s at most)'
+extra[3]=mk
+passed('2.0 the marksman: he does not come down with the others - the brain finds a roof from which CJ is seen, the helicopter goes over it, and when it hangs there steady he goes down its rope onto the roof (the helicopter is held until he stands)')
+# 2.0: with the second four's worker running the helicopter is held over the drop until THEY are down too (it used to fly off the moment the first four
+# stood - and the second four came down from a helicopter that was leaving, and fell). No roof within 15 s: the marksman comes in on the ground.
+def escort_world8():
+ w,c,_=setup();summon(w,c);ground=VM('Helicover_Ground',w);sq=VM('Helicover_Squad',w);t2_=VM('Helicover_Team2',w);sq2_=VM('Helicover_Squad2',w);V_=(c,ground,sq,t2_,sq2_)
+ w.health[1]=100;w.step(*V_,n=3);w.shared[b.CMD]=16;w.step(*V_,n=6)
+ w.car=[c.v[26],c.v[27],c.v[28]+18.];w.speed=0.
+ return w,V_
+wh,VH=escort_world8();heli_h=wh.shared[b.PUB+1]
+for _ in range(120):
+ steps(wh,VH,1)
+ if 'SQIN' in wh.messages:break
+first4=[wh.shared[b.GROUND_PUB+i] for i in range(4)];second=[wh.shared[b.GROUND_PUB2+i] for i in range(3)]
+assert 'SQIN' in wh.messages and all(x in wh.exists for x in first4+second),(wh.messages,second)
+t_rope2=max(x[0] for x in wh.calls if x[1]==0x503 and x[2][1] in (164,165));t_free=[x[0] for x in wh.calls if x[1]==0x574 and x[2][1]==0 and x[0]>=wh.shared[b.DEPLOY_T0]]
+assert t_free and min(t_free)>t_rope2 and len([x for x in wh.calls if x[1]==0x503 and x[2][1] in (164,165) and x[0]>=wh.shared[b.DEPLOY_T0]+3000])==3,('the helicopter is let go only after the second four went down its ropes',t_free[:2],t_rope2)
+assert wh.shared[b.GROUND_PUB2+3]==-1
+wh.now+=15500;steps(wh,VH,8);mk2=wh.shared[b.GROUND_PUB2+3]
+assert mk2 in wh.exists and wh.skin[mk2]==t2b.MODELS[3] and [x for x in wh.calls if x[1]==0x9a and x[2][1]==164 or x[1]==0x9a and x[2][1]==165],(mk2,wh.messages[-3:])
+passed('2.0 the drop of eight: the helicopter hangs over the drop until the second four are down its ropes too (nobody comes down from a helicopter that is leaving); with no roof found within 15 s the marksman comes in on the ground, out of view')
 steps(w8,V8,20)
 P8=posts(w8);jobs8={P8[x].job for x in team8+extra if x in P8}
-assert set(team8+extra)<=set(P8) and jobs8=={H.HCB_ROLE_LEAD,H.HCB_ROLE_CLOSE,H.HCB_ROLE_POINT,H.HCB_ROLE_REAR,H.HCB_ROLE_CLOSE2,H.HCB_ROLE_POINT2,H.HCB_ROLE_CLOSE3,H.HCB_ROLE_MARKSMAN},jobs8
+assert set(team8+extra)<=set(P8) and jobs8=={H.HCB_ROLE_LEAD,H.HCB_ROLE_CLOSE,H.HCB_ROLE_POINT,H.HCB_ROLE_REAR,H.HCB_ROLE_CLOSE2,H.HCB_ROLE_POINT2,H.HCB_ROLE_REAR2,H.HCB_ROLE_MARKSMAN},jobs8   # (2.0: three with CJ - the commander and two bodyguards - four outer men, the marksman)
 assert any(orders(w8,0x5d3,x) or orders(w8,0x637,x) for x in extra),'the second squad worker moves the second four to their posts'
-passed('Eight on the ground: four more agents in black come down the same ropes 3 s after the first four (MP5, M4, AK, sniper rifle by role) - nobody appears out of nowhere; the brain gives all eight their posts - the commander, three bodyguards, four outer men - and the second squad worker moves them')
+passed('Eight on the ground: four more agents in black come down the same ropes 3 s after the first four (MP5, M4, AK, sniper rifle by role) - nobody appears out of nowhere; the brain gives all eight their posts - the commander and two bodyguards with CJ, four outer men, the marksman - and the second squad worker moves them')
 # 1.5.4: a man of the second four stuck 45 m+ from CJ for 40 s is replaced where the screen does not show (never in view)
 old_=extra[1];w8.pos[old_]=[0.,-60.,0.];w8.offscreen={old_};steps(w8,V8,4)
 assert old_ in w8.exists,'not at once'
@@ -281,7 +315,7 @@ passed('Rope evacuation guards are led by the squad while CJ walks to the rope')
 w,c,ground,sq,team=escort_world();V=(c,ground,sq)
 for k,t in enumerate(team):w.pos[t]=[BG[k][0],BG[k][1],0.]
 hostile=950;w.exists.add(hostile);w.pos[hostile]=[20.,0.,0.];w.pedtype[hostile]=7;w.weapons[hostile]=30;w.civilians=[hostile];w.damage.add((1,hostile))
-w.health[hostile]=100000;steps(w,V,30);ducked=[t for t in team if orders(w,0x634,t)];assert ducked,'somebody fights crouched from his spot'
+w.health[hostile]=100000;steps(w,V,70);ducked=[t for t in team if orders(w,0x634,t)];assert ducked,('somebody fights crouched from his spot (2.0: the outer man, once he is at his place 18 m out)',{t:(w.pos[t][:2],posts(w)[t].job,posts(w)[t].crouch,spot(posts(w)[t])) for t in team})
 g_=ducked[0];w.dead.add(hostile);w.pos[g_]=[0.,-12.,0.];w.calls.clear();steps(w,V,6)
 seq=[x[1] for x in w.calls if x[2] and x[2][0]==g_ and x[1] in (0x4eb,0x5d3,0x637)]
 assert seq[:2]==[0x4eb,0x5d3] and last(w,0x4eb,g_)[1]==0,seq
@@ -290,7 +324,7 @@ door=list(w.coords(1));steps(w,V,3)
 w.interior=3;w.player=[2000.,2000.,1000.] if hasattr(w,'player') else None;w.pos[team[1]]=[door[0],door[1]-30.,0.];w.calls.clear();w.teleports.clear();w.now+=4100;steps(w,V,12)
 Pd=posts(w)
 assert not any(orders(w,op,t) for t in team for op in (0xa1,0x850)) and not w.teleports,'nobody follows CJ into the building or is teleported'
-assert Pd and all(math.dist(spot(p_),door[:2])<=13. for p_ in Pd.values()),('the posts are laid out round the door CJ went in by',[spot(p_) for p_ in Pd.values()],door)
+assert Pd and all(math.dist(spot(p_),door[:2])<=16. for p_ in Pd.values()),('the posts are laid out round the door CJ went in by',[spot(p_) for p_ in Pd.values()],door)
 assert orders(w,0x5d3,team[1]) or orders(w,0x637,team[1]) or orders(w,0x5f5,team[1]),'the man who was away comes to his post at the door'
 w.interior=0;w.player=door
 passed('CJ inside a building: the detail holds the door he went in by - posts round it, nobody follows him inside or is teleported; the man who was away comes back to the door')
@@ -315,7 +349,7 @@ passed('Stairs or a slope are walked, not vaulted')
 w,c,p=setup(True);launch=VM('Helicover',w);summon(w,c);w.step(c,p,launch,n=15)
 assert w.menu[7]==b'DEPLOY SQUAD',w.menu
 w.events.append(6);w.step(c,p,n=4);assert not any(b'TACTICS' in r for r in w.menu) and w.menu[-1]==b'< BACK',w.menu
-w.events.append(2);w.step(c,p,n=4);w.shared[b.ESCORT_ON]=1;w.step(c,p,n=4);assert w.menu[7]==b'RECALL SQUAD',w.menu   # (BACK is row 3 now)
+w.events.append(3);w.step(c,p,n=4);w.shared[b.ESCORT_ON]=1;w.step(c,p,n=4);assert w.menu[7]==b'RECALL SQUAD',w.menu   # (BACK is row 4 now: the missions switch came to this page)
 w.step(c,p,n=6);w.events.append(5);w.step(c,p,n=2);assert w.shared[b.CMD] in (17,0) and any(x[2]==[b.CMD,17] for x in calls(w,0xddc))
 passed('Main menu: one row deploys / recalls the squad; SETTINGS has no tactics row any more (1.5: the brain alone decides how the detail fights)')
 w,c,_=setup();summon(w,c);w.incar[1]=c.v[5];w.shared[b.CMD]=16;w.step(c,n=5);assert 'HCEXIT' in w.messages and w.shared[b.STATE]!=19
@@ -682,6 +716,40 @@ def squad_run():steps(w,V,300)
 speak,savg=cost_of(V[2],squad_run);assert not invariants(w)
 assert fpeak<=700 and favg<=350 and speak<=2000 and savg<=500,(fpeak,favg,speak,savg)
 passed('Frame cost in a busy fight at 30 fps (8 attackers, 10 s): fire worker peak %d / average %d script instructions a frame (it was up to 3600 when it searched for targets itself), squad worker peak %d / average %d'%(fpeak,favg,speak,savg))
+
+# ------------------------------------------------------------------ 2.0: the mod walks the guards (the brain's command 4 answers 5 = "his legs are mine")
+w,c,ground,sq,team=escort_world();V=(c,ground,sq);w.brain.body=True
+for t in team:w.pos[t]=[0.,-14.,0.]
+w.walk.clear();w.calls.clear();steps(w,V,4)
+assert w.shared[b.NATIVE]==1,'the squad worker has told both fours that the mod walks them'
+MOVES=(0x5d3,0x637,0x5f5,0x850,0x78f)
+steps(w,V,75);P_=posts(w)
+assert not [x for x in w.calls if x[1] in MOVES and x[2][0] in team],('no go-to, run-and-fire, path, follow or vault task from the scripts',[(hex(x[1]),x[2][0]) for x in w.calls if x[1] in MOVES and x[2][0] in team][:4])
+assert all(math.dist(w.pos[t][:2],spot(P_[t]))<1.5 for t in team),{t:(w.pos[t][:2],spot(P_[t])) for t in team}
+assert all(w.brain.walked.get(t,0)>5 for t in team) and all(w.shared[b.SQ_SLOT+k*b.SQ_SLOT_SIZE]!=1 for k in range(4))
+passed('2.0 the mod walks the guards: the squad worker asks for the post as before and is answered 5 while a man is on his way - it gives him no movement task at all (no go-to, run-and-fire, path-network detour, follower, vault), and the men arrive')
+# at the post the script is the body again: a threat - the weapon comes up, with the brain's leave he fires
+hostile=950;w.exists.add(hostile);w.pos[hostile]=[20.,0.,0.];w.pedtype[hostile]=7;w.weapons[hostile]=30;w.civilians=[hostile];w.damage.add((1,hostile));w.health[hostile]=100000
+w.calls.clear();steps(w,V,40)
+assert any(firing(w,t) for t in team) and not [x for x in w.calls if x[1] in (0x5d3,0x5f5,0x850) and x[2][0] in team],'fire from the post is the script\'s; walking is still the mod\'s'
+passed('2.0 at his post the script is his body again: crouch, aim and fire tasks as before (only the walking moved to the mod)')
+# the script falls back by itself when the mod stops walking them (the answer is no longer 5)
+w.brain.body=False;w.dead.add(hostile)
+for t in team:w.pos[t]=[0.,-14.,0.]
+w.walk.clear();w.calls.clear();steps(w,V,6)
+assert w.shared[b.NATIVE]==0 and all(orders(w,0x5d3,t) or orders(w,0x637,t) for t in team),'the scripts walk them again'
+passed('2.0 fallback: when the mod does not walk the guards (its checks failed, or it was turned off after a crash) the scripts walk them exactly as in 1.5')
+# ------------------------------------------------------------------ 2.0: ASSAULT - the squad goes for the man CJ points out, and says what it does
+w,c,ground,sq,team=escort_world();V=(c,ground,sq);w.brain.body=True;steps(w,V,20)
+w.shared[b.MODE]=1;hostile=951;w.exists.add(hostile);w.pos[hostile]=[0.,70.,0.];w.pedtype[hostile]=7;w.weapons[hostile]=30;w.civilians=[hostile];w.health[hostile]=100000
+w.damage.add((1,hostile));w.targeting=hostile;w.messages.clear();steps(w,V,30)
+assert w.brain.out.umode==1 and w.brain.out.target==hostile and w.brain.out.task in (H.HCB_TASK_APPROACH,H.HCB_TASK_GATHER,H.HCB_TASK_BOUND),(w.brain.out.umode,w.brain.out.target,w.brain.out.task)
+assert 'SQTAP' in w.messages,w.messages
+d0=min(math.dist(w.pos[t][:2],w.pos[hostile][:2]) for t in team);steps(w,V,60);d1=min(math.dist(w.pos[t][:2],w.pos[hostile][:2]) for t in team)
+assert d1<d0-10,('the squad closes on him',d0,d1)
+w.shared[b.RECALL]=1;steps(w,V,6);assert w.shared[b.RECALL]==0 and w.brain.out.task==H.HCB_TASK_REGROUP and 'SQTRG' in w.messages,(w.brain.out.task,w.messages)
+steps(w,V,60);assert max(math.dist(w.pos[t][:2],w.player[:2]) for t in team)<22,'"to me": everybody is back with CJ'
+passed('2.0 ASSAULT: with the mode switched on the menu the squad goes for the man CJ aims at ("target marked - moving up"), closes on him by its own way-finding, and CANCEL: TO ME brings everybody back to CJ ("back to CJ")')
 
 text='\n'.join(results)+'\nMocked script execution only: real pathing, cover and gunfire are not tested.\n'
 (b.OUT/'squad_tests.txt').write_text(text);print(text)

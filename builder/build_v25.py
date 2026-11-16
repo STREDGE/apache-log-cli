@@ -73,6 +73,7 @@ AUTO_DEPLOY_T=STATE+567   # 1.5.4: when the helicopter may next send the team do
 TEAM2_LAG=STATE+569   # 1.5.4: +0..3 per man of the second four: since when he has been 45 m or more from CJ
 CMD_SRC=STATE+568   # 1.5.4: who wrote CMD last: 1 the menu, 2 the commander's "we pull out", 3 the automatic deployment (the log says it)
 CR_LAND=STATE+566   # 1.5.3: 1 while the pilot is asked for a landing approach (flag 8: down to 15 m over the pad on the way in)
+MODE=STATE+573;RECALL=STATE+574;NATIVE=STATE+575;SQ_TASK_SAID=STATE+576;TEAM2_HEART=STATE+577   # 2.0: the player's mode (0 PROTECT, 1 ASSAULT); "to me" (the brain takes the 1); 1 = the mod walks the guards itself (the squad worker writes it from the brain's answer)
 DEPLOY_T0=STATE+565   # 1.5: when the first four went down the ropes (the second four follow them down the same ropes 3 s later)
 COMBAT_PILOT=STATE+564   # 1.5: 1 while the brain's own pilot holds the helicopter on its station in a fight (escort, state 2)
 HELI_SPOT_X=STATE+561;HELI_SPOT_Y=STATE+562;HELI_SPOT_Z=STATE+563   # 1.4.1: the brain's spot for the helicopter in a fight (floats; x = 0 none)
@@ -183,11 +184,14 @@ MESSAGES={'HCLOAD': '~b~PILOT:~w~ inbound to your position.',
  'HCRCAN':'~b~PILOT:~w~ pickup cancelled. Ropes up.',
  'HCRUP':'~b~PILOT:~w~ squad, back up the ropes.',
  'HCDSQ':'~b~PILOT:~w~ picking the squad up first, then we leave.',
+ 'HCMDP':'~g~ALPHA:~w~ PROTECT. Three by you, four in cover, marksman up high.',
+ 'HCMDA':'~r~ALPHA:~w~ ASSAULT. Aim or fire at an enemy - we go for him.',
+ 'HCRCL':'~g~ALPHA:~w~ all back to CJ!',
  'HCBURN': '~r~CAR ON FIRE!~w~ Get away from it.',
  'HCEVADE': '~r~TAKING HITS!~w~ Pilot breaking away.',
  'HCSHOT': '~r~TAKING FIRE!~w~ Pilot breaking away.',
- 'HCHELLO': '~b~HELICOVER 1.5 BETA 3~w~ ready. CLEO menu > Helicover.',
- 'HCHELLV': '~b~HELICOVER 1.5 BETA 3~w~ ready. Map marker is off here.'}
+ 'HCHELLO': '~b~HELICOVER 2.0 BETA 1~w~ ready. CLEO menu > Helicover.',
+ 'HCHELLV': '~b~HELICOVER 2.0 BETA 1~w~ ready. Map marker is off here.'}
 # Generate state updates; panel prints messages when the state changes.
 # beta 6: our people do not cower. CREATE_CHAR gives a mission ped the built-in "normal" decision maker (m_norm.ped): punched, shot at or
 # aimed at, it picks "duck and cover" / "flee" like any passer-by. 65542 is the game's built-in EMPTY decision maker (slot 6 | 1<<16, loaded
@@ -212,7 +216,7 @@ c.set(GAME_OK,1);c.label('GAME_SIG_BAD');c.set(COMBAT_PILOT,0);c.set(CR_LAND,0);
 for key in range(PUB,PUB+7):c.set(key,-1)
 for key in range(GROUND_PUB,GROUND_PUB+5):c.set(key,-1)
 c.set(ROPE_COMMAND,0)
-for key,val in [(SQ_SAY_SEQ,-1),(BRAIN_HELLO,0),(POLICE,0),(MISSIONS,0),(BR_ALERT,0),(BR_TOP,-1),(BR_THREATS,0),(BR_ATTACKERS,0),(POSE,2),(POSE_DONE,2),(LANG,0),(ROPE_WAIT,0),(LEAVE_N,0),(AFTER_ROPE,0),(DISMISS_NEXT,0),(LEAVE_ROT,0),(ROPE_BUSY,0),(SWAP_MSG,0),(TEAM_CREW,0),(STATE,0),(CMD,0),(OPEN,0),(MODEL,487),(CREW,2),(FIRE,3),(TOUCH,0),(HUD,2),(HP,0),(WEAPON_SETTING,0),(EXIT_MODE,0),(AUTO_EXIT,0),(LOCK_HOLD,0),(ROPE_PENDING,0),(DROP_RESULT,0),(ROPE_TRIES,0),(RETRY_AT,0),(FORCE_ROPE,0),(EXIT_PRESSED,0),(EXIT_LAST,0),(AIR_SEEN,0),(AIR_CALL_NEXT,0),(KILLS,0),(LAST_TGT,-1),(ENGAGED,0),(CLEAR_AT,0),(ORBIT_I,0),(ORBIT_NEXT,0),(TACTICS,0),(ESCORT_PENDING,0),(ST_I,0),(ST_NEXT,0),(HP_PREV,0),(HP_T,0),(EVADE_UNTIL,0),(HELI_SHOT_T,-100000)]:c.set(key,val)
+for key,val in [(SQ_SAY_SEQ,-1),(BRAIN_HELLO,0),(POLICE,0),(MISSIONS,0),(MODE,0),(RECALL,0),(NATIVE,0),(SQ_TASK_SAID,-1),(TEAM2_HEART,0),(BR_ALERT,0),(BR_TOP,-1),(BR_THREATS,0),(BR_ATTACKERS,0),(POSE,2),(POSE_DONE,2),(LANG,0),(ROPE_WAIT,0),(LEAVE_N,0),(AFTER_ROPE,0),(DISMISS_NEXT,0),(LEAVE_ROT,0),(ROPE_BUSY,0),(SWAP_MSG,0),(TEAM_CREW,0),(STATE,0),(CMD,0),(OPEN,0),(MODEL,487),(CREW,2),(FIRE,3),(TOUCH,0),(HUD,2),(HP,0),(WEAPON_SETTING,0),(EXIT_MODE,0),(AUTO_EXIT,0),(LOCK_HOLD,0),(ROPE_PENDING,0),(DROP_RESULT,0),(ROPE_TRIES,0),(RETRY_AT,0),(FORCE_ROPE,0),(EXIT_PRESSED,0),(EXIT_LAST,0),(AIR_SEEN,0),(AIR_CALL_NEXT,0),(KILLS,0),(LAST_TGT,-1),(ENGAGED,0),(CLEAR_AT,0),(ORBIT_I,0),(ORBIT_NEXT,0),(TACTICS,0),(ESCORT_PENDING,0),(ST_I,0),(ST_NEXT,0),(HP_PREV,0),(HP_T,0),(EVADE_UNTIL,0),(HELI_SHOT_T,-100000)]:c.set(key,val)
 c.label('IDLE');c.call('NAP');c.call('RESOLVE_LANG');a(0x01bd,V(20));a(0xddc,I(HEART),V(20));c.get(19,HELLO_AT);c.eq(19,-1,'HELLO_CHECK');c.go('HELLO_DONE')
 c.label('HELLO_CHECK');c.eq(19,0,'HELLO_DUE');a(0x0085,V(19),V(20));a(0x000a,V(19),I(5000));a(0xddc,I(HELLO_AT),V(19));c.go('HELLO_DONE')
 c.label('HELLO_DUE');c.check(0x001d,[V(20),V(19)],'HELLO_DONE');c.check(0x0256,[I(0)],'HELLO_DONE');c.set(HELLO_AT,-1);c.get(19,GAME_OK);c.eq(19,1,'HELLO_OLD');msg(c,'HCHELLO');c.go('HELLO_DONE')
@@ -1052,14 +1056,16 @@ def main_rows(st,sit,x,prof='en'):
  return [Tx('MAP',prof,st in MAP_STATES and not exiting),Tx('GROVE',prof,st in GROVE_STATES),Tx('EXIT_LAND',prof,mode==0),Tx('EXIT_ROPE',prof,mode==1),Tx('GUNFIRE',prof),Tx('SETTINGS',prof)]
 MAIN_VARIANTS=[(st,0,0) for st in NONE_STATES]+[(st,1,0) for st in BUSY_STATES]+[(st,2,x) for st in GROUND_STATES for x in range(8)]+[(st,3,x) for st in GROUND_STATES for x in range(4)]
 def main_key(st,sit,x):return st*1000+sit*100+x
-def setup_rows(tac,hud,prof):
+def setup_rows(mis,hud,prof):
  """1.4.1: the crews are fixed (SWAT in the helicopter; on the ground a soldier in command and seven agents in black) and the
  gunners' pose is the brain's - the settings keep the helicopter, the squad's tactics (AUTO = the brain picks) and the messages."""
  # 1.5: no SQUAD TACTICS row - how the detail fights is the brain's business alone (the player: "what are ASSAULT and GUARD for if it is all the same")
- return [Tx('SET_MODEL',prof),Tx(('MSG_OFF','MSG_IMP','MSG_ALL')[hud],prof),Tx('BACK',prof)]
-def fire_rows(val,pol,mis,prof):
- """GUNNER FIRE: the four rules (the one in force is marked), then two switches: what to do about policemen, and about the people of a mission."""
- return [Tx('FIRE%d'%v,prof,v==val) for v in FIRE_VALUES]+[Tx('POL_NEVER' if pol else 'POL_ANSWER',prof),Tx('MIS_FREE' if mis else 'MIS_DEF',prof),Tx('BACK',prof)]
+ # 2.0: the missions switch moved here from the fire page (that page got the mode and "to me" and must stay within eight rows)
+ return [Tx('SET_MODEL',prof),Tx(('MSG_OFF','MSG_IMP','MSG_ALL')[hud],prof),Tx('MIS_FREE' if mis else 'MIS_DEF',prof),Tx('BACK',prof)]
+def fire_rows(val,pol,mode,prof):
+ """FIRE AND MODE: 2.0 - the detail's mode (a switch: PROTECT / ASSAULT) and "to me" first; then the four fire rules (the one in force is
+ marked) and a switch: what to do about policemen."""
+ return [Tx('MODE_ASSAULT' if mode else 'MODE_PROTECT',prof),Tx('RECALL',prof)]+[Tx('FIRE%d'%v,prof,v==val) for v in FIRE_VALUES]+[Tx('POL_NEVER' if pol else 'POL_ANSWER',prof),Tx('BACK',prof)]
 PREF_PAGES=[(4,MODEL,MODEL_VALUES,'MODEL_TITLE','MODEL%d')]   # 1.4.1: no crew / weapon pages (fixed)
 for page,label in [(0,'PICK_MAIN'),(1,'PICK_FIRE'),(2,'PICK_SETUP'),(4,'PICK_MODEL'),(6,'PICK_DISMISS')]:
  nxt='PAGE_PICK_NEXT_'+str(page);p.eq(2,page,nxt);p.go(label);p.label(nxt)
@@ -1117,19 +1123,26 @@ p.label('DT_GO');p.set(DISMISS_T,0);p.set(CMD,4)
 p.label('DT_RET');p.ret()
 # settings: three sub-pages and two one-tap switches
 p.label('PICK_SETUP')
-for index,label in [(0,'OPEN_MODEL'),(1,'TOGGLE_HUD'),(2,'LEAVE_SETUP')]:pick(index,label)
+for index,label in [(0,'OPEN_MODEL'),(1,'TOGGLE_HUD'),(2,'TOGGLE_MIS'),(3,'LEAVE_SETUP')]:pick(index,label)
 p.go('MENU_POLL')
 p.label('LEAVE_SETUP');p.call('UNLOAD');p.go('OPEN_MAIN')
 # 1.4.1: tactics AUTO (0, the brain picks) -> ASSAULT (1) -> GUARD (2) -> AUTO
 p.label('TOGGLE_HUD');p.get(9,HUD);a(0x000a,V(9),I(-1));p.check(0x0019,[V(9),I(-1)],'TOGGLE_HUD_WRAP');a(0xddc,I(HUD),V(9));p.go('FORCE_REFRESH')
 p.label('TOGGLE_HUD_WRAP');p.set(HUD,2);p.go('FORCE_REFRESH')
+p.label('TOGGLE_MIS');p.get(9,MISSIONS);p.eq(9,0,'TOGGLE_MIS_OFF');p.set(MISSIONS,1);p.go('FORCE_REFRESH')
+p.label('TOGGLE_MIS_OFF');p.set(MISSIONS,0);p.go('FORCE_REFRESH')
 p.label('PICK_FIRE')
+# 2.0: row 0 switches the mode (and says what it means), row 1 is "to me" (the brain drops the assault and brings everybody back)
+p.eq(1,0,'FIRE_NOT_MODE');p.get(9,MODE);p.eq(9,0,'MODE_TO_PROTECT');p.set(MODE,1);say(p,'HCMDA');p.go('FORCE_REFRESH')
+p.label('MODE_TO_PROTECT');p.set(MODE,0);say(p,'HCMDP');p.go('FORCE_REFRESH')
+p.label('FIRE_NOT_MODE');p.eq(1,1,'FIRE_NOT_RECALL');p.set(RECALL,1);say(p,'HCRCL');p.go('FORCE_REFRESH')
+p.label('FIRE_NOT_RECALL')
 for idx,val in enumerate(FIRE_VALUES):
- nxt='FIRE_OPTION_NEXT_'+str(idx);p.eq(1,idx,nxt);p.set(FIRE,val);p.go('FORCE_REFRESH');p.label(nxt)
-for idx,key in [(len(FIRE_VALUES),POLICE),(len(FIRE_VALUES)+1,MISSIONS)]:
+ nxt='FIRE_OPTION_NEXT_'+str(idx);p.eq(1,idx+2,nxt);p.set(FIRE,val);p.go('FORCE_REFRESH');p.label(nxt)
+for idx,key in [(len(FIRE_VALUES)+2,POLICE)]:
  nxt='FIRE_SWITCH_NEXT_'+str(idx);off='FIRE_SWITCH_OFF_'+str(idx);p.eq(1,idx,nxt);p.get(9,key);p.eq(9,0,off);p.set(key,1);p.go('FORCE_REFRESH');p.label(off);p.set(key,0);p.go('FORCE_REFRESH');p.label(nxt)
 p.go('OPEN_MAIN')
-p.label('FIRE_KEY');p.get(6,FIRE);a(0x0012,V(6),I(10));p.get(11,POLICE);a(0x005a,V(6),V(11));a(0x0012,V(6),I(10));p.get(11,MISSIONS);a(0x005a,V(6),V(11));p.ret()
+p.label('FIRE_KEY');p.get(6,FIRE);a(0x0012,V(6),I(10));p.get(11,POLICE);a(0x005a,V(6),V(11));a(0x0012,V(6),I(10));p.get(11,MODE);a(0x005a,V(6),V(11));p.ret()
 for key,pag,choices,back in [(MODEL,4,[(0,487),(1,497),(2,425)],'OPEN_SETUP')]:
  label={4:'PICK_MODEL'}[pag];p.label(label)
  for idx,val in choices:
@@ -1167,7 +1180,7 @@ emit_team_phase('DT_PHASE',22,23,24)   # the same for DISMISS_TICK, which runs b
 # 15@ = 1 while a rope pickup of CJ is under way: the helicopter is coming in for it, or the rope hangs waiting for him. Uses 11@.
 p.label('ROPE_PHASE');p.get(15,ROPE_WAIT);p.eq(15,1,'RP_APPROACH');p.ret()
 p.label('RP_APPROACH');a(6,V(15),I(0));p.get(11,STATE);p.eq(11,19,'RP_RET');p.get(11,ESCORT_PENDING);p.eq(11,0,'RP_RET');a(6,V(15),I(1));p.label('RP_RET');p.ret()
-p.label('SETUP_KEY');p.get(6,TACTICS);a(0x0012,V(6),I(10));p.get(11,HUD);a(0x005a,V(6),V(11));p.ret()
+p.label('SETUP_KEY');p.get(6,MISSIONS);a(0x0012,V(6),I(10));p.get(11,HUD);a(0x005a,V(6),V(11));p.ret()
 p.label('CHECK_MENU_STATUS');p.eq(2,0,'CMS_FIRE');p.call('MAIN_KEY');p.go('CMS_COMPARE')
 p.label('CMS_FIRE');p.eq(2,1,'CMS_SETUP');p.call('FIRE_KEY');p.go('CMS_COMPARE')
 p.label('CMS_SETUP');p.eq(2,2,'CMS_CREW');p.call('SETUP_KEY');p.go('CMS_COMPARE')
@@ -1190,16 +1203,16 @@ for st,sit,x in MAIN_VARIANTS:
  nxt='DRAW_MAIN_NEXT_%d_%d_%d'%(st,sit,x);p.eq(6,main_key(st,sit,x),nxt);draw('MAIN_%d_%d_%d'%(st,sit,x),len(main_rows(st,sit,x)));p.label(nxt)
 a(6,V(7),I(0));draw('MAIN_0_0_0',2)
 p.label('DRAW_2');p.call('SETUP_KEY');a(0x0085,V(3),V(6))
-for tac in (0,1,2):
+for tac in (0,1):
  for hud in (0,1,2):
-  nxt='DRAW_SETUP_NEXT_%d%d'%(tac,hud);p.eq(6,tac*10+hud,nxt);draw('SETUP_%d%d'%(tac,hud),3);p.label(nxt)
+  nxt='DRAW_SETUP_NEXT_%d%d'%(tac,hud);p.eq(6,tac*10+hud,nxt);draw('SETUP_%d%d'%(tac,hud),4);p.label(nxt)
 draw('SETUP_02',4)
 p.label('DRAW_1');p.call('FIRE_KEY');a(0x0085,V(3),V(6))
 for val in FIRE_VALUES:
  for pol in (0,1):
-  for mis in (0,1):
-   nxt='DRAW_FIRE_NEXT_%d%d%d'%(val,pol,mis);p.eq(6,val*100+pol*10+mis,nxt);draw('FIRE_%d%d%d'%(val,pol,mis),len(FIRE_VALUES)+3);p.label(nxt)
-draw('FIRE_300',len(FIRE_VALUES)+3)
+  for mode in (0,1):
+   nxt='DRAW_FIRE_NEXT_%d%d%d'%(val,pol,mode);p.eq(6,val*100+pol*10+mode,nxt);draw('FIRE_%d%d%d'%(val,pol,mode),len(FIRE_VALUES)+4);p.label(nxt)
+draw('FIRE_300',len(FIRE_VALUES)+4)
 for pageid,key,values,_,_ in PREF_PAGES:
  p.label('DRAW_'+str(pageid));p.get(8,key);a(0x0085,V(3),V(8))
  for val in values:
@@ -1214,17 +1227,17 @@ p.label('CLOSE');p.call('UNLOAD');a(0xdf3);p.set(OPEN,0);p.set(0,0);a(6,V(10),I(
 VERSION='1.4'
 for st,sit,x in MAIN_VARIANTS:
  for prof,suf in zip(PROFILES,SUFFIX):
-  title=(i18n.encode('HELICOVER 1.5 BETA 3','en') if prof=='en' else i18n.menu_text('TITLE_READY',prof)) if st==0 else i18n.state_title(st,STATES[st],prof)
+  title=(i18n.encode('HELICOVER 2.0 BETA 1','en') if prof=='en' else i18n.menu_text('TITLE_READY',prof)) if st==0 else i18n.state_title(st,STATES[st],prof)
   p.blob('MAIN_%d_%d_%d'%(st,sit,x)+suf,title,main_rows(st,sit,x,prof))
 for prof,suf in zip(PROFILES,SUFFIX):
  if prof=='en':p.blob('OFFLINE_MENU',i18n.menu_text('OFFLINE_TITLE',prof),[i18n.menu_text('OFFLINE_ROW',prof)])   # the core is missing, so the language is unknown: English only
  p.blob('DISMISS_MENU'+suf,i18n.menu_text('DISMISS_TITLE',prof),[Tx('DISMISS_YES',prof),Tx('DISMISS_NO',prof)])
  p.blob('DISMISS_MENU_T'+suf,i18n.menu_text('DISMISS_TITLE',prof),[Tx('DISMISS_YES_TEAM',prof),Tx('DISMISS_NO',prof)])
- for tac in (0,1,2):
+ for tac in (0,1):
   for hud in (0,1,2):p.blob('SETUP_%d%d'%(tac,hud)+suf,i18n.menu_text('SET_TITLE',prof),setup_rows(tac,hud,prof))
  for val in FIRE_VALUES:
   for pol in (0,1):
-   for mis in (0,1):p.blob('FIRE_%d%d%d'%(val,pol,mis)+suf,i18n.menu_text('FIRE_TITLE',prof),fire_rows(val,pol,mis,prof))
+   for mode in (0,1):p.blob('FIRE_%d%d%d'%(val,pol,mode)+suf,i18n.menu_text('FIRE_TITLE',prof),fire_rows(val,pol,mode,prof))
  for pg,_,values,title,fmt in PREF_PAGES:
   for val in values:
    p.blob('PREF_'+str(pg)+'_'+str(val)+suf,i18n.menu_text(title,prof),[Tx(fmt%v,prof,v==val) for v in values]+[Tx('BACK',prof)])

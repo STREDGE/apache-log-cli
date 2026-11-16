@@ -63,6 +63,22 @@ LIB.hcb_gunner_round.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_floa
 LIB.hcb_gunner_blocked.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32]
 LIB.hcb_pilot_reset.argtypes = [ctypes.c_void_p, hcb_vec, hcb_vec, hcb_vec]
 LIB.hcb_pilot_step.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+LIB.hcb_nav_way.argtypes = [ctypes.c_void_p, hcb_vec, hcb_vec, ctypes.c_void_p, ctypes.c_int, ctypes.c_uint32]
+LIB.hcb_nav_cell.argtypes = [ctypes.c_void_p, ctypes.c_float, ctypes.c_float, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint32]
+
+
+def nav_way(brain, a, b, now, n=10):
+    """The way the brain's map gives from a to b: a list of points, [] = no way, None = the map does not know."""
+    wp = (hcb_vec * n)()
+    k = LIB.hcb_nav_way(brain.mem, vec(*a), vec(*b), wp, n, now)
+    return None if k < 0 else [(wp[i].x, wp[i].y, wp[i].z) for i in range(k)]
+
+
+def nav_cell(brain, x, y, now):
+    z, blk = ctypes.c_float(), ctypes.c_int()
+    st = LIB.hcb_nav_cell(brain.mem, x, y, ctypes.byref(z), ctypes.byref(blk), now)
+    return st, z.value, blk.value
+
 for _i, _n in enumerate(['hcb_ped', 'hcb_veh', 'hcb_event', 'hcb_snapshot', 'hcb_out', 'hcb_cfg', 'hcb_mark', 'hcb_track_info', 'hcb_rec', 'hcb_box_head', 'hcb_los', 'hcb_order', 'hcb_shot', 'hcb_round', 'hcb_pilot', 'hcb_pilot_in', 'hcb_pilot_out']):
     assert LIB.hcb_struct_size(_i) == ctypes.sizeof(STRUCTS[_n]), ('layout differs between C and Python', _n, LIB.hcb_struct_size(_i), ctypes.sizeof(STRUCTS[_n]))
     assert ctypes.sizeof(STRUCTS[_n]) % 4 == 0, _n
@@ -259,6 +275,14 @@ class Scene:
         self.recorder = None
         self.state_every = 0     # with a recorder: store the brain's memory every this many ticks
         self.snapshots = []
+        # 1.0
+        self.umode, self.recall, self.body = 0, 0, 1
+        self.ground_q, self.seg_q = [], []
+        self.high = []           # [(x, y, z, sees_cj)]: high places the adapter has found
+        self.roping = set()      # ids of ours who are on the rope
+        self.blocks = []         # [(x1, y1, x2, y2, h)]: boxes h metres high (the ground is h there)
+        self.ground_fn = None    # or a function (x, y) -> height of the ground, None = nothing to stand on
+        self.walls_stop = True   # a man walking does not go through a wall
 
     def _id(self):
         self.next_id += 0x100
@@ -321,11 +345,60 @@ class Scene:
     def pos_of(self, id):
         return (self.peds.get(id) or self.vehs.get(id) or self.cj)['pos'] if id != 1 else self.cj['pos']
 
-    def blocked(self, p, q):
-        """Does a wall stand between the points p and q (on the ground plan)?"""
+    def ground_at(self, x, y):
+        """Height of the ground at (x, y), None = nothing to stand on."""
+        import math
+        if self.ground_fn:
+            return self.ground_fn(x, y)
+        if any(math.dist((x, y), (hx, hy)) < hr for hx, hy, hr in self.holes):
+            return None
+        for x1, y1, x2, y2, h in self.blocks:
+            if min(x1, x2) <= x <= max(x1, x2) and min(y1, y2) <= y <= max(y1, y2):
+                return h
+        return 0.
+
+    def wall_dist(self, pt):
+        """Distance from a point to the nearest wall (a man is 0.35 m thick: he cannot stand ON a fence)."""
+        import math
+        best = 1e9
+        for x1, y1, x2, y2 in list(self.walls) + list(getattr(self, 'low_walls', [])):
+            dx, dy = x2 - x1, y2 - y1
+            l2 = dx * dx + dy * dy
+            k = 0. if l2 < 1e-9 else max(0., min(1., ((pt[0] - x1) * dx + (pt[1] - y1) * dy) / l2))
+            best = min(best, math.hypot(pt[0] - x1 - dx * k, pt[1] - y1 - dy * k))
+        return best
+
+    def walk_blocked(self, p, q):
+        """Can a man NOT walk straight from p to q: a wall crossed or brushed (0.3 m), a ledge, a hole."""
+        import math
+        if self.blocked(p, q) or self.crosses_block(p, q):
+            return True
+        n = max(1, int(math.dist(p[:2], q[:2]) / 0.2))
+        d0 = self.wall_dist(p)
+        for k in range(1, n + 1):
+            pt = (p[0] + (q[0] - p[0]) * k / n, p[1] + (q[1] - p[1]) * k / n)
+            d = self.wall_dist(pt)
+            if d < 0.3 and d < d0 - 1e-6:
+                return True
+        return False
+
+    def crosses_block(self, p, q):
+        import math
+        n = max(2, int(math.dist(p[:2], q[:2]) / 0.25))
+        z0 = self.ground_at(p[0], p[1])
+        for k in range(n + 1):
+            x, y = p[0] + (q[0] - p[0]) * k / n, p[1] + (q[1] - p[1]) * k / n
+            g = self.ground_at(x, y)
+            if g is None or (z0 is not None and abs(g - z0) > 0.75):
+                return True
+        return False
+
+    def blocked(self, p, q, low_too=True):
+        """Does a wall stand between the points p and q (on the ground plan)? A LOW wall (self.low_walls) hides a crouching
+        man only: it does not block the line to a standing man's head (low_too=False)."""
         def cross(o, u, v):
             return (u[0] - o[0]) * (v[1] - o[1]) - (u[1] - o[1]) * (v[0] - o[0])
-        for x1, y1, x2, y2 in self.walls:
+        for x1, y1, x2, y2 in (list(self.walls) + (list(getattr(self, 'low_walls', [])) if low_too else [])):
             w1, w2 = (x1, y1), (x2, y2)
             if cross(p, q, w1) * cross(p, q, w2) < 0 and cross(w1, w2, p) * cross(w1, w2, q) < 0:
                 return True
@@ -364,11 +437,32 @@ class Scene:
         s.n_hints = len(hn)
         for k_, pos_ in enumerate(hn):
             s.hints[k_] = vec(*pos_)
+        s.umode, s.recall, s.body = self.umode, self.recall, self.body
+        gq = self.ground_q[:HCB_MAX_GROUND]
+        s.n_ground = len(gq)
+        for o, (x_, y_, z_) in zip(s.ground, gq):
+            g_ = self.ground_at(x_, y_)
+            o.x, o.y = x_, y_
+            if g_ is None or g_ > z_:
+                o.found, o.z = 0, 0.
+            else:
+                o.found, o.z = 1, g_
+                o.wall = (1 if self.blocked((x_, y_), (x_ + 1., y_)) else 0) | (2 if self.blocked((x_, y_), (x_, y_ + 1.)) else 0)
+        sq = self.seg_q[:HCB_MAX_SEGS]
+        s.n_segs = len(sq)
+        for o, (a_, b_) in zip(s.segs, sq):
+            o.a, o.b = vec(*a_), vec(*b_)
+            o.clear = int(not self.walk_blocked(a_, b_))
+        hg = self.high[:HCB_MAX_HIGH]
+        s.n_high = len(hg)
+        for o, (x_, y_, z_, sees_) in zip(s.high, hg):
+            o.at = vec(x_, y_, z_); o.height = z_ - (self.cj['pos'][2] - 1.); o.sees_cj = int(sees_)
         s.n_probes = len(self.probe_q)
         for o, (at, frm) in zip(s.probes, self.probe_q):
             o.at = vec(*at)
             setattr(o, 'from', vec(*frm))
             o.hidden = int(self.blocked(frm, at))
+            o.hidden_hi = int(self.blocked(frm, at, low_too=False))
             o.ground = int(not any(math.dist(at[:2], (hx, hy)) < hr for hx, hy, hr in self.holes))
         s.n_los = len(self.asked)
         for o, (a, b) in zip(s.los, self.asked):
@@ -393,6 +487,7 @@ class Scene:
         s.n_ours = len(self.ours)
         for i, (id, role) in enumerate(self.ours.items()):
             s.ours[i], s.our_role[i] = id, role
+            s.our_state[i] = (HCB_OS_ROPING if id in self.roping else 0) | (HCB_OS_NATIVE if self.body else 0)
         return s
 
     def step(self, n=1, ms=100):
@@ -412,16 +507,29 @@ class Scene:
             self.orders = {o.who: hcb_order.from_buffer_copy(bytes(o)) for o in out.orders[:out.n_orders]}
             self.probe_q = [((q.at.x, q.at.y, q.at.z), (getattr(q, 'from').x, getattr(q, 'from').y, getattr(q, 'from').z)) for q in out.probe_q[:out.n_probe_q]]
             self.posts = {p_.who: hcb_post.from_buffer_copy(bytes(p_)) for p_ in out.posts[:out.n_posts]}
+            self.ground_q = [(q.x, q.y, q.z) for q in out.ground_q[:out.n_ground_q]]
+            self.seg_q = [((q.a.x, q.a.y, q.a.z), (q.b.x, q.b.y, q.b.z)) for q in out.seg_q[:out.n_seg_q]]
+            self.last_out = out
             if out.say:
                 self.said.append((self.time, out.say, out.say_dir))
             if self.walk_posts:
                 for who, p_ in self.posts.items():
                     if who in self.peds and p_.move and who not in getattr(self, 'stuck_men', ()):
-                        me, to = self.peds[who]['pos'], [p_.at.x, p_.at.y, me_z] if (me_z := self.peds[who]['pos'][2]) is not None else None
+                        tgt = p_.via if self.body else p_.at       # (1.0: the mod walks him to the next point of his way)
+                        me, to = self.peds[who]['pos'], [tgt.x, tgt.y, me_z] if (me_z := self.peds[who]['pos'][2]) is not None else None
                         d = math.dist(me[:2], to[:2])
-                        step = min(d, (1.4, 3.5, 5.5, 3.5)[min(p_.move, 4) - 1] * ms / 1000.)   # 4: by the path network
+                        spd = (1.4, 3.5, 5.5, 3.5)[min(p_.move, 4) - 1]                        # 4: by the path network
+                        if self.body and p_.act == HCB_ACT_FASTWALK:
+                            spd = 2.4                                                            # (the game's jog)
+                        step = min(d, spd * ms / 1000.)
                         if d > 1e-6:
-                            self.peds[who]['pos'] = [me[0] + (to[0] - me[0]) * step / d, me[1] + (to[1] - me[1]) * step / d, me[2]]
+                            nw = [me[0] + (to[0] - me[0]) * step / d, me[1] + (to[1] - me[1]) * step / d, me[2]]
+                            if self.body and self.walls_stop and self.walk_blocked(me, nw):
+                                nw = me                              # a wall, a ledge: he does not get through
+                            g_ = self.ground_at(nw[0], nw[1]) if self.body else None
+                            if g_ is not None and self.body:
+                                nw[2] = g_ + 1.
+                            self.peds[who]['pos'] = nw
             for p in list(self.peds.values()) + [self.cj]:
                 p.pop('shot', None)
                 p['pos'] = [p['pos'][i] + p['vel'][i] * ms / 1000. for i in range(3)]

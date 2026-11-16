@@ -122,6 +122,51 @@ typedef struct detail {
     hcb_vec hint[12];
     u32 grenade_said, water_said, ahead_said;
 } detail;
+/* ------------------------------------------------------------------ 1.0: the brain's own map, the men's actions, the squad */
+#define NAV_N 48                 /* cells a side, one metre each: the ground round the focus (CJ, or the assault target) */
+#define NAV_SEGS 48
+typedef struct navcell {
+    float z;                /* height of the ground */
+    u32 asked;              /* when the question went out (state 3) */
+    u32 blk_until;          /* the blocked ways out of this cell are forgotten then */
+    u8 st;                  /* 0 not known, 1 ground, 2 nothing to stand on, 3 asked */
+    u8 blk;                 /* bit d = the way out in direction d (0..7) is blocked (a man tried and did not get through) */
+    u8 fix;                 /* what the level rays found: bit 0 = a wall to the next cell at +x, bit 1 = at +y */
+    u8 r1;
+} navcell;
+typedef struct segent {
+    hcb_vec a, b;
+    u32 asked, answered;
+    u8 used, clear, r0, r1;
+} segent;
+typedef struct nav {
+    int ox, oy;             /* world x, y of the corner of cell (0, 0), whole metres */
+    float fz;               /* the focus's ground height (the first question starts from it) */
+    u32 known;              /* cells with an answer */
+    u8 ok, r0, r1, r2;
+    navcell c[NAV_N * NAV_N];
+    segent sg[NAV_SEGS];
+} nav;
+#define AG_PATH 10
+typedef struct agent {
+    u32 id;
+    hcb_vec goal;           /* the place he is going to (the post as he took it) */
+    hcb_vec via;            /* the point he walks to now */
+    hcb_vec path[AG_PATH];
+    hcb_vec last_pos, prog_pos;
+    u32 goal_since, prog_since, plan_t, side_until, arrived_since, last_seen, failed_at;
+    float prog_best;
+    u8 used, phase, act, why, fails, n_path, i_path, moves;   /* moves: changes of action (for the log) */
+} agent;
+typedef struct squad {
+    u8 umode, task, ow_ok, ow_ready, mover, gathered, pad0, pad1;
+    u32 task_since, target, target_seen, bound_since, ow_since, ow_done_for, clear_since, lost_since;
+    hcb_vec target_at, gather_at, ow_at, front;
+    float target_dist;
+    hcb_vec apost[8];       /* each man's place in the assault (kept between looks) */
+    u32 apost_id[8], apost_t[8];
+    u8 apost_ok[8];
+} squad;
 struct hcb_brain {
     hcb_cfg cfg;
     u32 time, ticks, rng, seed, alert_since, calm_since, kills;
@@ -132,6 +177,9 @@ struct hcb_brain {
     losent los[HCB_LOS_CACHE];
     cover cv[HCB_MAX_COVERS];
     detail dt;
+    nav nv;
+    agent ag[8];
+    squad sq;
 };
 
 
@@ -148,4 +196,17 @@ HID vtrack *hcb_vfind(hcb_brain *b, u32 id);
 HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out);
 /* hcb_detail.c */
 HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out);
+/* hcb_nav.c */
+HID void hcb_nav_update(hcb_brain *b, const hcb_snapshot *s, hcb_out *out, hcb_vec focus);
+HID int hcb_nav_path(hcb_brain *b, hcb_vec from, hcb_vec to, hcb_vec *wp, int max, u32 now);   /* > 0 way points; 0 no way; -1 the map does not know */
+HID int hcb_nav_line(hcb_brain *b, hcb_vec a, hcb_vec c, u32 now);
+HID hcb_vec hcb_nav_centre(const hcb_brain *b, hcb_vec at);
+HID int hcb_nav_seg(hcb_brain *b, hcb_out *out, hcb_vec a, hcb_vec c, u32 now);              /* 1 free, 0 blocked, -1 asked */
+HID void hcb_nav_block(hcb_brain *b, hcb_vec at, hcb_vec toward, u32 now, u32 ttl);
+HID int hcb_nav_ground(const hcb_brain *b, hcb_vec at, float *z);                           /* 1 ground known there */
+/* hcb_agent.c */
+HID void hcb_agent_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out);
+/* hcb_squad.c */
+HID void hcb_squad_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out);
+HID int hcb_squad_roping(const hcb_snapshot *s, u32 id);
 #endif

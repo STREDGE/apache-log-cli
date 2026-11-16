@@ -171,6 +171,11 @@ HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         armed_hostile = t->cls == HCB_CLS_WATCH && (t->why == HCB_WHY_ARMED_NEAR || t->why == HCB_WHY_ARMED_FACING);
         switch (s->roe) {
         case HCB_ROE_DEFEND: fire = t->cls >= HCB_CLS_THREAT || low_hp_aim(s, t); break;
+        }
+        /* 1.0, ASSAULT: the man CJ has pointed out (aimed or fired at in the last 6 s) is the squad's target whatever he is doing */
+        if (!fire && s->umode == HCB_UMODE_ASSAULT && s->roe != HCB_ROE_HOLD && b->sq.target == t->last.id && t->cj_marked && now - t->cj_marked < 6000) fire = 1;
+        switch (fire ? 99 : s->roe) {
+        case 99: break;
         case HCB_ROE_ARMED: case HCB_ROE_LEGACY_ALL: fire = t->cls >= HCB_CLS_THREAT || armed_hostile; break;
         case HCB_ROE_FOLLOW: fire = t->cj_marked && now - t->cj_marked < (u32)c->follow_ms; break;
         default: fire = 0;
