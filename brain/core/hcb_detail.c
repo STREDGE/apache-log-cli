@@ -102,6 +102,20 @@ static void cv_learn(hcb_brain *b, const hcb_snapshot *s) {
 static int find_cover(hcb_brain *b, hcb_out *out, hcb_vec center, hcb_vec u, hcb_vec threat, const float *radii, int nr, float toward, u32 now, hcb_vec *found) {
     int i, k;
     hcb_vec away = v_mul(u, -1.0f);
+    /* 0.8: first the places the game itself calls cover (its CCover points: walls, corners, cars) within reach of the
+       centre - the spot 1.6 m behind such a thing, seen from the threat */
+    if (nr > 0 && radii[nr - 1] > 0.01f)
+        for (i = 0; i < b->dt.n_hint && i < 12; i++) {
+            hcb_vec at = v_add(b->dt.hint[i], v_mul(away, 1.6f)), d;
+            int st;
+            if (dist2d(at, center) > radii[nr - 1] + 3.0f) continue;
+            at.z = center.z;
+            d = unit2(v_sub(at, center), away);
+            if (dist2d(at, center) > 0.5f && v_dot(d, u) > toward) continue;
+            st = cv_state(b, at, threat, now);
+            if (st == 1) { *found = at; return 1; }
+            if (st == -1) cv_ask(b, out, at, threat, now);
+        }
     for (i = 0; i < nr; i++) {
         for (k = 0; k < (radii[i] > 0.01f ? 12 : 1); k++) {
             hcb_vec d = rot(away, k), at = v_add(center, v_mul(d, radii[i]));
@@ -162,11 +176,18 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
     float cj_speed = v_len(flat(cj->vel)), best = -1, sbest = -1, edps_sum = 0, heli_speed = 0;
     hcb_vec cjp = cj->pos, f, r, u, pr, T, look;
     u8 duty, mode, say = HCB_SAY_NONE, say_dir = 0, cj_in = 0;
+    int indoor = 0;
     vtrack *heli = s->heli ? hcb_vfind(b, s->heli) : 0;
 
     out->n_posts = 0; out->n_probe_q = 0; out->say = HCB_SAY_NONE; out->cover_ok = 0; out->lead = 0;
     out->mode = dt->mode; out->leading = 0; out->heli_ok = 0;
     cv_learn(b, s);
+    dt->n_hint = (u8)(s->n_hints < 12 ? s->n_hints : 12);
+    for (i = 0; i < dt->n_hint; i++) dt->hint[i] = s->hints[i];
+    /* 0.8, a building: inside one CJ is somewhere else altogether (the game's interiors are far away); the detail holds
+       the place where he went in - everything below is laid out round that door until he is out again */
+    if (!s->interior) { dt->door = cj->pos; dt->door_ok = 1; }
+    else if (dt->door_ok) { cjp = dt->door; cj_speed = 0; indoor = 1; }
 
     /* the door gunners: seated on the skid while the helicopter travels or all is quiet, kneeling at the door when it
        hangs over a fight (the brain decides; there is no setting) */
@@ -213,6 +234,7 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
             && (now - dt->threat_since < 3000 || best < keep->edps * 1.5f + 5.0f)) threat = keep;
         if (threat->last.id != dt->threat_id) { dt->threat_id = threat->last.id; dt->threat_since = now; }
     } else dt->threat_id = 0;
+    if (indoor) { threat = 0; suspect = 0; dt->threat_id = 0; dt->threat_mem_t = 0; }   /* (what CJ meets inside is not at the door) */
     if (threat) { dt->threat_mem = threat->last.pos; dt->threat_mem_t = now ? now : 1; }
     else remembered = dt->threat_mem_t && now - dt->threat_mem_t < 12000 && b->alert >= HCB_ALERT_THREAT;
 
@@ -245,6 +267,29 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         if (dt->heli_ok) { out->heli_ok = 1; out->heli_at = dt->heli_at; }
     } else { dt->heli_ok = 0; dt->heli_k = 0; dt->heli_bad = 0; }
 
+    /* 0.8, CJ in the water: the helicopter comes over him, 12 m up, for the rope */
+    if (s->in_water && !indoor && s->heli) {
+        out->heli_ok = 1; out->heli_at = cjp; out->heli_at.z = cjp.z + 12.0f;
+    }
+    /* 0.8, CJ drives: with no fight on, the helicopter scouts 50 m ahead of him along his way, and armed men ahead are
+       called ("armed men ahead", once in 15 s) */
+    if (cj->vehicle && cj->vehicle != s->heli && cj_speed > 8.0f && !(threat || remembered) && s->heli) {
+        hcb_vec dir = unit2(cj->vel, (hcb_vec){0, 1, 0});
+        out->heli_ok = 1; out->heli_at = v_add(cjp, v_mul(dir, 50.0f)); out->heli_at.z = cjp.z + 22.0f;
+        if (!dt->ahead_said || now - dt->ahead_said >= 15000)
+            for (i = 0; i < HCB_MAX_TRACKS; i++) {
+                const track *t = &b->tr[i];
+                hcb_vec rel;
+                float along, lat;
+                if (!t->used || t->friendly || !t->seen || (t->last.flags & HCB_PF_DEAD) || !hcb_is_firearm(t->last.weapon)) continue;
+                if (t->cls < HCB_CLS_WATCH && !(t->last.pedtype >= 7 && t->last.pedtype <= 16)) continue;       /* (watched already, or an armed gang man further off) */
+                rel = flat(v_sub(t->last.pos, cjp)); along = rel.x * dir.x + rel.y * dir.y; lat = rel.x * dir.y - rel.y * dir.x;
+                if (along < 25.0f || along > 140.0f || f_abs(lat) > 25.0f) continue;
+                dt->ahead_said = now ? now : 1; dt->say_seq++; dt->last_say = HCB_SAY_AHEAD; dt->say_dir = 0; dt->said_at = dt->ahead_said;
+                out->say = HCB_SAY_AHEAD; out->say_dir = 0; out->say_seq = dt->say_seq;
+                break;
+            }
+    }
     if (!n || cj->vehicle || (cj->flags & HCB_PF_DEAD) || s->cutscene) {      /* nobody on foot with CJ, or CJ in a vehicle */
         dt->cj_cover_ok = 0; dt->duty = HCB_DUTY_CALM; out->duty = HCB_DUTY_CALM; dt->leading = 0;
         return;
@@ -317,7 +362,7 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         dt->places_dirty = 1; dt->place_said = now ? now : 1;
     }
     /* ... and coming back to such a place in peace the commander says so, once in two minutes */
-    if (duty < HCB_DUTY_COVER && n && !cj->vehicle && say == HCB_SAY_NONE && (!dt->place_said || now - dt->place_said > 120000))
+    if (duty < HCB_DUTY_COVER && n && !cj->vehicle && !indoor && say == HCB_SAY_NONE && (!dt->place_said || now - dt->place_said > 120000))
         for (i = 0; i < dt->places && i < 16; i++)
             if (dist2d(dt->place[i], cjp) < 45.0f) { say = HCB_SAY_BEEN_HERE; dt->place_said = now ? now : 1; break; }
     if (duty < HCB_DUTY_COVER && dt->duty >= HCB_DUTY_COVER && (!dt->clear_said || now - dt->clear_said > 10000) && say == HCB_SAY_NONE) { say = HCB_SAY_CLEAR; dt->clear_said = now ? now : 1; }
@@ -506,6 +551,39 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
             if (along < 0.3f || along > 40.0f || f_abs(lat) >= need) continue;
             p->at = v_add(p->at, v_mul(side, (lat < 0 ? -need : need) - lat));
             if (p->move == 0) p->move = 2;
+        }
+    }
+    /* 0.8, CJ in the water: nobody follows him in - each man stays where he stands (on the bank), eyes on CJ; the commander
+       says the helicopter is coming over (the rope is the player's to take: CLIMB ABOARD BY ROPE) */
+    if (s->in_water && !indoor) {
+        for (i = 0; i < out->n_posts; i++) {
+            hcb_post *p = &out->posts[i];
+            int m;
+            for (m = 0; m < n && ids[m] != p->who; m++) {}
+            if (m == n) continue;
+            p->at = men[m]->pos; p->move = 0; p->look = cjp;
+        }
+        if (say == HCB_SAY_NONE && (!dt->water_said || now - dt->water_said >= 30000)) { say = HCB_SAY_WATER; dt->water_said = now ? now : 1; }
+    }
+    /* 0.8, a grenade, a rocket, a fire bottle: every man within its radius sprints straight out of it (and no post is
+       left inside); "grenade - <dir>!" when it is within 15 m of CJ, once in 3 s */
+    for (k = 0; k < (int)s->n_dangers && k < HCB_MAX_DANGERS; k++) {
+        const hcb_danger *g = &s->dangers[k];
+        float R = g->radius > 1.0f && g->radius < 40.0f ? g->radius : 10.0f;
+        if (g->kind == HCB_DG_BLAST) continue;                                  /* (gone off already) */
+        for (i = 0; i < out->n_posts; i++) {
+            hcb_post *p = &out->posts[i];
+            int m;
+            for (m = 0; m < n && ids[m] != p->who; m++) {}
+            if (m == n) continue;
+            if (dist2d(men[m]->pos, g->at) < R || dist2d(p->at, g->at) < R) {
+                hcb_vec o = unit2(v_sub(men[m]->pos, g->at), unit2(v_sub(cjp, g->at), (hcb_vec){0, 1, 0}));
+                p->at.x = g->at.x + o.x * (R + 3.0f); p->at.y = g->at.y + o.y * (R + 3.0f); p->at.z = men[m]->pos.z;
+                p->move = 3; p->crouch = 0;
+            }
+        }
+        if (dist2d(g->at, cjp) < 15.0f && !indoor && (!dt->grenade_said || now - dt->grenade_said >= 3000)) {
+            say = HCB_SAY_GRENADE; say_dir = rel_dir(cj, g->at); dt->grenade_said = now ? now : 1;      /* (over anything else he was saying) */
         }
     }
     /* 0.7, stealth: CJ crouches and creeps while all is quiet - so does the detail (down, at a walk, no running about) */

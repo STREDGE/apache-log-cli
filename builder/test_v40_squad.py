@@ -275,9 +275,14 @@ g_=ducked[0];w.dead.add(hostile);w.pos[g_]=[0.,-12.,0.];w.calls.clear();steps(w,
 seq=[x[1] for x in w.calls if x[2] and x[2][0]==g_ and x[1] in (0x4eb,0x5d3,0x637)]
 assert seq[:2]==[0x4eb,0x5d3] and last(w,0x4eb,g_)[1]==0,seq
 passed('After a crouched fight the guard stands up before moving on')
-w.interior=3;w.pos[team[1]]=[0.,-30.,0.];w.calls.clear();steps(w,V,6);assert not any(orders(w,op,t) for t in team for op in (0x5d3,0xa1,0x5f5,0x667))
-w.interior=0
-passed('CJ inside an interior: the team waits outside instead of teleporting after him')
+door=list(w.coords(1));steps(w,V,3)
+w.interior=3;w.player=[2000.,2000.,1000.] if hasattr(w,'player') else None;w.pos[team[1]]=[door[0],door[1]-30.,0.];w.calls.clear();w.teleports.clear();w.now+=4100;steps(w,V,12)
+Pd=posts(w)
+assert not any(orders(w,op,t) for t in team for op in (0xa1,0x850)) and not w.teleports,'nobody follows CJ into the building or is teleported'
+assert Pd and all(math.dist(spot(p_),door[:2])<=13. for p_ in Pd.values()),('the posts are laid out round the door CJ went in by',[spot(p_) for p_ in Pd.values()],door)
+assert orders(w,0x5d3,team[1]) or orders(w,0x637,team[1]) or orders(w,0x5f5,team[1]),'the man who was away comes to his post at the door'
+w.interior=0;w.player=door
+passed('CJ inside a building: the detail holds the door he went in by - posts round it, nobody follows him inside or is teleported; the man who was away comes back to the door')
 w,c,ground,sq,team=escort_world();V=(c,ground,sq)
 hostile=951;w.exists.add(hostile);w.pos[hostile]=[25.,25.,0.];w.pedtype[hostile]=7;w.weapons[hostile]=30;w.damage.add((1,hostile));w.civilians=[]
 w.shared[b.FIRE_TARGET]=hostile;steps(w,V,6);assert w.shared[b.SQ_T]==hostile
@@ -609,6 +614,8 @@ assert w.messages and not {'SQCAR'}&set(w.messages),w.messages
 passed('MESSAGES: IMPORTANT keeps danger and tactical calls, drops the chatter')
 w,V,team=noisy_fight(0,6)
 assert not w.messages,w.messages
+assert w.shared[b.STATE] in (3,19),'1.5.3: "we pull out" has called the rope pickup by itself'
+w.health[1]=100;w.shared[b.CMD]=2;steps(w,V,8);w.messages.clear()   # (FOLLOW ME again: the pickup is called off)
 w.shared[b.CMD]=16;steps(w,V,4);assert w.messages==['SQALR'],w.messages
 passed('MESSAGES: OFF is silent in a fight but still explains why a command was refused')
 w,c,ground,sq,team=escort_world();f=VM('Helicover_Fire',w);V=(c,ground,sq,f)
@@ -617,6 +624,28 @@ hostile=996;w.exists.add(hostile);w.pos[hostile]=[20.,0.,0.];w.pedtype[hostile]=
 w.messages.clear();w.shared[b.MSG_UNTIL]=0;steps(w,V,30)
 assert 'SQXR' in w.messages and 'HCCONT' not in w.messages,w.messages
 passed('With the team on the ground only the squad calls the contact (no double "CONTACT!")')
+# ------------------------------------------------------------------ 1.5.3: the rest of the plan, in the scripts
+# an unarmed brawler at CJ: the brain says "by hand" - the guard puts his gun away and goes for him; an armed man - the gun is back
+w,V,team=squad_scene([(985,7.,0.,0,True)]);w.health[985]=100000;w.calls.clear();steps(w,V,25)
+fist=[x for x in w.calls if x[1]==0x5e2 and x[2][1]==985]
+assert fist and not hit_men(w,985) if 'hit_men' in globals() else fist,'a guard goes for him with his hands'
+gman=fist[0][2][0]
+assert any(x[1]==0x1b9 and x[2]==[gman,0] for x in w.calls) and not [x for x in firing(w,gman) if 985 in x[2][1:8]],'his gun is put away first, and he does not shoot the man'
+w.weapons[985]=30;w.calls.clear();steps(w,V,20)
+import build_v25_ground as _g
+assert any(x[1]==0x1b9 and x[2][0]==gman and x[2][1] in [wp for wp,_m in _g.TEAM_WEAPONS] for x in w.calls),'the man has drawn a gun: the guard\'s own gun is back in his hands'
+passed('An unarmed brawler at CJ is taken down by hand (the guard puts his gun away, no shot is fired at the man); when the man draws a weapon the guard has his gun in his hands again')
+# the commander's new words reach the screen
+w,c,ground,sq,team=escort_world();V=(c,ground,sq);steps(w,V,3)
+for seq_,(what,dir_,key) in enumerate([(9,3,'SQGL'),(10,0,'SQWATER'),(11,0,'SQAHEAD'),(7,1,'SQSR'),(8,0,'SQMEM')]):
+ w.messages.clear();w.now+=4000;w.brain.say=(100+seq_,what,dir_);steps(w,V,4);assert key in w.messages,(key,w.messages)
+passed('The commander\'s words reach the screen: "grenade - left", "CJ is in the water", "armed men ahead", "sniper - right", "we were attacked here before"')
+# "we pull out" also orders the rope pickup for the player (the hot pickup) - only while the helicopter escorts and CJ is on foot
+w,c,ground,sq,team=escort_world();V=(c,ground,sq);steps(w,V,3)
+assert w.shared[b.STATE]==2
+w.now+=4000;w.brain.say=(200,4,0);steps(w,V,6)
+assert w.shared[b.STATE]==19 or any(x[2]==[b.CMD,10] for x in calls(w,0xddc)),(w.shared[b.STATE],'the rope pickup is ordered')
+passed('"We pull out" is also the order to the pilot: the rope pickup starts by itself (the hot pickup); CJ only has to take the rope')
 w,c,p=setup(True);launch=VM('Helicover',w);w.step(c,p,launch,n=15);w.events.append(1);w.step(c,p,n=4)
 rows=[]
 for _ in range(4):rows.append(w.menu[3]);w.events.append(1);w.step(c,p,n=4)   # (1.5: MESSAGES is row 1 of the settings)

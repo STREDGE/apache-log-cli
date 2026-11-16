@@ -55,7 +55,7 @@ extern void *memset(void *d, int c, u64 n);
 
 #define HIDDEN __attribute__((visibility("hidden")))
 #define EXPORT __attribute__((visibility("default")))
-#define VERSION "0.7 (posts that are kept, sniper call, memory of places, stealth, clear of burning cars; its own pilot in a fight)"
+#define VERSION "0.8 (grenades, water, buildings, scouting ahead, by hand against the unarmed, the game's cover points, voice, landing approach)"
 #define GAME_DIR "/storage/emulated/0/Android_unprotected/data/com.rockstargames.gtasa/"
 
 /* ---------- the game (offsets from libGTASA base; see brain/research/game_facts.md) ---------- */
@@ -260,6 +260,7 @@ static void flush_log(void) {
 #define CFG GAME_DIR "configs/net.helicover.brain.ini"
 static int g_marks = 0;         /* debug markers: off unless the player turns them on */
 static u32 g_last_crash;        /* 1.4.1: the brain's step when the last game crashed inside it (0 = none); 20 = a gunner's shot */
+static int g_voice_off, g_water_off;   /* 0.8: the commander's voice (CPed::Say) / the water level call are off: the game crashed in them once */
 static int g_fire_off;          /* 1.4.1: the game's own weapon fire for the gunners is off (it crashed once, or the words differ) */
 static int key_at(const char *b, const char *key) { int i, k; for (i = 0; b[i]; i++) { for (k = 0; key[k] && b[i + k] == key[k]; k++) {} if (!key[k]) { i += k; while (b[i] == ' ' || b[i] == '\t' || b[i] == '=') i++; return i; } } return -1; }
 static void load_config(void) {
@@ -270,15 +271,19 @@ static void load_config(void) {
     b[n] = 0;
     if ((i = key_at(b, "Markers")) >= 0 && (b[i] == '0' || b[i] == '1')) g_marks = b[i] == '1';
     if ((i = key_at(b, "FireOff")) >= 0 && b[i] == '1') g_fire_off = 1;
+    if ((i = key_at(b, "VoiceOff")) >= 0 && b[i] == '1') g_voice_off = 1;
+    if ((i = key_at(b, "WaterOff")) >= 0 && b[i] == '1') g_water_off = 1;
     if ((i = key_at(b, "LastCrash")) >= 0) for (g_last_crash = 0; b[i] >= '0' && b[i] <= '9'; i++) g_last_crash = g_last_crash * 10 + (u32)(b[i] - '0');
 }
 static void save_config_with(u32 crash) {
-    char b[96]; struct text t = {b, sizeof b, 0};
+    char b[160]; struct text t = {b, sizeof b, 0};
     int fd = open(CFG, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd < 0) return;
     ts(&t, g_marks ? "[Preferences]\nMarkers = 1\n" : "[Preferences]\nMarkers = 0\n");
     if (crash) { ts(&t, "LastCrash = "); tu(&t, crash); ts(&t, "\n"); }
     if (g_fire_off || crash == 20) ts(&t, "FireOff = 1\n");
+    if (g_voice_off || crash == 21) ts(&t, "VoiceOff = 1\n");
+    if (g_water_off || crash == 22) ts(&t, "WaterOff = 1\n");
     write(fd, b, t.len); close(fd);
 }
 static void crash_settings(u32 where) { save_config_with(where ? where : 99); }
@@ -557,6 +562,107 @@ static float f_sqrt(float x) {
 }
 static float dist2(const float *a, const float *b) { float x = a[0] - b[0], y = a[1] - b[1], z = a[2] - b[2]; return x * x + y * y + z * z; }
 
+/* ---------- 0.8: more of what the game itself knows (found in the player's libGTASA.so; the words below are checked at
+   the start and each part is left out when they differ) ----------
+   - explosions: CExplosion's table, 16 x 0x88 (+0 type, +4 position, +0x10 radius, +0x30 active)
+   - thrown and launched things: gaProjectileInfo, 32 x 0x38 (+0 weapon, +0x1c active, +0x20 position)
+   - the game's own cover points: CCover::m_aPoints, 100 x 0x28 (+0 type, 0 = none; +4 position; +0x10 the thing it is on)
+   - CWaterLevel::GetWaterLevel(x, y, z, float *level, bool, CVector *): is there water here and how high
+   - CPed::Say(context, delay, probability, ...): the game's own voice lines (the commander speaks) */
+#define EXPLOSIONS 0xd28c78UL
+#define PROJ_INFO 0xd29508UL
+#define GOT_PROJ_INFO 0x84e270UL
+#define COVER_POINTS 0xc9b390UL
+#define WATER_LEVEL 0x6ba834UL
+#define PED_SAY 0x5a57c4UL
+static const struct { u32 at, word; } TABLE_WORDS[] = {{0x6fcf80, 0x90003169U}, {0x6fcf84, 0x9131e129U}, {0x6fcec0, 0x3900c19fU}, {0x6fe510, 0x321d0be9U}, {0x5d676c, 0x39c00008U}, {0x5d6770, 0x34000128U}};
+static const struct { u32 at, word; } WATER_WORDS[] = {{0x6ba834, 0xd10143ffU}, {0x6ba838, 0xfd000beaU}};
+static const struct { u32 at, word; } SAY_WORDS[] = {{0x5a57c4, 0x2a0103ecU}, {0x5a57c8, 0x2a0503e8U}};
+typedef int (*water_fn)(float x, float y, float z, float *level, int touching, void *normal);
+typedef void (*say_fn)(void *ped, u32 context, u32 delay, float probability, u32 a, u32 b, u32 c);
+static int g_tables_ok, g_water_ok, g_say_ok;
+static hcb_vec g_hints[HCB_MAX_HINTS];
+static u32 g_n_hints, g_hints_at, g_said_voice;
+static void more_setup(void) {
+    u32 i;
+    g_tables_ok = RD(u64, G + GOT_PROJ_INFO) == G + PROJ_INFO;
+    for (i = 0; i < sizeof TABLE_WORDS / sizeof TABLE_WORDS[0]; i++) if (RD(u32, G + TABLE_WORDS[i].at) != TABLE_WORDS[i].word) g_tables_ok = 0;
+    g_water_ok = !g_water_off;
+    for (i = 0; i < sizeof WATER_WORDS / sizeof WATER_WORDS[0]; i++) if (RD(u32, G + WATER_WORDS[i].at) != WATER_WORDS[i].word) g_water_ok = 0;
+    g_say_ok = !g_voice_off;
+    for (i = 0; i < sizeof SAY_WORDS / sizeof SAY_WORDS[0]; i++) if (RD(u32, G + SAY_WORDS[i].at) != SAY_WORDS[i].word) g_say_ok = 0;
+    lg("the game's own knowledge: grenades, explosions and cover points "); lg(g_tables_ok ? "read" : "NOT read (the tables are not where expected)");
+    lg("; water level "); lg(g_water_ok ? "asked" : g_water_off ? "off (the game crashed in it once)" : "NOT asked (the code differs)");
+    lg("; the commander's voice "); lg(g_say_ok ? "on" : g_voice_off ? "off (the game crashed in it once)" : "off (the code differs)"); lg("\n");
+}
+static void fill_more(hcb_snapshot *s, const float *cjp) {
+    u32 i;
+    s->n_hints = 0; s->n_dangers = 0; s->in_water = 0;
+    if (g_water_ok && !s->player.vehicle) {
+        float level = -10000.0f;
+        g_where = 22;
+        if (((water_fn)(G + WATER_LEVEL))(cjp[0], cjp[1], cjp[2], &level, 1, 0) && level == level && level > cjp[2] - 0.2f && level < cjp[2] + 30.0f) s->in_water = 1;
+        g_where = 1;
+    }
+    if (!g_tables_ok) return;
+    for (i = 0; i < 32 && s->n_dangers < HCB_MAX_DANGERS; i++) {          /* in the air or lying: grenades, bottles, rockets */
+        const u8 *pi = (const u8 *)(G + PROJ_INFO + (u64)i * 0x38);
+        u32 w = RD(u32, pi);
+        float p[3];
+        hcb_danger *d;
+        if (!RD(u8, pi + 0x1c)) continue;
+        memcpy(p, pi + 0x20, 12);
+        if (!sane(p) || dist2(p, cjp) > 60.0f * 60.0f) continue;
+        if (!(w == 16 || w == 17 || w == 39 || w == 18 || w == 19 || w == 20)) continue;
+        d = &s->dangers[s->n_dangers++];
+        d->at.x = p[0]; d->at.y = p[1]; d->at.z = p[2];
+        d->kind = w == 18 ? HCB_DG_FIRE : w == 19 || w == 20 ? HCB_DG_ROCKET : HCB_DG_GRENADE;
+        d->radius = w == 18 ? 7.0f : 10.0f;
+    }
+    for (i = 0; i < 16 && s->n_dangers < HCB_MAX_DANGERS; i++) {          /* just gone off (for the picture and the log) */
+        const u8 *e = (const u8 *)(G + EXPLOSIONS + (u64)i * 0x88);
+        float p[3];
+        hcb_danger *d;
+        if (!RD(u8, e + 0x30)) continue;
+        memcpy(p, e + 4, 12);
+        if (!sane(p) || dist2(p, cjp) > 60.0f * 60.0f) continue;
+        d = &s->dangers[s->n_dangers++];
+        d->at.x = p[0]; d->at.y = p[1]; d->at.z = p[2]; d->kind = HCB_DG_BLAST; d->radius = RD(float, e + 0x10);
+    }
+    /* the game's cover points near CJ: looked up twice a second (a point on a car or an object is that thing's place - read
+       through the kernel, so a pointer that has gone stale is an error, never a crash) */
+    if (!g_hints_at || s->time - g_hints_at >= 500 || s->time < g_hints_at) {
+        g_hints_at = s->time ? s->time : 1; g_n_hints = 0;
+        for (i = 0; i < 100 && g_n_hints < HCB_MAX_HINTS; i++) {
+            const u8 *c = (const u8 *)(G + COVER_POINTS + (u64)i * 0x28);
+            u64 ent = RD(u64, c + 0x10), m = 0;
+            float p[3];
+            if (!RD(signed char, c)) continue;
+            memcpy(p, c + 4, 12);
+            if (ent) {
+                if (!safe_read(&m, ent + 0x18, 8)) continue;
+                if (m ? !safe_read(p, m + 0x30, 12) : !safe_read(p, ent + 8, 12)) continue;
+            }
+            if (!sane(p) || dist2(p, cjp) > 30.0f * 30.0f) continue;
+            g_hints[g_n_hints].x = p[0]; g_hints[g_n_hints].y = p[1]; g_hints[g_n_hints].z = p[2]; g_n_hints++;
+        }
+    }
+    s->n_hints = (u16)g_n_hints;
+    for (i = 0; i < g_n_hints; i++) s->hints[i] = g_hints[i];
+}
+/* the commander says it aloud too: a line of the game's own that fits (the model has it or stays silent) */
+static void speak(u8 say, u32 lead) {
+    static const u16 CTX[12] = {0, 144 /* MOVE_IN */, 159 /* ORDER_WAIT_MANY */, 153 /* ORDER_FOLLOW_NEAR_MANY */, 44 /* CHASED */, 148 /* ORDER_ATTACK_SINGLE */,
+                                258 /* ENEMY_GANG_WASTED */, 85 /* DUCK */, 220 /* TARGET */, 85 /* DUCK */, 40 /* CAR_WAIT_FOR_ME */, 220 /* TARGET */};
+    struct pool pp;
+    u8 *ped;
+    if (!g_say_ok || say >= 12 || !CTX[say] || !lead || !get_pool(PED_POOL, &pp) || !(ped = obj_of(&pp, lead, PED_STRIDE)) || is_dead(ped)) return;
+    g_where = 21;
+    ((say_fn)(G + PED_SAY))(ped, CTX[say], 0, 1.0f, 0, 0, 0);
+    g_where = 1;
+    g_said_voice++;
+}
+
 static int build_snapshot(hcb_snapshot *s, const hcb_out *prev) {
     struct pool pp, vp;
     const u8 *cj = player_ped(), *wanted, *e;
@@ -717,6 +823,7 @@ static int build_snapshot(hcb_snapshot *s, const hcb_out *prev) {
     /* who is ours, for the gunshot hook */
     g_our_ent[0] = cj; g_our_ent[1] = obj_of(&vp, VHANDLE(s->heli), VEH_STRIDE);
     for (k = 0; k < HCB_MAX_OURS; k++) g_our_ent[2 + k] = k < s->n_ours ? obj_of(&pp, s->ours[k], PED_STRIDE) : 0;
+    fill_more(s, cjp);
     return 1;
 }
 
@@ -828,6 +935,7 @@ static void think(void) {
     hcb_think(BRAIN, &g_snap, &g_out);
     if (g_out.say) { g_say_seq = g_out.say_seq; g_say = g_out.say; g_say_dir = g_out.say_dir; }
     if (hcb_places_changed(BRAIN)) places_save();
+    if (g_out.say) speak(g_out.say, g_out.lead);
     journal(now);
     hcb_rec_push(&g_rec[g_cur], g_box[g_cur], &g_snap, g_out.digest);
     memcpy(&g_shown, &g_out, sizeof g_shown);
@@ -915,14 +1023,14 @@ static const char *const ROLE_NAME[] = {"let-go", "pilot", "gunner1", "gunner2",
 static const char *const JOB_NAME[] = {"-", "LEAD", "CLOSE", "POINT", "REAR", "CLOSE2", "POINT2", "REAR2", "MARKSMAN", "CLOSE3"};
 static const char *const DUTY_NAME[] = {"calm", "watch", "shield", "cover", "bound", "hold", "ring"};
 static const char *const HOLD_NAME[] = {"FIRE", "no-target", "rule", "CJ-in-line", "CJ-behind", "friend-in-line", "bystander", "car-near",
-                                        "no-LOS", "range", "reacting", "pause", "covering", "enough-on-him"};
+                                        "no-LOS", "range", "reacting", "pause", "covering", "enough-on-him", "BY-HAND"};
 static const char *const CLS_NAME[] = {"friend", "neutral", "watch", "THREAT", "ATTACKER"};
 static const char *const WHY_NAME[] = {"-", "ours", "ally", "hurt-CJ", "hurt-ours", "shot-at-CJ", "shot-at-ours", "aims-at-CJ", "aims-at-ours",
                                        "armed-facing", "armed-near", "hostile-near", "ramming", "burning", "melee-closing", "shooting-nearby", "air-fire"};
 static const char *const MODE_NAME[] = {"HOLD", "PULLOUT", "ASSAULT"};
 static const char *const MOVE_NAME[] = {"stay", "walk", "run", "sprint", "path"};
 static const char *const ALERT_NAME[] = {"calm", "wary", "threat", "COMBAT", "EVACUATE"};
-static const char *const SAY_NAME[] = {"", "into cover", "CJ is in cover", "stay with me", "we pull out", "I have command", "clear", "sniper", "we were attacked here before"};
+static const char *const SAY_NAME[] = {"", "into cover", "CJ is in cover", "stay with me", "we pull out", "I have command", "clear", "sniper", "we were attacked here before", "grenade", "CJ is in the water", "armed men ahead"};
 static const char *const AIM_NAME[] = {"body", "driver", "tyre"};
 #define NAME(arr, i) ((u32)(i) < sizeof arr / sizeof arr[0] ? arr[i] : "?")
 /* ---------- the journal (1.4.1): what the brain decided, in plain words, for the diagnosis from the log ----------
@@ -954,7 +1062,7 @@ static void journal(u32 now) {
     log_begin();
     if (g_out.alert != j_alert && g_out.alert < 5) { jline(now); lg("alert "); lg(ALERT_NAME[g_out.alert]); lg(", CJ health "); ti(&g_log, (long)g_snap.player.health); lg("\n"); j_alert = g_out.alert; }
     if (g_out.duty != j_duty && g_out.duty < 7) { jline(now); lg("detail: "); lg(DUTY_NAME[g_out.duty]); lg(", mode "); tu(&g_log, g_out.mode); lg(", "); tu(&g_log, g_out.n_posts); lg(" posts\n"); j_duty = g_out.duty; }
-    if (g_out.say && g_out.say < 9) { jline(now); lg("commander: \""); lg(SAY_NAME[g_out.say]); lg("\" (direction "); tu(&g_log, g_out.say_dir); lg(")\n"); }
+    if (g_out.say && g_out.say < 12) { jline(now); lg("commander: \""); lg(SAY_NAME[g_out.say]); lg("\" (direction "); tu(&g_log, g_out.say_dir); lg(")\n"); }
     if (g_out.leading != j_lead) { jline(now); lg(g_out.leading ? "commander leads CJ to cover\n" : "commander stops leading\n"); j_lead = g_out.leading; }
     log_end();
 summary:
@@ -1124,8 +1232,10 @@ static void cmd_pilot(int *v) {
         float h = g_out.heli_ok ? g_out.heli_at.z - t[2] : 16.0f;
         in.hover = h < 12.0f ? 12.0f : h > 40.0f ? 40.0f : h;
         in.cruise = 28.0f;
+        { float dx = t[0] - pos.x, dy = t[1] - pos.y; if (dx * dx + dy * dy > 40.0f * 40.0f) in.cruise = 45.0f; }   /* (0.8: scouting ahead of CJ's car - it keeps up) */
         in.face.x = t[0] - g_snap.player.pos.x; in.face.y = t[1] - g_snap.player.pos.y; in.face.z = 0;
     }
+    if (v[4] & 8) { in.land = 1; in.hover = 15.0f; }                    /* 0.8: the approach to a landing - down to 15 m over the pad on the way in; the game's pilot sets it down from there */
     hcb_pilot_step(&g_pilot, &in, &o);
     g_pilot.last = now;
     g_pilot_out = o; g_pilot_at = now; g_pilot_flags = (u32)v[4]; g_pilot_to[0] = t[0]; g_pilot_to[1] = t[1]; g_pilot_to[2] = t[2];
@@ -1319,6 +1429,7 @@ static void session_second(u32 now) {
     if (cj->vehicle) { ts(D, " in "); who(D, cj->vehicle); } else ts(D, " on foot");
     ts(D, " w "); tu(D, cj->weapon); ts(D, " stars "); tu(D, g_snap.wanted); ts(D, " mission "); tu(D, g_snap.on_mission); ts(D, " interior "); tu(D, g_snap.interior);
     if (g_snap.cutscene) ts(D, " CUTSCENE");
+    if (g_snap.in_water) ts(D, " IN-WATER");
     if (g_snap.controls_off) ts(D, " controls-off");
     ped_flags(D, cj->flags, 0);
     ts(D, "\n  brain: alert "); ts(D, NAME(ALERT_NAME, g_out.alert)); ts(D, " danger "); tf(D, g_out.danger); ts(D, " threats "); tu(D, g_out.n_threats);
@@ -1333,7 +1444,7 @@ static void session_second(u32 now) {
     if (g_out.heli_ok) { ts(D, " spot "); tvec(D, g_out.heli_at.x, g_out.heli_at.y, g_out.heli_at.z); }
     ts(D, " gunners' pose "); tu(D, g_out.gunner_pose);
     ts(D, "\n  seen: peds "); tu(D, g_snap.n_peds); ts(D, " (+"); tu(D, g_snap.peds_lost); ts(D, " left out) vehicles "); tu(D, g_snap.n_vehs);
-    ts(D, " ours "); tu(D, g_snap.n_ours); ts(D, " | shots: ours "); tu(D, s_shots_ours); ts(D, " others "); tu(D, s_shots_other); ts(D, " at us "); tu(D, s_shots_at_us);
+    ts(D, " ours "); tu(D, g_snap.n_ours); ts(D, " game cover points "); tu(D, g_snap.n_hints); ts(D, " voice lines "); tu(D, g_said_voice); ts(D, " | shots: ours "); tu(D, s_shots_ours); ts(D, " others "); tu(D, s_shots_other); ts(D, " at us "); tu(D, s_shots_at_us);
     if (s_ev_cut) { ts(D, " | event lines cut "); tu(D, s_ev_cut); }
     ts(D, "\n  time: looks "); tu(D, s_looks); ts(D, " think avg "); tu(D, s_looks ? s_think_us / s_looks : 0); ts(D, " max "); tu(D, s_think_max);
     ts(D, " us, this log "); tu(D, s_log_us); ts(D, " us | frames "); tu(D, s_frames); ts(D, " longest "); tu(D, s_gap_max / 1000); ts(D, " ms | rays "); tu(D, rays); ts(D, " left for later "); tu(D, g_rays_skipped - s_skip0);
@@ -1351,7 +1462,13 @@ static void session_second(u32 now) {
         if (g_pilot_flags & 1) ts(D, " stop-there");
         if (g_pilot_flags & 2) ts(D, " BLOCKED");
         if (g_pilot_flags & 4) ts(D, " ON-STATION-IN-A-FIGHT (the brain's own pilot)");
+        if (g_pilot_flags & 8) ts(D, " LANDING-APPROACH");
         ts(D, "\n");
+    }
+    for (i = 0; i < g_snap.n_dangers && i < HCB_MAX_DANGERS; i++) {
+        static const char *const DG[] = {"?", "GRENADE", "FIRE-BOTTLE", "ROCKET", "explosion"};
+        const hcb_danger *d = &g_snap.dangers[i];
+        ts(D, "  danger: "); ts(D, NAME(DG, d->kind)); ts(D, " at "); tvec(D, d->at.x, d->at.y, d->at.z); ts(D, " keep clear "); tf(D, d->radius); ts(D, "m\n");
     }
     hc_scan(D, now - s_hc_at >= 30000 || !s_hc_at);
     if (now - s_hc_at >= 30000 || !s_hc_at) s_hc_at = now;
@@ -1619,6 +1736,7 @@ static int try_install(void) {
     lg("libGTASA.so base "); tx(&g_log, G); lg("\n"); tu(&g_log, sizeof GTA_WORDS / sizeof GTA_WORDS[0]); lg(" instruction words match; GOT slots pointing at the brain: "); tu(&g_log, (u64)g_slots); lg(" of 3 (no code changed)\nthe brain is running\n");
     log_begin(); lg("libraries in the game:"); dl_iterate_phdr(list_libs, 0); lg("\n"); log_end();
     fire_setup();
+    more_setup();
     places_load();
     return 1;
 }
@@ -1769,7 +1887,7 @@ HIDDEN void brain_on_crash(int sig, void *info, void *ucv) {
     lg(sig == 11 ? " (bad memory access)" : sig == 7 ? " (bus error)" : sig == 4 ? " (illegal instruction)" : sig == 8 ? " (arithmetic)" : sig == 6 ? " (abort)" : "");
     lg("\n  pc "); addr_name(pc); lg("\n  lr "); addr_name(lr); lg("\n  fault address "); tx(&g_log, fault);
     lg("\n  inside the brain: "); tu(&g_log, g_where);
-    lg(" (0 outside, 1 a look, 2 a ray, 3 markers, 4 the pilot's turn, 11-16 a script's question, 20 a gunner's shot)\n");
+    lg(" (0 outside, 1 a look, 2 a ray, 3 markers, 4 the pilot's turn, 11-16 a script's question, 20 a gunner's shot, 21 the commander's voice, 22 the water level)\n");
     for (n = 0; fp && n < 16 && safe_read(fr, fp, 16); n++) { if (!fr[1]) break; lg("  called from "); addr_name(fr[1]); lg("\n"); if (fr[0] <= fp) break; fp = fr[0]; }
     for (a = sp, n = 0; sp && a < sp + 2048 && n < 10; a += 8) if (safe_read(&w, a, 8) && is_code(w)) { lg("  on the stack "); addr_name(w); lg("\n"); n++; }
     lg("  Helicover:");
@@ -1818,7 +1936,7 @@ static void *watchdog(void *arg) {
 }
 
 struct ModInfo { char guid[48]; char name[48]; char version[24]; char author[48]; u16 ver[4]; u8 reserved[336]; };
-static struct ModInfo g_info __attribute__((aligned(16))) = {"net.helicover.brain", "Helicover Brain", "0.7", "Helicover", {0, 7, 0, 0}, {0}};
+static struct ModInfo g_info __attribute__((aligned(16))) = {"net.helicover.brain", "Helicover Brain", "0.8", "Helicover", {0, 8, 0, 0}, {0}};
 static int g_done;
 EXPORT struct ModInfo *__GetModInfo(void) { return &g_info; }
 EXPORT void OnModPreLoad(void) {}

@@ -144,6 +144,16 @@ class BrainSim:
         heli = w.shared[b.PUB + 1]
         s.heli = vid(heli) if heli in w.cars else 0
         s.wanted, s.on_mission = w.wanted, int(getattr(w, 'on_mission', 0))
+        # 1.5.3: what the adapter reads from the game besides - a building, water, grenades, the game's cover points
+        s.interior, s.in_water = int(getattr(w, 'interior', 0) or 0), int(bool(getattr(w, 'cj_in_water', False)))
+        dg = list(getattr(w, 'dangers', []))[:h.HCB_MAX_DANGERS]
+        s.n_dangers = len(dg)
+        for k_, (pos_, kind_, rad_) in enumerate(dg):
+            s.dangers[k_].at = h.vec(*pos_); s.dangers[k_].kind = kind_; s.dangers[k_].radius = rad_
+        hn = list(getattr(w, 'cover_hints', []))[:h.HCB_MAX_HINTS]
+        s.n_hints = len(hn)
+        for k_, pos_ in enumerate(hn):
+            s.hints[k_] = h.vec(*pos_)
         roe = w.shared[b.FIRE]
         s.roe = roe if 0 <= roe <= 4 else h.HCB_ROE_DEFEND
         s.police = h.HCB_POLICE_EVADE if w.shared[b.POLICE] == 1 else h.HCB_POLICE_ANSWER
@@ -258,6 +268,9 @@ class BrainSim:
         i = h.hcb_pilot_in()
         i.target = h.vec(float(v[f + 1]), float(v[f + 2]), 0.)
         i.ground, i.dt, i.stop, i.blocked = float(v[f + 3]), max(.001, (w.now - last) / 1000.), int(v[f + 4]) & 1, (int(v[f + 4]) >> 1) & 1
+        if int(v[f + 4]) & 8:                         # 1.5.3: a landing approach (as the adapter)
+            i.land, i.hover = 1, 15.
+            self.land_flown = getattr(self, 'land_flown', 0) + 1
         if int(v[f + 4]) & 4:                         # 1.5: on station in a fight (as the adapter's cmd_pilot)
             hgt = self.out.heli_at.z - float(v[f + 3]) if self.out is not None and self.out.heli_ok else 16.
             i.hover, i.cruise = max(12., min(40., hgt)), 28.

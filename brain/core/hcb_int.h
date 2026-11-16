@@ -114,7 +114,11 @@ typedef struct detail {
     u32 sniper_said, place_said;
     hcb_vec place[16];      /* where the detail was attacked before (kept between games by the adapter) */
     u16 place_n[16];
-    u8 places, places_dirty, pad2[2];
+    u8 places, places_dirty, door_ok, n_hint;
+    /* 0.8 */
+    hcb_vec door;           /* where CJ last stood out of doors (inside a building the detail holds there) */
+    hcb_vec hint[12];
+    u32 grenade_said, water_said, ahead_said;
 } detail;
 struct hcb_brain {
     hcb_cfg cfg;

@@ -12,7 +12,7 @@
 #define HCB_H
 #include <stdint.h>
 
-#define HCB_VERSION 4          /* layout of the structs below; a black box says which version wrote it */
+#define HCB_VERSION 5          /* layout of the structs below; a black box says which version wrote it */
 
 #define HCB_MAX_PEDS 64        /* peds in one snapshot (nearest to CJ first) */
 #define HCB_MAX_VEHS 40
@@ -23,6 +23,8 @@
 #define HCB_MAX_VTRACKS 48
 #define HCB_MAX_PROBES 8        /* cover questions per tick (a point, and where the threat is: is the point hidden from it, is there ground?) */
 #define HCB_MAX_LOS 96          /* line-of-sight questions per tick (answered by the adapter in the next snapshot) */
+#define HCB_MAX_HINTS 12        /* 0.8: the game's own cover points near CJ */
+#define HCB_MAX_DANGERS 8       /* 0.8: live grenades, rockets, fires and fresh explosions near CJ */
 
 /* ---- ped flags (hcb_ped.flags) */
 #define HCB_PF_DEAD 1
@@ -127,6 +129,7 @@
 #define HCB_HOLD_PAUSE 11      /* between two bursts */
 #define HCB_HOLD_COVERING 12   /* weapon on a suspect, finger off the trigger */
 #define HCB_HOLD_ENOUGH 13     /* a man to fire at, but three of ours are on him already: weapon on him, no fire */
+#define HCB_HOLD_FISTS 14      /* 0.8, proportionate force: an unarmed man on foot is not shot - a guard near him takes him down by hand */
 
 typedef struct hcb_vec {
     float x;
@@ -239,6 +242,14 @@ typedef struct hcb_post {
 #define HCB_SAY_CLEAR 6         /* "clear - regroup on CJ" */
 #define HCB_SAY_SNIPER 7        /* 0.7: "sniper - <dir>!" (a man far off who has hit or fired at CJ) */
 #define HCB_SAY_BEEN_HERE 8     /* 0.7: "we were attacked here before - eyes open" (the brain remembers the places) */
+#define HCB_SAY_GRENADE 9       /* 0.8: "grenade - <dir>!" */
+#define HCB_SAY_WATER 10        /* 0.8: "CJ is in the water - the helicopter is over you, take the rope" */
+#define HCB_SAY_AHEAD 11        /* 0.8: "armed men ahead" (CJ drives, the helicopter scouts the way) */
+/* dangers (hcb_danger.kind) */
+#define HCB_DG_GRENADE 1        /* a thrown grenade / satchel / tear gas on its way or lying */
+#define HCB_DG_FIRE 2           /* a molotov */
+#define HCB_DG_ROCKET 3
+#define HCB_DG_BLAST 4          /* an explosion that has just gone off */
 
 typedef struct hcb_los {
     uint32_t from;      /* one of ours */
@@ -249,6 +260,12 @@ typedef struct hcb_los {
     uint8_t reserved2;
 } hcb_los;
 
+typedef struct hcb_danger {
+    hcb_vec at;
+    float radius;       /* metres to keep clear */
+    uint8_t kind;       /* HCB_DG_* */
+    uint8_t pad[3];
+} hcb_danger;
 typedef struct hcb_snapshot {
     uint32_t time;      /* game time, ms */
     uint32_t frame;
@@ -265,7 +282,7 @@ typedef struct hcb_snapshot {
     uint8_t police;     /* HCB_POLICE_* */
     uint8_t mission_free; /* 1 = the player wants mission characters treated like anybody else (default 0: defensive) */
     uint8_t tactics;    /* the squad's tactics on the menu: 0 AUTO (the brain chooses), 1 ASSAULT (push towards the threat), 2 GUARD (stay close) */
-    uint8_t reserved2;
+    uint8_t in_water;   /* 0.8: CJ is swimming */
     hcb_vec cam_pos;
     hcb_vec cam_fwd;
     uint16_t n_peds;
@@ -283,6 +300,11 @@ typedef struct hcb_snapshot {
     hcb_veh vehs[HCB_MAX_VEHS];
     hcb_event events[HCB_MAX_EVENTS];
     hcb_los los[HCB_MAX_LOS];
+    /* 0.8 */
+    uint16_t n_hints;
+    uint16_t n_dangers;
+    hcb_vec hints[HCB_MAX_HINTS];       /* the game's own cover points (CCover) near CJ: where something solid stands */
+    hcb_danger dangers[HCB_MAX_DANGERS];
 } hcb_snapshot;
 
 typedef struct hcb_mark {
@@ -534,7 +556,8 @@ typedef struct hcb_pilot_in {
     float hover;                /* height over the ground to stop at (0 = 25 m) */
     uint8_t stop;               /* 1 = stop over the target; 0 = fly on through it */
     uint8_t blocked;            /* the last step was refused (something solid in the way): stop and climb */
-    uint8_t pad[2];
+    uint8_t land;               /* 0.8: come down over the point to `hover` metres over the ground (a landing approach: gently near the ground) */
+    uint8_t pad;
     hcb_vec face;               /* 0.6, on station in a fight: the line the fuselage is to lie along (flat; zero = as it is) -
                                    side-on to the threat, so a door looks at him; turned to when slow and near the point */
 } hcb_pilot_in;

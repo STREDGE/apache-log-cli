@@ -559,6 +559,9 @@ API int hcb_track(const hcb_brain *b, u32 id, hcb_track_info *o) {
  *             ours / our_role / peds / vehs / events;
  *   state:    the brain's memory, byte for byte. */
 #define HEAD ((u32)__builtin_offsetof(hcb_snapshot, ours))
+/* 0.8: what stands after the lines of sight (the game's cover points, the dangers) is recorded whole */
+#define TAIL_AT ((u32)__builtin_offsetof(hcb_snapshot, n_hints))
+#define TAIL ((u32)(sizeof(hcb_snapshot) - TAIL_AT))
 static u32 put(u8 *buf, u32 at, const void *src, u32 n) { copy(buf + at, src, n); return at + n; }
 static u32 rd32(const u8 *p) { return (u32)p[0] | ((u32)p[1] << 8) | ((u32)p[2] << 16) | ((u32)p[3] << 24); }
 API void hcb_rec_init(hcb_rec *r, u32 cap) { zero(r, sizeof *r); r->cap = cap; }
@@ -574,7 +577,7 @@ static int make_room(hcb_rec *r, u8 *buf, u32 need) {
     return 1;
 }
 static u32 snapshot_len(u32 no, u32 np, u32 nv, u32 ne, u32 nl) {
-    return 12 + HEAD + no * 4 + ((no + 3) & ~3u) + np * sizeof(hcb_ped) + nv * sizeof(hcb_veh) + ne * sizeof(hcb_event) + nl * sizeof(hcb_los);
+    return 12 + HEAD + no * 4 + ((no + 3) & ~3u) + np * sizeof(hcb_ped) + nv * sizeof(hcb_veh) + ne * sizeof(hcb_event) + nl * sizeof(hcb_los) + TAIL;
 }
 API void hcb_rec_push(hcb_rec *r, u8 *buf, const hcb_snapshot *s, u32 digest) {
     u32 no = s->n_ours < HCB_MAX_OURS ? s->n_ours : HCB_MAX_OURS, np = s->n_peds < HCB_MAX_PEDS ? s->n_peds : HCB_MAX_PEDS;
@@ -596,6 +599,7 @@ API void hcb_rec_push(hcb_rec *r, u8 *buf, const hcb_snapshot *s, u32 digest) {
     at = put(buf, at, s->ours, no * 4); at = put(buf, at, s->our_role, no); at = put(buf, at, pad, ((no + 3) & ~3u) - no);
     at = put(buf, at, s->peds, np * sizeof(hcb_ped)); at = put(buf, at, s->vehs, nv * sizeof(hcb_veh)); at = put(buf, at, s->events, ne * sizeof(hcb_event));
     at = put(buf, at, s->los, nl * sizeof(hcb_los));
+    at = put(buf, at, (const u8 *)s + TAIL_AT, TAIL);
     r->end = at; r->records++;
 }
 API void hcb_rec_push_state(hcb_rec *r, u8 *buf, const hcb_brain *b) {
@@ -643,6 +647,9 @@ API int hcb_rec_next(const u8 *buf, u32 end, u32 *offset, hcb_snapshot *s, u32 *
     copy(s->vehs, buf + at, nv * sizeof(hcb_veh)); at += nv * sizeof(hcb_veh);
     copy(s->events, buf + at, ne * sizeof(hcb_event)); at += ne * sizeof(hcb_event);
     copy(s->los, buf + at, nl * sizeof(hcb_los)); at += nl * sizeof(hcb_los);
+    copy((u8 *)s + TAIL_AT, buf + at, TAIL); at += TAIL;
+    if (s->n_hints > HCB_MAX_HINTS) s->n_hints = HCB_MAX_HINTS;
+    if (s->n_dangers > HCB_MAX_DANGERS) s->n_dangers = HCB_MAX_DANGERS;
     *offset = at;
     return HCB_REC_SNAPSHOT;
 }

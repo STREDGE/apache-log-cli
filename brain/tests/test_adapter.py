@@ -46,6 +46,8 @@ PED_POOL, VEH_POOL, PED_STRIDE, VEH_STRIDE = 0xbc3bb8, 0xbc3bc0, 0x9c8, 0xc68
 PLAYERS, PLAYER_FOCUS, TIME_MS, USER_PAUSE, CUTSCENE, MISSION_FLAG, SCRIPT_SPACE, GROUPS, RSGLOBAL = 0xbdc738, 0xbdcae8, 0xbdc558, 0xbdc594, 0xba8925, 0x9f83f8, 0x9a2038, 0xc89c20, 0xc9b320
 VT_USE_GUN, VT_KILL = 0x8338c8 + 0x10, 0x833c80 + 0x10
 F_SCRIPTS, F_HUD, F_GUNSHOT, F_LOS, F_POLY, F_SCREEN = 0x3f3ad8, 0x51f6f0, 0x442854, 0x5075a4, 0x6ee4a4, 0x6e9df8
+F_WATER, F_SAY = 0x6ba834, 0x5a57c4       # CWaterLevel::GetWaterLevel, CPed::Say (0.8)
+EXPLOSIONS_T, PROJ_T, COVER_T = 0xd28c78, 0xd29508, 0xc9b390   # the game's tables the mod reads (0.8)
 F_FIRE, F_FLASH = 0x700c64, 0x59bcb0   # CWeapon::Fire, CPed::DoGunFlash (1.4.1: the gunners' own weapon fire)
 GOT_SCRIPTS, GOT_HUD, GOT_GUNSHOT = 0x845438, 0x845ec8, 0x843f10
 GOT_IGNORE, IGNORE_ENTITY, F_COLLECT, F_VARPTR, SCRIPT_PARAMS = 0x84b180, 0xbdcaf8, 0x3f1fcc, 0x3f2654, 0xa001ac
@@ -141,7 +143,8 @@ class Emu:
         uc.mem_map(WORLD, 0x400000)
         uc.hook_add(UC_HOOK_CODE, self.on_stub, begin=STUB, end=STUB + 0xffff)
         self.fire_calls, self.flash_calls = [], []
-        for addr, fn in ((F_SCRIPTS, self.g_scripts), (F_HUD, self.g_hud), (F_GUNSHOT, self.g_gunshot), (F_LOS, self.g_los), (F_POLY, self.g_poly), (F_SCREEN, self.g_screen), (F_FIRE, self.g_fire), (F_FLASH, self.g_flash)):
+        self.water_level, self.water_calls, self.say_calls = None, 0, []
+        for addr, fn in ((F_SCRIPTS, self.g_scripts), (F_HUD, self.g_hud), (F_GUNSHOT, self.g_gunshot), (F_LOS, self.g_los), (F_POLY, self.g_poly), (F_SCREEN, self.g_screen), (F_FIRE, self.g_fire), (F_FLASH, self.g_flash), (F_WATER, self.g_water), (F_SAY, self.g_say)):
             uc.hook_add(UC_HOOK_CODE, fn, begin=GTA + addr, end=GTA + addr)
         names = [b'/data/app/x/lib/arm64/libGTASA.so\0', b'/data/app/x/lib/arm64/libSAcleo64.so\0']
         ph = lambda va, sz: struct.pack('<IIQQQQQQ', 1, 6, va, va, va, sz, sz, 0x1000)
@@ -391,6 +394,13 @@ class Emu:
                                     ik=self.r32(ped + 0x698), clip=self.r32(w + 8), total=self.r32(w + 0xc), state=self.r32(w + 4), acc=bytes(uc.mem_read(ped + 0x8de, 1))[0]))
         self.w32(w + 4, 1)                                             # the game's Fire leaves the weapon "firing"
         self._ret(uc, 1)
+    def g_water(self, uc, *_):
+        self.water_calls += 1
+        if self.water_level is not None: uc.mem_write(uc.reg_read(X[0]), struct.pack('<f', self.water_level))
+        self._ret(uc, 0 if self.water_level is None else 1)
+    def g_say(self, uc, *_):
+        self.say_calls.append((uc.reg_read(X[0]), uc.reg_read(X[1]) & 0xffff, uc.reg_read(X[2]) & 0xffffffff, round(fl(uc.reg_read(S[0])), 3)))
+        self._ret(uc, 0)
     def g_flash(self, uc, *_):
         self.flash_calls.append((uc.reg_read(X[0]), uc.reg_read(X[1]) & 0xffffffff, uc.reg_read(X[2]) & 0xff)); self._ret(uc, 1)
     def g_los(self, uc, *_):
@@ -1157,6 +1167,39 @@ assert 'places of earlier attacks remembered: 1' in lg3, 'an entry that is not a
 e4 = Emu(); e4.fs[PLACES] = struct.pack('<I', 999999) + b'x' * 40; lg4 = e4.load()
 assert 'the brain is running' in lg4 and 'remembered: 0' in lg4, 'a damaged file is ignored'
 passed('0.7 memory of places: a fight writes its place to configs/net.helicover.brain.places; the next game loads it; a damaged file or an entry that is not a number is left out')
+
+# 0.8: what the mod reads from the game besides - water, grenades, explosions, the game's cover points - and the commander's voice
+e = Emu(); lg_ = e.load()
+assert "the game's own knowledge: grenades, explosions and cover points read; water level asked; the commander's voice on" in lg_, lg_[-600:]
+gang = e.ped(20, 0, pedtype=7, weapon=30, face=(-1., 0.))
+s1 = e.ped(4, 2, pedtype=8, weapon=31)
+e.share(HC_STATE + 71, e.handle(s1)); e.share(HC_HELLO, 0)
+e.frame(n=2)
+assert e.water_calls >= 1
+e.water_level = 1.5                                                   # the water stands above CJ's middle: he swims
+e.uc.mem_write(GTA + PROJ_T + 3 * 0x38, struct.pack('<I', 16) + b'\0' * 0x18 + b'\1\0\0\0' + struct.pack('<3f', 6., 2., 1.))     # a live grenade 6 m off
+e.uc.mem_write(GTA + PROJ_T + 5 * 0x38, struct.pack('<I', 16) + b'\0' * 0x18 + b'\1\0\0\0' + struct.pack('<3f', 900., 2., 1.))   # one far away: left out
+e.uc.mem_write(GTA + EXPLOSIONS_T + 2 * 0x88, struct.pack('<I3ff', 0, -8., 3., 1., 9.)); e.uc.mem_write(GTA + EXPLOSIONS_T + 2 * 0x88 + 0x30, b'\1')
+e.uc.mem_write(GTA + COVER_T + 7 * 0x28, struct.pack('<bbbb3f', 2, 0, 0, 0, -5., 4., 1.) + struct.pack('<Q', 0))                    # a cover point of the game's 6 m off
+e.uc.mem_write(GTA + COVER_T + 8 * 0x28, struct.pack('<bbbb3f', 1, 0, 0, 0, 0., 0., 0.) + struct.pack('<Q', 0xdead0000))            # one on a thing that is gone: left out
+e.frame(n=6); e.gunshot(gang, (0., 0.5, 1.)); e.frame(ms=100, n=12, hud=False)
+head, text, ticks = replay_tool.replay(e.save())
+sn = ticks[-1]['snapshot']
+assert sn.in_water == 1 and sn.n_hints == 1 and abs(sn.hints[0].x + 5.) < .01 and all(t['match'] for t in ticks), (sn.in_water, sn.n_hints)
+dg = {(d.kind, round(d.at.x), round(d.radius)) for d in sn.dangers[:sn.n_dangers]}
+assert dg == {(h.HCB_DG_GRENADE, 6, 10), (h.HCB_DG_BLAST, -8, 9)}, dg
+e.frame(ms=100, n=35, hud=False)                                      # (the log is written out)
+lg_ = e.log()
+assert 'IN-WATER' in lg_ and 'danger: GRENADE at (6.0 2.0 1.0)' in lg_ and 'game cover points 1' in lg_, [l_ for l_ in lg_.splitlines() if 'danger' in l_][:3]
+assert e.say_calls and all(c_[0] == s1 and c_[3] == 1.0 and 0 < c_[1] < 361 for c_ in e.say_calls), e.say_calls   # the commander (the only guard here) speaks
+passed('0.8 the game\'s own knowledge: CJ swimming (the game\'s water level asked every look), live grenades and fresh explosions near CJ, the game\'s cover points (one on a thing that is gone is left out, never read) - all in the brain\'s picture, in the log and in the report, which replays exactly; the commander\'s words are also spoken with the game\'s own voice lines (CPed::Say) - %d lines here' % len(e.say_calls))
+# the words differ / it crashed there once: that part is left out and said so
+e = Emu(tweak=lambda e_: e_.uc.mem_write(GTA + F_SAY, b'\0\0\0\0')); lg_ = e.load()
+assert "the commander's voice off (the code differs)" in lg_ and 'the brain is running' in lg_
+CFG_ = '/storage/emulated/0/Android_unprotected/data/com.rockstargames.gtasa/configs/net.helicover.brain.ini'
+e = Emu(); e.fs[CFG_] = b'[Preferences]\nMarkers = 0\nLastCrash = 22\nWaterOff = 1\n'; lg_ = e.load(); e.frame(n=3)
+assert 'water level off (the game crashed in it once)' in lg_ and e.water_calls == 0
+passed('0.8 safety: each of those parts is checked against the game\'s code at the start and left out when it differs; a part the game once crashed in (water level, voice) stays off from the next start on')
 
 text = '\n'.join(results) + '\nThe phone build on an emulated CPU with the real libGTASA.so and the real code of the CLEO library; the world in memory is laid out by the test. Not run in the game.\n'
 (h.OUT / 'brain_adapter_tests.txt').write_text(text)

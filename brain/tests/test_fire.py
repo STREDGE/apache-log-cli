@@ -884,6 +884,22 @@ for seed in range(1, 61):
 assert total > 3000, total
 passed('60 random fights (25 s each, guards and CJ running about, cars, police, every fire rule): %d orders to fire, checked one by one by an independent calculation - none with CJ or one of ours in the line, at a friend, against the fire rule, or at a car that could blow up beside CJ' % total)
 
+# 0.8, proportionate force: a brawler with nothing in his hands is not shot - he is taken down by hand
+sc = rule(HCB_ROE_DEFEND)
+br = sc.ped(9, 0, pedtype=GANG, weapon=0)
+sc.damage(br, 1, 5)                                    # he punches CJ
+fired = run(sc, 20)
+assert not fired and 'FISTS' in set(holds(sc).values()) and all(HOLD[o.hold] == 'FISTS' for o in sc.orders.values() if o.target == br), holds(sc)
+sc.cj['health'] = 30.                                  # CJ is in a bad way: no more of that
+run(sc, 20)
+assert 'FISTS' not in set(holds(sc).values()), holds(sc)
+sc = rule(HCB_ROE_DEFEND)
+kn = sc.ped(9, 0, pedtype=GANG, weapon=4)              # a knife is a weapon
+sc.damage(kn, 1, 20)
+run(sc, 20)
+assert 'FISTS' not in set(holds(sc).values()), holds(sc)
+passed('Proportionate force: an unarmed brawler at CJ is not shot (the order says "by hand") while CJ is not badly hurt; a knife, or CJ under 40 health - the usual fire rules')
+
 text = '\n'.join(results) + '\nThe core only. Nothing here has run in the game.\n'
 (hcb_py.OUT / 'brain_fire_tests.txt').write_text(text)
 print(text)
