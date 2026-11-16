@@ -119,6 +119,18 @@ ent = sorted(entered.values()); close_ = any(b - a < 10 for a, b in zip(ent, ent
 # (1.5: the outer man goes further out now and seldom comes to the gap with the other two - "somebody waited" is asked only when two came to it within a second)
 assert len(through) == 3 and two_in <= 1 and (waited > 0 or not close_) and stood_in <= 12, ('all three through, one at a time, somebody waited (when two came together), nobody stood in it over a second', len(through), two_in, waited, ent, stood_in)
 passed('A doorway (a gap one metre wide) under threat: three men go through one at a time - the next one waits short of it - and nobody stands in it longer than %.1f s' % (stood_in / 10.))
+# (1.5: the commander and a bodyguard come to the gap together on their way to CJ - the one behind waits short of it)
+sc = Scene(); sc.walls = [(-20., -10., 0., -10.), (1., -10., 20., -10.)]
+team = [sc.our(x, -12.5, SQ + k, weapon=M4) for k, x in enumerate((-0.8, 1.8))]; sc.walk_posts = True
+g = sc.ped(0, 40, pedtype=GANG, weapon=AK, face=(0., -1.))
+two_in, waited = 0, 0
+for k in range(400):
+    if k % 9 == 0: sc.shot(g, (0., 0., 1.), dst=1)
+    sc.step(1)
+    two_in = max(two_in, sum(1 for w in team if in_gap(sc.peds[w]['pos'])))
+    waited += sum(1 for p in sc.posts.values() if p.why == HCB_WHY2_DOORWAY and p.act == HCB_ACT_HOLD)
+assert two_in <= 1 and waited > 0 and all(sc.peds[w]['pos'][1] > -9. for w in team), ('two come to the gap together: one waits his turn', two_in, waited)
+passed('A doorway, two men at it together (the commander and a bodyguard on their way to CJ): one goes through, the other waits short of it')
 
 # ------------------------------------------------------------------ what the half-hour run found (soak_30min.py), each as a drill of its own
 # four men to the far side of a long wall with one gap two metres wide: all through, nobody gives up, the gap is never "shut" by those who jostled in it

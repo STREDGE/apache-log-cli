@@ -426,7 +426,8 @@ assert mate not in classes(sc), 'a man sitting in a car that stands still is nob
 sc.vehs[hit_car]['vel'] = [0., 9., 0.]                 # ... and drives on
 sc.step(3)
 c = classes(sc)
-assert c[hit_car] == (HCB_CLS_THREAT, HCB_WHY_RAMMING) and c[mate] == (HCB_CLS_THREAT, HCB_WHY_RAMMING) and c[d1][0] == HCB_CLS_ATTACKER, c
+assert c.get(hit_car) == (HCB_CLS_THREAT, HCB_WHY_RAMMING) and c.get(d1, (0, 0))[0] == HCB_CLS_ATTACKER, c
+assert c.get(mate) == (HCB_CLS_THREAT, HCB_WHY_RAMMING), ('whoever drives a car that has run one of ours down is a threat while it drives about', c)
 passed('The car that ran one of ours down drives on with another man at the wheel: the man driving it now is a THREAT (ramming) like the car itself, and the one who ran our man down stays an ATTACKER')
 
 sc = Scene(wanted=3)
