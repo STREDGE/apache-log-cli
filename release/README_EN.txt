@@ -1,10 +1,30 @@
-HELICOVER 1.5 BETA 3 - support helicopter with a smart crew
-GTA San Andreas (Android, 64-bit), a CLEO mod + the Helicover Brain 0.8 mod. They only work together.
+HELICOVER 1.5 BETA 4 - support helicopter with a smart crew
+GTA San Andreas (Android, 64-bit), a CLEO mod + the Helicover Brain 0.9 mod. They only work together.
 
 WHAT IT IS
 Call a support helicopter: it flies in from far away, follows CJ and covers him with four door
 gunners. Drop a four-man team on foot, get picked up by rope, fly to the map marker or Grove
 Street and get out there by landing or by rope.
+
+NEW IN 1.5 BETA 4 (brain 0.9) - FROM THE FIFTH WHOLE-GAME LOG
+IMPORTANT: replace EVERYTHING - the CLEO files and libHelicoverBrain64.so. None of this has been tried in the game yet.
+What your fight showed: CJ lost 125 health in 16 hits - pistols 67, cars ramming 40, nightstick 12, fists 7; 87 of it while no
+team was near (it did not come for the first 218 s of the fight).
+- The team comes down by itself: once the fight is on (alert "combat" or worse) and CJ is on foot, the escorting helicopter
+  lowers the team down the ropes - once in 45 s at most, never while a team is out. The menu works as before.
+- CJ under 40 health: an armed man who aims at him or simply stands within 20 m is a target at once - his first shot is not
+  waited for. ("Police: answer" used to hold fire on an aiming policeman until he shot.)
+- A ramming car: the commander calls "CAR - LEFT!" (the side). CJ is yours to drive, so getting out of the way is up to you; the
+  guards and gunners still fire at the driver and the tyres.
+- Explosions: nobody stands within 6-14 m of a blast any more (two guards took 150-180 from one) - they leave its circle.
+- Pull-out ("we pull out"): the commander and bodyguards at CJ, the rest 8-12 m off, not a heap at 5 m.
+- Stuck men: a man more than 20 m from his post goes by the path network at once; a man of the second four who stood 40 s more
+  than 45 m from CJ out of view is replaced by a new one who comes in from off screen.
+- "Into cover" is repeated only if CJ has moved, otherwise once in 15 s.
+- The landing approach is gentler: the last 5 m at 3 m/s at most (it was 4.6-5.2).
+- New counters in the log: water (`water asked ... in water ...`), the game's cover table (`table: live ... read ...`), and who
+  gave the helicopter an order (`+568` in "Helicover changed": 1 menu, 2 "we pull out", 3 automatic deployment).
+Honestly: the brain cannot move CJ out of a ramming car's way - you drive him; it only names the car and the side.
 
 NEW IN 1.5 BETA 3 (brain 0.8) - THE WHOLE REST OF THE PLAN
 IMPORTANT: replace EVERYTHING - the CLEO files and libHelicoverBrain64.so. None of this has run in the game yet.

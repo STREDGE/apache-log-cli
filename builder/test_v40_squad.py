@@ -109,7 +109,7 @@ passed('Contact with a pillar 3 m away: the commander tells CJ which way to go (
 # ------------------------------------------------------------------ too hot: a ring and the pickup call
 w2.health[1]=20;w2.messages.clear();steps(w2,V2,8)
 P2=posts(w2);lead_=w2.brain.out.lead
-assert all(math.dist(spot(p),w2.coords(1)[:2])<=5.1 for who_,p in P2.items()) and w2.messages.count('SQEVAC')==1,([spot(p) for p in P2.values()],w2.messages)   # (everybody comes in: nobody further than 5 m)
+D2_=sorted(math.dist(spot(p),w2.coords(1)[:2]) for p in P2.values());assert all(x<=5.1 for x in D2_[:-1]) and 7.5<=D2_[-1]<=12.5 and w2.messages.count('SQEVAC')==1,([spot(p) for p in P2.values()],w2.messages)   # (0.9: the commander and the bodyguards come in, the outer man holds 8-12 m off)
 steps(w2,V2,60);assert w2.messages.count('SQEVAC')==1
 passed('CJ badly hurt under fire: everybody comes in round him (within 5 m) and "too hot - call ROPE PICKUP", once (not again for 20 s)')
 w2.health[1]=100;w2.dead.add(h2);w2.messages.clear();w2.now+=30000;steps(w2,V2,6);w2.now+=30000;steps(w2,V2,6);w2.now+=30000;steps(w2,V2,6)
@@ -157,6 +157,17 @@ P8=posts(w8);jobs8={P8[x].job for x in team8+extra if x in P8}
 assert set(team8+extra)<=set(P8) and jobs8=={H.HCB_ROLE_LEAD,H.HCB_ROLE_CLOSE,H.HCB_ROLE_POINT,H.HCB_ROLE_REAR,H.HCB_ROLE_CLOSE2,H.HCB_ROLE_POINT2,H.HCB_ROLE_CLOSE3,H.HCB_ROLE_MARKSMAN},jobs8
 assert any(orders(w8,0x5d3,x) or orders(w8,0x637,x) for x in extra),'the second squad worker moves the second four to their posts'
 passed('Eight on the ground: four more agents in black come down the same ropes 3 s after the first four (MP5, M4, AK, sniper rifle by role) - nobody appears out of nowhere; the brain gives all eight their posts - the commander, three bodyguards, four outer men - and the second squad worker moves them')
+# 1.5.4: a man of the second four stuck 45 m+ from CJ for 40 s is replaced where the screen does not show (never in view)
+old_=extra[1];w8.pos[old_]=[0.,-60.,0.];w8.offscreen={old_};steps(w8,V8,4)
+assert old_ in w8.exists,'not at once'
+w8.now+=41000;w8.offscreen={old_};steps(w8,V8,6)
+new_=w8.shared[b.GROUND_PUB2+1]
+assert new_!=old_ and new_ in w8.exists and old_ not in w8.exists and w8.skin[new_]==t2b.MODELS[1] and not [x for x in w8.teleports if x['who'] in (new_,old_)],(old_,new_)
+w8.pos[extra[2]]=[0.,-60.,0.];w8.offscreen=set();steps(w8,V8,4);w8.now+=41000;steps(w8,V8,6)
+assert w8.shared[b.GROUND_PUB2+2]==extra[2] and extra[2] in w8.exists,'in view nobody is replaced'
+w8.pos[extra[2]]=[1.5,-3.,0.];steps(w8,V8,2)
+extra[1]=new_
+passed('The second four: a man stuck 45 m or more from CJ for 40 s is deleted out of sight and replaced by a new one that comes in where the screen does not show - never in view, never teleported')
 w8.offscreen=set(extra[:2])
 for t_ in team8:w8.exists.discard(t_)                     # the first four are gone (fallen / recalled)
 steps(w8,V8,8)
@@ -637,7 +648,7 @@ assert any(x[1]==0x1b9 and x[2][0]==gman and x[2][1] in [wp for wp,_m in _g.TEAM
 passed('An unarmed brawler at CJ is taken down by hand (the guard puts his gun away, no shot is fired at the man); when the man draws a weapon the guard has his gun in his hands again')
 # the commander's new words reach the screen
 w,c,ground,sq,team=escort_world();V=(c,ground,sq);steps(w,V,3)
-for seq_,(what,dir_,key) in enumerate([(9,3,'SQGL'),(10,0,'SQWATER'),(11,0,'SQAHEAD'),(7,1,'SQSR'),(8,0,'SQMEM')]):
+for seq_,(what,dir_,key) in enumerate([(9,3,'SQGL'),(10,0,'SQWATER'),(11,0,'SQAHEAD'),(12,3,'SQKL'),(7,1,'SQSR'),(8,0,'SQMEM')]):
  w.messages.clear();w.now+=4000;w.brain.say=(100+seq_,what,dir_);steps(w,V,4);assert key in w.messages,(key,w.messages)
 passed('The commander\'s words reach the screen: "grenade - left", "CJ is in the water", "armed men ahead", "sniper - right", "we were attacked here before"')
 # "we pull out" also orders the rope pickup for the player (the hot pickup) - only while the helicopter escorts and CJ is on foot

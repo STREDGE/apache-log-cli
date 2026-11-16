@@ -465,8 +465,10 @@ assert w.menu[0]==b'HELICOVER / FOLLOWING'
 w.shared[b.CMD]=5;w.step(c,p,n=8);assert w.menu[0]==b'HELICOVER / EVAC INBOUND'
 passed('Main menu updates the status in its title while it is open')
 
-def fire_world():
- w,c,_=setup();summon(w,c);f=VM('Helicover_Fire',w);w.step(c,f,n=3);w.shared[b.FIRE]=3;return w,c,f
+def fire_world(auto=False):
+ w,c,_=setup();summon(w,c);f=VM('Helicover_Fire',w);w.step(c,f,n=3);w.shared[b.FIRE]=3
+ if not auto:w.shared[b.AUTO_DEPLOY_T]=10**9   # 1.5.4: (the automatic deployment of the team has a test of its own)
+ return w,c,f
 def threaten(w,*npcs,weapon=30):
  """Beta 6: PROTECT CJ engages a real threat only - arm the man and turn him to CJ (an armed gang member / policeman on foot, close, in sight)."""
  for npc in npcs:
@@ -955,6 +957,15 @@ for _ in range(200):
  if w.shared.get(b.DEST_NATIVE)==1:break
 w.now+=26000;w.step(c,n=3);assert w.shared[b.STATE]==23
 passed('A stalled native descent still offers LAND / ROPE after 25 s')
+
+# 1.5.4 (fifth log: no ground team for the first 218 s of a fight): the helicopter sends the team down by itself once the fight is on
+w,c,f=fire_world(auto=True);npc=target(w,typ=7,skin=20);w.damage.add((1,npc));w.step(c,f,n=25)
+assert w.shared[b.CMD_SRC]==3 and w.shared[b.AUTO_DEPLOY_T]>w.now,(w.shared[b.CMD_SRC],w.shared[b.AUTO_DEPLOY_T],w.now,w.shared[b.BR_ALERT])
+first=w.shared[b.AUTO_DEPLOY_T];w.shared[b.CMD]=0;w.shared[b.CMD_SRC]=0;w.step(c,f,n=25)
+assert w.shared[b.AUTO_DEPLOY_T]==first and w.shared[b.CMD_SRC]!=3,'once in 45 s'
+w,c,f=fire_world(auto=True);w.shared[b.ESCORT_ON]=1;npc=target(w,typ=7,skin=20);w.damage.add((1,npc));w.step(c,f,n=25)
+assert w.shared[b.CMD_SRC]!=3,'a team is out already: no second one'
+passed('A fight on (alert COMBAT) with no team out: the helicopter sends the team down the ropes by itself (once in 45 s, never while a team is out); the log says who gave the order (CMD_SRC 3)')
 
 # The pilot brings a distant active target into view while following CJ.
 w,c,f=fire_world();npc=target(w,typ=7,skin=20);w.damage.add((1,npc));w.step(c,f,n=25)

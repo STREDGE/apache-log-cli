@@ -245,6 +245,7 @@ typedef struct hcb_post {
 #define HCB_SAY_GRENADE 9       /* 0.8: "grenade - <dir>!" */
 #define HCB_SAY_WATER 10        /* 0.8: "CJ is in the water - the helicopter is over you, take the rope" */
 #define HCB_SAY_AHEAD 11        /* 0.8: "armed men ahead" (CJ drives, the helicopter scouts the way) */
+#define HCB_SAY_CAR 12          /* 0.9: "car - <dir>!": a car on a collision course with CJ reaches him within 3 s */
 /* dangers (hcb_danger.kind) */
 #define HCB_DG_GRENADE 1        /* a thrown grenade / satchel / tear gas on its way or lying */
 #define HCB_DG_FIRE 2           /* a molotov */

@@ -139,14 +139,14 @@ a(0x0e48,V(23),I(9),I(5))   # 23@ number, 24@ what (HCB_SAY_*), 25@ direction fr
 s.get(19,b.SQ_SAY_SEQ);s.check(0x003b,[V(19),V(23)],'SAY_NEW');s.go('SAY_DONE')
 s.label('SAY_NEW');a(0xddc,I(b.SQ_SAY_SEQ),V(23));s.eq(19,-1,'SAY_WHAT');s.go('SAY_DONE')
 s.label('SAY_WHAT')
-for what,keys in [(1,['SQGO'+d for d in 'FRBL']),(2,['SQSAFE']),(3,['SQME'+d for d in 'FRBL']),(4,['SQEVAC']),(5,['SQCMD']),(6,['SQCLR']),(7,['SQS'+d for d in 'FRBL']),(8,['SQMEM']),(9,['SQG'+d for d in 'FRBL']),(10,['SQWATER']),(11,['SQAHEAD'])]:   # 1.5.3: 9 grenade, 10 CJ in the water, 11 armed men ahead   # 1.5.2: 7 sniper, 8 a place where the detail was attacked before
+for what,keys in [(1,['SQGO'+d for d in 'FRBL']),(2,['SQSAFE']),(3,['SQME'+d for d in 'FRBL']),(4,['SQEVAC']),(5,['SQCMD']),(6,['SQCLR']),(7,['SQS'+d for d in 'FRBL']),(8,['SQMEM']),(9,['SQG'+d for d in 'FRBL']),(10,['SQWATER']),(11,['SQAHEAD']),(12,['SQK'+d for d in 'FRBL'])]:   # 1.5.4: 12 a car on a collision course   # 1.5.3: 9 grenade, 10 CJ in the water, 11 armed men ahead   # 1.5.2: 7 sniper, 8 a place where the detail was attacked before
  nw=uid('SAY_W');s.eq(24,what,nw)
  if len(keys)==1:
   msg(keys[0],False)
   if what==4 and not TEAM:
    # 1.5.3, the hot pickup: "we pull out" is also the order to the pilot - while the helicopter escorts CJ (state 2) and CJ is on
    # foot, the rope pickup is asked for at once (the same command as CLIMB ABOARD BY ROPE on the menu); CJ only has to take the rope
-   s.get(19,b.STATE);s.eq(19,2,'SAY_DONE');s.check(0x80df,[V(0)],'SAY_DONE');s.get(19,b.CMD);s.eq(19,0,'SAY_DONE');s.set(b.CMD,10)
+   s.get(19,b.STATE);s.eq(19,2,'SAY_DONE');s.check(0x80df,[V(0)],'SAY_DONE');s.get(19,b.CMD);s.eq(19,0,'SAY_DONE');s.set(b.CMD_SRC,2);s.set(b.CMD,10)
   s.go('SAY_DONE')
  else:
   for d,key in enumerate(keys):
@@ -359,6 +359,7 @@ TEXTS={'SQXF': '~r~SHOTS AT CJ - FRONT!~w~ Covering him.',
  'SQGF': '~r~GRENADE - FRONT!~w~ Get away from it!', 'SQGR': '~r~GRENADE - RIGHT!~w~ Get away from it!', 'SQGB': '~r~GRENADE - BEHIND!~w~ Get away from it!', 'SQGL': '~r~GRENADE - LEFT!~w~ Get away from it!',
  'SQWATER': '~y~ALPHA:~w~ CJ in the water - helicopter over you, take the rope.',
  'SQAHEAD': '~y~PILOT:~w~ armed men ahead on your way.',
+ 'SQKF': '~r~CAR - FRONT!~w~ Get out of its way!', 'SQKR': '~r~CAR - RIGHT!~w~ Get out of its way!', 'SQKB': '~r~CAR - BEHIND!~w~ Get out of its way!', 'SQKL': '~r~CAR - LEFT!~w~ Get out of its way!',
  'SQCMD': '~r~ALPHA DOWN!~w~ BRAVO: I have command.'}
 if __name__=='__main__':
  report=s.build('Helicover_Squad2' if TEAM else 'Helicover_Squad','csa');print(report)

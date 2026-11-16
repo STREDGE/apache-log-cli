@@ -69,6 +69,9 @@ SQ_TICK=STATE+464
 # 1.4.1: the second four of the ground team (guards 5-8) and their own squad worker (Helicover_Squad2) and lifecycle (Helicover_Team2)
 GROUND_PUB2=STATE+480;SQ_SLOT2=STATE+500;SQ_BR_ST2=STATE+540;SQ_BR_TG2=STATE+544;SQ_PACE2=STATE+548;SQ_T2=STATE+552
 SQ_HEART2=STATE+556;SQ_GROUP2=STATE+557;SQ_TICK2=STATE+558;TEAM2_STATE=STATE+559
+AUTO_DEPLOY_T=STATE+567   # 1.5.4: when the helicopter may next send the team down on its own
+TEAM2_LAG=STATE+569   # 1.5.4: +0..3 per man of the second four: since when he has been 45 m or more from CJ
+CMD_SRC=STATE+568   # 1.5.4: who wrote CMD last: 1 the menu, 2 the commander's "we pull out", 3 the automatic deployment (the log says it)
 CR_LAND=STATE+566   # 1.5.3: 1 while the pilot is asked for a landing approach (flag 8: down to 15 m over the pad on the way in)
 DEPLOY_T0=STATE+565   # 1.5: when the first four went down the ropes (the second four follow them down the same ropes 3 s later)
 COMBAT_PILOT=STATE+564   # 1.5: 1 while the brain's own pilot holds the helicopter on its station in a fight (escort, state 2)
@@ -1138,7 +1141,7 @@ for label,cmd in [('DO_CALL',1),('DO_FOLLOW',2),('DO_HOLD',3),('DO_GROVE',7),('D
  for st in [1,4,13]:
   nxt='ALLOW_'+label+'_'+str(st);p.eq(8,st,nxt);p.go('FORCE_REFRESH');p.label(nxt)
  if cmd!=17:p.set(DISMISS_T,0)   # another order withdraws a dismissal that still waits for the squad
- p.set(CMD,cmd)   # beta 5: no fixed 200 ms pause - the page follows the state on the very next pass (the menu is polled every frame)
+ p.set(CMD_SRC,1);p.set(CMD,cmd)   # beta 5: no fixed 200 ms pause - the page follows the state on the very next pass (the menu is polled every frame)
  p.go('CHECK_MENU_STATUS')
 # the two EXIT BUTTON rows are switches: they choose what the game's own exit button does and start nothing themselves
 p.label('DO_EXIT_LAND');p.set(EXIT_MODE,0);say(p,'HCXBL');p.go('FORCE_REFRESH')
@@ -1258,7 +1261,7 @@ f=Script();a=f.add
 def rest(var,P):
  """Weapons down. CLEAR_CHAR_TASKS also ends the kneeling of a mounted gunner, so it is asked for again (beta 6). Uses 30@."""
  a(0x0687,V(var));f.get(30,POSE);f.check(0x0019,[V(30),I(0)],P);f.check(0x0a32,[V(var)],P);a(0x04eb,V(var),I(1));f.label(P)
-f.label('INIT');a(0);f.set(BURN_NEXT,0);f.set(BURN_SAID,0);f.set(BR_KILLS,-1);f.set(BR_ALERT,0);f.set(BR_TOP,-1)
+f.label('INIT');a(0);f.set(AUTO_DEPLOY_T,0);f.set(BURN_NEXT,0);f.set(BURN_SAID,0);f.set(BR_KILLS,-1);f.set(BR_ALERT,0);f.set(BR_TOP,-1)
 for i in range(4):f.set(G_AIM+i,-1);f.set(G_AIM_T+i,0);f.set(G_FIRE+i,-1);f.set(G_FIRE_T+i,0)
 f.set(FIRENEXT,0);f.set(FIREGEN,-1);f.set(FIRE_ACTIVE,0);f.set(FIRE_TARGET,-1);a(6,V(26),I(-1))
 f.label('WAIT');a(1,I(0));f.call('BANNER');a(0x01bd,V(30));a(0xddc,I(FIREHEART),V(30));f.check(0x0a52,[I(EXIT_WIDGET)],'EXIT_POLL_DONE');a(0xddc,I(EXIT_PRESSED),V(30));f.label('EXIT_POLL_DONE');f.get(30,BUSY);f.eq(30,0,'WAIT');f.get(30,STATE)
@@ -1290,6 +1293,13 @@ a(0x0e48,V(8),I(13),I(3))   # 8@ alert, 9@ threats, 10@ attackers, 11@ kills, 12
 f.get(30,POSE);f.check(0x803b,[V(30),V(17)],'POSE_SAME');f.check(0x8019,[V(17),I(2)],'POSE_SAME');f.check(0x0019,[V(17),I(-1)],'POSE_SAME');a(0xddc,I(POSE),V(17));f.label('POSE_SAME')   # (check jumps when false: same, above 2 or negative -> unchanged)
 a(0xddc,I(HELI_SPOT_X),V(18));a(0xddc,I(HELI_SPOT_Y),V(19));a(0xddc,I(HELI_SPOT_Z),V(20))
 a(0xddc,I(BR_ALERT),V(8));a(0xddc,I(BR_THREATS),V(9));a(0xddc,I(BR_ATTACKERS),V(10))
+# 1.5.4 (fifth log: no ground team for the first 218 s of the fight and for the last 34): the helicopter that escorts CJ (state 2) sends the
+# team down the ropes by itself when the alert is COMBAT or worse, CJ is on foot, no team is out, nothing else is ordered, and 45 s have
+# passed since it last did so
+f.check(0x0019,[V(8),I(2)],'AD_DONE');f.get(30,ESCORT_ON);f.eq(30,0,'AD_DONE');f.get(30,STATE);f.eq(30,2,'AD_DONE');f.get(30,CMD);f.eq(30,0,'AD_DONE')
+f.get(30,PUB);f.check(0x80df,[V(30)],'AD_DONE');f.get(30,AUTO_DEPLOY_T);a(0x01bd,V(31));f.check(0x001d,[V(31),V(30)],'AD_DONE')
+a(0x000a,V(31),I(45000));a(0xddc,I(AUTO_DEPLOY_T),V(31));f.set(CMD_SRC,3);f.set(CMD,16)
+f.label('AD_DONE')
 # fire at the helicopter: the stamp the pilot's evasion looks at (it used to come from the bullet traces)
 f.check(0x0019,[V(16),I(-1)],'HELI_SHOT_DONE');f.check(0x8019,[V(16),I(600)],'HELI_SHOT_DONE');a(0x01bd,V(31));a(0x0062,V(31),V(16));a(0xddc,I(HELI_SHOT_T),V(31));f.label('HELI_SHOT_DONE')
 # the pilot still flies by the old rules (stage 6): he is told whom the fight is about - the most dangerous man, while there is a threat and

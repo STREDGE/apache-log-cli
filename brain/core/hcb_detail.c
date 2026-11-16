@@ -453,7 +453,7 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
             } else {
                 /* the outer four */
                 int c = job[i] == HCB_ROLE_POINT ? 0 : job[i] == HCB_ROLE_POINT2 ? 1 : job[i] == HCB_ROLE_REAR ? 2 : 3;
-                float R = ring ? 5.0f : fight ? RAD_FIGHT[c] : RAD_PEACE[c] * (cj_speed > 3.5f ? 0.8f : 1.0f);
+                float R = ring ? 8.0f + 1.3f * (float)c : fight ? RAD_FIGHT[c] : RAD_PEACE[c] * (cj_speed > 3.5f ? 0.8f : 1.0f);
                 hcb_vec c0 = v_add(cjp, v_add(v_mul(ahead, CORNER[c][0] * R), v_mul(side, CORNER[c][1] * R)));
                 c0.z = cjp.z;
                 if (fight && !ring && i < MAXD) {
@@ -529,7 +529,7 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                 if (threat && dist2d(threat->last.pos, cjp) > 45.0f && (threat->shots_at_cj || threat->damage_cj > 0) && (!dt->sniper_said || now - dt->sniper_said >= 20000)) {
                     say = HCB_SAY_SNIPER; say_dir = rel_dir(cj, threat->last.pos); dt->sniper_said = now ? now : 1;
                 } else
-                if (dt->cj_cover_ok && !cj_in && (!dt->cover_said || now - dt->cover_said >= SAY_COVER_MS)) { say = HCB_SAY_TAKE_COVER; say_dir = rel_dir(cj, dt->cj_cover); dt->cover_said = now ? now : 1; }
+                if (dt->cj_cover_ok && !cj_in && (!dt->cover_said || (now - dt->cover_said >= SAY_COVER_MS && (dist2d(cjp, dt->cover_said_at) >= 3.0f || now - dt->cover_said >= 15000)))) { say = HCB_SAY_TAKE_COVER; say_dir = rel_dir(cj, dt->cj_cover); dt->cover_said = now ? now : 1; dt->cover_said_at = cjp; }
                 else if (cj_in && now - dt->in_since >= 1000 && (!dt->safe_said || now - dt->safe_said >= 15000)) { say = HCB_SAY_IN_COVER; dt->safe_said = now ? now : 1; }
                 else if (!dt->cj_cover_ok && now - dt->contact_since >= 1500 && dt->nocover_since && now - dt->nocover_since >= 2000 && (!dt->cover_said || now - dt->cover_said >= 8000)) {
                     say = HCB_SAY_FOLLOW_ME; say_dir = rel_dir(cj, v_sub(cjp, v_mul(u, 5.0f))); dt->cover_said = now ? now : 1;
@@ -570,7 +570,10 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
     for (k = 0; k < (int)s->n_dangers && k < HCB_MAX_DANGERS; k++) {
         const hcb_danger *g = &s->dangers[k];
         float R = g->radius > 1.0f && g->radius < 40.0f ? g->radius : 10.0f;
-        if (g->kind == HCB_DG_BLAST) continue;                                  /* (gone off already) */
+        /* 0.9 (fifth log: two guards took 183 and 152 from blasts 8 m from them; the old rule let blasts go as "gone off already"):
+           a blast still in the game's table is avoided like a grenade. Its radius is not trusted (the same blast read 35 m,
+           then 62 m a second later): 6 to 14 m is the keep-clear, whatever the table says */
+        if (g->kind == HCB_DG_BLAST) R = R < 6.0f ? 6.0f : R > 14.0f ? 14.0f : R;
         for (i = 0; i < out->n_posts; i++) {
             hcb_post *p = &out->posts[i];
             int m;
@@ -586,6 +589,22 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
             say = HCB_SAY_GRENADE; say_dir = rel_dir(cj, g->at); dt->grenade_said = now ? now : 1;      /* (over anything else he was saying) */
         }
     }
+    /* 0.9, a car on a collision course (fifth log: four rams took 40 of CJ's 125 health; the brain saw each car 0.7 to 2.3 s
+       before it hit and said nothing): when it is on its way to CJ and will be there within 3 s the commander calls it, with
+       the side it comes from, once in 2.5 s (over anything but a grenade) */
+    if (n && !cj->vehicle && !indoor && (!dt->car_said || now - dt->car_said >= 2500))
+        for (i = 0; i < HCB_MAX_VTRACKS; i++) {
+            const vtrack *vt = &b->vt[i];
+            hcb_vec rel;
+            float d, closing;
+            if (!vt->used || !vt->seen || vt->why != HCB_WHY_RAMMING || vt->cls < HCB_CLS_THREAT || vt->last.id == s->heli) continue;
+            rel = flat(v_sub(cjp, vt->last.pos)); d = v_len(rel);
+            if (d < 1.0f || d > 45.0f) continue;
+            closing = (vt->last.vel.x * rel.x + vt->last.vel.y * rel.y) / d;
+            if (closing < 4.0f || d / closing > 3.0f) continue;
+            if (say != HCB_SAY_GRENADE) { say = HCB_SAY_CAR; say_dir = rel_dir(cj, vt->last.pos); dt->car_said = now ? now : 1; }
+            break;
+        }
     /* 0.7, stealth: CJ crouches and creeps while all is quiet - so does the detail (down, at a walk, no running about) */
     if (duty < HCB_DUTY_COVER && (cj->flags & HCB_PF_DUCKING) && cj_speed < 2.5f)
         for (i = 0; i < out->n_posts; i++) { out->posts[i].crouch = 1; if (out->posts[i].move > 1) out->posts[i].move = 1; }
@@ -653,7 +672,9 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
             hcb_vec rel = v_sub(p->at, cjp), q = rot(rel, a_ % 12);
             if (p->job != HCB_ROLE_CLOSE && p->job != HCB_ROLE_CLOSE2 && v_len(flat(rel)) > 1.0f) { q.z = rel.z; p->at = v_add(cjp, q); }
             p->stuck = 1;
-            if (a_ >= 3) p->move = 4;
+            /* 0.9 (fifth log: two men stood 57 s, 37 and 58 m from their posts): the path network from the second try, and at once
+               for a man far from his post */
+            if (a_ >= 3 || d > 20.0f) p->move = 4;
         }
     }
     out->cover_ok = (u8)(duty >= HCB_DUTY_COVER && dt->cj_cover_ok && !cj_in);
