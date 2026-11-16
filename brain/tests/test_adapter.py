@@ -51,6 +51,7 @@ EXPLOSIONS_T, PROJ_T, COVER_T = 0xd28c78, 0xd29508, 0xc9b390   # the game's tabl
 F_TASK_NEW, F_GOTO, F_SHOOT, F_SET_TASK, F_GROUND = 0x5d7414, 0x632400, 0x633510, 0x64e084, 0x50f408   # 1.0: the body and the map
 VT_GOTO, VT_SHOOT, VT_ROPE = 0x839040 + 0x10, 0x839b98 + 0x10, 0x8381f8 + 0x10
 HC_MODE, HC_RECALL, CMD_PLAN = 0x48456A00 + 573, 0x48456A00 + 574, 7
+F_EV_CLEAR, F_SET_SEC, F_GUN_CTOR, F_GUN_CTL, F_RELOAD, ROPES_T = 0x64e734, 0x64e5c8, 0x5dd83c, 0x5dfb64, 0x700a2c, 0xbd3e50   # 1.1
 F_FIRE, F_FLASH = 0x700c64, 0x59bcb0   # CWeapon::Fire, CPed::DoGunFlash (1.4.1: the gunners' own weapon fire)
 GOT_SCRIPTS, GOT_HUD, GOT_GUNSHOT = 0x845438, 0x845ec8, 0x843f10
 GOT_IGNORE, IGNORE_ENTITY, F_COLLECT, F_VARPTR, SCRIPT_PARAMS = 0x84b180, 0xbdcaf8, 0x3f1fcc, 0x3f2654, 0xa001ac
@@ -120,7 +121,7 @@ GTA_IMAGE = bytes(GTA_IMAGE)
 
 
 class Emu:
-    def __init__(self, tweak=None, cleo=None, sautils=True, mod=None, cleo_ready=True):
+    def __init__(self, tweak=None, cleo=None, sautils=True, mod=None, cleo_ready=True, gun=False):
         self.mod_path = mod or MOD
         self.uc = uc = Uc(UC_ARCH_ARM64, UC_MODE_ARM)
         self.imports, self.fs, self.fds, self.polys, self.items, self.prot, self.los_calls, self.threads = {}, {}, {}, [], [], [], [], []
@@ -149,11 +150,15 @@ class Emu:
         self.water_level, self.water_calls, self.say_calls = None, 0, []
         self.new_tasks, self.set_tasks, self.abort_calls, self.abort_ok, self.pool_full, self.ground_calls, self.los_fn = [], [], [], True, False, 0, None
         self.ground = lambda x, y, z: (1, 0.)                                # flat ground at height 0 everywhere
-        for addr, fn in ((F_TASK_NEW, self.g_task_new), (F_GOTO, self.g_goto), (F_SHOOT, self.g_shoot), (F_SET_TASK, self.g_set_task), (F_GROUND, self.g_ground)):
+        self.ev_clears, self.sec_tasks, self.gun_cmds, self.reloads, self.gun_fires = [], [], [], [], True
+        for addr, fn in ((F_TASK_NEW, self.g_task_new), (F_GOTO, self.g_goto), (F_SHOOT, self.g_shoot), (F_SET_TASK, self.g_set_task), (F_GROUND, self.g_ground),
+                         (F_EV_CLEAR, self.g_ev_clear), (F_SET_SEC, self.g_set_sec), (F_GUN_CTOR, self.g_gun_ctor), (F_GUN_CTL, self.g_gun_ctl), (F_RELOAD, self.g_reload)):
             uc.hook_add(UC_HOOK_CODE, fn, begin=GTA + addr, end=GTA + addr)
         # the virtual functions the mod calls on a task: its type (+0x28) and "can you stop now?" (+0x38)
         for vt, typ in ((VT_USE_GUN, 1017), (VT_KILL, 1000), (VT_GOTO, 903), (VT_SHOOT, 911), (VT_ROPE, 1407)):
             uc.mem_write(GTA + vt + 0x28, struct.pack('<Q', self.stub('type:%d' % typ))); uc.mem_write(GTA + vt + 0x38, struct.pack('<Q', self.stub('abort')))
+        self.vt_flee = 0x834000   # (1.1: a vtable for a task of the game AI's own - a flight - laid out by the test in the game's data)
+        uc.mem_write(GTA + self.vt_flee + 0x28, struct.pack('<Q', self.stub('type:911'))); uc.mem_write(GTA + self.vt_flee + 0x38, struct.pack('<Q', self.stub('abort')))
         for addr, fn in ((F_SCRIPTS, self.g_scripts), (F_HUD, self.g_hud), (F_GUNSHOT, self.g_gunshot), (F_LOS, self.g_los), (F_POLY, self.g_poly), (F_SCREEN, self.g_screen), (F_FIRE, self.g_fire), (F_FLASH, self.g_flash), (F_WATER, self.g_water), (F_SAY, self.g_say)):
             uc.hook_add(UC_HOOK_CODE, fn, begin=GTA + addr, end=GTA + addr)
         names = [b'/data/app/x/lib/arm64/libGTASA.so\0', b'/data/app/x/lib/arm64/libSAcleo64.so\0']
@@ -168,6 +173,8 @@ class Emu:
         self.cleo_before = bytes(uc.mem_read(CLEO, self.cleo_size))
         if tweak:
             tweak(self)
+        if not gun:      # (1.1: the tests written before the mod's own gun task run with it refused - "the code differs" - so the scripts' fire states are what they see)
+            uc.mem_write(GTA + F_GUN_CTL, b'\0\0\0\0')
         self.load_mod()
         self.before = bytes(uc.mem_read(GTA, GTA_SIZE))
 
@@ -215,7 +222,7 @@ class Emu:
         self.w64(p + 0x18, mat); uc.mem_write(p + 0x5a, bytes([3])); uc.mem_write(p + 0x32, struct.pack('<h', model))
         intel = self.alloc(0x440); self.w64(intel, p); self.w64(p + 0x538, intel)
         uc.mem_write(p + 0x548, b'\x01'); self.w32(p + 0x54c, 1); self.wf(p + 0x6ac, health); self.w32(p + 0x720, pedtype)
-        uc.mem_write(p + 0x8dc, b'\x00'); self.w32(p + 0x730, weapon)
+        uc.mem_write(p + 0x8dc, b'\x00'); self.w32(p + 0x730, weapon); self.w32(p + 0x738, 30); self.w32(p + 0x73c, 500)   # (a full magazine, rounds in reserve)
         return p
 
     def handle(self, ptr):
@@ -440,6 +447,26 @@ class Emu:
     def g_set_task(self, uc, *_):
         mgr, t, slot = uc.reg_read(X[0]), uc.reg_read(X[1]), uc.reg_read(X[2]) & 0xffffffff
         self.w64(mgr + 8 * slot, t); self.set_tasks.append((mgr, t, slot)); self._ret(uc)
+    # 1.1: the event slot, the secondary slots, the gun task, a magazine
+    def g_ev_clear(self, uc, *_):
+        mgr = uc.reg_read(X[0]); slot = 1 if self.r64(mgr + 8) else 2
+        self.ev_clears.append((mgr, self.r64(mgr + 8 * slot))); self.w64(mgr + 8 * slot, 0); self._ret(uc)
+    def g_set_sec(self, uc, *_):
+        mgr, t, slot = uc.reg_read(X[0]), uc.reg_read(X[1]), uc.reg_read(X[2]) & 0xffffffff
+        self.w64(mgr + 0x28 + 8 * slot, t); self.sec_tasks.append((mgr, t, slot)); self._ret(uc)
+    def g_gun_ctor(self, uc, *_):
+        t, ent, cmd, burst = uc.reg_read(X[0]), uc.reg_read(X[1]), uc.reg_read(X[2]) & 0xff, uc.reg_read(X[3]) & 0xffff
+        self.w64(t, GTA + VT_USE_GUN); self.w64(t + 0x28, ent); uc.mem_write(t + 0x17, bytes([cmd]))
+        self.new_tasks.append(dict(kind='gun', task=t, ent=ent, cmd=cmd, burst=burst)); self._ret(uc, t)
+    def g_gun_ctl(self, uc, *_):
+        t, ped, ent, cmd = uc.reg_read(X[0]), uc.reg_read(X[1]), uc.reg_read(X[2]), uc.reg_read(X[3]) & 0xff
+        self.w64(t + 0x28, ent); uc.mem_write(t + 0x17, bytes([cmd])); self.gun_cmds.append((t, ped, ent, cmd))
+        if cmd == 3 and self.gun_fires:                               # the game fires: a round leaves his magazine
+            w = ped + 0x730 + struct.unpack('<b', bytes(uc.mem_read(ped + 0x8dc, 1)))[0] * 0x20
+            self.w32(w + 8, max(0, self.r32(w + 8) - 1))
+        self._ret(uc, 1)
+    def g_reload(self, uc, *_):
+        w, ped = uc.reg_read(X[0]), uc.reg_read(X[1]); self.reloads.append((w, ped)); self.w32(w + 8, 30); self._ret(uc)
     def g_ground(self, uc, *_):
         x, y, z = (fl(uc.reg_read(r)) for r in S[:3]); f, g = self.ground(x, y, z)
         self.ground_calls += 1
@@ -1336,6 +1363,127 @@ assert 'squad: mode ASSAULT' in lg_ and '(TO ME)' in lg_ and 'body MOD: new task
 SUM = MODS + 'hcbrain_summary.txt'
 assert SUM in e.fs and b'guard farther than 8 m from his post while CJ stands' in e.fs[SUM] and b'the body: the mod' in e.fs[SUM], e.fs.get(SUM)
 passed('1.0 the mode: PROTECT / ASSAULT is read from the scripts\' shared value, "to me" is taken once and holds ten seconds; command 7 tells the scripts the mode, the squad\'s task, the marksman\'s roof and whether the mod walks the men; the log has a line for the squad, the body and the map every second and every guard\'s action, stage, reason and the game\'s own task types; mods/hcbrain_summary.txt keeps the session\'s numbers (far from post, stuck, sprint, changes of action)')
+
+# ------------------------------------------------------------------ 1.1: the mod's own gun task, magazines, the game AI kept off, ropes, the settings file
+def fight_world(gun=True, cfg=None, far=False):
+    e = Emu(gun=gun)
+    if cfg: e.fs[CFG_] = cfg
+    lg_ = e.load()
+    g1 = e.ped(9 if far else 1.5, 6 if far else -1., pedtype=8, weapon=31)
+    e.share(HC_STATE + 71, e.handle(g1)); e.share(HC_HELLO, 0); e.share(HC_MODE, 0); e.share(HC_RECALL, 0)
+    e.frame(n=6, hud=False)
+    gang = e.ped(18, 0, pedtype=7, weapon=30, face=(-1., 0.))
+    e.frame(n=2, hud=False); e.gunshot(gang, (0., 0.5, 1.))
+    return e, g1, gang, lg_
+def squad(e, g): return e.opcode(10, 3, CMD_SQUAD, handle=e.handle(g))[1]
+e, g1, gang, lg_ = fight_world()
+assert "their weapons: the mod's own gun task" in lg_ and 'the game AI kept off the guards: yes' in lg_ and 'their ropes: held by the mod' in lg_, lg_[-500:]
+states = []
+for _ in range(14):
+    e.frame(ms=50, hud=False); states.append(squad(e, g1)[1])
+guns = [t for t in e.new_tasks if t['kind'] == 'gun']; mgr = e.r64(g1 + 0x538) + 8
+assert states[-1] == 6 and len(guns) == 1 and guns[0]['ent'] == gang and e.sec_tasks == [(mgr, guns[0]['task'], 0)], (states, guns, e.sec_tasks)
+assert e.r64(mgr + 24) == 0 or e.r64(mgr + 24) != guns[0]['task'], 'his main slot is not the gun task: he can walk and fire'
+assert e.gun_cmds and e.gun_cmds[-1][2] == gang and e.gun_cmds[-1][3] == 3 and all(c[0] == guns[0]['task'] for c in e.gun_cmds), e.gun_cmds[-3:]
+clip0 = e.r32(g1 + 0x738)
+for _ in range(10):
+    e.frame(ms=50, hud=False); squad(e, g1)
+assert len([t for t in e.new_tasks if t['kind'] == 'gun']) == 1 and e.r32(g1 + 0x738) < clip0, 'asked every frame: no new task, only the command; rounds leave his magazine'
+e.move(e.cj, 10, 0.3); e.frame(ms=50, n=2, hud=False); v = squad(e, g1)                         # CJ in his line: the same task is told to aim, not fire
+assert v[1] == 6 and e.gun_cmds[-1][3] == 1, (v, e.gun_cmds[-1])
+e.move(e.cj, 0, 0); e.w32(gang + 0x54c, 55); e.frame(ms=100, n=6, hud=False); v = squad(e, g1)    # the man is dead: the task is told to stop
+assert e.gun_cmds[-1][3] == 6 and e.gun_cmds[-1][2] == 0 and v[1] != 6, (v, e.gun_cmds[-1])
+head, text, ticks = replay_tool.replay(e.save())
+assert ticks[-1]['snapshot'].our_clip[0] == e.r32(g1 + 0x738) and all(t['match'] for t in ticks)
+passed('1.1 the guards\' weapons: with the brain\'s leave to fire a guard gets the game\'s own gun task ONCE in his attack slot (CTaskSimpleUseGun through SetTaskSecondary - the main slot is left alone) and the script is told 6 = "his weapon is the mod\'s"; after that only its command is set every look - fire a burst, aim (CJ in the line), stop (the man is dead); the rounds left in his magazine go to the core')
+# the self-check: fire ordered for 3 s and no round leaves the weapon - the scripts fire from then on
+e, g1, gang, _ = fight_world(); e.gun_fires = False
+st = []
+for k in range(90):
+    if k % 12 == 0: e.gunshot(gang, (0., 0.5, 1.))
+    e.frame(ms=50, hud=False); st.append(squad(e, g1)[1])
+e.frame(ms=100, n=35, hud=False)                                    # (the log is written out)
+assert st[10] == 6 and st[-1] == 2 and 'no round has left the weapon' in e.log() and e.gun_cmds[-1][3] == 7, (st[::10], e.gun_cmds[-1])
+passed('1.1 the gun task checks itself: 3 s of fire orders and no round has left any guard\'s weapon - the mod says so in the log, ends its task and the scripts fire as before (the answer is 2 again)')
+# magazines: the man whose turn it is gets CWeapon::Reload, once a turn
+e, g1, gang, _ = fight_world()
+for k in range(12):
+    e.frame(ms=50, hud=False); squad(e, g1)
+e.w32(g1 + 0x738, 3)
+for k in range(30):
+    if k % 12 == 0: e.gunshot(gang, (0., 0.5, 1.))
+    e.frame(ms=50, hud=False); squad(e, g1)
+assert len(e.reloads) == 1 and e.reloads[0] == (g1 + 0x730, g1) and e.r32(g1 + 0x738) > 20, e.reloads
+passed('1.1 magazines: with 3 rounds left the guard takes the core\'s turn to reload - the mod calls the game\'s CWeapon::Reload for his weapon once and he fires on with a full magazine')
+# fire on the move. With the mod's gun task: a plain walk and the gun task beside it. Without it: the game's go-and-shoot task, once.
+e, g1, gang, _ = fight_world(far=True)
+for k in range(8):
+    e.frame(ms=50, hud=False); squad(e, g1); v = post(e, g1)
+kinds = [t['kind'] for t in e.new_tasks]
+assert v[1] == 5 and kinds.count('goto') == 1 and kinds.count('gun') == 1 and 'shoot' not in kinds, (v, kinds)
+e, g1, gang, _ = fight_world(gun=False, far=True)
+for k in range(8):
+    e.frame(ms=50, hud=False); st_ = squad(e, g1); v = post(e, g1)
+sh = [t for t in e.new_tasks if t['kind'] == 'shoot']
+assert st_[1] == 2 and v[1] == 5 and len(sh) == 1 and sh[0]['ent'] == gang and sh[0]['ms'] in (4, 6, 7) and e.set_tasks[-1][1:] == (sh[0]['task'], 3), (st_, v, e.new_tasks)
+for k in range(6):
+    e.frame(ms=50, hud=False); squad(e, g1); post(e, g1)
+assert len([t for t in e.new_tasks if t['kind'] == 'shoot']) == 1, 'asked again: the same task goes on'
+gang2 = e.ped(16, 4, pedtype=7, weapon=30, face=(-1., 0.)); e.w32(gang + 0x54c, 55)
+for k in range(14):
+    if k % 4 == 0: e.gunshot(gang2, (0., 0.5, 1.))
+    e.frame(ms=50, hud=False); squad(e, g1); post(e, g1)
+sh = [t for t in e.new_tasks if t['kind'] == 'shoot']
+assert len(sh) == 2 and sh[1]['ent'] == gang2, ('another man: another go-and-shoot task', [t['kind'] for t in e.new_tasks])
+e.share(HC_STATE + 7, 0)                                             # HOLD FIRE: he goes on, without the weapon
+for k in range(10):
+    e.frame(ms=50, hud=False); squad(e, g1); v = post(e, g1)
+assert e.new_tasks[-1]['kind'] == 'goto' and v[1] == 5, (e.new_tasks[-1]['kind'], v)
+passed('1.1 fire on the move: with the mod\'s gun task a guard walks by the plain go-to task and fires by the gun task beside it; where that task is refused he gets the game\'s go-and-shoot task ONCE (the man the brain gave him), a new one for another man, and a plain walk again when fire is forbidden')
+# the game AI kept off: the empty decision maker is put back, a flight in his event slot is removed, a walk is left alone
+e, (g1,), _ = detail_world()
+intel = e.r64(g1 + 0x538); e.w32(intel + 0x160, 5); post(e, g1)
+e.w32(intel + 0x160, 9); e.frame(ms=100, hud=False); post(e, g1)
+assert e.r32(intel + 0x160) == 5, e.r32(intel + 0x160)
+flee = e.alloc(0x60); e.w64(flee, GTA + e.vt_flee); e.w64(intel + 8 + 16, flee); n0 = len(e.abort_calls)
+e.frame(ms=100, hud=False); post(e, g1)
+assert e.ev_clears == [(intel + 8, flee)] and e.r64(intel + 8 + 16) == 0 and e.abort_calls[n0][:2] == (flee, g1), (e.ev_clears, e.abort_calls[n0:])
+walk = e.alloc(0x60); e.w64(walk, GTA + VT_GOTO); e.w64(intel + 8 + 16, walk); e.frame(ms=100, hud=False); post(e, g1)
+assert len(e.ev_clears) == 1 and e.r64(intel + 8 + 16) == walk, 'a task that is not a reaction of the game AI is left where it is'
+e.w64(intel + 8 + 16, flee); e.abort_ok = False; e.frame(ms=100, hud=False); post(e, g1)
+assert len(e.ev_clears) == 1 and e.r64(intel + 8 + 16) == flee, 'and one that refuses to stop is not torn out'
+e.frame(ms=100, n=40, hud=False); lg_ = e.log()
+assert "the guards' decision maker (the scripts' empty one): 5" in lg_ and 'mind: decision maker 5 put back 1 AI reactions removed 1 (last type 911) refused' in lg_, [l_ for l_ in lg_.splitlines() if 'mind:' in l_][-1:]
+passed('1.1 the game AI kept off a guard: the scripts\' empty decision maker is remembered and put back when something has changed it; a flight (type 911) in his event slot is asked to stop and removed with the game\'s ClearTaskEventResponse; a task of another kind is left alone and one that refuses is not torn out')
+# ropes: while one of ours is on it the rope is kept alive and its top goes with the helicopter
+e = Emu(); e.load()
+pilot = e.ped(0, 8, 25., pedtype=8); heli = e.veh(0, 8, 25., vtype=3, driver=pilot)
+g1 = e.ped(1.5, 8, 20., pedtype=8, weapon=31)
+e.share(HC_STATE + 21, e.handle(heli) & 0x7fffffff); e.share(HC_STATE + 22, e.handle(pilot)); e.share(HC_STATE + 71, e.handle(g1)); e.share(HC_HELLO, 0)
+rope_task = e.alloc(0x40); e.w64(rope_task, GTA + VT_ROPE); e.w32(rope_task + 0x18, 105); e.w64(e.r64(g1 + 0x538) + 8 + 24, rope_task)
+R = GTA + ROPES_T + 2 * 0x340
+e.wf(R, 1.5, 8., 24.); e.w64(R + 0x300, 105); e.uc.mem_write(R + 0x339, b'\x08'); e.w32(R + 0x334, e.r32(GTA + TIME_MS) + 400)
+other = GTA + ROPES_T + 5 * 0x340; e.wf(other, 50., 50., 30.); e.w64(other + 0x300, 300); e.uc.mem_write(other + 0x339, b'\x08'); e.w32(other + 0x334, 12345)
+e.frame(n=8, hud=False)
+assert e.r32(R + 0x334) == e.r32(GTA + TIME_MS) + 4000 and e.r32(other + 0x334) == 12345, 'his rope lives on; a rope nobody of ours is on is not touched'
+e.move(heli, 3, 10, 25.); e.frame(n=3, hud=False)
+top = struct.unpack('<3f', bytes(e.uc.mem_read(R, 12)))
+assert math.dist(top, (4.5, 10., 24.)) < 0.01, ('the top of the rope goes with the helicopter', top)
+e.w64(e.r64(g1 + 0x538) + 8 + 24, 0); till = e.r32(R + 0x334); e.frame(n=5, hud=False)
+assert e.r32(R + 0x334) == till, 'he stands: the rope is the game\'s again'
+passed('1.1 ropes: a rope one of ours comes down (the game\'s own rope task names it) is kept alive past its 4 s and its top follows the helicopter; when he stands, or for a rope nobody of ours is on, nothing is touched')
+# the settings file: every tactical number, checked
+e = Emu(); e.fs[CFG_] = b'[Preferences]\nMarkers = 0\n\n[Tactics]\nGatherM = 40\nRiflesPerTarget = 9\nCornerMs = abc\nPlaceFire = 0.55\n'; lg_ = e.load()
+assert 'tactical numbers from the settings file: 2 changed, 2 ignored' in lg_, [l_ for l_ in lg_.splitlines() if 'tactical' in l_]
+out_ = e.fs[CFG_].decode()
+assert '[Tactics]' in out_ and '\nGatherM = 40 ' in out_ and '\nPlaceFire = 0.55 ' in out_ and '\nRiflesPerTarget = 3 ' in out_ and '\nCornerMs = 800 ' in out_ and out_.count('\n') > 35, out_[:600]
+e2 = Emu(); e2.fs[CFG_] = e.fs[CFG_] + b''; lg2 = e2.load()
+assert 'tactical numbers from the settings file: 2 changed, 0 ignored' in lg2 and e2.fs[CFG_] == e.fs[CFG_], 'the file the mod wrote reads back the same'
+e3 = Emu(gun=True); e3.fs[CFG_] = b'[Preferences]\nMarkers = 0\nLastCrash = 26\n'; lg3 = e3.load()
+assert b'GunOff = 1' in e3.fs[CFG_] and 'the scripts fire the guards\' weapons from now on' in lg3
+e3 = Emu(gun=True); e3.fs[CFG_] = b'[Preferences]\nMarkers = 0\nMindOff = 1\nRopeOff = 1\nGunOff = 1\n'; lg3 = e3.load()
+assert 'the game AI kept off the guards: off in the settings; their weapons: the scripts (off in the settings); their ropes: the game\'s (off in the settings)' in lg3, lg3[-400:]
+passed('1.1 the settings file: every tactical number is written to configs/net.helicover.brain.ini ([Tactics], with what it means and its limits); a changed value is taken at the next start, one that is not a number or outside its limits is ignored and written back as the built-in one; MindOff / GunOff / RopeOff switch those parts off, and a crash inside one of them (steps 25-27) does it by itself')
 
 text = '\n'.join(results) + '\nThe phone build on an emulated CPU with the real libGTASA.so and the real code of the CLEO library; the world in memory is laid out by the test. Not run in the game.\n'
 (h.OUT / 'brain_adapter_tests.txt').write_text(text)
