@@ -54,7 +54,7 @@ extern void *memset(void *d, int c, u64 n);
 
 #define HIDDEN __attribute__((visibility("hidden")))
 #define EXPORT __attribute__((visibility("default")))
-#define VERSION "0.3 (stage 3: protective detail and pilot)"
+#define VERSION "0.4 (eight-man detail, the commander leads CJ, the gunners fire their own weapons, crash recorder)"
 #define GAME_DIR "/storage/emulated/0/Android_unprotected/data/com.rockstargames.gtasa/"
 
 /* ---------- the game (offsets from libGTASA base; see brain/research/game_facts.md) ---------- */
@@ -84,7 +84,8 @@ extern void *memset(void *d, int c, u64 n);
 #define HC_FIRE (HC_STATE + 7)
 #define HC_PUB (HC_STATE + 20)              /* +0 CJ, +1 helicopter, +2 pilot, +3..6 gunners */
 #define HC_PHASE (HC_STATE + 27)            /* 1 = the crew has left the helicopter after a landing and are guards on foot; else they are in its doors */
-#define HC_GROUND (HC_STATE + 71)           /* +0..4 ground team */
+#define HC_GROUND (HC_STATE + 71)           /* +0..3 ground team (guards 1-4), +4 the rope actor */
+#define HC_GROUND2 (HC_STATE + 480)         /* +0..3 ground team, guards 5-8 (1.4.1) */
 #define HC_LEAVE (HC_STATE + 416)           /* +0..7 guards who were let go and walk away: still ours (never a target, never in a line of fire) */
 #define HC_HELLO (HC_STATE + 440)           /* the scripts create it with 0; the brain answers with HELLO_MAGIC */
 #define HC_POLICE (HC_STATE + 441)          /* 0 answer policemen who fire, 1 never fire at the police */
@@ -97,7 +98,7 @@ extern void *memset(void *d, int c, u64 n);
 #define CMD_POST 4                          /* 10 variables: in handle; out move (-1 no post, 0 stay, 1 walk, 2 run, 3 sprint), x y z, crouch, look x y z, duty */
 #define CMD_DETAIL 5                        /* 9 variables: out what the commander said last (seq, HCB_SAY_*, direction), duty, cover for CJ (ok, x y z), commander */
 #define CMD_PILOT 6                         /* 6 variables: in helicopter, point x y, roofs z, flags (1 stop, 2 the last step was refused); out x y z, metres left, speed (-1 = no pilot) */
-#define CMD_STATUS 3                        /* 5 variables: out alert, threats, attackers, kills, the most dangerous man; 8: + ms since CJ fired, direction x, y; 9: + ms since a stranger fired at our helicopter */
+#define CMD_STATUS 3                        /* 5 variables: out alert, threats, attackers, kills, the most dangerous man; 8: + ms since CJ fired, direction x, y; 9: + ms since a stranger fired at our helicopter; 10: + the gunners' pose (0 stand, 1 kneel, 2 sit); 13: + the helicopter's spot x y z (0 0 0 = none) */
 #define IGNORE_ENTITY 0xbdcaf8UL            /* CWorld::pIgnoreEntity */
 #define GOT_IGNORE 0x84b180UL               /* the GOT entry the line-of-sight code reads its address from */
 /* CLEO (offsets from the start of libSAcleo64.so; the unpacked library is at +0x88000) */
@@ -180,24 +181,31 @@ static void flush_log(void) {
 /* ---------- settings ---------- */
 #define CFG GAME_DIR "configs/net.helicover.brain.ini"
 static int g_marks = 0;         /* debug markers: off unless the player turns them on */
+static u32 g_last_crash;        /* 1.4.1: the brain's step when the last game crashed inside it (0 = none); 20 = a gunner's shot */
+static int g_fire_off;          /* 1.4.1: the game's own weapon fire for the gunners is off (it crashed once, or the words differ) */
+static int key_at(const char *b, const char *key) { int i, k; for (i = 0; b[i]; i++) { for (k = 0; key[k] && b[i + k] == key[k]; k++) {} if (!key[k]) { i += k; while (b[i] == ' ' || b[i] == '\t' || b[i] == '=') i++; return i; } } return -1; }
 static void load_config(void) {
     char b[256]; long n; int fd = open(CFG, O_RDONLY), i;
     if (fd < 0) return;
     n = read(fd, b, sizeof(b) - 1); close(fd);
     if (n <= 0) return;
     b[n] = 0;
-    for (i = 0; b[i]; i++)
-        if (b[i] == 'M' && b[i + 1] == 'a' && b[i + 2] == 'r' && b[i + 3] == 'k' && b[i + 4] == 'e' && b[i + 5] == 'r' && b[i + 6] == 's') {
-            for (i += 7; b[i] == ' ' || b[i] == '\t' || b[i] == '='; i++) {}
-            if (b[i] == '0' || b[i] == '1') g_marks = b[i] == '1';
-            return;
-        }
+    if ((i = key_at(b, "Markers")) >= 0 && (b[i] == '0' || b[i] == '1')) g_marks = b[i] == '1';
+    if ((i = key_at(b, "FireOff")) >= 0 && b[i] == '1') g_fire_off = 1;
+    if ((i = key_at(b, "LastCrash")) >= 0) for (g_last_crash = 0; b[i] >= '0' && b[i] <= '9'; i++) g_last_crash = g_last_crash * 10 + (u32)(b[i] - '0');
 }
-static void save_config(void) {
-    const char *t = g_marks ? "[Preferences]\nMarkers = 1\n" : "[Preferences]\nMarkers = 0\n";
+static void save_config_with(u32 crash) {
+    char b[96]; struct text t = {b, sizeof b, 0};
     int fd = open(CFG, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd < 0) return;
-    write(fd, t, slen(t)); close(fd);
+    ts(&t, g_marks ? "[Preferences]\nMarkers = 1\n" : "[Preferences]\nMarkers = 0\n");
+    if (crash) { ts(&t, "LastCrash = "); tu(&t, crash); ts(&t, "\n"); }
+    if (g_fire_off || crash == 20) ts(&t, "FireOff = 1\n");
+    write(fd, b, t.len); close(fd);
+}
+static void crash_settings(u32 where) { save_config_with(where ? where : 99); }
+static void save_config(void) {
+    save_config_with(g_last_crash);
 }
 
 /* ---------- the brain and its black box ---------- */
@@ -489,20 +497,21 @@ static int build_snapshot(hcb_snapshot *s, const hcb_out *prev) {
     if (shared_get(HC_FIRE, &v) && v <= 4) s->roe = (u8)v;
     if (shared_get(HC_POLICE, &v)) s->police = v == 1 ? HCB_POLICE_EVADE : HCB_POLICE_ANSWER;
     if (shared_get(HC_MISSION, &v)) s->mission_free = v == 1;
-    if (shared_get(HC_TACTICS, &v)) s->tactics = v == 1;
+    if (shared_get(HC_TACTICS, &v)) s->tactics = (u8)(v <= 2 ? v : 0);   /* 0 AUTO, 1 ASSAULT, 2 GUARD */
 
     /* ours: what the scripts have published (a handle that no longer names a live ped is dropped) */
     if (shared_get(HC_PUB + 1, &v) && obj_of(&vp, v, VEH_STRIDE)) s->heli = VID(v);
     /* (the four of the crew are door gunners - their rounds are made by the script along a checked line - only while they are mounted;
        on foot they fire the game's own weapon like the ground team, and are judged like it) */
     mounted = !(shared_get(HC_PHASE, &v) && v == 1);
-    for (k = 0; k < 18 && s->n_ours < HCB_MAX_OURS; k++) {
-        u32 key = k < 5 ? HC_PUB + 2 + k : k < 10 ? HC_GROUND + (k - 5) : HC_LEAVE + (k - 10), n;
+    /* (k: 0 pilot, 1-4 the crew, 5-8 guards 1-4, 9-12 guards 5-8, 13 the rope actor, 14-21 guards let go) */
+    for (k = 0; k < 22 && s->n_ours < HCB_MAX_OURS; k++) {
+        u32 key = k < 5 ? HC_PUB + 2 + k : k < 9 ? HC_GROUND + (k - 5) : k < 13 ? HC_GROUND2 + (k - 9) : k == 13 ? HC_GROUND + 4 : HC_LEAVE + (k - 14), n;
         if (!shared_get(key, &v) || !obj_of(&pp, v, PED_STRIDE) || v == cj_h) continue;
         for (n = 0; n < s->n_ours && s->ours[n] != v; n++) {}
         if (n < s->n_ours) continue;                    /* the same man published twice */
         s->ours[s->n_ours] = v;
-        s->our_role[s->n_ours] = (u8)(k == 0 ? HCB_ROLE_PILOT : k < 5 ? (mounted ? HCB_ROLE_GUNNER : HCB_ROLE_SQUAD) + (k - 1) : k < 10 ? HCB_ROLE_SQUAD + (k - 5 < 4 ? k - 5 : 3) : HCB_ROLE_NONE);
+        s->our_role[s->n_ours] = (u8)(k == 0 ? HCB_ROLE_PILOT : k < 5 ? (mounted ? HCB_ROLE_GUNNER : HCB_ROLE_SQUAD) + (k - 1) : k < 13 ? HCB_ROLE_SQUAD + (k - 5) : HCB_ROLE_NONE);
         s->n_ours++;
     }
 
@@ -673,6 +682,7 @@ static void save_report(const char *why) {
 /* ---------- the two per-frame entries ---------- */
 typedef void (*void_fn)(void);
 static void_fn g_scripts_orig, g_hud_orig;
+static void journal(u32 now);
 static void think(void) {
     u32 now = RD(u32, G + TIME_MS), every = g_out.alert >= HCB_ALERT_THREAT ? 50 : 100, fresh = 0;
     u64 t0;
@@ -692,6 +702,7 @@ static void think(void) {
     if (fresh || g_ticks % 50 == 0) hcb_rec_push_state(&g_rec[g_cur], g_box[g_cur], BRAIN);
     hcb_think(BRAIN, &g_snap, &g_out);
     if (g_out.say) { g_say_seq = g_out.say_seq; g_say = g_out.say; g_say_dir = g_out.say_dir; }
+    journal(now);
     hcb_rec_push(&g_rec[g_cur], g_box[g_cur], &g_snap, g_out.digest);
     memcpy(&g_shown, &g_out, sizeof g_shown);
     g_ticks++;
@@ -704,6 +715,128 @@ static void think(void) {
     if (g_snap.player.health <= 0 && g_was_alive) save_report("CJ died");
     g_was_alive = g_snap.player.health > 0;
     if (__atomic_exchange_n(&g_dump_request, 0, __ATOMIC_ACQ_REL)) save_report("asked for in Mods Settings");
+}
+/* ---------- 1.4.1: the door gunners fire their own weapons through the game's weapon code ----------
+   CWeapon::Fire (+ CPed::DoGunFlash, as the game's own gun task does): the sound, the muzzle flash, the tracer and the hit
+   are the game's. The brain still decides every round and checks its line first (hcb_gunner_round, then a ray); the
+   gunner's script only keeps his weapon on the man. brain/research/weapon_fire_facts.md has the proofs. */
+#define WEAPON_FIRE 0x700c64UL
+#define PED_GUNFLASH 0x59bcb0UL
+static const struct { u32 at, word; } FIRE_WORDS[] = {
+    {0x700c64, 0xd10243ffU}, {0x700c68, 0x6d0223e9U}, {0x700dc4, 0xb9400668U}, {0x700dd0, 0xb9400a68U},
+    {0x700e64, 0x9400018cU}, {0x7011a0, 0x9111c2a0U}, {0x7013a0, 0xb9001268U}, {0x7016c8, 0xb9469ac8U},
+    {0x7016cc, 0x370018c8U}, {0x59bcb0, 0xf81e0ff3U}, {0x59bcc8, 0xf9432e68U}, {0x70157c, 0x3d637a60U},
+};
+typedef int (*weapon_fire_fn)(void *weapon, void *firer, float *start, float *barrel, void *target_ent, float *target_pos, float *alt);
+typedef int (*gunflash_fn)(void *ped, int divisor, int left);
+static void cmd_gunner(int *v);
+static float get_f(const int *v);
+static int g_fire_ready;                /* the words match and it was not turned off */
+static u32 g_own_shots, g_own_refused;
+static void fire_setup(void) {
+    u32 i;
+    if (g_fire_off) { lg("the gunners' own weapon fire is off (the game crashed in it once): they fire by the drive-by task\n"); return; }
+    for (i = 0; i < sizeof FIRE_WORDS / sizeof FIRE_WORDS[0]; i++)
+        if (RD(u32, G + FIRE_WORDS[i].at) != FIRE_WORDS[i].word) { lg("the game's weapon code differs at "); tx(&g_log, FIRE_WORDS[i].at); lg(": the gunners fire by the drive-by task\n"); return; }
+    g_fire_ready = 1;
+    hcb_config(BRAIN)->gunner_weapon = 0.0f;   /* every round is the brain's, checked on its own line */
+    lg("the gunners fire their own weapons through the game's weapon code (12 words match)\n");
+}
+/* one round of one mounted gunner, if the brain lets it go now (called after the scripts, every frame) */
+static void gunner_shot(u32 who) {
+    struct pool pp;
+    int v[9];
+    u8 *ped, *w;
+    float s[3], bpos[3], t[3], d[3], len;
+    u32 old, cur;
+    v[0] = (int)who;
+    cmd_gunner(v);
+    if (v[1] != 2 || !get_pool(PED_POOL, &pp) || !(ped = obj_of(&pp, who, PED_STRIDE)) || is_dead(ped)) return;
+    t[0] = get_f(v + 6); t[1] = get_f(v + 7); t[2] = get_f(v + 8);
+    memcpy(s, pos_of(ped), 12); s[2] += 0.5f;                          /* from the gunner's own gun, not 5.5 m out */
+    d[0] = t[0] - s[0]; d[1] = t[1] - s[1]; d[2] = t[2] - s[2]; len = f_sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+    if (!(len > 2.0f) || !sane(s) || !sane(t)) { g_own_refused++; return; }
+    s[0] += d[0] / len * 0.8f; s[1] += d[1] / len * 0.8f; s[2] += d[2] / len * 0.8f;   /* clear of his own hands and the skid */
+    cur = (u32)(int)RD(signed char, ped + 0x8dc);
+    if (cur > 12) return;
+    w = ped + 0x730 + (u64)cur * 0x20;
+    if (RD(u32, w) < 22 || RD(u32, w) > 38 || (RD(u32, w) > 34 && RD(u32, w) != 38)) { g_own_refused++; return; }   /* instant-hit guns only */
+    if (RD(int, w + 4) > 1) RD(int, w + 4) = 0;                        /* never stalled by a reload */
+    if (RD(int, w + 8) < 2) RD(int, w + 8) = 2;
+    if (RD(int, w + 0xc) < 25000) RD(int, w + 0xc) = 30000;            /* an NPC's ammo above 25000 is never used up */
+    RD(u8, ped + 0x8de) = 100;                                          /* the brain scattered the round already: no second spread */
+    old = RD(u32, ped + 0x698); RD(u32, ped + 0x698) = old | 1;        /* the IK bit: the round goes to the target point */
+    memcpy(bpos, s, 12);
+    g_where = 20;
+    if (((weapon_fire_fn)(G + WEAPON_FIRE))(w, ped, s, bpos, 0, t, 0)) {
+        g_own_shots++;
+        if (RD(int, w + 4) == 1) ((gunflash_fn)(G + PED_GUNFLASH))(ped, 250, 0);
+    } else g_own_refused++;
+    g_where = 4;
+    RD(u32, ped + 0x698) = old;
+}
+static void gunners_fire(void) {
+    u32 k, v;
+    if (!g_fire_ready || !g_ticks || !(shared_get(HC_PHASE, &v) && v == 2)) return;   /* (PHASE 2: the crew is in its doors) */
+    for (k = 0; k < g_snap.n_ours; k++)
+        if (g_snap.our_role[k] >= HCB_ROLE_GUNNER && g_snap.our_role[k] < HCB_ROLE_SQUAD) gunner_shot(g_snap.ours[k]);
+}
+/* ---------- the journal (1.4.1): what the brain decided, in plain words, for the diagnosis from the log ----------
+   Changes of the alert, of the detail's duty and mode, every word of the commander, and every 30 s a summary: how much of
+   the fight the gunners and the guards fired and what held them, how many posts were not reached. At most 40 lines a
+   minute (a busy fight is summarised, not written out). */
+static u32 j_alert = 99, j_duty = 99, j_at, j_lines, j_lines_at, j_combat, j_looks, j_fire[2], j_seen[2], j_hold[2][32], j_stuck, j_lead;
+static void jline(u32 now) {
+    if (now - j_lines_at > 60000) { j_lines_at = now; j_lines = 0; }
+    j_lines++;
+    lg("["); tu(&g_log, now / 1000); lg("s] ");
+}
+static void journal(u32 now) {
+    static const char *ALERT[] = {"calm", "wary", "threat", "COMBAT", "EVACUATE"};
+    static const char *DUTY[] = {"calm", "watch", "shield", "cover", "bound", "hold", "ring"};
+    static const char *SAY[] = {"", "into cover", "CJ is in cover", "stay with me", "we pull out", "I have command", "clear"};
+    u32 i, k, g, top;
+    j_looks++;
+    if (g_out.alert >= HCB_ALERT_COMBAT) {
+        j_combat++;
+        for (i = 0; i < g_out.n_orders; i++) {
+            const hcb_order *o = &g_out.orders[i];
+            for (k = 0; k < g_snap.n_ours && g_snap.ours[k] != o->who; k++) {}
+            if (k == g_snap.n_ours) continue;
+            g = g_snap.our_role[k] >= HCB_ROLE_GUNNER && g_snap.our_role[k] < HCB_ROLE_SQUAD ? 0 : 1;
+            j_seen[g]++;
+            if (o->fire) j_fire[g]++; else if (o->hold < 32) j_hold[g][o->hold]++;
+        }
+    }
+    for (i = 0; i < g_out.n_posts; i++) if (g_out.posts[i].stuck) j_stuck++;
+    if (j_lines > 40 && now - j_lines_at <= 60000) goto summary;
+    log_begin();
+    if (g_out.alert != j_alert && g_out.alert < 5) { jline(now); lg("alert "); lg(ALERT[g_out.alert]); lg(", CJ health "); ti(&g_log, (long)g_snap.player.health); lg("\n"); j_alert = g_out.alert; }
+    if (g_out.duty != j_duty && g_out.duty < 7) { jline(now); lg("detail: "); lg(DUTY[g_out.duty]); lg(", mode "); tu(&g_log, g_out.mode); lg(", "); tu(&g_log, g_out.n_posts); lg(" posts\n"); j_duty = g_out.duty; }
+    if (g_out.say && g_out.say < 7) { jline(now); lg("commander: \""); lg(SAY[g_out.say]); lg("\" (direction "); tu(&g_log, g_out.say_dir); lg(")\n"); }
+    if (g_out.leading != j_lead) { jline(now); lg(g_out.leading ? "commander leads CJ to cover\n" : "commander stops leading\n"); j_lead = g_out.leading; }
+    log_end();
+summary:
+    if (!j_at) j_at = now;
+    if (now - j_at < 30000) return;
+    log_begin();
+    jline(now); lg("30 s: looks "); tu(&g_log, j_looks); lg(", in combat "); tu(&g_log, j_combat);
+    for (g = 0; g < 2; g++) {
+        lg(g ? " | guards: " : " | gunners: ");
+        if (!j_seen[g]) { lg("-"); continue; }
+        lg("fire "); tu(&g_log, j_fire[g] * 100 / j_seen[g]); lg("%");
+        for (k = 0; k < 2; k++) {                                   /* the two commonest reasons not to fire */
+            top = 0;
+            for (i = 1; i < 32; i++) if (j_hold[g][i] > j_hold[g][top]) top = i;
+            if (!j_hold[g][top]) break;
+            lg(", hold "); tu(&g_log, top); lg(" "); tu(&g_log, j_hold[g][top] * 100 / j_seen[g]); lg("%");
+            j_hold[g][top] = 0;
+        }
+    }
+    lg(" | posts not reached (looks) "); tu(&g_log, j_stuck); lg(" | gunners' own shots "); tu(&g_log, g_own_shots); lg(" (refused "); tu(&g_log, g_own_refused); lg(")"); lg(" | CJ health "); ti(&g_log, (long)g_snap.player.health); lg("\n");
+    flush_log();
+    log_end();
+    j_at = now; j_looks = j_combat = j_stuck = 0; memset(j_fire, 0, sizeof j_fire); memset(j_seen, 0, sizeof j_seen); memset(j_hold, 0, sizeof j_hold);
 }
 /* ---------- the bridge to Helicover's scripts: one private CLEO opcode ---------- */
 typedef void *(*script_fn)(void *script);
@@ -783,6 +916,10 @@ static void cmd_squad(int *v) {
     v[2] = (int)o.target;
     fill_shot(&q, who, o.target, &pp, cj, me, him, 0, 0);
     v[1] = hcb_squad_state(BRAIN, &q);
+    if (g_fire_ready && v[1] == 2) {                                   /* a mounted gunner: weapon on the man, the brain fires */
+        u32 k;
+        for (k = 0; k < g_snap.n_ours; k++) if (g_snap.ours[k] == who && g_snap.our_role[k] >= HCB_ROLE_GUNNER && g_snap.our_role[k] < HCB_ROLE_SQUAD) v[1] = 4;
+    }
 }
 /* A guard of the detail: where to be and how (the fire order is asked for separately, command 2) */
 static void cmd_post(int *v) {
@@ -871,6 +1008,8 @@ static void cmd_status(int *v, int count) {
         put_f(v + 6, g_cj_shot_dir[0]); put_f(v + 7, g_cj_shot_dir[1]);
     }
     if (count >= 9) v[8] = g_heli_shot_t && now - g_heli_shot_t < 60000 ? (int)(now - g_heli_shot_t) : -1;
+    if (count >= 10) v[9] = g_out.gunner_pose;                                     /* 1.4.1: how the gunners hold (the brain's) */
+    if (count >= 13) { if (g_out.heli_ok) { put_f(v + 10, g_out.heli_at.x); put_f(v + 11, g_out.heli_at.y); put_f(v + 12, g_out.heli_at.z); } else v[10] = v[11] = v[12] = 0; }
     if (!get_pool(PED_POOL, &pp)) return;
     for (i = 0; i < g_out.n_marks; i++) {
         const hcb_mark *m = &g_out.marks[i];
@@ -956,7 +1095,7 @@ HIDDEN void brain_scripts(void) {
     if (g_ready && !g_busy) { g_busy = 1; g_where = 1; bridge(); think(); g_where = 0; g_busy = 0; watch_frames(t, now_us() - t); }
     g_frame_at_us = t;
     g_scripts_orig();
-    if (g_ready && !g_busy) { g_busy = 1; g_where = 2; pilot_turn(); g_where = 0; g_busy = 0; }
+    if (g_ready && !g_busy) { g_busy = 1; g_where = 4; pilot_turn(); gunners_fire(); g_where = 0; g_busy = 0; }
 }
 
 typedef void (*poly_fn)(float x1, float y1, float x2, float y2, float x3, float y3, float x4, float y4, const u8 *rgba);
@@ -964,20 +1103,6 @@ typedef int (*screen_fn)(const float *in, float *out, float *w, float *h, int fa
 static void square(float x, float y, float r, const u8 *c) { ((poly_fn)(G + G_DRAW_POLY))(x - r, y - r, x + r, y - r, x - r, y + r, x + r, y + r, c); }
 /* Where CJ is to go (the commander's "into cover"): a pulsing green chevron over the spot and a dot on it, drawn whatever the
    debug markers setting is - it is the detail's sign to the player, the way a bodyguard points. */
-static void draw_cover(void) {
-    static const u8 GREEN[4] = {60, 230, 110, 235}, DARK[4] = {0, 0, 0, 170};
-    float W = (float)RD(int, G + RSGLOBAL + 8), H = (float)RD(int, G + RSGLOBAL + 12), top[3], foot[3], st[3], sf[3], w, h, k, r;
-    u32 t = RD(u32, G + TIME_MS) % 1000;
-    if (!g_shown.cover_ok || !g_ticks || RD(u8, G + USER_PAUSE) || W < 100 || H < 100) return;
-    foot[0] = g_shown.cover_at.x; foot[1] = g_shown.cover_at.y; foot[2] = g_shown.cover_at.z - 0.9f;
-    top[0] = foot[0]; top[1] = foot[1]; top[2] = foot[2] + 1.6f + 0.25f * (t < 500 ? (float)t / 500.0f : (float)(1000 - t) / 500.0f);
-    if (!((screen_fn)(G + G_CALC_SCREEN))(top, st, &w, &h, 1, 1) || !((screen_fn)(G + G_CALC_SCREEN))(foot, sf, &w, &h, 1, 1)) return;
-    if (st[0] < 0 || st[0] > W || st[1] < 0 || st[1] > H) return;
-    k = H * 0.022f; r = H * 0.006f;
-    ((poly_fn)(G + G_DRAW_POLY))(st[0] - k * 1.15f, st[1] - k * 1.15f, st[0] + k * 1.15f, st[1] - k * 1.15f, st[0], st[1] + k * 0.55f, st[0], st[1] + k * 0.55f, DARK);
-    ((poly_fn)(G + G_DRAW_POLY))(st[0] - k, st[1] - k, st[0] + k, st[1] - k, st[0], st[1] + k * 0.4f, st[0], st[1] + k * 0.4f, GREEN);
-    if (sf[0] >= 0 && sf[0] <= W && sf[1] >= 0 && sf[1] <= H) { square(sf[0], sf[1], r + 2, DARK); square(sf[0], sf[1], r, GREEN); }
-}
 static void draw(void) {
     static const u8 COL[5][4] = {{60, 200, 90, 220}, {150, 150, 150, 0}, {250, 220, 40, 230}, {255, 140, 0, 240}, {240, 40, 40, 255}};
     static const u8 ALLY[4] = {70, 150, 255, 220}, EDGE[4] = {0, 0, 0, 200}, BAR[5][4] = {{90, 90, 90, 150}, {250, 220, 40, 220}, {255, 140, 0, 230}, {240, 40, 40, 240}, {255, 255, 255, 255}};
@@ -1012,7 +1137,7 @@ static void draw(void) {
 }
 HIDDEN void brain_hud(void) {
     g_hud_orig();
-    if (g_ready && !g_busy) { g_busy = 1; g_where = 3; draw_cover(); draw(); g_where = 0; g_busy = 0; }
+    if (g_ready && !g_busy) { g_busy = 1; g_where = 3; draw(); g_where = 0; g_busy = 0; }   /* (1.4.1: no cover mark - the commander walks CJ there) */
 }
 
 /* ---------- Mods Settings (SAUtils) ---------- */
@@ -1102,6 +1227,7 @@ static int try_install(void) {
     else { lg("the HUD slot is taken or could not be changed: no markers on screen (the report still works)\n"); }
     __atomic_store_n(&g_ready, 1, __ATOMIC_RELEASE);
     lg("libGTASA.so base "); tx(&g_log, G); lg("\n"); tu(&g_log, sizeof GTA_WORDS / sizeof GTA_WORDS[0]); lg(" instruction words match; GOT slots pointing at the brain: "); tu(&g_log, (u64)g_slots); lg(" of 3 (no code changed)\nthe brain is running\n");
+    fire_setup();
     return 1;
 }
 static void *waiter(void *arg) {
@@ -1231,6 +1357,49 @@ static void hang_dump(u32 secs) {
     if (locked) log_end();
     save_report("the game hung (see hcbrain_log.txt for where)");
 }
+/* ---------- the crash recorder (1.4.1): a crash of the game is written to the log before the game's own handler runs ----------
+   Where (pc, lr, the fault address, the frames on the stack with their names), what the brain was doing (g_where) and
+   what Helicover was doing; then a report is saved (once) and the previous handler takes over as if we were not there. */
+static struct sigact g_crash_old[32];
+static volatile u32 g_crashing;
+static u32 g_crash_where;                 /* g_where at the crash, kept for the next start (written into the settings) */
+static void crash_settings(u32 where);
+HIDDEN void brain_on_crash(int sig, void *info, void *ucv) {
+    static const u32 KEYS[] = {0, 1, 7, 20, 21, 27, 29, 440, 451, 452, 454, 455};
+    const u8 *uc = (const u8 *)ucv;
+    u64 pc = uc ? RD(u64, uc + 440) : 0, lr = uc ? RD(u64, uc + 424) : 0, sp = uc ? RD(u64, uc + 432) : 0, fp = uc ? RD(u64, uc + 416) : 0;
+    u64 fault = info ? RD(u64, (const u8 *)info + 16) : 0, a, w, fr[2];
+    u32 i, n, v, tries;
+    if (__atomic_exchange_n(&g_crashing, 1, __ATOMIC_ACQ_REL)) goto pass;   /* a crash inside the recorder: let the game have it */
+    for (tries = 0; tries < 200 && __atomic_exchange_n(&g_log_lock, 1, __ATOMIC_ACQUIRE); tries++) usleep(1000);
+    g_crash_where = g_where;
+    lg("\nCRASH: signal "); tu(&g_log, (u64)sig);
+    lg(sig == 11 ? " (bad memory access)" : sig == 7 ? " (bus error)" : sig == 4 ? " (illegal instruction)" : sig == 8 ? " (arithmetic)" : sig == 6 ? " (abort)" : "");
+    lg("\n  pc "); addr_name(pc); lg("\n  lr "); addr_name(lr); lg("\n  fault address "); tx(&g_log, fault);
+    lg("\n  inside the brain: "); tu(&g_log, g_where);
+    lg(" (0 outside, 1 a look, 2 a ray, 3 markers, 4 the pilot's turn, 11-16 a script's question, 20 a gunner's shot)\n");
+    for (n = 0; fp && n < 16 && safe_read(fr, fp, 16); n++) { if (!fr[1]) break; lg("  called from "); addr_name(fr[1]); lg("\n"); if (fr[0] <= fp) break; fp = fr[0]; }
+    for (a = sp, n = 0; sp && a < sp + 2048 && n < 10; a += 8) if (safe_read(&w, a, 8) && is_code(w)) { lg("  on the stack "); addr_name(w); lg("\n"); n++; }
+    lg("  Helicover:");
+    for (i = 0; i < sizeof KEYS / sizeof KEYS[0]; i++) if (shared_get(HC_STATE + KEYS[i], &v)) { lg(" +"); tu(&g_log, KEYS[i]); lg("="); ti(&g_log, (int)v); }
+    lg("\n  brain looks "); tu(&g_log, g_ticks); lg("\n");
+    flush_log();
+    write_file("hcbrain_crash.txt", g_log.buf, g_log.len, 0, 0, 0, 0);   /* kept: the next start writes a new log */
+    __atomic_store_n(&g_log_lock, 0, __ATOMIC_RELEASE);
+    crash_settings(g_crash_where);
+    if (g_ready && g_where != 5) save_report("the game crashed (see hcbrain_log.txt)");
+pass:
+    if (sig > 0 && sig < 32) sigaction(sig, &g_crash_old[sig], 0);     /* the game's (or AML's) own handler, as before */
+    if (sig == 6) syscall(131, syscall(172), syscall(178), 6L);         /* abort is raised again; a fault repeats by itself */
+}
+static void crash_recorder_on(void) {
+    static const int SIGS[] = {11, 7, 4, 8, 6};
+    struct sigact act;
+    u32 i;
+    memset(&act, 0, sizeof act); act.flags = 4;                        /* SA_SIGINFO */
+    act.handler = (void *)&brain_on_crash;
+    for (i = 0; i < sizeof SIGS / sizeof SIGS[0]; i++) sigaction(SIGS[i], &act, &g_crash_old[SIGS[i]]);
+}
 static void *watchdog(void *arg) {
     u32 last = 0, still = 0, dumps = 0, fc;
     (void)arg;
@@ -1245,7 +1414,7 @@ static void *watchdog(void *arg) {
 }
 
 struct ModInfo { char guid[48]; char name[48]; char version[24]; char author[48]; u16 ver[4]; u8 reserved[336]; };
-static struct ModInfo g_info __attribute__((aligned(16))) = {"net.helicover.brain", "Helicover Brain", "0.3", "Helicover", {0, 3, 0, 0}, {0}};
+static struct ModInfo g_info __attribute__((aligned(16))) = {"net.helicover.brain", "Helicover Brain", "0.4", "Helicover", {0, 4, 0, 0}, {0}};
 static int g_done;
 EXPORT struct ModInfo *__GetModInfo(void) { return &g_info; }
 EXPORT void OnModPreLoad(void) {}
@@ -1261,6 +1430,8 @@ EXPORT void OnModLoad(void) {
     r = try_install();
     if (r != -1 && (r == 0 || !g_cleo)) { if (pthread_create(&th, 0, waiter, (void *)(long)r)) lg("cannot start the waiting thread\n"); else lg("waiting (for the game or for CLEO)\n"); }
     if (r != -1) { if (pthread_create(&th, 0, watchdog, 0)) lg("cannot start the hang recorder\n"); else lg("hang recorder on\n"); }
+    if (r != -1) { crash_recorder_on(); lg("crash recorder on\n"); if (g_last_crash == 20) { g_fire_off = 1; lg("the last game crashed in a gunner's shot: the game's weapon fire stays off from now on\n"); }
+        if (g_last_crash) { if (g_last_crash == 99) lg("the last game crashed outside the brain"); else { lg("the last game crashed inside the brain at step "); tu(&g_log, g_last_crash); } lg(" (the CRASH block was in the log of that game)\n"); g_last_crash = 0; save_config(); } }
     ti(&g_log, r); lg(" = state at load\n");
     flush_log();
 }

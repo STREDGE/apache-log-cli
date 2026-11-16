@@ -227,6 +227,14 @@ HID void hcb_fire_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                    or a man with free hands can take it. An attacker nobody is on gets a rifle whatever it costs. */
                 else if (busy[i] && (cs[j].free || cs[j].taken)) v *= 0.6f;
                 v *= 1.0f / (1.0f + 0.01f * v_dist(me[i]->pos, cs[j].t->last.pos));  /* the nearer shooter, other things equal */
+                /* 1.4.1: the men on the ground take who is close to CJ, the door gunners who is further off (the tablet's fight:
+                   the gunners had them all and the guards next to CJ had nobody 64 % of the time) */
+                {
+                    float dcj = v_dist(cs[j].t->last.pos, s->player.pos);
+                    int role = s->our_role[i];
+                    if (role >= HCB_ROLE_SQUAD) v *= dcj < 20.0f ? 1.3f : 0.8f;
+                    else if (role >= HCB_ROLE_GUNNER) v *= dcj > 15.0f ? 1.15f : 0.85f;
+                }
                 if (v > best) { best = v; bi = i; bj = j; }
             }
         }

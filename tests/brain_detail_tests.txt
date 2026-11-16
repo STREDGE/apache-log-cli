@@ -8,10 +8,17 @@ PASS: No cover within 8 m: the commander tells CJ to stay with the bodyguard, wh
 PASS: CJ is never sent towards the shooter for cover, nor to a hidden spot with no ground under it (water, a drop)
 PASS: Bounding overwatch: when both men of the fire team have to move, one runs to his spot while the other holds where he is, crouched, covering him; then they change
 PASS: The commander falls: the next man takes command and says so; the three left share the roles (bodyguard and fire team)
-PASS: Too hot (CJ badly hurt under fire): a tight ring round him, nobody further than 2 m, the bodyguard towards the shooter; "we pull out - call the pickup", not repeated for 20 s
+PASS: Too hot (CJ badly hurt under fire): the detail pulls out - a tight ring round him, nobody further than 2 m, the bodyguard towards the shooter, the commander 2.5 m ahead leading him away from the shooter; "we pull out - call the pickup", not repeated for 20 s
 PASS: The shooter is down and it stays quiet: "clear - regroup on CJ", once, and the detail is back in its formation
 PASS: Cover questions: at most 8 a look (two rays each in the game), and a spot already answered is not asked about again while the answer is fresh
 PASS: CJ in a vehicle: the detail gives no posts on foot (the scripts take the free seats or follow)
+PASS: Eight men: the commander, two bodyguards either side of CJ, the advance pair (ahead and the right flank), the counter-assault pair (behind and the left flank) and the marksman further back; when CJ stands a while the outer men stand off on the approaches
+PASS: Under fire the commander leads CJ to the cover himself: he walks 2-3 m ahead of CJ on the way, staying ahead as CJ follows
+PASS: CJ decides: if he does not follow, the commander goes back to his side after 3 s and offers the way again a few seconds later
+PASS: The threat is remembered (the attacker 20 s, his place 12 s more): between bursts the detail does not stand down; then it does
+PASS: A man who does not get nearer to his post for 1.5 s is given another way round (the post turned round CJ), then the path network
+PASS: The brain picks how to fight: 5 stars (or too many / too strong, CJ badly hurt) -> pull out; one weak shooter and CJ safe in cover -> assault
+PASS: The helicopter gets a spot 28 m from CJ on the far side, where the gunners see the shooter; the gunners sit on the skid when all is quiet and kneel at the door over a fight
 PASS: SQUAD TACTICS: GUARD keeps the fire team within 12 m of CJ (6 m here), ASSAULT pushes it towards the shooter (10 m, never beyond 18 m)
 PASS: The same fight twice gives the same posts, the same words and the same questions (a recorded fight replays exactly)
 The core only. Nothing here has run in the game.

@@ -17,7 +17,7 @@
 #define HCB_MAX_PEDS 64        /* peds in one snapshot (nearest to CJ first) */
 #define HCB_MAX_VEHS 40
 #define HCB_MAX_EVENTS 48      /* events gathered between two snapshots */
-#define HCB_MAX_OURS 16        /* pilot, gunners, squad */
+#define HCB_MAX_OURS 24        /* pilot, gunners, squad (8 on the ground), guards let go */
 #define HCB_MAX_MARKS 48       /* contacts reported back for the debug markers */
 #define HCB_MAX_TRACKS 96      /* people the brain remembers at one time */
 #define HCB_MAX_VTRACKS 48
@@ -61,7 +61,7 @@
 #define HCB_ROLE_NONE 0        /* ours, but not in the fight (a guard who was let go and walks away): a friend in every line of fire, no orders */
 #define HCB_ROLE_PILOT 1
 #define HCB_ROLE_GUNNER 2      /* +0..3: right front, left front, right rear, left rear */
-#define HCB_ROLE_SQUAD 6       /* +0..3 */
+#define HCB_ROLE_SQUAD 6       /* +0..7: the detail on the ground, by number (0 is the commander while he lives) */
 
 /* ---- what the brain thinks of a contact (hcb_mark.cls), least to most dangerous */
 #define HCB_CLS_FRIEND 0
@@ -205,7 +205,15 @@ typedef struct hcb_probe {
 #define HCB_ROLE_LEAD 1         /* the commander (call sign Alpha) */
 #define HCB_ROLE_CLOSE 2        /* the personal bodyguard, at CJ's side */
 #define HCB_ROLE_POINT 3        /* the fire team: ahead / towards the threat */
-#define HCB_ROLE_REAR 4         /* the fire team: the rear / the other flank */
+#define HCB_ROLE_REAR 4         /* the fire team: the rear / the other flank (call sign Charlie: the counter-assault pair) */
+#define HCB_ROLE_CLOSE2 5       /* the second bodyguard, on CJ's other side */
+#define HCB_ROLE_POINT2 6       /* the advance pair (Bravo), second man: a flank on the move */
+#define HCB_ROLE_REAR2 7        /* the counter-assault pair (Charlie), second man: the other flank */
+#define HCB_ROLE_MARKSMAN 8     /* Delta: a rifle on a spot that sees far (high ground, the far side) */
+/* how the detail fights (hcb_out.mode): the brain picks it from the fight itself, the menu only forces one */
+#define HCB_MODE_HOLD 0         /* CJ into cover, fight from cover, the pair bounds */
+#define HCB_MODE_PULLOUT 1      /* too much for us: a ring round CJ, the commander leads him away, call the pickup */
+#define HCB_MODE_ASSAULT 2      /* few and weak: CJ in cover, the pair pushes and flanks */
 typedef struct hcb_post {
     uint32_t who;
     hcb_vec at;         /* where to be */
@@ -213,7 +221,10 @@ typedef struct hcb_post {
     uint8_t move;       /* 0 stay where you are, 1 walk, 2 run, 3 sprint */
     uint8_t crouch;     /* 1 = crouched there */
     uint8_t duty;       /* HCB_DUTY_* */
-    uint8_t job;        /* HCB_ROLE_LEAD .. HCB_ROLE_REAR */
+    uint8_t job;        /* HCB_ROLE_LEAD .. HCB_ROLE_MARKSMAN */
+    uint8_t stuck;      /* 1 = he has not got nearer to his post for a while: this is another way round (the script goes by the
+                           path network when it is set) */
+    uint8_t pad[3];
 } hcb_post;
 
 /* What the commander says (hcb_out.say), with a direction from CJ's point of view (hcb_out.say_dir: 0 ahead, 1 right,
@@ -250,7 +261,7 @@ typedef struct hcb_snapshot {
     uint8_t roe;        /* HCB_ROE_*: the player's fire rule */
     uint8_t police;     /* HCB_POLICE_* */
     uint8_t mission_free; /* 1 = the player wants mission characters treated like anybody else (default 0: defensive) */
-    uint8_t tactics;    /* the squad's tactics on the menu: 0 GUARD (stay close to CJ), 1 ASSAULT (push towards the threat) */
+    uint8_t tactics;    /* the squad's tactics on the menu: 0 AUTO (the brain chooses), 1 ASSAULT (push towards the threat), 2 GUARD (stay close) */
     uint8_t reserved2;
     hcb_vec cam_pos;
     hcb_vec cam_fwd;
@@ -316,6 +327,11 @@ typedef struct hcb_out {
     uint8_t duty;       /* the detail's state: HCB_DUTY_CALM / WATCH / COVER (a fight) / RING (evacuation) */
     hcb_vec cover_at;
     uint32_t lead;      /* the commander now */
+    uint8_t mode;       /* HCB_MODE_*: how the detail fights now */
+    uint8_t leading;    /* 1 = the commander walks ahead of CJ to cover_at (or away from the threat when pulling out) */
+    uint8_t gunner_pose; /* how the door gunners should hold: 0 standing, 1 kneeling at the door, 2 seated on the skid */
+    uint8_t heli_ok;    /* 1 = heli_at is where the helicopter should hang: the gunners see the threat from there */
+    hcb_vec heli_at;
     hcb_post posts[HCB_MAX_OURS];
     hcb_probe probe_q[HCB_MAX_PROBES];
 } hcb_out;

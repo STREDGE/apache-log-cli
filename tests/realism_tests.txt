@@ -28,11 +28,8 @@ PASS: Guards keep the man they are firing at while he lives; a new attacker is t
 PASS: The squad takes a shooter the brain names, even 45 m away
 PASS: No script reads bullet traces: CJ's line of fire and everybody else's shots are the brain's
 PASS: Door gunners fire their own weapon in bursts with a breath between them (5 bursts in 6.6 s for each gunner on the man, 4-9 rounds each), not a steady stream like a minigun
-PASS: The team that ropes down wears the crew setting: Grove 106/107, Army 287, SWAT 285 (it was always SWAT)
-PASS: Changing the crew on the menu re-dresses the team on the ground at once: same spot, heading, health and armour, nobody teleports
-PASS: Grove clothes alternate between the two Families skins
-PASS: A guard in a car keeps the old clothes until he steps out, then changes in place
-PASS: Changing the crew weapon arms the team on the ground at once
+PASS: 1.4.1: the team that ropes down is fixed whatever the crew setting: the commander a soldier (287), then agents in black (164 / 165)
+PASS: The ground team is never re-dressed or re-armed by the crew settings (they only concern the helicopter's crew)
 PASS: Door gunners created by a crew change are armed immediately
 PASS: Model swap: instant, except while somebody hangs on a rope (then right after it ends, one message)
 PASS: Helicopter swapped while the ropes are out: the rope session carries on with the new helicopter, still frozen on the spot

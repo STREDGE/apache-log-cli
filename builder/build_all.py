@@ -6,9 +6,10 @@ import re,shutil,subprocess,sys
 import i18n_v12 as i18n
 from pathlib import Path
 HERE=Path(__file__).resolve().parent;ROOT=HERE.parent;OUT=ROOT/'build'
-NAMES=['Helicover','Helicover_Core','Helicover_Panel','Helicover_Fire','Helicover_Ground','Helicover_Squad']
-def run(script):
-    r=subprocess.run([sys.executable,script],cwd=HERE,capture_output=True,text=True)
+NAMES=['Helicover','Helicover_Core','Helicover_Panel','Helicover_Fire','Helicover_Ground','Helicover_Squad','Helicover_Squad2','Helicover_Team2']
+def run(script,**env):
+    import os
+    r=subprocess.run([sys.executable,script],cwd=HERE,capture_output=True,text=True,env=dict(os.environ,**env))
     sys.stdout.write(r.stdout);sys.stderr.write(r.stderr)
     if r.returncode:sys.exit(r.returncode)
 def missing_keys():
@@ -36,7 +37,7 @@ def write_languages():
         out+=i18n.ukey(k).encode('ascii')+b' '+i18n.fxt_text(k)+b'\n'
     (OUT/'Helicover_RU.fxt').write_bytes(bytes(out))
 if __name__=='__main__':
-    run('build_v25.py');run('build_v25_ground.py');run('build_v25_squad.py')
+    run('build_v25.py');run('build_v25_ground.py');run('build_v25_squad.py');run('build_v25_squad.py',HC_SQUAD_TEAM='1');run('build_v25_team2.py')
     write_languages()
     miss=missing_keys()
     if miss:sys.exit('Missing FXT texts: '+', '.join(miss))

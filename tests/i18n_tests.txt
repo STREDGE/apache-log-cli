@@ -8,7 +8,7 @@ PASS: The kill counter ("TARGET DOWN n") is printed with the English key or its 
 PASS: With the game in Russian the menu is Russian and reads correctly in the simulated font: main page, state in the title, settings
 PASS: The fire page in Russian: four rules and the two switches (police, missions), every row readable in the simulated font
 PASS: Aboard in Russian: the two exit-button switches; switching shows the Russian hint and starts nothing
-PASS: Every one of the 255 menu pages has an English and a Russian version with the same rows; at most 8 rows, none longer than 26 (RU 30) characters; no language page, no FONT TEST
+PASS: Every one of the 238 menu pages has an English and a Russian version with the same rows; at most 8 rows, none longer than 26 (RU 30) characters; no language page, no FONT TEST
 PASS: The launcher's "files missing" message is Russian in the game's Russian and English otherwise
 PASS: CALL HELICOPTER: once called the page is the FOLLOWING page - there is no CALL row to press twice, and one helicopter exists
 PASS: While the helicopter is being prepared, swapped or is leaving the first row says so ("HELICOPTER INBOUND...", "CHANGING, PLEASE WAIT...", "HELICOPTER LEAVING...") and orders nothing
@@ -24,7 +24,7 @@ PASS: DISMISS while the squad is still roping down waits for the landing, then r
 PASS: A recall that cannot start is retried every 6 s and does not keep the helicopter for ever: DISMISS goes through after 45 s
 PASS: Another order withdraws a dismissal that was still waiting for the squad
 PASS: DISMISS without a squad is immediate after the confirmation; "NO, KEEP IT" changes nothing
-PASS: Crew and helicopter models are pre-requested while their pages are open, so choosing one does not stall a frame
+PASS: The helicopter models are pre-requested while their page is open, so choosing one does not stall a frame
 PASS: Tapping "helicover" in the CLEO list: the menu is on the screen 2 frame(s) later at 10, 30 and 60 fps, whatever the scripts were doing (it used to take 0.9 s of fixed pauses)
 PASS: No menu script (never started, or stopped a few seconds ago): the launcher says "files missing" within 0.7 s and leaves no open request behind
 PASS: A heartbeat that is out of date (or ahead of the clock after a loaded save) with both scripts alive: the menu still opens, 3 frames at most - a stale stamp alone never means "missing"
@@ -43,6 +43,6 @@ PASS: The acknowledgement of an order ("PILOT: following you") takes the line at
 PASS: No script but the launcher ("files missing") uses the help box any more
 PASS: Pilot, gunners and every squad member (also after a change of clothes) get the game's empty decision maker: punched or shot at they keep their task instead of ducking with their hands over their heads; TASK_DUCK (the scared pose) is not used anywhere
 PASS: Door gunners sit on the skids by default (mounted 0.45 m lower and 0.15 m further out than kneeling, crouched right after they are mounted)
-PASS: SETTINGS > "GUNNERS: SITTING / KNEELING / STANDING" goes round with each tap and switches the pose at once (crew re-mounted once, weapons back in their hands)
+PASS: The gunners' pose is the brain's (no setting): when it changes they are re-seated once at once (seated on the skid -> kneeling at the door), weapons back in their hands
 PASS: After a fight the gunners go back to one knee (clearing their fire task would leave them standing)
 Mocked script execution only: the Russian layout was confirmed on the player's phone (beta 3); the look of the menu itself is the game's.
