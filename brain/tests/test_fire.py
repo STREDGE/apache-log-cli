@@ -581,6 +581,22 @@ sc.shot(g2, (0., 0., 1.), dst=1)
 run(sc, 10)
 assert sorted(sc.orders[w_].target for w_ in team) == sorted([g, g, g2]), holds(sc)
 passed('A new attacker is taken by the guard whose hands are free; the men who are firing keep their man (with nobody free, one rifle goes over)')
+# a guard with free hands who may not fire at the new man (a wall in front of him) does not "look after" him: the firing man
+# goes over to a newcomer more dangerous than his own man, as if nobody were free
+sc = Scene()
+firer, walled = squad(sc, places=((3, 8), (-3, -8)))
+sc.walls.append((-8., -6.5, 4., -6.5))                 # just in front of the second guard: he sees nobody
+pistol = sc.ped(15, 2, pedtype=GANG, weapon=PISTOL)
+sc.shot(pistol, (0., 0., 1.), dst=1)
+run(sc, 10)
+assert sc.orders[firer].target == pistol and sc.orders[firer].fire and HOLD[sc.orders[walled].hold] == 'NO_LOS', holds(sc)
+deagle = sc.ped(-12, 6, pedtype=GANG, weapon=24)       # a Desert Eagle on the other side of CJ
+sc.shot(deagle, (0., 0., 1.), dst=1)
+run(sc, 10)
+m_ = sc.brain.marks()
+assert 1.5 < m_[deagle].edps / m_[pistol].edps < 1.9, ('(the scene: about 1.7 times as dangerous)', m_[deagle].edps, m_[pistol].edps)
+assert sc.orders[firer].target == deagle and sc.orders[firer].fire and HOLD[sc.orders[walled].hold] == 'NO_LOS', holds(sc)
+passed('A guard who may not fire at a man (a wall in front of him) is no free hands for him: the guard firing at a pistol man goes over to a Desert Eagle that only he can take')
 sc, front, rear = heli_scene(cj_at=(40., 41.8), z=2.)  # a crewman by the landed helicopter, firing the game's own weapon: CJ 10 m behind his man
 g = sc.ped(30, 41, pedtype=GANG, weapon=AK)
 sc.shot(g, (40., 41.8, 1.), dst=1)

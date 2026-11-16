@@ -218,6 +218,7 @@ static void deal_quarters(detail *dt, hcb_vec cjp, hcb_vec ahead, hcb_vec side, 
             if (seg_dist(flat(cjp), a_, b2_, &t_) < 12.0f) cost += 25.0f;   /* (a way past CJ: he would be seen - another quarter if one is near) */
         }
         if (fight) { if (!(used & 1)) cost += 80.0f; if (!(used & 2)) cost += 80.0f; }   /* (the quarters towards the threat are manned first - round CJ if need be) */
+        else { if (!(used & 1)) cost += 15.0f; if (!(used & 2)) cost += 15.0f; }        /* (in peace, with fewer than four, the way ahead first: a point man) */
         if (cost < best) { best = cost; for (i = 0; i < 4; i++) best_p[i] = p_[i]; }
     }
     for (q = 0; q < 4; q++) dt->q_id[q] = 0;
@@ -665,6 +666,7 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                         if (cj_speed < 2.0f && i < MAXD && !s->body) at = reachable(b, out, cjp, at, now, &dt->man[i].pad);
                     }
                     mv = pace(dist2d(at, men[i]->pos), fight ? cs : cj_speed);
+                    if (!fight && !ring && mv > 2 && cj_speed < 5.5f && dist2d(at, men[i]->pos) < 35.0f) mv = 2;   /* (1.5: out there, in peace a run at most) */
                     if (ring) d_ = HCB_DUTY_RING;
                 }
                 k++;

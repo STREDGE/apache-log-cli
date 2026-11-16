@@ -248,6 +248,24 @@ assert v not in classes(sc)
 sc, v = car(-20, 0.5, (15., 0., 0.), cj_in_car=True)   # CJ is in a car himself
 assert v not in classes(sc)
 passed('1.3: a car is RAMMING when on two looks running its path comes within 0.8 m of CJ within 1.5 s at 8 m/s or more (the first 2.0 log: 19 cars called at 2.5 m / 2 s, none hit CJ); passing 2 m by, wide, slow, far, leaving, or CJ in a car - not')
+
+
+def ever_rams(sc, v, looks):
+    """Is the car called RAMMING on any of the next looks? (one look is never a ram: they have to be watched for longer)"""
+    called = v in classes(sc)
+    for _ in range(looks):
+        sc.step(1)
+        called = called or v in classes(sc)
+    return called
+
+
+sc, v = car(3, 0.3, (15., 0., 0.))                     # pulls away from beside CJ at 15 m/s, on a line straight back through him
+assert not ever_rams(sc, v, 10), 'a car driving away from CJ is no ram, however fast and however straight its line runs through him'
+sc, v = car(-6, 0.3, (5., 0., 0.))                     # rolls dead at him at 5 m/s from 6 m, until it is all but touching him
+assert not ever_rams(sc, v, 9), 'a car rolling at CJ slower than 8 m/s is no ram'
+sc, v = car(-20, 0.5, (15., 0., 0.), cj_in_car=True)   # dead on at 15 m/s - but CJ sits in a car himself
+assert not ever_rams(sc, v, 10), 'CJ in a car is not rammed: the traffic round his car is not called'
+passed('Watched for a whole second, not one look: a car driving away from CJ (however fast, its line straight through him), one rolling dead at him at 5 m/s, and one dead on at 15 m/s while CJ sits in a car are never RAMMING')
 sc = Scene()
 b1 = sc.veh(8, 0, health=200., flags=HCB_VF_BURNING)
 b2 = sc.veh(30, 0, health=200., flags=HCB_VF_BURNING)
@@ -326,6 +344,16 @@ drv = sc.vehs[v]['driver']
 sc.damage(drv, sc.cj['id'], 30, weapon=49); sc.step(1)
 assert classes(sc)[drv][0] >= HCB_CLS_THREAT, 'once it has hit CJ the driver answers for it'
 passed('A car on a collision course stays RAMMING for 1.5 s through a swerve (it blinked every 0.1-0.4 s in the real fight); braking releases it at once, and (1.3) so does driving off; 1.3: its driver is fired at only after the car has hit CJ or one of ours')
+sc, v = car(-20, 0.5, (15., 0., 0.)); sc.step(1)
+assert classes(sc)[v] == (HCB_CLS_THREAT, HCB_WHY_RAMMING)
+sc.vehs[v]['vel'] = [6., 1., 0.]                       # it slows to 6 m/s and turns off to pass 3 m by - still drawing nearer
+sc.step(1)
+assert classes(sc)[v] == (HCB_CLS_THREAT, HCB_WHY_RAMMING), 'held through the turn'
+sc.step(int(sc.brain.cfg.ram_hold_ms / 100) + 1)
+x_, y_ = sc.vehs[v]['pos'][:2]
+assert -(x_ * 6. + y_ * 1.) > 0, '(the scene: it is still coming nearer)'
+assert v not in classes(sc), 'the hold lasts 1.5 s: then the car is judged on the course it is on now'
+passed('A car that came at CJ on a collision course and then slowed and turned off to pass 3 m by is held RAMMING for 1.5 s only - then released, although it is still drawing nearer')
 
 # ------------------------------------------------------------------ hurt, and the game does not say by whom
 sc = Scene()
@@ -369,6 +397,37 @@ sc.damage(0, guard, 90, weapon=49)
 sc.step(1)
 assert classes(sc)[cop] == (HCB_CLS_ATTACKER, HCB_WHY_HURT_OURS) and classes(sc)[rolling][1] == HCB_WHY_RAMMING, classes(sc)
 passed('Run down with no author named (as in the real fight): the driver of the nearest moving car within 9 m answers for it - also when he has just jumped out of it - and the car stays a threat while it keeps moving; a parked car and a distant one are not blamed')
+sc = Scene()
+guard = sc.our(6, 0, HCB_ROLE_SQUAD)
+gang_driver = sc.ped(6, 50, pedtype=GANG)
+gang_car = sc.veh(6, 50, vel=(12., 0., 0.), driver=gang_driver)   # a gang car driving by 50 m off (no passer-by: he would answer for a hit)
+sc.step(1)
+sc.damage(0, guard, 90, weapon=49)                     # something the snapshot does not show runs our man down
+sc.step(1)
+c = classes(sc)
+assert sc.brain.out.n_attackers == 0 and gang_driver not in c and gang_car not in c, ('only a car right there can have run him down', c)
+passed('Run down with no author named and no moving car within 9 m: nobody is blamed - not even the driver of a gang car 50 m off')
+sc = Scene()
+guard = sc.our(6, 0, HCB_ROLE_SQUAD)
+d1, mate = sc.ped(9, 0, pedtype=GANG), sc.ped(10, 2, pedtype=GANG)
+hit_car = sc.veh(9, 0, vel=(-9., 0., 0.), driver=d1)
+sc.step(1)
+sc.damage(0, guard, 90, weapon=49)                     # run down: no author
+sc.step(1)
+assert classes(sc)[d1] == (HCB_CLS_ATTACKER, HCB_WHY_HURT_OURS)
+sc.vehs[hit_car]['vel'] = [0., 0., 0.]                 # it stops, the driver jumps out and his mate takes the wheel ...
+sc.peds[d1]['vehicle'] = 0
+sc.peds[d1]['pos'] = [14., 6., 1.]
+sc.vehs[hit_car]['driver'] = mate
+sc.peds[mate]['vehicle'] = hit_car
+sc.peds[mate]['pos'] = list(sc.vehs[hit_car]['pos'])
+sc.step(1)
+assert mate not in classes(sc), 'a man sitting in a car that stands still is nobody'
+sc.vehs[hit_car]['vel'] = [0., 9., 0.]                 # ... and drives on
+sc.step(3)
+c = classes(sc)
+assert c[hit_car] == (HCB_CLS_THREAT, HCB_WHY_RAMMING) and c[mate] == (HCB_CLS_THREAT, HCB_WHY_RAMMING) and c[d1][0] == HCB_CLS_ATTACKER, c
+passed('The car that ran one of ours down drives on with another man at the wheel: the man driving it now is a THREAT (ramming) like the car itself, and the one who ran our man down stays an ATTACKER')
 
 sc = Scene(wanted=3)
 sc.heli = sc.veh(0, 20, z=40., cls=HCB_VC_HELI)

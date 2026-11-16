@@ -22,7 +22,9 @@ HELICOVER BRAIN 1.5 (Helicover 2.0 бета 6) — по логу беты 5 и �
                                        48 мест на 6 кольцах 12–55 м со сдвигом, 1 за взгляд, не плоско — 1,5 м к CJ, не видно —
                                        край к CJ до 4,5 м, держится 12 с; g_watch освобождает слот через 2 с без взгляда;
                                        ends_early раз на задачу; SettingsVersion 15 (файл старой версии не читается);
-                                       ГОЛОС_ЖЕСТ_ТЕХ; сводка «1.5»
+                                       голос: фразы по gSpeechContextLookup / gEmgSpeechLookup, force audible, агенту —
+                                       VOICE_EMG_ARMY1-3 (+0x340 речь); жест: CTaskSimpleRunNamedAnim CopTraf_Come/POLICE
+                                       1,5 с в главный слот, arms_free, раз в 4 с, шаг 32, WaveOff; сводка «1.5»
   скрипты             Team2            сброс снайпера только при ow_ok 1 (крыша), не при ответе о подхвате
 Тесты: новые в test_detail (четверти, дуга, полоса, вне вида, идут рядом), test_squad, test_rules13 (снайпер: подхват в
 бою, крыша без подхода, сарай с карты), test_fire, test_places, test_drills, test_adapter (вылет IK, урон, настройки);

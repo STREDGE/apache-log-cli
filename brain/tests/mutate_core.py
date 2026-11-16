@@ -255,7 +255,7 @@ M = [
  (A, '(act == a->act + 1 || act + 1 == a->act)', '1', '1.3 pace band: the pace next to the edge only'),
  (A, '                                a->plan_t = 0; a->why = HCB_WHY2_BLOCKED;\n                                hcb_path_forget(b, p->who);', '                                a->n_path = 0; p->via = me->pos; a->why = HCB_WHY2_BLOCKED;', '1.3 a blocked leg does not stop him'),
  (Q, 'if (!q->mk_far_since || now - q->mk_far_since < 10000) {', 'if (0) {', '1.3 marksman: stays up while CJ is near'),
- (Q, '            q->mk_climb_t = now ? now : 1; q->mk_z0 = here; p->climb = 1;\n        }', '        }', '1.3 marksman: climbs at the wall'),
+ (Q, '            q->mk_climb_t = now ? now : 1; q->mk_z0 = here; p->climb = 1;\n            if (q->mk_foot_ok && q->mk_state == MK_ROOF) p->at = q->mk_at;\n        }', '        }', '1.3 marksman: climbs at the wall'),
  (Q, '                    k = MK_STEP; st = v->pos; break;', '                    continue;', '1.3 marksman: a car for a step'),
  (Q, 'if (best >= 0) how = q->mk_at.z - 1.0f - here <= 2.8f ? MK_ROOF : MK_HIGHGROUND;', '', '1.3 marksman: high ground'),
  (Q, 'if (dc < bd) { bd = dc; q->mk_at = v->pos; q->mk_at.z += 2.6f; best = j; how = MK_VROOF; }', '', '1.3 marksman: a bus roof'),

@@ -329,8 +329,8 @@ w.player=[30.,0.,0.];w.calls.clear();steps(w,V,12);assert not calls(w,0xe48) and
 passed('The brain mod gone in mid-game: the squad never runs the opcode and never fires (no "dumb" fallback: the posts are the brain\'s)')
 w,c,_=setup();summon(w,c);command=g['command'];command(w,c,3,ticks=5);w.car=[0.,0.,18.];w.speed=0
 ground=VM('Helicover_Ground',w);sq=VM('Helicover_Squad',w);w.health[1]=100;w.step(c,ground,sq,n=3);w.shared[b.ROPE_COMMAND]=1;w.step(c,ground,sq,n=6)
-rope=[w.shared[b.GROUND_PUB+i] for i in range(4)];w.now+=8000;w.calls.clear();w.step(c,ground,sq,n=6)
-assert w.shared[b.SQ_ROPE]==1 and all(len(orders(w,0x5d3,t))>0 for t in rope)
+rope=[w.shared[b.GROUND_PUB+i] for i in range(4)];w.now+=8000;w.calls.clear();w.step(c,ground,sq,n=20)   # (1.5: an outer man's place stands still now - his order is renewed after 1.5 s, not every look)
+assert w.shared[b.SQ_ROPE]==1 and all(len(orders(w,0x5d3,t))+len(orders(w,0x5f5,t))>0 for t in rope)   # (1.5: the outer man 20 m out may be sent by the game's path network)
 assert all(o[4] in (4,6,7) for t in rope for o in orders(w,0x5d3,t)) and w.shared[b.SQ_GROUP]==2
 passed('Rope evacuation guards are led by the squad while CJ walks to the rope')
 w,c,ground,sq,team=escort_world();V=(c,ground,sq)

@@ -30,7 +30,15 @@ Both black boxes (811 and 1695 ticks) replay bit for bit here. What is done:
   from the edge you are seen from; a low roof on the map (up to 2.8 m) is a roof he walks to and climbs; a roof with no
   way up is given up at once, whole; the helicopter picks him up in a fight too; a new marksman goes down the rope only
   over the roof chosen.
-- VOICE_AND_WAVE
+- The commander's voice. In the log the mod "spoke" 44 times and the game stayed silent: of the nine lines used, the
+  commander's army voice has only two - the rest are CJ's own or gang lines; an agent in black who takes command has none;
+  and in a fight the game drops unimportant lines. Now the commander uses only lines his voice really has ("get down",
+  "move in", "cover me", "clear", "I see him", ...), marked important (always heard); an agent in black is given an army
+  voice. Each line is in the log: heard, or why not.
+- The commander waves "come to me". The script started the gesture 10 times, but the rifle up in his hands overrode it
+  and the next walk order cut it at once. Now the mod does it: turns him to you, lowers his weapon and gives him the
+  game's "CopTraf_Come" for 1.5 s; nothing interrupts it, at most once in 4 s; you start towards him - it stops. Animation
+  set not in memory - the mod asks the game to load it. Switch WaveOff, crash step 32.
 - No jostling: the places of the three at your side are 1.1 m apart at least (58 times under a metre in the log); the
   commander in cover is right behind you, the bodyguards to the sides.
 - Log and summary: the table the mod sees hits on ours by no longer fills up (after 8 minutes hits on new guards were
