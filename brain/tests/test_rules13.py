@@ -346,6 +346,38 @@ busy, cj_n = pace_run(lambda k: [(0., 1.4, 0.), (0., 3.0, 0.), (0., 0., 0.), (0.
 assert busy <= 1.25 * cj_n, ('CJ changes his pace %d times a minute: a man follows each change once, no flicker in between' % cj_n, busy)
 passed('Pace without flicker: CJ walking round a square - a man changes his action %.1f times a minute (the second 2.0 log: 18.9); CJ changing pace %d times a minute - %.1f, once for each of CJ\'s changes and no more' % (steady, cj_n, busy))
 
+# ------------------------------------------------------------------ the arrival margin: CJ creeps on - a man on his way goes on to well inside "there"
+# (his place moves along at CJ's pace and he walks a little faster: stopping at the very edge of "there", he was HOLD and WALK in turns -
+#  a stop of one look every few steps. The detail crouches with a creeping CJ, so "walk on beside him" does not cover it)
+MOVING_ACTS = (HCB_ACT_WALK, HCB_ACT_FASTWALK, HCB_ACT_RUN, HCB_ACT_SPRINT)
+sc = Scene(); team = squad(sc); sc.step(20)
+sc.cj['flags'] |= HCB_PF_DUCKING                                 # (all quiet: CJ crouches and creeps at 1.2 m/s, round a square)
+hist = {}
+for k in range(400):
+    sc.cj['vel'] = [v * 1.2 / 1.4 for v in SQUARE[(k // 100) % 4]]
+    sc.step(1)
+    for w, p_ in sc.posts.items(): hist.setdefault(w, []).append(p_.act)
+blips = sum(1 for h in hist.values() for i in range(1, len(h) - 1) if h[i] not in MOVING_ACTS and h[i - 1] in MOVING_ACTS and h[i + 1] in MOVING_ACTS)
+creep = sum(1 for h in hist.values() for a_, b_ in zip(h, h[1:]) if a_ != b_) / len(team) / (400 / 600.)
+assert blips <= 2 and creep <= 60, ('creeping with CJ: no stops of a single look at the edge of "there" (about 470 in 40 s, 190 changes a minute a man, without the margin)', blips, creep)
+passed('CJ creeping on (crouched, 1.2 m/s, round a square): a man on his way goes on to well inside his place before he stops - %d stops of a single look in 40 s for the whole detail, %.0f changes of action a minute a man (without the margin: some 470 such stops, 190 changes a minute)' % (blips, creep))
+
+# ------------------------------------------------------------------ the pace band holds only the pace next to an edge: CJ breaks into a sprint - all go at once
+# (a man walking 6 m from his place when CJ sprints is to sprint: two paces up. "Near the edge at 5 m" keeps a pace only against the one next to it)
+sc = Scene(); team = squad(sc); sc.step(20)
+walked, looks = 0, 0
+for dx, dy in ((0., 1.), (1., 0.), (0., -1.)):
+    sc.cj['vel'] = [1.4 * dx, 1.4 * dy, 0.]; sc.step(100)       # 10 s of a walk with the detail round him ...
+    sc.cj['vel'] = [6.5 * dx, 6.5 * dy, 0.]                     # ... and he sprints off
+    for k in range(30):
+        sc.step(1)
+        for p_ in sc.posts.values():
+            if p_.phase == HCB_PH_MOVING:
+                looks += 1; walked += p_.act in (HCB_ACT_WALK, HCB_ACT_FASTWALK)
+    sc.cj['vel'] = [0., 0., 0.]; sc.step(60)
+assert looks > 500 and walked <= 3, ('CJ sprints: nobody on his way walks on (about 40 walking looks when every pace near an edge is held)', walked, looks)
+passed('CJ breaks from a walk into a sprint, three times: every man on his way is off at a run or a sprint at the next look (%d walking looks of %d) - the band at a pace edge holds only the pace next to it, a jump of two paces is made at once' % (walked, looks))
+
 # ------------------------------------------------------------------ beta 5: a shooter running round CJ (his places shift with every look): no back-and-forth at the place
 LOW6 = [(10., -13., 10., -9.), (10., 9., 10., 13.), (-6., -14., -6., -10.), (-6., 10., -6., 14.), (13., -5., 13., -3.), (13., 3., 13., 5.)]
 aba = 0

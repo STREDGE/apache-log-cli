@@ -131,6 +131,38 @@ for k in range(400):
     waited += sum(1 for p in sc.posts.values() if p.why == HCB_WHY2_DOORWAY and p.act == HCB_ACT_HOLD)
 assert two_in <= 1 and waited > 0 and all(sc.peds[w]['pos'][1] > -9. for w in team), ('two come to the gap together: one waits his turn', two_in, waited)
 passed('A doorway, two men at it together (the commander and a bodyguard on their way to CJ): one goes through, the other waits short of it')
+# (1.1: a doorway is walked through its middle - a way that comes to it at a slant is not pulled straight past it: the leg through the
+#  gap runs from the middle of the cell before it to the middle of the cell beyond, square to the wall, never a slant line by a jamb)
+sc = Scene(); sc.walls = [(-20., -10., 0., -10.), (1., -10., 20., -10.)]          # the same wall, the gap one metre wide at x 0..1
+team = [sc.our(-6., -16., SQ, weapon=M4)]; sc.walk_posts = True; sc.step(100)  # (the whole map is known)
+bad = []
+for frm, to in (((-6., -16.), (6., -4.)), ((-8., -13.), (8., -6.)), ((-12., -12.), (9., -7.)), ((7., -14.), (-6., -5.)), ((5., -5.), (-6., -15.)), ((3., -12.5), (-2., -7.))):
+    way = hcb_py.nav_way(sc.brain, frm + (1.,), to + (1.,), sc.time)
+    pts = [frm] + [p[:2] for p in way or []]
+    legs = [(a, b) for a, b in zip(pts, pts[1:]) if (a[1] + 10.) * (b[1] + 10.) < 0.]      # the leg across the line of the wall
+    near, far = ((0.5, -10.5), (0.5, -9.5)) if frm[1] < -10. else ((0.5, -9.5), (0.5, -10.5))
+    if len(legs) != 1 or d2(legs[0][0], near) > 0.05 or d2(legs[0][1], far) > 0.05: bad.append((frm, to, way))
+assert not bad, ('every way crosses the wall square through the middle of the gap', bad)
+passed('A doorway come to at a slant (six ways across the wall, from either side): each goes through the middle of the gap, square to the wall - from the middle of the cell before it to the middle of the cell beyond - never a slant line that takes a man into a jamb')
+
+# ------------------------------------------------------------------ CJ is never sent towards the shooter for cover - not even when that is the only shade there is
+# CJ at the end of a jetty (water behind him and on both sides), the shooter on the shore 25 m east, a parked car on the jetty beside the
+# line between them: CJ is in the open, and the only shade with ground under it is behind the car - 2.5 m from CJ towards the shooter
+sc = Scene(); sc.holes = [(0., 10., 8.5), (0., -10., 8.5), (-10., 0., 8.5)]; sc.walls = [(5., 0.5, 5., 1.5)]
+team = [sc.our(x, y, SQ + k, weapon=M4) for k, (x, y) in enumerate(((-0.8, 0.6), (1.2, -0.6), (2.5, 0.7), (-0.6, -0.9)))]; sc.walk_posts = True
+g = sc.ped(25., 0., pedtype=GANG, weapon=AK, face=(-1., 0.)); sc.step(2)
+shade = (2.5 * math.cos(math.radians(30.)), 2.5 * math.sin(math.radians(30.)))
+assert sc.blocked((25., 0.), shade) and sc.ground_at(*shade) is not None and not sc.blocked((25., 0.), (0., 0.)), 'the scene: real shade with ground behind the car, CJ in the open'
+toward, marks = 0, 0
+for k in range(60):
+    if k % 9 == 0: sc.shot(g, (0., 0., 1.), dst=1)
+    o = sc.step(1)
+    if o.cover_ok:
+        marks += 1; toward += o.cover_at.x > 0.5 * math.hypot(o.cover_at.x, o.cover_at.y) + 0.01
+jj = {p.job: p for p in sc.posts.values()}
+assert toward == 0, ('CJ is never sent to cover on the shooter\'s side of him', toward, marks, (o.cover_at.x, o.cover_at.y))
+assert any(s_[1] == HCB_SAY_FOLLOW_ME for s_ in sc.said) and jj[HCB_ROLE_CLOSE].duty == HCB_DUTY_SHIELD and d2((jj[HCB_ROLE_CLOSE].at.x, jj[HCB_ROLE_CLOSE].at.y), (1.4, 0.)) < 0.4, ('"CJ, stay with me" - the bodyguard shields him where he stands', sc.said, jj[HCB_ROLE_CLOSE].duty)
+passed('CJ at the end of a jetty under fire from the shore, the only shade a parked car 2.5 m from him towards the shooter: he is never sent there - "CJ, stay with me", and the bodyguard puts his body between CJ and the shooter')
 
 # ------------------------------------------------------------------ what the half-hour run found (soak_30min.py), each as a drill of its own
 # four men to the far side of a long wall with one gap two metres wide: all through, nobody gives up, the gap is never "shut" by those who jostled in it
