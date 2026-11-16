@@ -524,12 +524,20 @@ API void hcb_think(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         h = hcb_fnv(h, o->who); h = hcb_fnv(h, o->target); h = hcb_fnv(h, ((u32)o->fire << 24) | ((u32)o->aim_at << 16) | ((u32)o->hold << 8) | o->ready);
     }
     for (i = 0; i < out->n_queries; i++) { h = hcb_fnv(h, out->queries[i].from); h = hcb_fnv(h, out->queries[i].to); }
+    /* 1.0: the map first (it takes the answers and asks for more ground), then where everybody is to be (the detail in
+       PROTECT, the squad over it in ASSAULT), then each man's own way there */
+    hcb_nav_update(b, s, out, b->sq.umode == HCB_UMODE_ASSAULT && b->sq.target_seen && !s->recall ? b->sq.front : s->player.pos);
     hcb_detail_plan(b, s, out);
+    hcb_squad_plan(b, s, out);
+    hcb_agent_plan(b, s, out);
     for (i = 0; i < out->n_posts; i++) {
         const hcb_post *p = &out->posts[i];
         h = hcb_fnv(h, p->who); h = hcb_fnv(h, hcb_bits(p->at.x)); h = hcb_fnv(h, hcb_bits(p->at.y));
         h = hcb_fnv(h, ((u32)p->move << 24) | ((u32)p->crouch << 16) | ((u32)p->duty << 8) | p->job);
+        h = hcb_fnv(h, hcb_bits(p->via.x)); h = hcb_fnv(h, hcb_bits(p->via.y)); h = hcb_fnv(h, ((u32)p->act << 16) | ((u32)p->phase << 8) | p->why);
     }
+    h = hcb_fnv(h, ((u32)out->task << 24) | ((u32)out->umode << 16) | ((u32)out->n_ground_q << 8) | out->n_seg_q); h = hcb_fnv(h, out->target);
+    h = hcb_fnv(h, ((u32)out->ow_ok << 8) | out->ow_ready);
     for (i = 0; i < out->n_probe_q; i++) { h = hcb_fnv(h, hcb_bits(out->probe_q[i].at.x)); h = hcb_fnv(h, hcb_bits(out->probe_q[i].at.y)); }
     h = hcb_fnv(h, ((u32)out->say << 24) | ((u32)out->say_dir << 16) | out->say_seq); h = hcb_fnv(h, ((u32)out->cover_ok << 8) | out->duty);
     for (i = 0; i < out->n_marks; i++) {

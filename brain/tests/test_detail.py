@@ -51,22 +51,26 @@ def detail8(sc, walk=True):
     return detail(sc, places=EIGHT, walk=walk)
 
 
-OUTER, BODY = ('point', 'point2', 'rear', 'delta'), ('close', 'close2', 'close3')
+OUTER, BODY = ('point', 'point2', 'rear', 'rear2'), ('close', 'close2')
 sc = Scene()
 team = detail8(sc)
 sc.step(30)
 j = by_job(sc)
-assert set(j) == {'lead'} | set(OUTER) | set(BODY), sorted(j)
+assert set(j) == {'lead', 'delta'} | set(OUTER) | set(BODY), sorted(j)
 assert d2(at(j['lead']), (0, 0)) < 1.6, ('the commander is at CJ\'s side', at(j['lead']))
-assert all(1.5 < d2(at(j[k]), (0, 0)) < 3.2 and at(j[k])[1] < -0.5 for k in BODY), ('the three bodyguards: two to three metres off, behind him - nobody in front of CJ', [at(j[k]) for k in BODY])
-assert all(8 <= d2(at(j[k]), (0, 0)) <= 12.5 for k in OUTER), ('the outer four: 9-12 m out', [at(j[k]) for k in OUTER])
+assert at(j['lead'])[0] > 0.8 and at(j['lead'])[1] < 0, ('1.0: at his right shoulder, a step behind', at(j['lead']))
+assert 3.0 < at(j['close'])[1] < 4.5 and at(j['close'])[0] < -1.2, ('one bodyguard ahead on the left, clear of CJ\'s way', at(j['close']))
+assert at(j['close2'])[1] < -1.5 and at(j['close2'])[0] < -1.0 and j['close2'].look.y < -8, ('the other behind on the left, watching the rear', at(j['close2']))
+assert all(abs(at(j[k])[0]) > 1.0 for k in BODY + ('lead',)), 'nobody on the line CJ walks'
+assert all(13 <= d2(at(j[k]), (0, 0)) <= 17 for k in OUTER), ('the outer four: 14-15 m out', [at(j[k]) for k in OUTER])
+assert d2(at(j['delta']), (0, 0)) > 15, 'the marksman (on the ground while no high place is known): furthest out'
 quad = sorted((at(j[k])[0] > 0, at(j[k])[1] > 0) for k in OUTER)
 assert quad == [(False, False), (False, True), (True, False), (True, True)], ('one at each corner', quad)
 assert all(d2((j[k].look.x, j[k].look.y), (0, 0)) > 20 for k in OUTER), 'each looks outwards over his own corner'
 assert all(p.duty == HCB_DUTY_CALM and not p.crouch for p in j.values())
-near_cj = [k for k, p in j.items() if d2(sc.peds[p.who]['pos'], sc.cj['pos']) < 4.0]
+near_cj = [k for k, p in j.items() if d2(sc.peds[p.who]['pos'], sc.cj['pos']) < 4.5]
 assert sorted(near_cj) == sorted(('lead',) + BODY), near_cj
-passed('Peace, eight men: the commander at CJ\'s side, three bodyguards two to three metres behind him (nobody in front of him, no heap round him), the other four 9-12 m out, one at each corner, each watching outwards')
+passed('Peace, eight men (1.0): THREE at CJ - the commander at his right shoulder, one bodyguard ahead on the left, one behind on the left watching the rear, nobody on the line he walks; four 14-15 m out, one at each corner, each watching outwards; the marksman furthest out')
 
 sc = Scene()
 team = detail(sc)
@@ -95,10 +99,11 @@ sc.shot(1, (0., 30., 1.))
 sc.step(1)
 j = by_job(sc)
 assert abs(j['point'].at.x) >= 1.99 and j['point'].move in (1, 2, 3), ('the point man is out of CJ\'s line', at(j['point']))
-assert all(d2(at(p), before[p.who]) < .05 for k, p in j.items() if k != 'point'), 'nobody else had to move'
+assert all(d2(at(p), before[p.who]) < .05 for k, p in j.items() if k not in ('point', 'close')), 'nobody else had to move'
+assert abs(j['close'].at.x) >= 1.99, 'the bodyguard ahead on the left steps further out of the line too'
 sc.step(15)
 j = by_job(sc)
-assert d2(at(j['point']), before[j['point'].who]) < .05, 'CJ stopped shooting 1.2 s ago: back to his slot'
+assert d2(at(j['point']), before[j['point'].who]) < .3, 'CJ stopped shooting 1.2 s ago: back to his slot'
 passed('CJ shooting: nobody stands in front of his gun - a man within 2 m of his line steps out sideways (the bodyguard 1.2 m), and goes back once CJ has stopped for 1.2 s')
 
 # ------------------------------------------------------------------ a suspect: weapons up, the bodyguard between him and CJ
@@ -110,8 +115,8 @@ sc.step(4)
 j = by_job(sc)
 assert all(p.duty == HCB_DUTY_WATCH for p in j.values()), [p.duty for p in j.values()]
 assert d2(at(j['close']), (1.5, 0)) < 0.3, ('the first bodyguard steps between the suspect and CJ', at(j['close']))
-assert all(d2((j[k].look.x, j[k].look.y), (15, 0)) < 1.5 for k in ('lead', 'close', 'close2', 'close3', 'point', 'point2')), 'eyes on him'
-assert all(d2((j[k].look.x, j[k].look.y), (15, 0)) > 15 for k in ('rear', 'delta')), 'the two rear men keep watching the rear'
+assert all(d2((j[k].look.x, j[k].look.y), (15, 0)) < 1.5 for k in ('lead', 'close', 'close2', 'point', 'point2')), 'eyes on him'
+assert all(d2((j[k].look.x, j[k].look.y), (15, 0)) > 15 for k in ('rear', 'rear2', 'delta')), 'the rear men keep watching the rear'
 passed('A suspect (armed and near, has done nothing yet): the first bodyguard steps between him and CJ, the commander, the bodyguards and the two front men put their eyes on him, the two rear men keep the rear')
 
 # ------------------------------------------------------------------ contact: cover for CJ, the commander tells him, the team fights from cover
@@ -201,7 +206,7 @@ passed('CJ is never sent towards the shooter for cover, nor to a hidden spot wit
 
 # ------------------------------------------------------------------ a fight, eight men: three shield CJ, four hold posts behind cover
 def fight8(walls, threat=(30., 0.)):
-    sc = Scene(); sc.walls = list(walls)
+    sc = Scene(); sc.low_walls = list(walls)      # (1.0: things a crouching man is hidden behind and a standing one fires over)
     team = detail8(sc); sc.step(20)
     g = sc.ped(threat[0], threat[1], pedtype=GANG, weapon=AK, face=(-1., 0.))
     sc.step(2); sc.shot(g, (0., 0., 1.), dst=1)
@@ -245,7 +250,7 @@ passed('On the way to a post a man runs upright; when CJ has moved far the outer
 # rotation: a badly hurt outer man changes places with the fittest bodyguard
 sc, team, g = fight8(WALLS)
 sc.step(30)
-j = by_job(sc); hurt = j['point2'].who; fresh = j['close3'].who
+j = by_job(sc); hurt = j['point2'].who; guards = {j['close'].who, j['close2'].who}
 sc.peds[hurt]['health'] = 60.
 for t_ in team: sc.peds[t_].setdefault('health', 250.)
 for t_ in team:
@@ -253,7 +258,7 @@ for t_ in team:
 sc.step(2)
 j = by_job(sc)
 assert j['point2'].who != hurt and JOB[sc.posts[hurt].job] in BODY, ('the wounded man comes in to CJ\'s side', JOB[sc.posts[hurt].job])
-assert JOB[sc.posts[fresh].job] in OUTER or any(JOB[sc.posts[t_].job] == 'point2' for t_ in team if t_ != hurt)
+assert j['point2'].who in guards, 'one of the two bodyguards has taken his post'
 passed('Rotation: an outer man who is badly hurt changes places with the fittest bodyguard - the wounded man comes in to CJ\'s side, a fresh one takes his post')
 
 # ------------------------------------------------------------------ the commander falls: the next man takes over and says so
@@ -344,10 +349,22 @@ passed('The threat is remembered (the attacker 20 s, his place 12 s more): betwe
 
 sc, team, g = contact(walls=[(-3., -2.5, -3., 2.5)])
 sc.stuck_men = {team[2]}                                   # the point man cannot move (a fence)
+sc.body = 0                                                # the script body (the fallback): the old way
 sc.step(70)
 pp = sc.posts[team[2]]
 assert pp.stuck and pp.move == 4, ('he gets another way round, then the path network', pp.stuck, pp.move)
-passed('A man who does not get nearer to his post for 1.5 s is given another way round (the post turned round CJ), then the path network')
+passed('Script body (fallback): a man who does not get nearer to his post for 1.5 s is given another way round (the post turned round CJ), then the path network')
+sc, team, g = contact(walls=[(-3., -2.5, -3., 2.5)])
+sc.stuck_men = {team[2]}
+acts, whys, stucks, phases, places = [], [], [], [], []
+for _ in range(160):
+    sc.step(1); pp = sc.posts[team[2]]; acts.append(pp.act); whys.append(pp.why); stucks.append(pp.stuck); phases.append(pp.phase); places.append(at(pp))
+assert HCB_ACT_SIDESTEP in acts[:25] and HCB_WHY2_NO_PROGRESS in whys[:25], ('1.5 s without getting nearer: he steps round and another way is looked for', acts[:25], whys[:25])
+assert 1 in stucks[:60] and HCB_WHY2_NO_ROUTE in whys[:60], ('the fourth time: the game\'s path network', stucks[:60])
+assert HCB_PH_FAILED in phases[:80], ('the sixth time the action has FAILED and says so', phases[:80])
+k_ = phases.index(HCB_PH_FAILED)
+assert any(d2(p_, places[k_]) > 2.0 for p_ in places[k_:]), 'and the squad gives him another place'
+passed('1.0, a man who cannot get on: after 1.5 s with no progress he steps round it and a new way is planned (the reason is given: "no progress"); the fourth time the game\'s path network is asked ("no route"); the sixth time his action has failed and the squad may give him another place')
 
 sc, team, g = contact(walls=[(-3., -2.5, -3., 2.5)])
 sc.wanted = 5
@@ -548,8 +565,8 @@ sc = Scene(); team = detail8(sc); sc.cj['pos'] = [10., 5., 1.]; sc.step(30)
 sc.interior = 5; sc.cj['pos'] = [2000., 2000., 1000.]
 sc.step(30)
 j = by_job(sc)
-assert d2(at(j['lead']), (10., 5.)) < 1.6 and all(d2(at(j[k]), (10., 5.)) <= 12.5 for k in j), ('everybody\'s place is round the door, not 2 km away', [at(p) for p in j.values()])
-assert all(d2(sc.peds[w_]['pos'], (10., 5.)) < 14 for w_ in team) and sc.last_out.duty == HCB_DUTY_CALM
+assert d2(at(j['lead']), (10., 5.)) < 1.6 and all(d2(at(j[k]), (10., 5.)) <= 19 for k in j), ('everybody\'s place is round the door, not 2 km away', [at(p) for p in j.values()])
+assert all(d2(sc.peds[w_]['pos'], (10., 5.)) < 21 for w_ in team) and sc.last_out.duty == HCB_DUTY_CALM
 sc.interior = 0; sc.cj['pos'] = [10., 6., 1.]; sc.step(10)
 assert d2(at(by_job(sc)['lead']), sc.cj['pos']) < 1.6, 'out again: with him as before'
 passed('CJ goes into a building: the detail holds the door he went in by (the commander at the door, the outer men at the corners round it) until he is out again')
@@ -613,7 +630,7 @@ passed('"Into cover" is not repeated every 6 s at a CJ who does not move (a seco
 # a man far from his post who does not get nearer (fifth log: two men stood 57 s, 37 and 58 m off): by the path network at once
 sc = Scene(); team = detail8(sc); sc.step(20)
 j = by_job(sc); far = [w_ for w_, p in sc.posts.items() if p.job == HCB_ROLE_POINT][0]
-sc.walk_posts = False
+sc.walk_posts = False; sc.body = 0                       # (the script body: with the mod's own body the map does this)
 sc.peds[far]['pos'] = [35., 35., 1.]
 sc.step(30)
 assert sc.posts[far].move == 4 and sc.posts[far].stuck, (sc.posts[far].move, sc.posts[far].stuck)

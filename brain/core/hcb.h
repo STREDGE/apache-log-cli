@@ -12,7 +12,7 @@
 #define HCB_H
 #include <stdint.h>
 
-#define HCB_VERSION 5          /* layout of the structs below; a black box says which version wrote it */
+#define HCB_VERSION 6          /* layout of the structs below; a black box says which version wrote it */
 
 #define HCB_MAX_PEDS 64        /* peds in one snapshot (nearest to CJ first) */
 #define HCB_MAX_VEHS 40
@@ -25,6 +25,10 @@
 #define HCB_MAX_LOS 96          /* line-of-sight questions per tick (answered by the adapter in the next snapshot) */
 #define HCB_MAX_HINTS 12        /* 0.8: the game's own cover points near CJ */
 #define HCB_MAX_DANGERS 8       /* 0.8: live grenades, rockets, fires and fresh explosions near CJ */
+#define HCB_MAX_GROUND 32       /* 1.0: ground questions per tick (the brain's own map of the ground round CJ): one ray down and four level
+                                   rays each */
+#define HCB_MAX_SEGS 16         /* 1.0: "can a man walk straight from a to b" questions per tick */
+#define HCB_MAX_HIGH 8          /* 1.0: high places near CJ (roofs) the adapter has found for the marksman */
 
 /* ---- ped flags (hcb_ped.flags) */
 #define HCB_PF_DEAD 1
@@ -191,7 +195,7 @@ typedef struct hcb_probe {
     hcb_vec from;
     uint8_t hidden;     /* the ray from `from` to a crouching chest at `at` is blocked */
     uint8_t ground;     /* there is something to stand on just below `at` */
-    uint8_t reserved0;
+    uint8_t hidden_hi;  /* 1.0: the ray to a STANDING man's head at `at` is blocked too (0 = he can fire over it standing up) */
     uint8_t reserved1;
 } hcb_probe;
 
@@ -228,8 +232,51 @@ typedef struct hcb_post {
     uint8_t job;        /* HCB_ROLE_LEAD .. HCB_ROLE_MARKSMAN */
     uint8_t stuck;      /* 1 = he has not got nearer to his post for a while: this is another way round (the script goes by the
                            path network when it is set) */
-    uint8_t pad[3];
+    uint8_t act;        /* 1.0: HCB_ACT_*: what he is doing now */
+    uint8_t phase;      /* 1.0: HCB_PH_*: where that action stands */
+    uint8_t why;        /* 1.0: HCB_WHY2_*: the reason of his last decision / failure */
+    hcb_vec via;        /* 1.0: the next point on his way there (= at when the way is straight); the mod walks him to it */
 } hcb_post;
+/* 1.0: what a man does (hcb_post.act) and how far he has got (hcb_post.phase) */
+#define HCB_ACT_HOLD 0          /* stay where he is */
+#define HCB_ACT_WALK 1
+#define HCB_ACT_FASTWALK 2
+#define HCB_ACT_RUN 3
+#define HCB_ACT_SPRINT 4        /* a rush from cover to cover, or closing on CJ under fire */
+#define HCB_ACT_COVER 5         /* in his place, down behind something */
+#define HCB_ACT_OVERWATCH 6     /* in his place, standing / kneeling, watching his sector */
+#define HCB_ACT_SIDESTEP 7      /* getting round something that blocks him */
+#define HCB_PH_CHOSEN 0
+#define HCB_PH_MOVING 1
+#define HCB_PH_ARRIVED 2
+#define HCB_PH_ACTING 3
+#define HCB_PH_FAILED 4
+#define HCB_WHY2_NONE 0
+#define HCB_WHY2_NEW_POST 1     /* the squad gave him another place */
+#define HCB_WHY2_DIRECT 2       /* the straight way is free */
+#define HCB_WHY2_ROUTE 3        /* going round by the brain's own map */
+#define HCB_WHY2_BLOCKED 4      /* the straight way is blocked: a way round is being looked for */
+#define HCB_WHY2_NO_PROGRESS 5  /* he did not get nearer: another way */
+#define HCB_WHY2_NO_ROUTE 6     /* no way found: the game's path network, then another place */
+#define HCB_WHY2_ARRIVED 7
+#define HCB_WHY2_WAIT_TURN 8    /* his pair covers: he waits for his turn to move */
+#define HCB_WHY2_IN_AIR 9       /* on the rope: no orders until he stands */
+/* 1.0: the mode the PLAYER has chosen (hcb_snapshot.umode) and what the squad is doing about it (hcb_out.task) */
+#define HCB_UMODE_PROTECT 0
+#define HCB_UMODE_ASSAULT 1
+#define HCB_TASK_ESCORT 0       /* protect: walking with CJ */
+#define HCB_TASK_SHIELD 1       /* protect: a fight - three at CJ, four in cover, the marksman above */
+#define HCB_TASK_EXTRACT 2      /* protect: too hot, getting CJ out */
+#define HCB_TASK_APPROACH 3     /* assault: on the way to the target, nothing seen yet */
+#define HCB_TASK_GATHER 4       /* assault: collecting at the last cover before the target */
+#define HCB_TASK_BOUND 5        /* assault: fire and movement, one pair at a time */
+#define HCB_TASK_SEARCH 6       /* assault: the target is out of sight - to where it was last seen */
+#define HCB_TASK_CONSOLIDATE 7  /* assault: the place is taken - all-round watch */
+#define HCB_TASK_REGROUP 8      /* assault: nothing left to do - back to CJ (the mode stays ASSAULT) */
+#define HCB_TASK_WITHDRAW 9     /* assault: too many of ours down or no way - back by bounds */
+/* per man of ours (hcb_snapshot.our_state) */
+#define HCB_OS_ROPING 1         /* on a rope or falling: no post, no orders */
+#define HCB_OS_NATIVE 2         /* the mod itself walks this man (not the script) */
 
 /* What the commander says (hcb_out.say), with a direction from CJ's point of view (hcb_out.say_dir: 0 ahead, 1 right,
    2 behind, 3 left) */
@@ -267,6 +314,30 @@ typedef struct hcb_danger {
     uint8_t kind;       /* HCB_DG_* */
     uint8_t pad[3];
 } hcb_danger;
+/* 1.0: the brain's own map. A ground question: what is the height of the ground at (x, y) looking down from z? */
+typedef struct hcb_ground {
+    float x;
+    float y;
+    float z;            /* question: look down from here; answer: the ground's height */
+    uint8_t found;      /* answer: 1 = there is ground */
+    uint8_t wall;       /* answer: bit 0 = something solid between this cell's middle and the next one to +x (a man cannot walk
+                           straight across), bit 1 = the same to +y - two level rays each, at knee and chest height */
+    uint8_t pad[2];
+} hcb_ground;
+/* can a man walk straight from a to b (nothing solid between them at knee and chest height)? */
+typedef struct hcb_seg {
+    hcb_vec a;
+    hcb_vec b;
+    uint8_t clear;      /* answer */
+    uint8_t pad[3];
+} hcb_seg;
+/* a high place near CJ where a man could stand (found by the adapter: flat, well above CJ's ground) */
+typedef struct hcb_high {
+    hcb_vec at;
+    float height;       /* metres above CJ's feet */
+    uint8_t sees_cj;    /* 1 = CJ can be seen from it */
+    uint8_t pad[3];
+} hcb_high;
 typedef struct hcb_snapshot {
     uint32_t time;      /* game time, ms */
     uint32_t frame;
@@ -306,6 +377,19 @@ typedef struct hcb_snapshot {
     uint16_t n_dangers;
     hcb_vec hints[HCB_MAX_HINTS];       /* the game's own cover points (CCover) near CJ: where something solid stands */
     hcb_danger dangers[HCB_MAX_DANGERS];
+    /* 1.0 */
+    uint8_t umode;      /* HCB_UMODE_*: the player's choice on the menu */
+    uint8_t recall;     /* 1 = "to me": the assault task is dropped, everybody back to CJ */
+    uint8_t n_ground;   /* answers to ground_q of the previous hcb_out */
+    uint8_t n_segs;     /* answers to seg_q */
+    uint8_t n_high;
+    uint8_t body;       /* 1 = the mod walks the guards itself (posts are followed by `via`) */
+    uint8_t reserved2;
+    uint8_t reserved3;
+    uint8_t our_state[HCB_MAX_OURS];    /* HCB_OS_* per entry of ours */
+    hcb_ground ground[HCB_MAX_GROUND];
+    hcb_seg segs[HCB_MAX_SEGS];
+    hcb_high high[HCB_MAX_HIGH];
 } hcb_snapshot;
 
 typedef struct hcb_mark {
@@ -360,6 +444,21 @@ typedef struct hcb_out {
     hcb_vec heli_at;
     hcb_post posts[HCB_MAX_OURS];
     hcb_probe probe_q[HCB_MAX_PROBES];
+    /* 1.0 */
+    uint8_t n_ground_q;
+    uint8_t n_seg_q;
+    uint8_t umode;      /* the player's mode as the brain has taken it */
+    uint8_t task;       /* HCB_TASK_*: what the squad is doing */
+    uint8_t ow_ok;      /* 1 = ow_at is the high place the marksman should be put on (the helicopter takes him there) */
+    uint8_t ow_ready;   /* 1 = the helicopter hangs over ow_at, steady: the rope can go down */
+    uint8_t n_moving;   /* how many of the detail are on the move this tick */
+    uint8_t reserved4;
+    uint32_t target;    /* assault: the man the squad goes for (0 = a place, or nothing) */
+    float target_dist;  /* assault: metres from the squad's front to the target */
+    hcb_vec target_at;  /* assault: where the squad is going */
+    hcb_vec ow_at;
+    hcb_ground ground_q[HCB_MAX_GROUND];
+    hcb_seg seg_q[HCB_MAX_SEGS];
 } hcb_out;
 
 /* Tunable numbers. hcb_init fills in the defaults; tests and the tuning runs change them. */
@@ -425,6 +524,12 @@ int hcb_places_get(const hcb_brain *b, hcb_vec *at, uint16_t *count);   /* fills
 void hcb_places_set(hcb_brain *b, const hcb_vec *at, const uint16_t *count, int n);
 int hcb_places_changed(hcb_brain *b);   /* 1 once after the list has changed (the adapter saves it then) */
 void hcb_think(hcb_brain *b, const hcb_snapshot *s, hcb_out *out);
+/* 1.0, for tests and the log: the brain's map. hcb_nav_way: the way it would take from `from` to `to` now (> 0 way points,
+   0 no way, -1 the map does not know where `from` is). hcb_nav_cell: what it knows of the ground at (x, y): 0 nothing yet,
+   1 ground (*z its height), 2 nothing to stand on; *blocked = the ways out of the cell that are marked blocked (bit per
+   direction, 0 = +x, counter-clockwise). */
+int hcb_nav_way(hcb_brain *b, hcb_vec from, hcb_vec to, hcb_vec *wp, int max, uint32_t now);
+int hcb_nav_cell(const hcb_brain *b, float x, float y, float *z, int *blocked, uint32_t now);
 
 /* What the brain knows about one contact, for tests and the log. Returns 0 when it does not know the id. */
 typedef struct hcb_track_info {
