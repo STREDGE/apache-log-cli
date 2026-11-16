@@ -234,8 +234,14 @@ def guard(k):
  s.label(P+'LEAVE');a(0x0633,V(G));setk_lit(k,'TASK',6);later(k,2500);s.ret()
  # ---- 1.2: far behind (40 m+): run to the slot on the path network. Never a teleport: a guard who cannot catch up
  # lags, and the ground worker stands the team down after 60 s (SQ_LAG).
- s.label(P+'ON_FOOT');s.check(0x0021,[V(24),F(40)],P+'NEAR');post_spot(G,R);s.get(25,fk(k,'TASK'));s.eq(25,7,P+'FAR_PATH');s.get(25,fk(k,'NEXT'));s.check(0x001d,[V(12),V(25)],R)
- s.label(P+'FAR_PATH');a(0x05f5,V(G),V(26),V(27),V(28),I(7),I(20000));setk_lit(k,'TASK',7);later(k,3000);s.ret()
+ # ---- 1.5: left behind (22 m+ from CJ, counting the height - he went up a stair, onto a bridge, round a block): the man
+ # follows CJ's own footsteps (the game's follower task, the one mission companions use), the way CJ really went, until he is
+ # within 10 m again; then the brain's posts apply as before. (1.2 sent him by the path network at 40 m: in the canal under
+ # the bridge the whole detail stood 60-80 m away for half a minute - the third whole-game log.) Never a teleport.
+ s.label(P+'ON_FOOT');s.check(0x0021,[V(24),F(22)],P+'FS_NEAR');s.get(25,fk(k,'TASK'));s.eq(25,13,P+'FS_ISSUE');s.get(25,fk(k,'NEXT'));s.check(0x001d,[V(12),V(25)],R)
+ s.label(P+'FS_ISSUE');a(0x0850,V(G),V(0));setk_lit(k,'TASK',13);later(k,4000);s.ret()
+ s.label(P+'FS_NEAR');s.get(25,fk(k,'TASK'));s.eq(25,13,P+'NEAR');s.check(0x0021,[V(24),F(10)],P+'FS_DONE');s.ret()
+ s.label(P+'FS_DONE');setk_lit(k,'TASK',0)
  # ---- stuck check every 2.5 s: moving, far, and barely moved
  s.label(P+'NEAR');s.get(25,fk(k,'LT'));a(0x0085,V(26),V(12));a(0x0062,V(26),V(25));s.check(0x0019,[V(26),I(2500)],P+'STUCK_DONE')
  s.get(26,fk(k,'LX'));s.get(27,fk(k,'LY'));a(0x0509,V(21),V(22),V(26),V(27),V(28));setk(k,'LX',21);setk(k,'LY',22);setk(k,'LT',12)

@@ -66,6 +66,7 @@ s.check(0x056e,[V(1)],'LOAD_FAILED');s.get(19,b.STATE);s.eq(19,3,'LOAD_FAILED');
 a(0x0574,V(1),I(1));s.set(b.FROZEN,1)
 for i,(var,x,y) in enumerate([(20,-1.5,1.2),(21,1.5,1.2),(22,-1.5,-1.2),(23,1.5,-1.2)]):
  a(0x0407,V(1),F(x),F(y),F(-1),V(10),V(11),V(12));a(0x0503,I(8),I(TEAM_MODELS[i]),V(10),V(11),V(12),V(var));s.check(0x056d,[V(var)],'CLEANUP');a(0xddc,I(b.GROUND_PUB+i),V(var));a(0x0085,V(7),V(var));s.call('GSETUP');a(0x0223,V(var),I(250));a(0x035f,V(var),I(100))
+a(0x01bd,V(19));a(0xddc,I(b.DEPLOY_T0),V(19))
 s.get(19,b.ESCORT_ON);s.eq(19,2,'PICKUP_DEPLOYED');s.go('ESCORT_LAND')
 s.label('PICKUP_DEPLOYED');s.set(b.ROPE_BUSY,1);a(0x01bd,V(19));a(0xddc,I(b.ROPE_T0),V(19));say(s,'RGDEP');a(0x01bd,V(27));a(0x000a,V(27),I(5000));a(6,V(25),I(-1));a(6,V(26),I(0));a(6,V(30),I(0));a(6,V(18),I(0))
 s.label('ACTIVE');a(1,I(500));s.get(19,b.BUSY);s.eq(19,1,'ACT_NOT_BUSY');s.go('ACTIVE')   # 1.2: the core is swapping the model / crew (states 16 / 17): sit this cycle out

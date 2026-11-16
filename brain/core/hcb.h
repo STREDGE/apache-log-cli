@@ -210,6 +210,7 @@ typedef struct hcb_probe {
 #define HCB_ROLE_POINT2 6       /* the advance pair (Bravo), second man: a flank on the move */
 #define HCB_ROLE_REAR2 7        /* the counter-assault pair (Charlie), second man: the other flank */
 #define HCB_ROLE_MARKSMAN 8     /* Delta: a rifle on a spot that sees far (high ground, the far side) */
+#define HCB_ROLE_CLOSE3 9       /* 0.6: the third bodyguard (eight men: the commander, three bodyguards, four outer men) */
 /* how the detail fights (hcb_out.mode): the brain picks it from the fight itself, the menu only forces one */
 #define HCB_MODE_HOLD 0         /* CJ into cover, fight from cover, the pair bounds */
 #define HCB_MODE_PULLOUT 1      /* too much for us: a ring round CJ, the commander leads him away, call the pickup */
@@ -527,6 +528,8 @@ typedef struct hcb_pilot_in {
     uint8_t stop;               /* 1 = stop over the target; 0 = fly on through it */
     uint8_t blocked;            /* the last step was refused (something solid in the way): stop and climb */
     uint8_t pad[2];
+    hcb_vec face;               /* 0.6, on station in a fight: the line the fuselage is to lie along (flat; zero = as it is) -
+                                   side-on to the threat, so a door looks at him; turned to when slow and near the point */
 } hcb_pilot_in;
 typedef struct hcb_pilot_out {
     hcb_vec pos;                /* where the helicopter is to be now */

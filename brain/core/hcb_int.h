@@ -100,7 +100,7 @@ typedef struct detail {
     u32 heli_t;
     u8 heli_ok, heli_k, mode, leading, pose, pad_[3];
     u32 mode_since;
-    struct { hcb_vec post; float best; u32 since; u8 alt, stuck, pad[2]; } man[8];   /* each man's progress to his post */
+    struct { hcb_vec post; float best; u32 since; u8 alt, stuck, hold_ok, pad; hcb_vec hold; u32 hold_id, hold_bad; } man[8];   /* each man's progress to his post; 0.6: an outer man's own post in a fight */
     u16 say_seq;
     u8 cj_cover_ok, duty, last_say, say_dir;
     /* 0.4.2 (from the first whole-game log): the detail keeps its threat, its cover and its tongue */

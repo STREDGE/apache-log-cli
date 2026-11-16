@@ -844,6 +844,23 @@ assert all(b - a < .5 for a, b in zip(speeds, speeds[1:])) and speeds[-1] > 5 an
 assert abs(left - math.hypot(400 - x, 8 - y)) < .5 and 0 < x < 100 and 25 < z < 36, (x, y, z, left)   # (it climbs to 35 m over the roofs for a 400 m trip)
 passed('1.4 pilot through 0E48 (6 variables): only for Helicover\'s helicopter and a point on the map; it turns towards the point and speeds up smoothly with the nose down; its turn goes into the helicopter\'s matrix after the scripts (rows of length 1, square to each other)')
 
+# 0.6: flag 4 - on station in a fight. The same pilot, but: short hops (28 m/s at most), down to the spot's height (never under
+# 12 m over the roofs below), and on station the fuselage turns to lie along the line from CJ to the spot (side-on to the threat)
+cjx, cjy = struct.unpack('<2f', bytes(e.uc.mem_read(e.r64(e.cj + 0x18) + 0x30, 8)))
+sx, sy = x + 30., y + 10.
+for k in range(260):
+    handled, v, used = pilot_ask(sx, sy, flags=1 | 4)
+    assert handled == 1 and v[5] != -1, v
+    x, y, z, left, sp = (f32(q) for q in v[1:6])
+    assert sp < 29.5, sp
+    e.wf(mat + 0x30, x, y, z)
+    e.frame(ms=50, hud=False)
+r_, f_, u_ = rows()
+line = (sx - cjx, sy - cjy); L_ = math.hypot(*line)
+assert left < 2.0 and 11.5 < z < 41., (left, z)
+assert abs(f_[0] * line[0] + f_[1] * line[1]) / L_ > 0.9, ('on station the fuselage lies along the line CJ - spot', f_, line)
+passed('0.6 the brain\'s own pilot in a fight (flag 4 of the pilot command): a short hop at no more than 28 m/s to the spot, at the spot\'s height (%.0f m here; never under 12 m over the roofs), and there it turns side-on to the threat - the fuselage along the line from CJ to the spot' % z)
+
 until_round()
 e.w32(gang + 0x54c, 55)                                              # he is dead
 e.frame(ms=50, n=2, hud=False)
