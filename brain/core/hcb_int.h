@@ -103,6 +103,12 @@ typedef struct detail {
     struct { hcb_vec post; float best; u32 since; u8 alt, stuck, pad[2]; } man[8];   /* each man's progress to his post */
     u16 say_seq;
     u8 cj_cover_ok, duty, last_say, say_dir;
+    /* 0.4.2 (from the first whole-game log): the detail keeps its threat, its cover and its tongue */
+    u32 threat_since;       /* when the threat the detail fights was taken */
+    u32 cover_bad_since;    /* since when CJ's spot has been known exposed or too far with no better one (0 = it is good) */
+    u32 said_at;            /* when the commander last said anything */
+    u32 in_since;           /* since when CJ has been in his cover (0 = he is not) */
+    u32 nocover_since;      /* since when there has been no cover for CJ in this fight (0 = there is one) */
 } detail;
 struct hcb_brain {
     hcb_cfg cfg;

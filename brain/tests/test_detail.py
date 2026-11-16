@@ -142,7 +142,7 @@ o = sc.last_out
 assert o.cover_ok and -5 < o.cover_at.x < -3 and abs(o.cover_at.y) < 2.6, ('a spot behind the wall, the nearest one', o.cover_ok, o.cover_at.x, o.cover_at.y)
 assert sc.blocked((25., 0.), (o.cover_at.x, o.cover_at.y)), 'the shooter cannot see it'
 sc.cj['pos'] = [o.cover_at.x, o.cover_at.y, 1.]
-sc.step(6)
+sc.step(30)                                                            # (he says it when CJ has stayed there a second, and never two things within 2.5 s)
 o = sc.last_out
 j = by_job(sc)
 assert any(s_[1] == HCB_SAY_IN_COVER for s_ in sc.said) and not o.cover_ok, ('"CJ is in cover - we hold"; the mark goes away', sc.said)
@@ -347,6 +347,57 @@ def run_twice():
 a_, b_ = run_twice()
 assert a_ == b_
 passed('The same fight twice gives the same posts, the same words and the same questions (a recorded fight replays exactly)')
+
+# ---- 0.4.2, from the first whole-game log (16.11.2026) ----
+# a car drives at a guard: he gets out of its way (seven were run over in that game); when it has passed he goes back
+sc = Scene(); team = detail(sc)
+sc.step(10)
+gx, gy = sc.peds[team[0]]['pos'][:2]
+drv = sc.ped(gx, gy - 30., pedtype=4)
+car = sc.veh(gx, gy - 30., vel=(0., 15., 0.), driver=drv)
+least = 9.
+for k in range(30):
+    sc.step(1)
+    c_ = sc.vehs[car]['pos']
+    for t_ in team:
+        q = sc.peds[t_]['pos']
+        if abs(q[1] - c_[1]) < 3.0: least = min(least, abs(q[0] - c_[0]))
+assert least > 2.0, ('nobody is within 2 m of the car\'s path as it passes', least)
+sc.vehs[car]['vel'] = [0., 0., 0.]; sc.step(40)
+assert d2(sc.peds[team[0]]['pos'], at(post(sc, team[0]))) < 1.5 and post(sc, team[0]).move != 3
+passed('A car at speed coming at a guard: he sprints out of its path (never within 2 m of it as it passes; closest %.1f m) and returns to his post after' % least)
+
+# the threat drives round CJ and others come and go: the commander does not chatter, the commander does not start and stop
+sc, team, g = contact(walls=[(-3., -2.5, -3., 2.5)])
+g2 = sc.ped(-20., 15., pedtype=GANG, weapon=AK, face=(1., -1.))
+lead_flips, was = 0, 0
+for k in range(300):
+    a_ = k * 0.05
+    sc.peds[g]['pos'] = [25. * math.cos(a_), 25. * math.sin(a_), 1.]
+    if k % 7 == 0: sc.shot(g if (k // 7) % 2 else g2, (0., 0., 1.), dst=1)
+    if k % 40 == 20: sc.cj['pos'] = [sc.cj['pos'][0] + 1.8, sc.cj['pos'][1], 1.]
+    sc.step(1)
+    lead_flips += sc.last_out.leading != was; was = sc.last_out.leading
+gaps = [b_[0] - a_[0] for a_, b_ in zip(sc.said, sc.said[1:])]
+assert gaps and min(gaps) >= 2500, ('never two things said within 2.5 s', sorted(gaps)[:5])
+same = [b_[0] - a_[0] for a_, b_ in zip(sc.said, sc.said[1:]) if a_[1] == b_[1] == HCB_SAY_TAKE_COVER]
+assert all(x >= 6000 for x in same) and len(sc.said) <= 12 and lead_flips <= 16, (len(sc.said), lead_flips, sc.said)
+passed('30 s with the shooter circling CJ, a second one firing in turn and CJ shifting about: the commander says %d things, never two within 2.5 s, "into cover" 6 s apart at least; he starts or stops leading %d times' % (len(sc.said), lead_flips))
+
+# the detail keeps the man it fights: a second shooter a little more dangerous for a moment does not turn it round
+sc, team, g = contact()
+sc.step(10)
+look0 = at(post(sc, team[2])); T0 = sc.brain.b.dt.threat_id if hasattr(sc.brain, 'b') else None
+g2 = sc.ped(-22., 0., pedtype=GANG, weapon=AK, face=(1., 0.))
+turned = 0
+for k in range(25):
+    if k % 5 == 0: sc.shot(g2, (0., 0., 1.), dst=1)
+    if k % 5 == 2: sc.shot(g, (0., 0., 1.), dst=1)
+    sc.step(1)
+    lk = post(sc, team[0]).look
+    turned += (lk.x < 0) != (k and prev < 0); prev = lk.x
+assert turned <= 2, ('the commander\'s weapon does not swing from one shooter to the other every look', turned)
+passed('Two shooters on opposite sides firing in turn: the detail keeps the one it fights (3 s at least, then until another is half again as dangerous) - it turned round %d times in 2.5 s' % turned)
 
 text = '\n'.join(results) + '\nThe core only. Nothing here has run in the game.\n'
 (hcb_py.OUT / 'brain_detail_tests.txt').write_text(text)
