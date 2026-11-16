@@ -55,7 +55,7 @@ extern void *memset(void *d, int c, u64 n);
 
 #define HIDDEN __attribute__((visibility("hidden")))
 #define EXPORT __attribute__((visibility("default")))
-#define VERSION "0.5 (the commander runs ahead to the cover, a close steady spot for the helicopter, nobody under a car, tighter fire)"
+#define VERSION "0.6 (its own pilot in a fight, the commander at CJ's side, three bodyguards, four men out on posts behind cover)"
 #define GAME_DIR "/storage/emulated/0/Android_unprotected/data/com.rockstargames.gtasa/"
 
 /* ---------- the game (offsets from libGTASA base; see brain/research/game_facts.md) ---------- */
@@ -98,7 +98,7 @@ extern void *memset(void *d, int c, u64 n);
 #define CMD_SQUAD 2                         /* 3 variables: in handle; out state (0 nothing, 1 cover, 2 fire, 3 cease fire now), target */
 #define CMD_POST 4                          /* 10 variables: in handle; out move (-1 no post, 0 stay, 1 walk, 2 run, 3 sprint), x y z, crouch, look x y z, duty */
 #define CMD_DETAIL 5                        /* 9 variables: out what the commander said last (seq, HCB_SAY_*, direction), duty, cover for CJ (ok, x y z), commander */
-#define CMD_PILOT 6                         /* 6 variables: in helicopter, point x y, roofs z, flags (1 stop, 2 the last step was refused); out x y z, metres left, speed (-1 = no pilot) */
+#define CMD_PILOT 6                         /* 6 variables: in helicopter, point x y, roofs z, flags (1 stop, 2 the last step was refused, 4 on station in a fight); out x y z, metres left, speed (-1 = no pilot) */
 #define CMD_STATUS 3                        /* 5 variables: out alert, threats, attackers, kills, the most dangerous man; 8: + ms since CJ fired, direction x, y; 9: + ms since a stranger fired at our helicopter; 10: + the gunners' pose (0 stand, 1 kneel, 2 sit); 13: + the helicopter's spot x y z (0 0 0 = none) */
 #define IGNORE_ENTITY 0xbdcaf8UL            /* CWorld::pIgnoreEntity */
 #define GOT_IGNORE 0x84b180UL               /* the GOT entry the line-of-sight code reads its address from */
@@ -882,7 +882,7 @@ static void gunners_fire(void) {
 }
 static const char *const ROLE_NAME[] = {"let-go", "pilot", "gunner1", "gunner2", "gunner3", "gunner4",
                                         "guard1", "guard2", "guard3", "guard4", "guard5", "guard6", "guard7", "guard8"};
-static const char *const JOB_NAME[] = {"-", "LEAD", "CLOSE", "POINT", "REAR", "CLOSE2", "POINT2", "REAR2", "MARKSMAN"};
+static const char *const JOB_NAME[] = {"-", "LEAD", "CLOSE", "POINT", "REAR", "CLOSE2", "POINT2", "REAR2", "MARKSMAN", "CLOSE3"};
 static const char *const DUTY_NAME[] = {"calm", "watch", "shield", "cover", "bound", "hold", "ring"};
 static const char *const HOLD_NAME[] = {"FIRE", "no-target", "rule", "CJ-in-line", "CJ-behind", "friend-in-line", "bystander", "car-near",
                                         "no-LOS", "range", "reacting", "pause", "covering", "enough-on-him"};
@@ -1087,6 +1087,15 @@ static void cmd_pilot(int *v) {
     in.target.x = t[0]; in.target.y = t[1]; in.ground = t[2];
     in.dt = (float)(now - g_pilot.last) * 0.001f;
     in.stop = (u8)(v[4] & 1); in.blocked = (u8)((v[4] >> 1) & 1);
+    if (v[4] & 4) {
+        /* 0.6, the brain's own pilot in a fight (the script asks every frame while the brain gives a spot): the height is
+           the spot's (never under 12 m over the roofs below), short hops at 28 m/s, and on station side-on to the threat -
+           the spot lies abeam of the line CJ - threat, so the line from CJ to it is the line to lie along */
+        float h = g_out.heli_ok ? g_out.heli_at.z - t[2] : 16.0f;
+        in.hover = h < 12.0f ? 12.0f : h > 40.0f ? 40.0f : h;
+        in.cruise = 28.0f;
+        in.face.x = t[0] - g_snap.player.pos.x; in.face.y = t[1] - g_snap.player.pos.y; in.face.z = 0;
+    }
     hcb_pilot_step(&g_pilot, &in, &o);
     g_pilot.last = now;
     g_pilot_out = o; g_pilot_at = now; g_pilot_flags = (u32)v[4]; g_pilot_to[0] = t[0]; g_pilot_to[1] = t[1]; g_pilot_to[2] = t[2];
@@ -1311,6 +1320,7 @@ static void session_second(u32 now) {
         if (g_pilot_out.arrived) ts(D, " ARRIVED");
         if (g_pilot_flags & 1) ts(D, " stop-there");
         if (g_pilot_flags & 2) ts(D, " BLOCKED");
+        if (g_pilot_flags & 4) ts(D, " ON-STATION-IN-A-FIGHT (the brain's own pilot)");
         ts(D, "\n");
     }
     hc_scan(D, now - s_hc_at >= 30000 || !s_hc_at);
@@ -1777,7 +1787,7 @@ static void *watchdog(void *arg) {
 }
 
 struct ModInfo { char guid[48]; char name[48]; char version[24]; char author[48]; u16 ver[4]; u8 reserved[336]; };
-static struct ModInfo g_info __attribute__((aligned(16))) = {"net.helicover.brain", "Helicover Brain", "0.5", "Helicover", {0, 5, 0, 0}, {0}};
+static struct ModInfo g_info __attribute__((aligned(16))) = {"net.helicover.brain", "Helicover Brain", "0.6", "Helicover", {0, 6, 0, 0}, {0}};
 static int g_done;
 EXPORT struct ModInfo *__GetModInfo(void) { return &g_info; }
 EXPORT void OnModPreLoad(void) {}

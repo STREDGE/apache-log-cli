@@ -1,10 +1,30 @@
-HELICOVER 1.4 BETA 3 - support helicopter with a smart crew
-GTA San Andreas (Android, 64-bit), a CLEO mod + the Helicover Brain 0.5 mod. They only work together.
+HELICOVER 1.5 BETA 1 - support helicopter with a smart crew
+GTA San Andreas (Android, 64-bit), a CLEO mod + the Helicover Brain 0.6 mod. They only work together.
 
 WHAT IT IS
 Call a support helicopter: it flies in from far away, follows CJ and covers him with four door
 gunners. Drop a four-man team on foot, get picked up by rope, fly to the map marker or Grove
 Street and get out there by landing or by rope.
+
+NEW IN 1.5 BETA 1 (brain 0.6) - FROM THE THIRD LOG AND YOUR REMARKS
+IMPORTANT: replace EVERYTHING - the CLEO files and libHelicoverBrain64.so.
+Its own pilot in a fight
+- In a fight the helicopter is flown by the brain's pilot, not the game's: frame by frame, to a spot 20 m from CJ and
+  16 m above him, abeam of the line CJ - shooter. On station it turns side-on so a door looks at the target. When the
+  fight is over it goes back to the usual escort; another order is obeyed at once.
+The detail on the ground - anew
+- No more heap round CJ. The commander is always at CJ's side. Three bodyguards: in peace two to three metres behind
+  him (nobody in front), under fire their bodies between CJ and the shooter. The other four are out: in peace at the
+  corners 9-12 m off, in a fight each on a post of his own behind cover in his sector 10-18 m out, with CJ in sight.
+  A post is kept, not swapped every second: only when it is exposed, CJ has gone far, or CJ cannot be seen from it.
+- The commander takes CJ to cover at his side, a step towards the cover, going there with him.
+- Rotation: a badly hurt outer man changes places with the fittest bodyguard.
+- ASSAULT / GUARD and the SQUAD TACTICS row are gone: the brain alone decides (hold, or pull CJ out).
+- The second four no longer appear out of nowhere: they come down the same ropes 3 s after the first four (or, when
+  the helicopter has gone, where the screen does not show, and run in).
+- A man left behind (22 m+, height counted) follows CJ's own footsteps until he is within 10 m.
+Not done yet from the approved plan: seats in CJ's car, water, buildings, stealth; landing and hot pickup by the
+brain's pilot; route recon; voice; memory of places; fists against the unarmed; grenades and snipers.
 
 NEW IN 1.4 BETA 3 (brain 0.5) - FROM YOUR SECOND LOG AND REMARKS
 IMPORTANT: replace EVERYTHING this time - the CLEO files and libHelicoverBrain64.so.

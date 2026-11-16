@@ -95,6 +95,14 @@ API void hcb_pilot_step(hcb_pilot *p, const hcb_pilot_in *in, hcb_pilot_out *out
     speed = f_sqrt(p->vel.x * p->vel.x + p->vel.y * p->vel.y);
     rate_max = speed < 8.0f ? TURN_HOVER : f_min(TURN_HOVER, G_ACC * 0.67f / speed + 0.08f);
     rate_want = dist > 12.0f ? f_clamp(1.6f * err, -rate_max, rate_max) : 0.0f;
+    /* 0.6: on station he turns side-on to the threat (along the line given, whichever end is nearer) */
+    if (dist <= 12.0f && speed < 8.0f && finite_v(in->face) && in->face.x * in->face.x + in->face.y * in->face.y > 0.25f) {
+        hcb_vec fc = flat_unit(in->face, p->head);
+        float e2;
+        if (fc.x * p->head.x + fc.y * p->head.y < 0) { fc.x = -fc.x; fc.y = -fc.y; }
+        e2 = f_atan2(p->head.x * fc.y - p->head.y * fc.x, p->head.x * fc.x + p->head.y * fc.y);
+        rate_want = f_clamp(1.4f * e2, -TURN_HOVER, TURN_HOVER);
+    }
     p->yaw_rate += (rate_want - p->yaw_rate) * f_min(1.0f, dt / 0.45f);
     {
         float t = p->yaw_rate * dt, c = f_cos(t), s = f_sin(t);

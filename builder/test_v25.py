@@ -62,7 +62,7 @@ class World:
   d=math.dist(old,new)
   if d>3.:self.teleports.append({'op':op,'who':who,'dist':d,'visible':self.visible(who),'time':self.now,'from':list(old),'to':list(new)})
  FIRE_OPS={0x74d:1,0x634:1,0x7a5:1,0x713:1,0x637:7}
- TASK_OPS=(0x667,0x687,0x5d3,0x5f5,0x5ca,0x633,0x792,0x5c5,0x173,0x78f,0x464,0x465,0x5d4,0x6e1)
+ TASK_OPS=(0x850,0x667,0x687,0x5d3,0x5f5,0x5ca,0x633,0x792,0x5c5,0x173,0x78f,0x464,0x465,0x5d4,0x6e1)
  def task_op(self,op,vals):
   """Which task a man is on: a firing task stays until another task replaces it."""
   if not vals:return
@@ -165,6 +165,8 @@ class VM:
    elif base in [0x56d,0x56e,0x3ca]:cond(vals[0] in w.exists)
    elif base in [0x118,0x119]:cond(vals[0] in w.dead)
    elif base in [0x2ca,0x2cb]:cond(w.visible(vals[0]))
+   elif base==0xc2:cond(getattr(w,'point_on_screen',lambda p:False)(vals[:3]))
+   elif op==0x850:w.walk[vals[0]]={'to':list(w.coords(vals[1])),'speed':6.5,'until':w.now+4000};w.follows=getattr(w,'follows',[])+[(w.now,vals[0],vals[1])]
    elif base in [0xdb,0x448]:cond(w.incar.get(vals[0])==vals[1] or (base==0xdb and w.attached_reports_incar and vals[0] in w.attach and w.attach[vals[0]][0]==vals[1]))
    elif base==0xdf:cond(vals[0] in w.incar or (w.attached_reports_incar and vals[0] in w.attach))
    elif base==0xa32:cond(vals[0] in w.attach)
@@ -535,12 +537,11 @@ passed('Protect CJ and cease-fire remain active after aim and takeoff changes')
 
 w,c,p=setup(True);summon(w,c);f=VM('Helicover_Fire',w);w.step(c,p,f,n=3);w.shared[b.FIRE]=3;w.step(c,p,f,n=5)
 launch=VM('Helicover',w);w.step(c,p,f,launch,n=15);w.events.append(6);w.step(c,p,f,n=4)
-assert w.menu==[b'HELICOVER / SETTINGS',b'CLOSE',b'HELICOPTER MODEL >',b'SQUAD TACTICS: AUTO',b'MESSAGES: ALL',b'< BACK'],w.menu
+assert w.menu==[b'HELICOVER / SETTINGS',b'CLOSE',b'HELICOPTER MODEL >',b'MESSAGES: ALL',b'< BACK'],w.menu
 assert w.shared[b.WPN]==31 and all(w.weapons[c.v[v]]==31 for v in [13,14,15,16])
 passed('1.4.1: the crews are fixed - no crew or crew weapon pages; the SWAT door gunners carry M4s')
-for tap,val,row in [(1,1,b'SQUAD TACTICS: ASSAULT'),(1,2,b'SQUAD TACTICS: GUARD'),(1,0,b'SQUAD TACTICS: AUTO')]:
- w.now+=1100;w.events.append(tap);w.step(c,p,f,n=12);assert w.shared[b.TACTICS]==val and row in w.menu,(val,w.menu)
-passed('SQUAD TACTICS: one tap moves AUTO (the brain picks) -> ASSAULT -> GUARD -> AUTO')
+w.now+=1100;w.events.append(1);w.step(c,p,f,n=12);assert w.shared.get(b.TACTICS,0)==0 and not any(b'TACTICS' in r for r in w.menu) and any(r.startswith(b'MESSAGES:') and r!=b'MESSAGES: ALL' for r in w.menu),w.menu
+passed('1.5: no SQUAD TACTICS row (how the detail fights is the brain\'s business alone); the second row is MESSAGES and a tap changes it')
 
 w,c,p=setup(True);w.touches[7]=0;w.step(c,p,n=15);w.touches[5]=w.now;w.step(c,p,n=8)
 assert w.menu is None and not calls(w,0xde0)
@@ -871,8 +872,9 @@ for npc,x,y in [(900,-25.,-25.),(901,25.,-25.),(902,-25.,-65.),(903,25.,-65.)]:
 w.step(c,f,n=25)
 gunners=[w.shared[b.PUB+i] for i in range(3,7)];men={}
 for t_,who,man,_s,_e in w.game_rounds:men.setdefault(who,set()).add(man)
-assert set(men)==set(gunners) and all(len(v)==1 for v in men.values()) and set().union(*men.values())=={900,901,902,903} and hit(w)=={900,901,902,903} and not invariants(w),(men,hit(w),invariants(w))
-passed('Four attackers, two on each side of the helicopter: each of the four gunners has a man of his own and fires his own weapon at him')
+# (1.5: the brain's own pilot now moves the helicopter to its station and turns it side-on, so who has which man changes as it turns)
+assert set(men)<=set(gunners) and len(men)>=3 and set().union(*men.values())=={900,901,902,903} and hit(w)=={900,901,902,903} and not invariants(w),(men,hit(w),invariants(w))
+passed('Four attackers, two on each side of the helicopter: the gunners share them out and fire their own weapons - all four men are hit, by at least three different gunners')
 
 if b.MAP_MARKER:
  # Search a nearby landing candidate when the exact map marker is obstructed.
@@ -955,8 +957,9 @@ passed('A stalled native descent still offers LAND / ROPE after 25 s')
 # The pilot brings a distant active target into view while following CJ.
 w,c,f=fire_world();npc=target(w,typ=7,skin=20);w.damage.add((1,npc));w.step(c,f,n=25)
 assert not calls(w,0x780),'0780 keeps a dangling ped pointer; never use it'
-assert w.shared[b.TRACKED_TARGET]==npc and calls(w,0x4a2),calls(w,0x4a2)
-passed('Pilot can reposition to keep an active threat in view')
+# (1.5: with a spot from the brain its own pilot flies the helicopter there frame by frame; without one the old orbit of the game's pilot)
+assert (w.shared[b.COMBAT_PILOT]==1 and w.frozen.get(c.v[5]) and w.shared[b.HELI_SPOT_Z]>1 and math.dist(w.car[:2],[w.shared[b.HELI_SPOT_X],w.shared[b.HELI_SPOT_Y]])<math.dist([0.,0.],[w.shared[b.HELI_SPOT_X],w.shared[b.HELI_SPOT_Y]])+25.) or (w.shared[b.TRACKED_TARGET]==npc and calls(w,0x4a2)),(w.shared[b.COMBAT_PILOT],w.car,calls(w,0x4a2))
+passed('Pilot repositions to keep an active threat in view (the brain\'s own pilot when the brain gives a spot)')
 # A player follow order cancels an active cruise detour.
 w,c,_=setup();summon(w,c);start_grove(w,c);w.los_fn=lambda a,z:not (abs(z[0]-a[0])<.1 and z[1]-a[1]>30.)
 w.step(c,n=5);assert w.frozen.get(c.v[5])
@@ -971,8 +974,8 @@ def to_destination(w,c,*vms):
 # menu (beta 4): the two EXIT BUTTON rows are switches for the game's own exit button - they start nothing themselves
 w,c,p=setup(True);summon(w,c);w.incar[1]=c.v[5];launch=VM('Helicover',w);w.step(c,p,launch,n=15)
 assert b'EXIT BUTTON: LAND [X]' in w.menu and b'EXIT BUTTON: ROPE' in w.menu and b'GET OUT HERE' not in w.menu,w.menu
-w.events.append(5);w.step(c,p,n=5);assert w.menu==[b'HELICOVER / SETTINGS',b'CLOSE',b'HELICOPTER MODEL >',b'SQUAD TACTICS: AUTO',b'MESSAGES: ALL',b'< BACK'] and not any(b'EXIT' in r or b'LANGUAGE' in r for r in w.menu),w.menu
-w.events.append(3);w.step(c,p,n=5);assert w.menu[0]==b'HELICOVER / FOLLOWING',w.menu
+w.events.append(5);w.step(c,p,n=5);assert w.menu==[b'HELICOVER / SETTINGS',b'CLOSE',b'HELICOPTER MODEL >',b'MESSAGES: ALL',b'< BACK'] and not any(b'EXIT' in r or b'LANGUAGE' in r for r in w.menu),w.menu
+w.events.append(2);w.step(c,p,n=5);assert w.menu[0]==b'HELICOVER / FOLLOWING',w.menu
 st=w.shared[b.STATE];pos=list(w.car)
 for idx,mode,row,key in [(3,1,b'EXIT BUTTON: ROPE [X]','HCXBR'),(3,1,b'EXIT BUTTON: ROPE [X]','HCXBR'),(2,0,b'EXIT BUTTON: LAND [X]','HCXBL'),(2,0,b'EXIT BUTTON: LAND [X]','HCXBL'),(3,1,b'EXIT BUTTON: ROPE [X]','HCXBR')]:
  w.calls.clear();w.messages.clear();w.shared[b.MSG_UNTIL]=0;w.events.append(idx);w.step(c,p,n=12)
@@ -1194,17 +1197,37 @@ assert w.shared[b.HELI_SHOT_T]>0 and w.now-w.shared[b.HELI_SHOT_T]<=300,(w.now,w
 w,c,f=fire_world();npc=target(w,typ=7,skin=102);w.weapons[npc]=30;w.actor_heading[npc]=180.;w.shooting_chars={npc};w.step(c,f,n=4);assert w.now-w.shared[b.HELI_SHOT_T]>5000,'a round that goes nowhere near the helicopter'
 w,c,f=fire_world();g0=w.shared[b.PUB+3];at_heli(w,g0);w.step(c,f,n=4);assert w.now-w.shared[b.HELI_SHOT_T]>5000,'our own fire'
 passed('A stranger\'s round that passes within 6 m of the helicopter stamps the time the pilot\'s evasion looks at (it used to be read from the bullet traces); rounds elsewhere and our own fire do not')
-# combat orbit around the threat at 28 m, 25 m above it, moving between points
-w,c,f=fire_world();w.speed=18.;npc=target(w,typ=7,skin=20);w.damage.add((1,npc));w.step(c,f,n=10)   # an orbiting helicopter is moving (not 'wedged')
-brain_spots=0
-for _ in range(80):
- w.step(c,f);m=calls(w,0x4a2)[-1][2];cj=w.coords(1)
- if w.shared[b.HELI_SPOT_Z]>1:
-  brain_spots+=1
-  assert 9.<=math.dist(m[1:3],cj[:2])<=34. and abs(m[3]-m[5])<.01 and abs(m[4]-12.)<.01,m   # 1.4.3: the brain's spot (20 m from CJ when taken, 16 m up, kept while CJ is 9-34 m from it); the ceiling is the spot's height
- else:assert abs(math.dist(m[1:3],w.pos[npc][:2])-b.ORBIT_RADIUS)<.5 and abs(m[3]-(w.pos[npc][2]+25.))<.01,m
-assert brain_spots>=60,brain_spots
-passed('In a fight the pilot holds the brain\'s spot: 28 m from CJ on the far side from the threat, 24 m up, where the gunners see the man (the old orbit round the threat only until the brain has the spot)')
+# 1.5: in a fight the brain's OWN pilot flies the helicopter to the brain's spot and holds it there, side-on to the threat
+w,c,f=fire_world();w.speed=18.;npc=target(w,typ=7,skin=20);w.damage.add((1,npc));w.step(c,f,n=10)
+n4=len(calls(w,0x4a2));flown=0;heli=c.v[5]
+for _ in range(160):
+ w.step(c,f)
+ if w.shared[b.COMBAT_PILOT]==1:flown+=1;assert w.frozen.get(heli) and w.shared[b.HELI_SPOT_Z]>1 and w.shared[b.TRACKED_TARGET]==-2
+spot_=[w.shared[b.HELI_SPOT_X],w.shared[b.HELI_SPOT_Y],w.shared[b.HELI_SPOT_Z]];cj=w.coords(1)
+assert flown>=120 and len(calls(w,0x4a2))-n4<=3,(flown,len(calls(w,0x4a2))-n4)   # (the game's pilot only until the brain had its spot)
+assert math.dist(w.car[:2],spot_[:2])<6. and abs(w.car[2]-spot_[2])<5. and 9.<=math.dist(spot_[:2],cj[:2])<=34.,(w.car,spot_)
+hd=math.radians(w.cars[heli]['heading']) if heli in getattr(w,'cars',{}) and 'heading' in w.cars[heli] else math.radians(getattr(w,'car_heading',0.))
+nose=(-math.sin(hd),math.cos(hd));to_cj=((cj[0]-w.car[0]),(cj[1]-w.car[1]));L_=math.hypot(*to_cj) or 1.
+assert abs(nose[0]*to_cj[0]+nose[1]*to_cj[1])/L_>.8,('on station the fuselage lies along the line to CJ: a door looks at the threat, which is abeam',nose,to_cj)
+assert not invariants(w)
+# the fight is over (the man is gone and it stays quiet): the helicopter is given back to the game's follow
+w.exists.discard(npc);w.damage.discard((1,npc))
+for _ in range(400):
+ w.step(c,f)
+ if w.shared[b.COMBAT_PILOT]==0:break
+assert w.shared[b.COMBAT_PILOT]==0 and not w.frozen.get(heli) and calls(w,0x726)[-1][2][1:3]==[1,-1] and w.shared[b.TRACKED_TARGET]==-1,(w.shared[b.COMBAT_PILOT],w.frozen.get(heli))
+passed('1.5: in a fight the brain\'s own pilot flies the helicopter to the brain\'s spot (20 m from CJ, 16 m up) frame by frame and holds it there side-on to the threat - %d of 160 looks on its own pilot, the game\'s pilot not asked again; when the fight is over the helicopter is given back to the game\'s follow'%flown)
+# an order given while its own pilot holds the helicopter in a fight: the new state flies it - the escort's follow is not put on top
+w,c,f=fire_world();npc=target(w,typ=7,skin=20);w.damage.add((1,npc))
+for _ in range(60):
+ w.step(c,f)
+ if w.shared[b.COMBAT_PILOT]==1:break
+assert w.shared[b.COMBAT_PILOT]==1
+n726=len(calls(w,0x726));command(w,c,3,ticks=6)                      # HOLD HERE
+assert w.shared[b.STATE]==3 and w.shared[b.COMBAT_PILOT]==0 and len(calls(w,0x726))==n726 and not invariants(w),(w.shared[b.STATE],w.shared[b.COMBAT_PILOT],len(calls(w,0x726))-n726)
+command(w,c,2,ticks=6);w.step(c,f,n=30)                              # FOLLOW ME again, the man is still there: its own pilot takes it back
+assert w.shared[b.STATE]==2 and w.shared[b.COMBAT_PILOT]==1,(w.shared[b.STATE],w.shared[b.COMBAT_PILOT])
+passed('An order in the middle of a fight (HOLD HERE) takes the helicopter from the brain\'s pilot cleanly - the flag is dropped and the escort\'s follow is not issued over the new order; back on FOLLOW ME its own pilot takes it again')
 # 1.1: every on-screen text is short, coloured consistently and names no removed button
 import re as _re
 _old=['BOARD CJ','LEAVE HELICOPTER','CALL SUPPORT','TAKE OFF','SETUP','SWAT:','TEAM ON FOOT >','EXIT NOW','LAND AT DESTINATION','DESCEND BY ROPE']

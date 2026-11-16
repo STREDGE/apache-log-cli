@@ -94,7 +94,7 @@ MAIN_RU=('ЛЕТЕТЬ ЗА МНОЙ [X]','ЖДАТЬ ЗДЕСЬ','ПАТРУЛ�
 w,c,p=open_menu(True)
 assert rows_of(w)==[i18n.encode(x,'game') for x in MAIN_RU],rows_of(w)
 assert [draw_game(r_) for r_ in rows_of(w)]==list(MAIN_RU) and draw_game(w.menu[0])=='HELICOVER / ЛЕТИТ ЗА ВАМИ',[draw_game(r_) for r_ in w.menu]
-press(w,(c,p),6,5);assert [draw_game(r_) for r_ in w.menu]==['HELICOVER / НАСТРОЙКИ','CLOSE','МОДЕЛЬ ВЕРТОЛЕТА >','ТАКТИКА: АВТО','СООБЩЕНИЯ: ВСЕ','< НАЗАД'],[draw_game(r_) for r_ in w.menu]
+press(w,(c,p),6,5);assert [draw_game(r_) for r_ in w.menu]==['HELICOVER / НАСТРОЙКИ','CLOSE','МОДЕЛЬ ВЕРТОЛЕТА >','СООБЩЕНИЯ: ВСЕ','< НАЗАД'],[draw_game(r_) for r_ in w.menu]
 passed('With the game in Russian the menu is Russian and reads correctly in the simulated font: main page, state in the title, settings')
 w,c,p=open_menu(True);press(w,(c,p),3,5)
 assert [draw_game(r_) for r_ in w.menu]==['HELICOVER / ОГОНЬ СТРЕЛКОВ','CLOSE','ЗАЩИЩАТЬ МЕНЯ [X]','ТОЛЬКО ВООРУЖЕННЫЕ','ТАМ, ГДЕ СТРЕЛЯЮ Я','НЕ СТРЕЛЯТЬ','ПОЛИЦИЯ: ОТВЕЧАТЬ','МИССИИ: ОБОРОНА','< НАЗАД'],[draw_game(r_) for r_ in w.menu]
@@ -118,7 +118,7 @@ for label,data in b.p.data.items():
 bases=[l_ for l_ in b.p.data if l_.startswith(('MAIN_','SETUP_','PREF_','DISMISS_')) and not l_.endswith('_U')]
 for base in bases:
  assert base+'_U' in b.p.data and len(b.p.data[base].split(b'\0'))==len(b.p.data[base+'_U'].split(b'\0')),base
-assert all(len([f_ for f_ in b.p.data[l_][4:].split(b'\0')[2:] if f_])==4 for l_ in b.p.data if l_.startswith('SETUP_')),'settings (1.4.1): helicopter model, tactics, messages, BACK - the crews and the gunners\' pose are fixed / the brain\'s'
+assert all(len([f_ for f_ in b.p.data[l_][4:].split(b'\0')[2:] if f_])==3 for l_ in b.p.data if l_.startswith('SETUP_')),'settings (1.5): helicopter model, messages, BACK - the crews, the gunners\' pose and the tactics are fixed / the brain\'s'
 passed('Every one of the %d menu pages has an English and a Russian version with the same rows; at most 8 rows, none longer than 26 (RU 30) characters; no language page, no FONT TEST'%len(bases))
 # the launcher's "files missing" message follows the same rule
 def missing_key(russian,game_lang):
@@ -235,7 +235,7 @@ passed('DISMISS without a squad is immediate after the confirmation; "NO, KEEP I
 # models for the HELICOPTER page are requested while the page is open and released after
 w,c,p=open_menu();w.calls.clear();press(w,(c,p),6,4);press(w,(c,p),0,4)
 assert w.menu[0]==b'HELICOVER / HELICOPTER' and {x[2][0] for x in calls(w,0x247)}=={487,497,425},'the helicopter models when the HELICOPTER page opens'
-w.calls.clear();press(w,(c,p),3,4);press(w,(c,p),3,4);assert w.menu[0]==b'HELICOVER / FOLLOWING' and {x[2][0] for x in calls(w,0x249)}>={487,497,425},('and released when the pages are left',w.menu)
+w.calls.clear();press(w,(c,p),3,4);press(w,(c,p),2,4);assert w.menu[0]==b'HELICOVER / FOLLOWING' and {x[2][0] for x in calls(w,0x249)}>={487,497,425},('and released when the pages are left',w.menu)
 passed('The helicopter models are pre-requested while their page is open, so choosing one does not stall a frame')
 
 # =================================================================== beta 5: the menu opens at once

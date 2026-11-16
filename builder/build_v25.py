@@ -69,6 +69,8 @@ SQ_TICK=STATE+464
 # 1.4.1: the second four of the ground team (guards 5-8) and their own squad worker (Helicover_Squad2) and lifecycle (Helicover_Team2)
 GROUND_PUB2=STATE+480;SQ_SLOT2=STATE+500;SQ_BR_ST2=STATE+540;SQ_BR_TG2=STATE+544;SQ_PACE2=STATE+548;SQ_T2=STATE+552
 SQ_HEART2=STATE+556;SQ_GROUP2=STATE+557;SQ_TICK2=STATE+558;TEAM2_STATE=STATE+559
+DEPLOY_T0=STATE+565   # 1.5: when the first four went down the ropes (the second four follow them down the same ropes 3 s later)
+COMBAT_PILOT=STATE+564   # 1.5: 1 while the brain's own pilot holds the helicopter on its station in a fight (escort, state 2)
 HELI_SPOT_X=STATE+561;HELI_SPOT_Y=STATE+562;HELI_SPOT_Z=STATE+563   # 1.4.1: the brain's spot for the helicopter in a fight (floats; x = 0 none)
 SQ_PACE=STATE+230   # 1.4, per guard: the pace of his last move order (a new pace renews the order)
 G_FIRE=STATE+465;G_FIRE_T=STATE+469;SQ_SAY_SEQ=STATE+473   # SQ_SAY_SEQ: the number of the commander's last words the squad has said (-1 = take the next number without saying it)   # 1.4, per gunner: the man his own weapon is firing at (-1 = not firing), when the firing order is renewed
@@ -180,8 +182,8 @@ MESSAGES={'HCLOAD': '~b~PILOT:~w~ inbound to your position.',
  'HCBURN': '~r~CAR ON FIRE!~w~ Get away from it.',
  'HCEVADE': '~r~TAKING HITS!~w~ Pilot breaking away.',
  'HCSHOT': '~r~TAKING FIRE!~w~ Pilot breaking away.',
- 'HCHELLO': '~b~HELICOVER 1.4 BETA 3~w~ ready. CLEO menu > Helicover.',
- 'HCHELLV': '~b~HELICOVER 1.4 BETA 3~w~ ready. Map marker is off here.'}
+ 'HCHELLO': '~b~HELICOVER 1.5 BETA 1~w~ ready. CLEO menu > Helicover.',
+ 'HCHELLV': '~b~HELICOVER 1.5 BETA 1~w~ ready. Map marker is off here.'}
 # Generate state updates; panel prints messages when the state changes.
 # beta 6: our people do not cower. CREATE_CHAR gives a mission ped the built-in "normal" decision maker (m_norm.ped): punched, shot at or
 # aimed at, it picks "duck and cover" / "flee" like any passer-by. 65542 is the game's built-in EMPTY decision maker (slot 6 | 1<<16, loaded
@@ -202,7 +204,7 @@ def healthcheck(s,fail):
 c=Script();a=c.add
 c.label('INIT');a(0);c.set(GAME_OK,0)
 for _ofs,_val in GAME_SIG:a(0x0dd8,V(19),I(_ofs),I(4),I(1));c.check(0x0039,[V(19),I(_val)],'GAME_SIG_BAD')
-c.set(GAME_OK,1);c.label('GAME_SIG_BAD');c.set(NOTICE_SKIP,-1);c.set(HELLO_AT,0);c.set(MSG_UNTIL,0);c.set(MSG_PRIO,0);c.set(MSG_HOLD,0);c.set(BANNER_ARMED,0);c.set(AVOID_STAGE,0);c.set(AVOID_NEXT,0);c.set(BUSY,0);c.set(FROZEN,0);c.set(LSTAGE,0);c.set(CREWGEN,0);c.set(FIRE_TARGET,-1);c.set(FIRE_ACTIVE,0);c.set(TRACKED_TARGET,-1);c.set(STUCK_SINCE,0)
+c.set(GAME_OK,1);c.label('GAME_SIG_BAD');c.set(COMBAT_PILOT,0);c.set(NOTICE_SKIP,-1);c.set(HELLO_AT,0);c.set(MSG_UNTIL,0);c.set(MSG_PRIO,0);c.set(MSG_HOLD,0);c.set(BANNER_ARMED,0);c.set(AVOID_STAGE,0);c.set(AVOID_NEXT,0);c.set(BUSY,0);c.set(FROZEN,0);c.set(LSTAGE,0);c.set(CREWGEN,0);c.set(FIRE_TARGET,-1);c.set(FIRE_ACTIVE,0);c.set(TRACKED_TARGET,-1);c.set(STUCK_SINCE,0)
 for key in range(PUB,PUB+7):c.set(key,-1)
 for key in range(GROUND_PUB,GROUND_PUB+5):c.set(key,-1)
 c.set(ROPE_COMMAND,0)
@@ -272,6 +274,7 @@ c.label('NAP_END');c.ret()
 c.label('TICK');c.get(19,FROZEN);c.eq(19,1,'TICK_NORMAL_WAIT');c.get(19,STATE)
 for st in [10,19,21,22]:
  nxt='TICK_FAST_NOT_'+str(st);c.eq(19,st,nxt);a(1,I(0));c.go('TICK_AFTER_WAIT');c.label(nxt)
+c.eq(19,2,'TICK_FAST_NOT_CP');c.get(19,COMBAT_PILOT);c.eq(19,1,'TICK_FAST_NOT_CP');a(1,I(0));c.go('TICK_AFTER_WAIT');c.label('TICK_FAST_NOT_CP')
 c.label('TICK_NORMAL_WAIT');c.call('NAP')
 c.label('TICK_AFTER_WAIT')
 if DEBUG_BREADCRUMBS:
@@ -634,7 +637,7 @@ for var in [4,13,14,15,16]:
  if var==4:c.label('CLEANUP_KEEP')
  a(0x048f,V(var));a(0x01c2,V(var));c.label(skip)
 c.check(0x056e,[V(5)],'RESET');a(0x01c3,V(5))
-c.label('RESET');c.set(FROZEN,0);c.set(LSTAGE,0);c.set(BUSY,0);state(c,0)
+c.label('RESET');c.set(FROZEN,0);c.set(COMBAT_PILOT,0);c.set(LSTAGE,0);c.set(BUSY,0);state(c,0)
 for weapon_model in [353,355,356,358]:a(0x0249,I(weapon_model))
 for key in range(PUB,PUB+7):c.set(key,-1)
 c.set(CMD,0);c.set(HP,0);c.go('IDLE')
@@ -695,7 +698,18 @@ c.ret()
 
 # Only while FOLLOW CJ is active: if a selected nearby threat is too far from the
 # helicopter, keep it in view. Never change landing, hold, muster or Grove missions.
-c.label('TRACK_COMBAT');c.eq(7,2,'TRACK_PATROL');c.go('TRACK_ACTIVE');c.label('TRACK_PATROL');c.eq(7,24,'TRACK_INACTIVE');c.label('TRACK_ACTIVE');c.get(29,FIRE_TARGET);alive(c,29,'TRACK_STOP')
+# 1.5: the brain's OWN pilot in a fight. While the helicopter escorts CJ (state 2), CJ is not aboard and the brain gives a spot
+# (HELI_SPOT: 20 m from CJ, 16 m up, abeam of the line to the threat) within 120 m, the helicopter is flown to it and held there
+# by the brain's pilot, frame by frame (CRUISE_STEP with flag 4: the spot's height, short hops, side-on to the threat) - not by the
+# game's pilot (04A2), who hung far and high and never turned a door to the target. When the spot is gone the helicopter is
+# given back to the game's follow; when another state has taken over, only the flag is dropped (that state flies it).
+c.label('TRACK_COMBAT');c.eq(7,2,'CP_OFF');c.get(30,BRAIN_HELLO);c.eq(30,BRAIN_MAGIC,'CP_OFF');c.get(30,HELI_SPOT_Z);c.check(0x0021,[V(30),F(1)],'CP_OFF');c.check(0x80db,[V(18),V(5)],'CP_OFF')
+c.get(30,FIREHEART);a(0x0085,V(31),V(20));a(0x0062,V(31),V(30));c.check(0x8019,[V(31),I(2000)],'CP_OFF')   # (the spot is fresh: the Fire worker, which publishes it, is alive)
+a(0x00aa,V(5),V(9),V(10),V(11));c.get(26,HELI_SPOT_X);c.get(27,HELI_SPOT_Y);a(0x0509,V(9),V(10),V(26),V(27),V(31));c.check(0x0023,[F(120),V(31)],'CP_OFF')
+c.set(COMBAT_PILOT,1);c.set(TRACKED_TARGET,-2);c.call('CRUISE_STEP');c.ret()
+c.label('CP_OFF');c.get(30,COMBAT_PILOT);c.eq(30,1,'TRACK_OLD');c.set(COMBAT_PILOT,0);c.eq(7,2,'TRACK_OLD')
+c.call('UNFREEZE');c.set(TRACKED_TARGET,-1);c.call('RESTORE_FLIGHT');a(0x0726,V(5),V(18),I(-1),F(15))
+c.label('TRACK_OLD');c.eq(7,2,'TRACK_PATROL');c.go('TRACK_ACTIVE');c.label('TRACK_PATROL');c.eq(7,24,'TRACK_INACTIVE');c.label('TRACK_ACTIVE');c.get(29,FIRE_TARGET);alive(c,29,'TRACK_STOP')
 a(0x00a0,V(18),V(9),V(10),V(11));a(0x00a0,V(29),V(17),V(19),V(31));a(0x050a,V(9),V(10),V(11),V(17),V(19),V(31),V(30));c.check(0x0023,[F(65),V(30)],'TRACK_STOP')
 c.get(19,TRACKED_TARGET);c.check(0x003b,[V(19),V(29)],'TRACK_CHANGED');c.go('TRACK_DIST')
 c.label('TRACK_CHANGED');c.eq(19,-1,'TRACK_REPLACE');c.go('TRACK_DIST')
@@ -850,7 +864,7 @@ for ahead in [30,80,150,250]:
 c.label('CR_ROOFS_DONE')
 # ask the pilot: 26@ helicopter, 27/28@ the point, 29@ the roofs, 30@ 1 = stop there (+2: the last step was refused) ->
 # 27-29@ where to be now, 30@ metres left, 31@ speed (-1: the brain has no pilot for this helicopter)
-a(0x0087,V(28),V(27));a(0x0087,V(27),V(26));a(0x0085,V(26),V(5));c.get(30,CR_BLK);a(0x0012,V(30),I(2));a(0x000a,V(30),I(1))
+a(0x0087,V(28),V(27));a(0x0087,V(27),V(26));a(0x0085,V(26),V(5));c.get(30,CR_BLK);a(0x0012,V(30),I(2));a(0x000a,V(30),I(1));c.get(31,COMBAT_PILOT);a(0x0012,V(31),I(4));a(0x005a,V(30),V(31))   # (+4: on station in a fight)
 c.get(31,BRAIN_HELLO);c.check(0x0039,[V(31),I(BRAIN_MAGIC)],'CR_NO_PILOT');a(6,V(31),I(-1));a(0x0e48,V(26),I(6),I(6))   # (31@ stays -1 when the brain does not answer)
 c.check(0x0039,[V(31),I(-1)],'CR_FLY')
 c.label('CR_NO_PILOT');c.get(26,CR_DX);c.get(27,CR_DY);a(0x0509,V(9),V(10),V(26),V(27),V(19));c.ret()   # (no brain: the helicopter hangs where it is)
@@ -1036,7 +1050,8 @@ def main_key(st,sit,x):return st*1000+sit*100+x
 def setup_rows(tac,hud,prof):
  """1.4.1: the crews are fixed (SWAT in the helicopter; on the ground a soldier in command and seven agents in black) and the
  gunners' pose is the brain's - the settings keep the helicopter, the squad's tactics (AUTO = the brain picks) and the messages."""
- return [Tx('SET_MODEL',prof),Tx(('TAC_AUTO','TAC_ASSAULT','TAC_GUARD')[tac],prof),Tx(('MSG_OFF','MSG_IMP','MSG_ALL')[hud],prof),Tx('BACK',prof)]
+ # 1.5: no SQUAD TACTICS row - how the detail fights is the brain's business alone (the player: "what are ASSAULT and GUARD for if it is all the same")
+ return [Tx('SET_MODEL',prof),Tx(('MSG_OFF','MSG_IMP','MSG_ALL')[hud],prof),Tx('BACK',prof)]
 def fire_rows(val,pol,mis,prof):
  """GUNNER FIRE: the four rules (the one in force is marked), then two switches: what to do about policemen, and about the people of a mission."""
  return [Tx('FIRE%d'%v,prof,v==val) for v in FIRE_VALUES]+[Tx('POL_NEVER' if pol else 'POL_ANSWER',prof),Tx('MIS_FREE' if mis else 'MIS_DEF',prof),Tx('BACK',prof)]
@@ -1097,12 +1112,10 @@ p.label('DT_GO');p.set(DISMISS_T,0);p.set(CMD,4)
 p.label('DT_RET');p.ret()
 # settings: three sub-pages and two one-tap switches
 p.label('PICK_SETUP')
-for index,label in [(0,'OPEN_MODEL'),(1,'TOGGLE_TACTICS'),(2,'TOGGLE_HUD'),(3,'LEAVE_SETUP')]:pick(index,label)
+for index,label in [(0,'OPEN_MODEL'),(1,'TOGGLE_HUD'),(2,'LEAVE_SETUP')]:pick(index,label)
 p.go('MENU_POLL')
 p.label('LEAVE_SETUP');p.call('UNLOAD');p.go('OPEN_MAIN')
 # 1.4.1: tactics AUTO (0, the brain picks) -> ASSAULT (1) -> GUARD (2) -> AUTO
-p.label('TOGGLE_TACTICS');p.get(9,TACTICS);a(0x000a,V(9),I(1));p.check(0x8019,[V(9),I(2)],'TOGGLE_TACTICS_WRAP');a(0xddc,I(TACTICS),V(9));p.go('FORCE_REFRESH')
-p.label('TOGGLE_TACTICS_WRAP');p.set(TACTICS,0);p.go('FORCE_REFRESH')
 p.label('TOGGLE_HUD');p.get(9,HUD);a(0x000a,V(9),I(-1));p.check(0x0019,[V(9),I(-1)],'TOGGLE_HUD_WRAP');a(0xddc,I(HUD),V(9));p.go('FORCE_REFRESH')
 p.label('TOGGLE_HUD_WRAP');p.set(HUD,2);p.go('FORCE_REFRESH')
 p.label('PICK_FIRE')
@@ -1174,7 +1187,7 @@ a(6,V(7),I(0));draw('MAIN_0_0_0',2)
 p.label('DRAW_2');p.call('SETUP_KEY');a(0x0085,V(3),V(6))
 for tac in (0,1,2):
  for hud in (0,1,2):
-  nxt='DRAW_SETUP_NEXT_%d%d'%(tac,hud);p.eq(6,tac*10+hud,nxt);draw('SETUP_%d%d'%(tac,hud),4);p.label(nxt)
+  nxt='DRAW_SETUP_NEXT_%d%d'%(tac,hud);p.eq(6,tac*10+hud,nxt);draw('SETUP_%d%d'%(tac,hud),3);p.label(nxt)
 draw('SETUP_02',4)
 p.label('DRAW_1');p.call('FIRE_KEY');a(0x0085,V(3),V(6))
 for val in FIRE_VALUES:
@@ -1196,7 +1209,7 @@ p.label('CLOSE');p.call('UNLOAD');a(0xdf3);p.set(OPEN,0);p.set(0,0);a(6,V(10),I(
 VERSION='1.4'
 for st,sit,x in MAIN_VARIANTS:
  for prof,suf in zip(PROFILES,SUFFIX):
-  title=(i18n.encode('HELICOVER 1.4 BETA 3','en') if prof=='en' else i18n.menu_text('TITLE_READY',prof)) if st==0 else i18n.state_title(st,STATES[st],prof)
+  title=(i18n.encode('HELICOVER 1.5 BETA 1','en') if prof=='en' else i18n.menu_text('TITLE_READY',prof)) if st==0 else i18n.state_title(st,STATES[st],prof)
   p.blob('MAIN_%d_%d_%d'%(st,sit,x)+suf,title,main_rows(st,sit,x,prof))
 for prof,suf in zip(PROFILES,SUFFIX):
  if prof=='en':p.blob('OFFLINE_MENU',i18n.menu_text('OFFLINE_TITLE',prof),[i18n.menu_text('OFFLINE_ROW',prof)])   # the core is missing, so the language is unknown: English only

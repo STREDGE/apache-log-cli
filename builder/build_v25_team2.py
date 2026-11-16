@@ -49,17 +49,37 @@ for m in sorted(set(MODELS))+[w for _,w in WEAPONS]:a(0x0247,I(m))
 a(0x038b);a(1,I(0))
 for m in sorted(set(MODELS))+[w for _,w in WEAPONS]:s.check(0x0248,[I(m)],'LOOP')
 alive(1,'LOOP')
+# 1.5: down the ropes, like the first four (the player: "the second lot appears out of nowhere"). While the helicopter still
+# hangs over the drop (within 25 s of the first four going down, standing still, 6-45 m above the guard) the four are created
+# as rope men under it (0503, the game's own rope descent) 3 s after the first four, when those are clear of the ropes.
+# Otherwise (the helicopter has gone): they are put where the screen does not show - the first of four spots 14 m round
+# the guard that is not on the screen - and run in from there.
+s.get(8,b.DEPLOY_T0);a(0x0085,V(9),V(13));a(0x0062,V(9),V(8));s.check(0x8019,[V(9),I(25000)],'SPAWN_GROUND')
+s.get(6,b.PUB+1);s.check(0x056e,[V(6)],'SPAWN_GROUND');a(0x02e3,V(6),V(10));s.check(0x0023,[F(2.0),V(10)],'SPAWN_GROUND')
+a(0x00aa,V(6),V(10),V(11),V(12));a(0x00a0,V(1),V(8),V(9),V(10));a(0x0063,V(12),V(10));s.check(0x0021,[V(12),F(6)],'SPAWN_GROUND');s.check(0x0023,[F(45),V(12)],'SPAWN_GROUND')
+s.get(8,b.DEPLOY_T0);a(0x0085,V(9),V(13));a(0x0062,V(9),V(8));s.check(0x0019,[V(9),I(3000)],'LOOP')      # (not yet: the first four are still on the ropes)
+for i,(x,y) in enumerate([(-1.5,0.0),(1.5,0.0),(-1.5,-2.4),(1.5,-2.4)]):
+ var=2+i;nx='ROPE_NEXT_%d'%i
+ a(0x0407,V(6),F(x),F(y),F(-1),V(10),V(11),V(12));a(0x0503,I(8),I(MODELS[i]),V(10),V(11),V(12),V(var));s.check(0x056d,[V(var)],nx)
+ a(0x0085,V(7),V(var));s.call('SETUP')
+ wpn,_=WEAPONS[i];a(0x01b2,V(var),I(wpn),I(30000));a(0x01b9,V(var),I(wpn));a(0x0223,V(var),I(250));a(0x035f,V(var),I(100))
+ a(0xddc,I(b.GROUND_PUB2+i),V(var));a(6,V(14+i),I(0))
+ s.label(nx)
+s.go('SPAWN_DONE')
+s.label('SPAWN_GROUND')
+for n_,(ox,oy) in enumerate([(-14.,-14.),(14.,-14.),(-14.,14.),(14.,14.)]):
+ a(0x00a0,V(1),V(10),V(11),V(12));a(0x000b,V(10),F(ox));a(0x000b,V(11),F(oy));a(0x000b,V(12),F(30));a(0x02ce,V(10),V(11),V(12),V(12))
+ if n_<3:s.check(0x80c2,[V(10),V(11),V(12),F(3.0)],'CAND_NEXT_%d'%n_);s.go('SPAWN_AT_OK');s.label('CAND_NEXT_%d'%n_)   # (on the screen: the next spot)
+s.label('SPAWN_AT_OK');a(0x0172,V(1),V(9))
 for i,(x,y) in enumerate(SPOTS):
  var=2+i;nx='SPAWN_NEXT_%d'%i
- a(0x0172,V(1),V(9));a(0x00a0,V(1),V(10),V(11),V(12))
- # beside and behind the guard (map frame); CREATE_CHAR adds 1 m to z, the guard's z is his centre
- a(0x0087,V(8),V(12));a(0x000b,V(8),F(-1.0))
- a(0x000b,V(10),F(x));a(0x000b,V(11),F(y))
- a(0x009a,I(8),I(MODELS[i]),V(10),V(11),V(8),V(var));s.check(0x056d,[V(var)],nx)
+ a(0x0087,V(8),V(10));a(0x000b,V(8),F(x));a(0x0087,V(6),V(11));a(0x000b,V(6),F(y))
+ a(0x009a,I(8),I(MODELS[i]),V(8),V(6),V(12),V(var));s.check(0x056d,[V(var)],nx)
  a(0x0173,V(var),V(9));a(0x0085,V(7),V(var));s.call('SETUP')
  wpn,_=WEAPONS[i];a(0x01b2,V(var),I(wpn),I(30000));a(0x01b9,V(var),I(wpn));a(0x0223,V(var),I(250));a(0x035f,V(var),I(100))
  a(0xddc,I(b.GROUND_PUB2+i),V(var));a(6,V(14+i),I(0))
  s.label(nx)
+s.label('SPAWN_DONE')
 for m in sorted(set(MODELS))+[w for _,w in WEAPONS]:a(0x0249,I(m))
 a(6,V(18),I(1));s.set(b.TEAM2_STATE,1);s.go('LOOP')
 # SETUP: V7 = a new man: mine, friendly to everybody, accurate, brave (the same as the first four: Ground's GSETUP)

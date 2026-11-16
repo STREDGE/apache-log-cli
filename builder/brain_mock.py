@@ -258,6 +258,12 @@ class BrainSim:
         i = h.hcb_pilot_in()
         i.target = h.vec(float(v[f + 1]), float(v[f + 2]), 0.)
         i.ground, i.dt, i.stop, i.blocked = float(v[f + 3]), max(.001, (w.now - last) / 1000.), int(v[f + 4]) & 1, (int(v[f + 4]) >> 1) & 1
+        if int(v[f + 4]) & 4:                         # 1.5: on station in a fight (as the adapter's cmd_pilot)
+            hgt = self.out.heli_at.z - float(v[f + 3]) if self.out is not None and self.out.heli_ok else 16.
+            i.hover, i.cruise = max(12., min(40., hgt)), 28.
+            cj = w.coords(1)
+            i.face = h.vec(float(v[f + 1]) - cj[0], float(v[f + 2]) - cj[1], 0.)
+            self.combat_flown = getattr(self, 'combat_flown', 0) + 1
         o = h.hcb_pilot_out()
         h.LIB.hcb_pilot_step(ctypes.byref(p), ctypes.byref(i), ctypes.byref(o))
         st[heli] = (p, w.now)
@@ -346,7 +352,9 @@ class BrainSim:
         if count >= 10:
             v[f + 9] = o.gunner_pose if o is not None else 2
         if count >= 13:
-            v[f + 10], v[f + 11], v[f + 12] = (o.heli_at.x, o.heli_at.y, o.heli_at.z) if o is not None and o.heli_ok else (0., 0., 0.)
+            # (hold_still: a knob of the tests only - no spot is given, so the helicopter hangs where the test put it and the door
+            #  geometry is what the test laid out)
+            v[f + 10], v[f + 11], v[f + 12] = (o.heli_at.x, o.heli_at.y, o.heli_at.z) if o is not None and o.heli_ok and not getattr(self, 'hold_still', False) else (0., 0., 0.)
 
     # ------------------------------------------------------------ for the tests
     def marks(self):
