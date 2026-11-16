@@ -108,7 +108,13 @@ typedef struct detail {
     u32 heli_t;
     u8 heli_ok, heli_k, mode, leading, pose, pad_[3];
     u32 mode_since;
-    struct { hcb_vec post; float best; u32 since; u8 alt, stuck, hold_ok, pad; hcb_vec hold; u32 hold_id, hold_bad; float hold_score; u32 hold_at; } man[8];   /* each man's progress to his post; 0.6: an outer man's own post in a fight */
+    struct { hcb_vec post; float best; u32 since; u8 alt, stuck, hold_ok, pad; hcb_vec hold; u32 hold_id, hold_bad; float hold_score; u32 hold_at; u8 hold_fight, hr_[3]; } man[8];   /* each man's progress to his post; 0.6: an outer man's own post in a fight; 1.5: in peace too (hold_fight: which it was chosen for) */
+    /* 1.5 (beta 6): the outer men's quarters round CJ - who has which (by id), and the axis they were dealt out on */
+    u32 q_id[5];
+    hcb_vec q_axis;
+    u8 q_fight, q_r_[3];
+    u32 still_since;        /* 1.5: since when CJ has stood (0 = he walks): in peace the outer men walk beside him, and take places once he stands */
+    u32 moved_at;           /* 1.5: when CJ last walked (over 1 m/s) */
     u16 say_seq;
     u8 cj_cover_ok, duty, last_say, say_dir;
     /* 0.4.2 (from the first whole-game log): the detail keeps its threat, its cover and its tongue */

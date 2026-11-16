@@ -32,6 +32,7 @@ def at(p):
 
 def fight(low=(), full=(), threats=((34., 0.),), tune=None, cj_fires=False, ticks=170):
     sc = Scene(); sc.low_walls = list(low); sc.walls = list(full)
+    sc.brain.cfg.outer_fight_m = 18.0          # (1.5: the weights are tested at the old 18 m ring - the geometry of these scenes)
     if tune: tune(sc.brain.cfg)
     team = [sc.our(x, y, SQ + k, weapon=M4) for k, (x, y) in enumerate(EIGHT)]
     sc.walk_posts = True; sc.step(20)
@@ -42,7 +43,13 @@ def fight(low=(), full=(), threats=((34., 0.),), tune=None, cj_fires=False, tick
             for g in gs: sc.shot(g, (0., 0., 1.), dst=1)
             if cj_fires: sc.shot(1, tuple(sc.peds[gs[0]]['pos']))
         sc.step(1)
-    return sc, team, gs, {JOB[p.job]: p for p in sc.posts.values()}
+    j = {JOB[p.job]: p for p in sc.posts.values()}
+    # (1.5: the quarters are dealt out by the least way, not by the man's number: "the point man" is the one in the quarter
+    #  ahead-left of the line to the threat - north-east here)
+    ne = [k for k in OUTER if j[k].at.x > 0 and j[k].at.y > 0]
+    if ne:
+        pm = j[ne[0]]; j[ne[0]] = j['point']; j['point'] = pm
+    return sc, team, gs, j
 
 
 def hidden(sc, frm, p, low_too=True):
@@ -100,7 +107,7 @@ passed('A place hidden from the shooter but with a wall between it and CJ is not
 
 # ------------------------------------------------------------------ he keeps a place: no moving for a little, no moving before 4 s
 sc, team, (g,), j = fight(low=LOW, ticks=170)
-kept = {k: at(j[k]) for k in OUTER}; moves = 0
+kept = {JOB[p.job]: at(p) for p in sc.posts.values()}; moves = 0
 for k in range(200):
     if k % 9 == 0: sc.shot(g, (0., 0., 1.), dst=1)
     if k == 20: sc.cj['pos'][0] += 1.5                               # CJ shifts a step: every value changes a little
@@ -129,7 +136,7 @@ dx, dy = p3[0] - cjp[0], p3[1] - cjp[1]; l_ = math.hypot(dx, dy)
 in_line = hcb_py.place_value(*args, cj_dir=(dx / l_, dy / l_, 0.), cj_fires=1)
 beside = hcb_py.place_value(*args, cj_dir=(-dy / l_, dx / l_, 0.), cj_fires=1)
 assert in_line < 0 and abs(beside - alone) < 0.01, ('in front of CJ\'s weapon it is no place; with CJ firing another way it is worth the same', in_line, beside)
-passed('What a place is worth, weight by weight: hidden from a second shooter +%.2f, another of ours within 3 m -%.2f (within 1.2 m - no place), in front of CJ\'s weapon while he fires - no place; 1.3: CJ or one of ours in his line to the shooter - no place (a place he holds is not dropped for it: the shooter shifting about moves nobody)' % (sc.brain.cfg.place_w_others, sc.brain.cfg.place_w_crowd))
+passed('What a place is worth, weight by weight: hidden from a second shooter +%.2f, another of ours within 3 m -%.2f (within 1.2 m - no place), in front of CJ\'s weapon while he fires - no place; 1.3: CJ or one of ours in his line to the shooter - no place (1.5: a place he holds goes only when CJ comes within 1.5 m of that line, a new one needs 1.8 m - no flapping)' % (sc.brain.cfg.place_w_others, sc.brain.cfg.place_w_crowd))
 
 text = '\n'.join(results) + '\nThe core only. Nothing here has run in the game.\n'
 (hcb_py.OUT / 'brain_places_tests.txt').write_text(text)

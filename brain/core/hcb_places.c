@@ -47,7 +47,13 @@ HID float hcb_place_score(hcb_brain *b, hcb_out *out, const place_in *in, hcb_ve
     if (d2(in->cj, in->threat) > 3.0f && seg_dist(a2, cj2, th2, &t) < 1.5f) return -1.0f;   /* the line the fight runs along */
     /* 1.3 (the second 2.0 log: one order in five to a man with a target was "CJ in the line" - and in 71 % of them he was further
        from the man than CJ): no place from which the line to the threat passes CJ, or within a metre of a place another of ours holds */
-    if (!in->keep && seg_dist(cj2, a2, th2, &t) < 1.8f && t > 0.02f && t < 0.98f) return -1.0f;
+    /* (1.5: the corridor the fire plan keeps round CJ - 2 m and 2 cm a metre out (hcb_fire.c, cj_line_m / line_per_m): from a place
+       with CJ inside it a man may not fire at all. A place he holds goes when CJ is inside it; a new one needs 0.4 m more - no
+       flapping between the two) */
+    {
+        float lt = d2(a2, th2), dl = seg_dist(cj2, a2, th2, &t);
+        if (t > 0.02f && t < 0.98f && dl < (in->keep ? 0.0f : 0.4f) + c->cj_line_m + c->line_per_m * t * lt) return -1.0f;
+    }
     for (k = 0; k < in->n_taken; k++) { hcb_vec tk = flat(in->taken[k]); if (d2(at, in->taken[k]) < 1.2f || (!in->keep && seg_dist(tk, a2, th2, &t) < 1.0f && t > 0.05f && t < 0.95f)) return -1.0f; }
     if (hcb_nav_ground(b, at, &z) && f_abs(z + 1.0f - in->man.z) > 2.5f && f_abs(z + 1.0f - at.z) > 2.5f) return -1.0f;   /* a roof, a pit */
     known = hcb_cv_raw(b, at, in->threat, now, &hid, &hi, &gr);

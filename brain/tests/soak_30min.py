@@ -31,9 +31,10 @@ def run(seed, minutes, check=True):
     sc.walk_posts = True
     size0 = LIB.hcb_brain_size()
     changed_at, was_mode, was_car = -100, 0, 0
-    n = dict(a_still=0, a_far=0, samples=0, still=0, far8=0, stuck=0, failed=0, calm=0, sprint=0, changes=0, near=0, near_n=0, fights=0, assault_s=0, replaced=0, car_s=0)
+    n = dict(a_still=0, a_far=0, samples=0, still=0, far8=0, stuck=0, failed=0, calm=0, sprint=0, changes=0, near=0, near_n=0, fights=0, assault_s=0, replaced=0, car_s=0,
+             out_n=0, out_near=0, out_set=0, out_down=0)
     gang, last_act, bad_for, digest, net_at = [], {}, {}, 0, {}
-    goal, mode_until, car = None, 0, 0
+    goal, mode_until, car, still_for = None, 0, 0, 0
     worst = dict(stuck=0, same_spot=0, in_wall=0)
     for sec in range(minutes * 60):
         # ---- what the player and the world do this second
@@ -85,6 +86,7 @@ def run(seed, minutes, check=True):
         if not check: continue
         # ---- the checks of this second
         out, cjp, still = sc.last_out, sc.cj['pos'], math.hypot(*sc.cj['vel'][:2]) < .5 and not car
+        still_for = still_for + 1 if still else 0                       # (1.5: the outer men take places once CJ has stood 4 s)
         assert LIB.hcb_brain_size() == size0
         stand = []
         near = 0
@@ -107,6 +109,10 @@ def run(seed, minutes, check=True):
             if who in last_act and last_act[who] != p.act: n['changes'] += 1
             last_act[who] = p.act
             near += math.dist(me[:2], cjp[:2]) < 4.
+            # (1.5, the player: "only the commander and the bodyguards at my side, the rest so that I hardly notice them - in cover, down")
+            if p.job in (HCB_ROLE_POINT, HCB_ROLE_POINT2, HCB_ROLE_REAR, HCB_ROLE_REAR2) and out.umode == HCB_UMODE_PROTECT and not car and sec - changed_at >= 15:
+                n['out_n'] += 1; n['out_near'] += math.dist(me[:2], cjp[:2]) < 12.
+                if still_for >= 5 and out.duty != HCB_DUTY_RING and d < 1.5: n['out_set'] += 1; n['out_down'] += bool(p.crouch)
             if p.phase >= HCB_PH_ARRIVED and p.phase != HCB_PH_FAILED and math.hypot(*sc.peds[who]['vel'][:2]) < .1: stand.append((who, me))
         for a in range(len(stand)):
             for b_ in range(a):
@@ -130,8 +136,9 @@ if __name__ == '__main__':
         'sprinting with no threat: %.1f %%   (goal 10 %% or less)' % sprint,
         'changes of action per guard per minute: %.1f   (goal 6 or less in peace; this half hour is mostly fights and marches)' % changes,
         'guards within 4 m of CJ in quiet PROTECT, average: %.1f   (goal 3)' % near,
-        'seconds with one of ours inside a wall: %d; seconds with two of ours on one spot: %d   (must be 0)' % (worst['in_wall'], worst['same_spot'])]
-    assert far8 <= 15 and stuck <= 5 and sprint <= 10 and worst['stuck'] < 60 and worst['in_wall'] == 0 and worst['same_spot'] == 0 and 2.5 <= near <= 3.5, '\n'.join(lines)
+        'seconds with one of ours inside a wall: %d; seconds with two of ours on one spot: %d   (must be 0)' % (worst['in_wall'], worst['same_spot']),
+        '1.5: an outer man within 12 m of CJ in PROTECT: %.1f %%   (goal 5 %% or less); at his place with CJ standing 5 s he is down: %.1f %%   (goal 90 %% or more)' % (pc(n['out_near'], n['out_n']), pc(n['out_down'], n['out_set']))]
+    assert pc(n['out_near'], n['out_n']) <= 5 and pc(n['out_down'], n['out_set']) >= 90 and far8 <= 15 and stuck <= 5 and sprint <= 10 and worst['stuck'] < 60 and worst['in_wall'] == 0 and worst['same_spot'] == 0 and 2.5 <= near <= 3.5, '\n'.join(lines)
     n2, worst2, digest2 = run(SEED, MINUTES, check=False)
     assert digest2 == digest, 'the same half hour a second time: every decision the same'
     lines.append('the same %d looks a second time: every decision the same (checksum %016x)' % (MINUTES * 600, digest))

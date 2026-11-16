@@ -742,7 +742,7 @@ static u32 g_shoot_stood, g_shoot_moved, g_shoot_off, g_gun_dropped;
 static u32 g_soft_falls, g_body_new, g_body_turn, g_body_refused, g_body_nomem, g_body_kept, g_recall_until;
 static u32 g_map_ground, g_map_ground_ok, g_map_segs, g_map_left, g_map_us_max, g_high_i;
 static u64 g_map_us;
-static struct { hcb_vec at; float height; u32 time; u8 sees, ok; } g_high[32];
+static struct { hcb_vec at; float height; u32 time; u8 sees, ok; } g_high[48];
 static void body_setup(void) {
     u32 i;
     g_body_ok = !g_body_off; g_map_ok = !g_map_off;
@@ -1270,24 +1270,50 @@ static void fill_map(hcb_snapshot *s, const hcb_out *prev, const float *cjp) {
         g_map_segs++;
     }
     g_map_left += n - i;
-    /* a high place for the marksman: one spot every other look (before the ground, which takes all the time there is while the map is new), on four rings round CJ. It must be 2-35 m above his feet, flat (the
-       ground a metre to each side is level with it) - whether CJ is seen from it is told with it. (1.3: from 2 m, not 4 - a shed, a
-       container, a kiosk the marksman can climb himself; the helicopter still only takes him to one 4 m up or more, ow_min_h) */
-    if (g_map_us < MAP_LOOK_US && !(g_ticks & 1) && !s->player.vehicle && !s->interior && s->n_ours) {
-        static const float RING[4] = {14.0f, 22.0f, 32.0f, 45.0f};
+    /* a high place for the marksman: 2-35 m above CJ's feet, flat (the ground a metre to each side is level with it) - whether CJ is
+       seen from it is told with it. (1.3: from 2 m, not 4 - a shed, a container, a kiosk the marksman can climb himself; the helicopter
+       still only takes him to one 4 m up or more, ow_min_h.)
+       1.5 (the fifth 2.0 log: "high places 0" a third of the time, the marksman never up): it was 32 fixed spots, one every other look,
+       each a single point - a roof was found only when a spot fell flat on it AND CJ could be seen from that very point. Now 48 slots on
+       six rings round CJ (12-55 m), a new spot every look, each time somewhere else in its slot (turned up to 20 degrees, moved up to
+       3 m: the slots sweep the ground round CJ instead of asking one point for ever); a spot that is not flat is tried 1.5 m nearer
+       CJ; CJ not seen from it - its edge towards CJ is tried (up to 4.5 m nearer, while the roof goes on). Kept 12 s. */
+    if (g_map_us < MAP_LOOK_US && !s->player.vehicle && !s->interior && s->n_ours) {
+        static const float RING[6] = {12.0f, 18.0f, 25.0f, 33.0f, 42.0f, 55.0f};
         static const float DIR[8][2] = {{1, 0}, {0.7071f, 0.7071f}, {0, 1}, {-0.7071f, 0.7071f}, {-1, 0}, {-0.7071f, -0.7071f}, {0, -1}, {0.7071f, -0.7071f}};
-        u32 c = g_high_i++ % 32;
-        float r = RING[c / 8], x = cjp[0] + DIR[c % 8][0] * r, y = cjp[1] + DIR[c % 8][1] * r, feet = cjp[2] - 1.0f, g, g2, g3, eye[3], cj[3];
-        int f, f2, f3;
-        g_high[c].ok = 0;
-        g = ground_z(x, y, feet + 38.0f, &f);
-        if (f && g >= feet + 2.0f && g <= feet + 35.0f) {
+        u32 c = g_high_i % 48, h = (g_high_i * 2654435761u) >> 8;
+        float th = ((float)(h & 255) / 255.0f - 0.5f) * 0.70f, r = RING[c / 8] + ((float)((h >> 8) & 255) / 255.0f - 0.5f) * 6.0f;
+        float ux = DIR[c % 8][0] - th * DIR[c % 8][1], uy = DIR[c % 8][1] + th * DIR[c % 8][0], ul = f_sqrt(ux * ux + uy * uy);
+        float x, y, feet = cjp[2] - 1.0f, g = 0, g2, g3, eye[3], cj[3], tx, ty, tl;
+        int f = 0, f2, f3, k, flat = 0, try_;
+        g_high_i++;
+        ux /= ul; uy /= ul;
+        x = cjp[0] + ux * r; y = cjp[1] + uy * r;
+        tx = cjp[0] - x; ty = cjp[1] - y; tl = f_sqrt(tx * tx + ty * ty); tx /= tl; ty /= tl;   /* (towards CJ) */
+        /* (a slot keeps the last roof it found until a new one replaces it or it is 12 s old: one miss does not lose it) */
+        for (try_ = 0; try_ < 2 && !flat; try_++) {
+            if (try_) { x += tx * 1.5f; y += ty * 1.5f; }
+            g = ground_z(x, y, feet + 38.0f, &f);
+            if (!f || g < feet + 2.0f || g > feet + 35.0f) break;
             g2 = ground_z(x + 1.0f, y, g + 1.5f, &f2); g3 = ground_z(x, y + 1.0f, g + 1.5f, &f3);
-            if (f2 && f3 && g2 - g < 0.4f && g - g2 < 0.4f && g3 - g < 0.4f && g - g3 < 0.4f) {
-                eye[0] = x; eye[1] = y; eye[2] = g + 1.6f; cj[0] = cjp[0]; cj[1] = cjp[1]; cj[2] = cjp[2] + 0.3f;
-                g_high[c].at.x = x; g_high[c].at.y = y; g_high[c].at.z = g + 1.0f; g_high[c].height = g - feet;
-                g_high[c].sees = (u8)map_ray(eye, cj); g_high[c].time = s->time; g_high[c].ok = 1;
+            flat = f2 && f3 && g2 - g < 0.4f && g - g2 < 0.4f && g3 - g < 0.4f && g - g3 < 0.4f;
+        }
+        if (flat) {
+            int seen = 0;
+            cj[0] = cjp[0]; cj[1] = cjp[1]; cj[2] = cjp[2] + 0.3f;
+            for (k = 0; k < 4 && g_map_us < MAP_LOOK_US + 600U; k++) {
+                if (k) {                                                /* (the edge towards CJ, while the roof goes on) */
+                    float gk;
+                    int fk;
+                    gk = ground_z(x + tx * 1.5f, y + ty * 1.5f, g + 1.5f, &fk);
+                    if (!fk || gk - g > 0.4f || g - gk > 0.4f) break;
+                    x += tx * 1.5f; y += ty * 1.5f;
+                }
+                eye[0] = x; eye[1] = y; eye[2] = g + 1.6f;
+                if (map_ray(eye, cj)) { seen = 1; break; }
             }
+            g_high[c].at.x = x; g_high[c].at.y = y; g_high[c].at.z = g + 1.0f; g_high[c].height = g - feet;
+            g_high[c].sees = (u8)seen; g_high[c].time = s->time; g_high[c].ok = 1;
         }
     }
     n = prev->n_ground_q < HCB_MAX_GROUND ? prev->n_ground_q : HCB_MAX_GROUND;
@@ -1325,9 +1351,9 @@ static void fill_map(hcb_snapshot *s, const hcb_out *prev, const float *cjp) {
         g_map_ground_ok++;
         mc_put(cx, cy, g, a->wall);
     }
-    for (i = 0; i < 32 && s->n_high < HCB_MAX_HIGH; i++) {
+    for (i = 0; i < 48 && s->n_high < HCB_MAX_HIGH; i++) {
         float at[3];
-        if (!g_high[i].ok || s->time < g_high[i].time || s->time - g_high[i].time > 20000) continue;
+        if (!g_high[i].ok || s->time < g_high[i].time || s->time - g_high[i].time > 12000) continue;
         at[0] = g_high[i].at.x; at[1] = g_high[i].at.y; at[2] = g_high[i].at.z;
         if (dist2(at, cjp) > 75.0f * 75.0f || !g_high[i].sees) continue;
         s->high[s->n_high].at = g_high[i].at; s->high[s->n_high].height = g_high[i].at.z - 1.0f - (cjp[2] - 1.0f); s->high[s->n_high].sees_cj = 1; s->n_high++;
@@ -1821,7 +1847,8 @@ static const char *const TASK_NAME[] = {"ESCORT", "SHIELD", "EXTRACT", "APPROACH
 /* 1.0: the summary of the session (mods/hcbrain_summary.txt, rewritten every ten seconds): the numbers the 2.0 plan is judged by.
    One sample a second for every guard on the ground who has a post. */
 static struct { u32 samples, still, far8, far20, stuck, failed, sprint_calm, calm, changes, near4, near4_n, up, up_n, secs, assault_secs, think_max; u8 act[HCB_MAX_OURS]; u32 act_who[HCB_MAX_OURS];
-                u32 away, away_still, in3, in3_near, uninvolved, fire_ticks, roe_hold_secs; float last[HCB_MAX_OURS][2]; } g_sum;   /* 1.3: the real thing */
+                u32 away, away_still, in3, in3_near, uninvolved, fire_ticks, roe_hold_secs; float last[HCB_MAX_OURS][2];
+                u32 out_n, out_near, out_set, out_down, lead_n, lead_near, still_secs, high_secs; } g_sum;   /* 1.3: the real thing; 1.5: the outer men out of sight */
 static const char *const ALERT_NAME[] = {"calm", "wary", "threat", "COMBAT", "EVACUATE"};
 static const char *const SAY_NAME[] = {"", "into cover", "CJ is in cover", "stay with me", "we pull out", "I have command", "clear", "sniper", "we were attacked here before", "grenade", "CJ is in the water", "armed men ahead"};
 static const char *const AIM_NAME[] = {"body", "driver", "tyre"};
@@ -2398,8 +2425,18 @@ static void session_summary(u32 now) {
         dx = cj->pos.x - p->pos.x; dy = cj->pos.y - p->pos.y;
         if (dx * dx + dy * dy < 16.0f) near++;
         if (po->job == HCB_ROLE_MARKSMAN) { g_sum.up_n++; if (p->pos.z > cj->pos.z + 4.0f) g_sum.up++; }
+        /* 1.5 (the player: "only the commander and the bodyguards at my side, the rest so that I hardly notice them - in cover, down,
+           each with his own view, all of them seeing me"): the outer four in PROTECT - within 12 m of CJ; down at their places once CJ
+           has stood 5 s (and not pulling out); the commander within 4 m of CJ (in ASSAULT too) */
+        if ((po->job == HCB_ROLE_POINT || po->job == HCB_ROLE_POINT2 || po->job == HCB_ROLE_REAR || po->job == HCB_ROLE_REAR2) && g_out.umode == HCB_UMODE_PROTECT) {
+            g_sum.out_n++; if (dx * dx + dy * dy < 144.0f) g_sum.out_near++;
+            if (g_sum.still_secs >= 5 && g_out.duty != HCB_DUTY_RING && d < 1.5f) { g_sum.out_set++; if (po->crouch) g_sum.out_down++; }
+        }
+        if (po->job == HCB_ROLE_LEAD) { g_sum.lead_n++; if (dx * dx + dy * dy < 16.0f) g_sum.lead_near++; }
     }
     if (!any) return;
+    g_sum.still_secs = cv < 0.5f ? g_sum.still_secs + 1 : 0;
+    if (g_snap.n_high) g_sum.high_secs++;
     g_sum.secs++;
     if (g_snap.roe == HCB_ROE_HOLD) g_sum.roe_hold_secs++;
     for (i = 0; i < g_out.n_orders; i++) {                             /* 1.3: fire at a man who is no threat: must be 0 */
@@ -2423,7 +2460,11 @@ static void session_summary(u32 now) {
     pct(&t, "sprinting with no threat", g_sum.sprint_calm, g_sum.calm, "   [0.9: 50 %, goal: 10 % or less]");
     ts(&t, "changes of action per guard per minute: "); if (g_sum.samples) tf(&t, (float)g_sum.changes * 60.0f / (float)g_sum.samples); ts(&t, "   [goal: 6 or less]\n");
     ts(&t, "guards within 4 m of CJ in PROTECT (average): "); if (g_sum.near4_n) tf(&t, (float)g_sum.near4 / (float)g_sum.near4_n); ts(&t, "   [0.9: 6 of 8, goal: 3]\n");
-    pct(&t, "the marksman 4 m or more above CJ", g_sum.up, g_sum.up_n, "   [0.9: never]");
+    pct(&t, "the marksman 4 m or more above CJ", g_sum.up, g_sum.up_n, "   [0.9: never, 1.4 in the game: 0 %]");
+    pct(&t, "1.5: high places known round CJ (seconds with at least one)", g_sum.high_secs, g_sum.secs, "   [1.4 in the game: high places 0 a third of the time]");
+    pct(&t, "1.5: an outer man (of the four) within 12 m of CJ in PROTECT", g_sum.out_near, g_sum.out_n, "   [goal: 5 % or less]");
+    pct(&t, "1.5: an outer man at his place, CJ standing 5 s: down", g_sum.out_down, g_sum.out_set, "   [goal: 90 % or more]");
+    pct(&t, "1.5: the commander within 4 m of CJ (PROTECT and ASSAULT)", g_sum.lead_near, g_sum.lead_n, "   [goal: 80 % or more]");
     pct(&t, "1.3: a guard 2 m+ from his post, on his way, who did not move in a second", g_sum.away_still, g_sum.away, "   [1.2 in the game: 20 %, goal: 5 % or less]");
     pct(&t, "1.3: the two bodyguards within 2.5 m of CJ standing", g_sum.in3_near, g_sum.in3, "   [goal: 80 % or more]");
     pct(&t, "1.3: fire orders at a man who is no threat (a passer-by, a driver going by)", g_sum.uninvolved, g_sum.fire_ticks, "   [1.2 in the game: half of them, goal: 0]");

@@ -103,7 +103,7 @@ passed('A blind corner under threat: the man stops short of it for %.1f s with h
 sc = Scene(); sc.walls = [(-20., -10., 0., -10.), (1., -10., 20., -10.)]              # a wall with a gap one metre wide
 team = [sc.our(x, -16., SQ + k, weapon=M4) for k, x in enumerate((-2., 0.5, 3.))]; sc.walk_posts = True
 g = sc.ped(0, 40, pedtype=GANG, weapon=AK, face=(0., -1.))
-two_in, waited, stood_in, last_in = 0, 0, 0, {}
+two_in, waited, stood_in, last_in, entered = 0, 0, 0, {}, {}
 def in_gap(p): return -0.3 <= p[0] <= 1.3 and -10.8 <= p[1] <= -9.2
 for k in range(400):
     if k % 9 == 0: sc.shot(g, (0., 0., 1.), dst=1)
@@ -111,10 +111,13 @@ for k in range(400):
     ins = [w for w in team if in_gap(sc.peds[w]['pos'])]
     two_in = max(two_in, len(ins)); waited += sum(1 for p in sc.posts.values() if p.why == HCB_WHY2_DOORWAY and p.act == HCB_ACT_HOLD)
     for w in team:
+        if w in ins and w not in entered: entered[w] = k
         last_in[w] = last_in.get(w, 0) + 1 if w in ins else 0
         stood_in = max(stood_in, last_in[w])
 through = [w for w in team if sc.peds[w]['pos'][1] > -9.]
-assert len(through) == 3 and two_in <= 1 and waited > 0 and stood_in <= 12, ('all three through, one at a time, somebody waited, nobody stood in it over a second', len(through), two_in, waited, stood_in)
+ent = sorted(entered.values()); close_ = any(b - a < 10 for a, b in zip(ent, ent[1:]))
+# (1.5: the outer man goes further out now and seldom comes to the gap with the other two - "somebody waited" is asked only when two came to it within a second)
+assert len(through) == 3 and two_in <= 1 and (waited > 0 or not close_) and stood_in <= 12, ('all three through, one at a time, somebody waited (when two came together), nobody stood in it over a second', len(through), two_in, waited, ent, stood_in)
 passed('A doorway (a gap one metre wide) under threat: three men go through one at a time - the next one waits short of it - and nobody stands in it longer than %.1f s' % (stood_in / 10.))
 
 # ------------------------------------------------------------------ what the half-hour run found (soak_30min.py), each as a drill of its own

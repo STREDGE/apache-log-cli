@@ -120,8 +120,12 @@ HID void hcb_agent_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
             /* (the three: only CJ himself in the line - one of the three in front of another is the shield, it stays) */
             int blocked = tp && !od->fire && (od->hold == HCB_HOLD_CJ_IN_LINE || (!in3 && (od->hold == HCB_HOLD_CJ_BEHIND || od->hold == HCB_HOLD_FRIEND)))
                 && !(p->job == HCB_ROLE_LEAD && (b->dt.leading || p->sign))   /* (the commander leading CJ to cover goes on leading) */
-                && d2(me->pos, p->at) < 2.5f && p->job != HCB_ROLE_MARKSMAN && !p->climb && !p->crouch;   /* (a man down in cover - and CJ in cover with him - keeps it) */
+                && d2(me->pos, p->at) < 2.5f && p->job != HCB_ROLE_MARKSMAN && !p->climb && !(p->crouch && in3);   /* (one of the three down in cover - CJ in cover with him - keeps it; 1.5: an outer man is down at every place now: he steps all the same) */
             if (blocked) { if (!a->line_since) a->line_since = now ? now : 1; } else a->line_since = 0;
+            /* (1.5, the player: "all of them in cover, firing from there and sitting": an outer man down in cover in a fight keeps it - his place
+               is chosen clear of CJ's line, and with one of ours in the way he holds his sector until his place is chosen again; out of a fight
+               he steps when the line stays blocked 2.5 s - a man of ours crossing it does not get him up) */
+            if (blocked && p->crouch && !in3 && (p->duty == HCB_DUTY_COVER || now - a->line_since < 2500)) blocked = 0;
             if (blocked && in3 && now - a->line_since >= 700 && !(a->step_until && now < a->step_until) && (!a->step_at || now - a->step_at >= 3000)) {
                 hcb_vec rel = flat(v_sub(me->pos, cjp_->pos)), to = flat(v_sub(tp->pos, cjp_->pos));
                 float l = v_len(to);
@@ -438,6 +442,7 @@ HID void hcb_agent_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
             else if (cj_speed > 2.2f) act = d > 12.0f ? HCB_ACT_SPRINT : d > 2.5f ? HCB_ACT_RUN : HCB_ACT_FASTWALK;
             else if (inner) act = d > 4.0f ? HCB_ACT_RUN : d > 2.0f ? HCB_ACT_FASTWALK : HCB_ACT_WALK;   /* (a man of the three is never left behind) */
             else act = d > 35.0f ? HCB_ACT_SPRINT : d > 10.0f ? HCB_ACT_RUN : d > 5.0f ? HCB_ACT_FASTWALK : HCB_ACT_WALK;   /* (1.3: a sprint with no threat from 35 m, not 25 - the second 2.0 log: 12 %) */
+            if (p->crouch && !fight && !urgent && !follow) act = HCB_ACT_WALK;   /* (1.5: down in peace - CJ creeps, or a man at his place - nobody runs) */
             /* (a pace once taken is kept while the distance is within a metre and a half of where it would change: no flicker) */
             if (was_moving && a->act != act && act >= HCB_ACT_WALK && act <= HCB_ACT_SPRINT) {
                 static const float EDGE[4] = {5.0f, 10.0f, 2.5f, 35.0f};

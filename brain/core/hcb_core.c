@@ -125,7 +125,7 @@ API void hcb_init(hcb_brain *b, u32 seed) {
     b->cfg.scatter_per_ms = 0.02f;
     b->cfg.gunner_weapon = 1;
     b->cfg.cabin_skip_m = 1.5f;
-    b->cfg.outer_peace_m = 15; b->cfg.outer_fight_m = 18; b->cfg.cj_low_hp = 40;
+    b->cfg.outer_peace_m = 21; b->cfg.outer_fight_m = 23; b->cfg.cj_low_hp = 40;
     b->cfg.gather_m = 32; b->cfg.rush_m = 8; b->cfg.assault_near_m = 9; b->cfg.fire_first_ms = 2000; b->cfg.search_ms = 6000;
     b->cfg.target_keep_ms = 20000; b->cfg.consolidate_ms = 8000; b->cfg.withdraw_down = 3;
     b->cfg.ow_min_h = 4; b->cfg.ow_max_h = 35; b->cfg.ow_min_d = 12; b->cfg.ow_max_d = 70; b->cfg.ow_try_ms = 40000;

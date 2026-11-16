@@ -167,7 +167,31 @@ del sc.ours[mk]; del sc.peds[mk]                                   # (the squad 
 for k in range(10): o = sc.step(1)
 assert o.ow_ok == 1 and d2((o.ow_at.x, o.ow_at.y), (22., 12.)) < 0.1 and abs(o.heli_at.z - 19.) < 0.1, ('aboard: the helicopter is sent over the roof to put him on it', o.ow_ok, o.ow_at.x, o.ow_at.y)
 passed('A good roof 7 m up (CJ seen from it), no way to climb it and nothing to step on, the first drop over it having failed: the helicopter is sent over the marksman (12 m up), he waits where he stands; when it hangs there steady the rope may go up; once he is aboard it is sent over the roof to put him on it - a new try')
-# ... and in a fight, or with no helicopter, no pickup: the next place
+# 1.5 (the player: "the marksman is a cripple - he hardly ever gets up on a roof"): in a fight too - the helicopter picks him up and puts
+# him on the roof (only an evacuation keeps it for CJ)
+sc = Scene(); team = squad(sc, 7)
+heli = sc.veh(0., -40., z=30., cls=HCB_VC_HELI); sc.heli = heli
+sc.blocks = [(18., 8., 26., 16., 7.0)]
+sc.high = [(22., 12., 8.0, True)]
+for k in range(460): o = sc.step(1)
+mk = sc.our(-3., -6., SQ + 7, weapon=SNIPER); team.append(mk)
+g = sc.ped(-30., 25., pedtype=GANG, weapon=AK, face=(1., 0.))
+o = None; alerts = set()
+for k in range(120):
+    if k % 9 == 0: sc.shot(g, (0., 0., 1.), dst=1)
+    o = sc.step(1); alerts.add(o.alert)
+    if o.ow_ok == 2: break
+assert HCB_ALERT_COMBAT in alerts and o.ow_ok == 2 and d2((o.heli_at.x, o.heli_at.y), pos(sc, mk)) < 0.5, ('a fight on: the helicopter is sent over him all the same', o.ow_ok, alerts)
+mp = pos(sc, mk); sc.vehs[heli]['pos'] = [mp[0] + 1., mp[1], mp[2] + 12.]; sc.vehs[heli]['vel'] = [0., 0., 0.]
+sc.shot(g, (0., 0., 1.), dst=1); o = sc.step(2)
+assert o.ow_ok == 2 and o.ow_ready, 'it hangs over him steady: the rope may go up'
+del sc.ours[mk]; del sc.peds[mk]
+for k in range(10):
+    if k % 9 == 0: sc.shot(g, (0., 0., 1.), dst=1)
+    o = sc.step(1)
+assert o.ow_ok == 1 and d2((o.ow_at.x, o.ow_at.y), (22., 12.)) < 0.1, ('aboard, in the fight: the helicopter is sent over the roof to put him on it', o.ow_ok)
+passed('1.5: the same in a fight - the helicopter picks the marksman up and is sent over the roof to put him on it (before 1.5: only with all quiet)')
+# ... and with no helicopter, no pickup: the next place
 sc = Scene(); team = squad(sc); mk = team[7]
 sc.blocks = [(18., 8., 26., 16., 7.0)]; sc.high = [(22., 12., 8.0, True)]
 for k in range(60): o = sc.step(1); assert o.ow_ok != 2, 'no helicopter: no pickup'
@@ -183,7 +207,7 @@ for k in range(400):
 assert feet(sc, mk) > 2.0
 sc.recall = 1; sc.step(2); sc.recall = 0
 for k in range(150): sc.step(1)
-assert feet(sc, mk) < 0.5 and d2(pos(sc, mk), sc.cj['pos']) < 22., ('"to me": down and back in the detail round CJ', pos(sc, mk))
+assert feet(sc, mk) < 0.5 and d2(pos(sc, mk), sc.cj['pos']) < 30., ('"to me": down and back in the detail round CJ (1.5: his place 25 m out)', pos(sc, mk))
 passed('"To me" from the menu: the marksman comes down off the shed at once and back into the detail round CJ (no new high place for 20 s)')
 
 # ================================================================== fire (plan item A)
@@ -229,13 +253,14 @@ assert len(blind) >= 3 and min(gaps) >= 30, ('the gunners have no line for 3 s: 
 passed('The gunners all have a man and none has a line to him (houses in the way) for 3 s: the helicopter moves round the circle to the next spot (%d spots in 15 s, never sooner than 3 s apart); with a line it keeps its spot' % len(blind))
 
 # ------------------------------------------------------------------ one of ours in his line: he steps out of it (2.5 m, away from CJ) and fires
-sc = Scene(roe=HCB_ROE_ARMED); team = squad(sc, 5); sc.step(30)
+sc = Scene(roe=HCB_ROE_ARMED); team = squad(sc, 5); sc.step(100)        # (1.5: the outer men take their places once CJ has stood 4 s)
 g = sc.ped(0., 30., pedtype=GANG, weapon=AK, face=(0., 1.))
 front = {w for w in team if sc.posts[w].job in (HCB_ROLE_POINT, HCB_ROLE_CLOSE)}
 sc.los_fn = lambda a, b_: a not in front                       # (the two in front have a wall in their way: the rear man is the one to fire)
 rear = [w for w in team if sc.posts[w].job == HCB_ROLE_REAR][0]
-friend = sc.our(-9.5, 0., HCB_ROLE_NONE)                       # one of ours standing in his line
 p0 = list(pos(sc, rear)); blocked_t, fired_t = None, None
+gp_ = pos(sc, g)
+friend = sc.our(p0[0] + 0.3 * (gp_[0] - p0[0]), p0[1] + 0.3 * (gp_[1] - p0[1]), HCB_ROLE_NONE)   # one of ours standing in his line (1.5: wherever his place is)
 for k in range(60):
     sc.step(1)
     o = sc.orders.get(rear)

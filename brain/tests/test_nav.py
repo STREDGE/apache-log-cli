@@ -161,7 +161,7 @@ acts = []
 sc.cj['vel'] = [0., 1.4, 0.]                                # CJ strolls
 for k in range(100):
     sc.step(1); acts += [sc.posts[w].act for w in team]
-walk_share = sum(a in (HCB_ACT_WALK, HCB_ACT_FASTWALK, HCB_ACT_HOLD, HCB_ACT_OVERWATCH) for a in acts) / len(acts)
+walk_share = sum(a in (HCB_ACT_WALK, HCB_ACT_FASTWALK, HCB_ACT_HOLD, HCB_ACT_OVERWATCH, HCB_ACT_COVER) for a in acts) / len(acts)   # (1.5: an outer man down at his place counts as calm)
 assert walk_share > 0.85 and HCB_ACT_SPRINT not in acts, (walk_share, set(acts))
 acts = []
 sc.cj['vel'] = [0., 6.5, 0.]                                # CJ sprints
