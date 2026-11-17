@@ -508,7 +508,7 @@ HID void hcb_agent_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                    steers the game's own aim-walk). Up to 4 m (kept until 6); a longer way is a rush with no fire, as a man really
                    crosses open ground. */
                 if (tp && od->hold != HCB_HOLD_ROE && od->hold != HCB_HOLD_NO_TARGET && od->hold != HCB_HOLD_COVERING && od->hold != HCB_HOLD_FISTS
-                    && b->alert >= HCB_ALERT_COMBAT && d2(tp->pos, me->pos) < 35.0f && d < (a->aimwalk ? 6.0f : 4.0f) && act != HCB_ACT_SIDESTEP) {
+                    && b->alert >= HCB_ALERT_COMBAT && d2(tp->pos, me->pos) < 35.0f && s->body && d < (a->aimwalk ? 6.0f : 4.0f) && act != HCB_ACT_SIDESTEP) {   /* (the mod's own body only: the scripts' body has no aim-walk) */
                     p->face = 1; a->aimwalk = 1;
                     if (act != HCB_ACT_WALK) { act = HCB_ACT_WALK; a->pace_since = now ? now : 1; a->pace_d = d; }
                     p->move = 1; set_act(a, p, act, HCB_PH_MOVING, 0);

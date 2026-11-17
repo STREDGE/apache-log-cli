@@ -99,7 +99,7 @@ w2.messages.clear();steps(w2,V2,25)
 o=w2.brain.out
 assert o.cover_ok and o.cover_at.x<-3.5 and abs(o.cover_at.y)<1.5,(o.cover_ok,o.cover_at.x,o.cover_at.y)
 assert any(m.startswith('SQGO') for m in w2.messages),('"CJ, into cover - <side>! Go to the mark."',w2.messages)
-w2.player=[o.cover_at.x,o.cover_at.y,0.];w2.pos[1]=list(w2.player);w2.messages.clear();steps(w2,V2,25)
+w2.player=[o.cover_at.x,o.cover_at.y,0.];w2.pos[1]=list(w2.player);w2.messages.clear();steps(w2,V2,50)   # (1.6: 5 s - the outer man's place is looked for in his whole quarter, he gets there a little later)
 P2=posts(w2);J2={jobs[p.job]:p for p in P2.values()}
 assert 'SQSAFE' in w2.messages and not w2.brain.out.cover_ok,('"CJ is in cover, we hold"; the mark goes',w2.messages)
 assert J2['close'].crouch and any(x[2]==[J2['close'].who,1] for x in calls(w2,0x4eb)),'the bodyguard crouches beside him'
@@ -109,7 +109,7 @@ passed('Contact with a pillar 3 m away: the commander tells CJ which way to go (
 # ------------------------------------------------------------------ too hot: a ring and the pickup call
 w2.health[1]=20;w2.messages.clear();steps(w2,V2,8)
 P2=posts(w2);lead_=w2.brain.out.lead
-D2_=sorted(math.dist(spot(p),w2.coords(1)[:2]) for p in P2.values());assert all(x<=5.1 for x in D2_[:-1]) and 12.5<=D2_[-1]<=19.5 and w2.messages.count('SQEVAC')==1,([spot(p) for p in P2.values()],w2.messages)   # (0.9: the commander and the bodyguards come in; 1.5: the outer man holds 14-19 m off, out of CJ's sight)
+D2_=sorted(math.dist(spot(p),w2.coords(1)[:2]) for p in P2.values());assert all(x<=5.1 for x in D2_[:-2]) and D2_[-2]<=8.6 and 12.5<=D2_[-1]<=19.5 and w2.messages.count('SQEVAC')==1,([spot(p) for p in P2.values()],w2.messages)   # (0.9: the bodyguards come in; 1.5: the outer man holds 14-19 m off, out of CJ's sight; 1.6: the commander a hop of 7 m ahead, leading CJ out)
 steps(w2,V2,60);assert w2.messages.count('SQEVAC')==1
 passed('CJ badly hurt under fire: everybody comes in round him (within 5 m) and "too hot - call ROPE PICKUP", once (not again for 20 s)')
 w2.health[1]=100;w2.dead.add(h2);w2.messages.clear();w2.now+=30000;steps(w2,V2,6);w2.now+=30000;steps(w2,V2,6);w2.now+=30000;steps(w2,V2,6)
@@ -336,7 +336,7 @@ passed('Rope evacuation guards are led by the squad while CJ walks to the rope')
 w,c,ground,sq,team=escort_world();V=(c,ground,sq)
 for k,t in enumerate(team):w.pos[t]=[BG[k][0],BG[k][1],0.]
 hostile=950;w.exists.add(hostile);w.pos[hostile]=[20.,0.,0.];w.pedtype[hostile]=7;w.weapons[hostile]=30;w.civilians=[hostile];w.damage.add((1,hostile))
-w.health[hostile]=100000;steps(w,V,70);ducked=[t for t in team if orders(w,0x634,t)];assert ducked,('somebody fights crouched from his spot (2.0: the outer man, once he is at his place 18 m out)',{t:(w.pos[t][:2],posts(w)[t].job,posts(w)[t].crouch,spot(posts(w)[t])) for t in team})
+w.health[hostile]=100000;steps(w,V,120);ducked=[t for t in team if orders(w,0x634,t)];assert ducked,('somebody fights crouched from his spot (2.0: the outer man, once he is at his place 18 m out)',{t:(w.pos[t][:2],posts(w)[t].job,posts(w)[t].crouch,spot(posts(w)[t])) for t in team})
 g_=ducked[0];w.dead.add(hostile);w.pos[g_]=[0.,-12.,0.];w.calls.clear();steps(w,V,6)
 seq=[x[1] for x in w.calls if x[2] and x[2][0]==g_ and x[1] in (0x4eb,0x5d3,0x637)]
 assert seq[:2]==[0x4eb,0x5d3] and last(w,0x4eb,g_)[1]==0,seq
