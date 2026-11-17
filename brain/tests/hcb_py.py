@@ -609,6 +609,7 @@ class Scene:
                             if g_ is not None and self.body:
                                 nw[2] = g_ + 1.
                             self.peds[who]['pos'] = nw
+                            if p_.move == 4: self.net_left = getattr(self, 'net_left', {}); self.net_left[who] = list(nw)   # (where the game's path network last took him: this simulation walks him through whatever is there)
             for p in list(self.peds.values()) + [self.cj]:
                 p.pop('shot', None)
                 p['pos'] = [p['pos'][i] + p['vel'][i] * ms / 1000. for i in range(3)]

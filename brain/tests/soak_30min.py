@@ -117,7 +117,10 @@ def run(seed, minutes, check=True):
             assert all(math.isfinite(x) for x in (p.at.x, p.at.y, p.at.z, p.via.x, p.via.y, p.via.z, p.look.x, p.look.y, p.look.z)), (sec, who, 'a place that is not a number')
             wd = sc.wall_dist(me)
             if p.move == 4: net_at[who] = sec                               # (4: the game's path network takes him - this simulation walks him through whatever is there)
-            if wd < 0.05 and sec - net_at.get(who, -100) > 3: worst['in_wall'] += 1
+            # (1.6.1: ... and he may stand on where it left him. The network of the game goes round things; this simulation's goes through
+            #  them, and a man it has brought to a place 16 cm beyond a low wall stops on the wall's line - not a decision of the brain's)
+            left_ = getattr(sc, 'net_left', {}).get(who)
+            if wd < 0.05 and sec - net_at.get(who, -100) > 3 and not (left_ and math.dist(left_[:2], me[:2]) < 0.3): worst['in_wall'] += 1
             d = math.dist(me[:2], (p.at.x, p.at.y))
             n['samples'] += 1
             # (the plan's measure is for PROTECT with CJ standing; a man coming back from an assault or left behind by CJ's car is counted

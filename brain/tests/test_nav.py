@@ -211,6 +211,11 @@ def crosses(p, q):
     return any(BOX[0] + .3 < p[0] + (q[0] - p[0]) * t / 20. < BOX[2] - .3 and BOX[1] + .3 < p[1] + (q[1] - p[1]) * t / 20. < BOX[3] - .3 for t in range(21))
 assert way and not any(crosses(a_, b_) for a_, b_ in zip([(0., -22., 1.)] + way, way)), ('the map\'s own way from one side of the block to the other goes round it', way)
 passed('Heights: a ledge 1.6 m high is not a step - the way goes round the block (the man never stands on it) and he arrives')
+# (the map by itself, from the heights of the ground alone: nobody has walked here, so no leg has been asked about and nothing is marked)
+sc = Scene(); BOX = (-6., -16., 6., -8., 1.0); sc.ground_fn = ground_blocks([BOX]); team = team_at(sc, ((18., 18.),)); sc.walk_posts = False; sc.step(80)   # (one man, held where he stands, well away from the block)
+way = hcb_py.nav_way(sc.brain, (0., -22., 1.), (0., -3., 1.), sc.time)
+assert way and not any(crosses(a_, b_) for a_, b_ in zip([(0., -22., 1.)] + way, way)), ('a map nobody has walked on: its way still goes round the block 1 m high', way)
+passed('Heights, the map alone (nobody has walked there, no leg was ever asked about): a way across a block 1 m high (a height the map does see the top of) goes round it - the heights of the ground are enough')
 sc = Scene(); ROOF = (-4., -20., 4., -12., 5.); sc.ground_fn = ground_blocks([ROOF]); team = team_at(sc, ((0., -16.),)); sc.peds[team[0]]['pos'][2] = 6.   # (a roof inside the brain's map: 1.1 sends a man who is OUTSIDE it by the game's path network, drop or no drop)
 left = 0
 for k in range(250):

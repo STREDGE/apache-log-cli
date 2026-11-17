@@ -184,6 +184,9 @@ assert all(d_ < 4.0 for d_ in body), ('1.3: the two bodyguards never left CJ (th
 assert lead_far < 5.0, ('1.5 (the player: "only the bodyguards and the commander at my side"): the commander never goes with the assault', lead_far)
 left = [pos(sc, j[n_].who) for n_ in ('point',)]; right = [pos(sc, j[n_].who) for n_ in ('point2',)]
 assert all(p_[0] < -2 for p_ in left) and all(p_[0] > 2 for p_ in right), ('the pairs came in on the two flanks, not down the fire team\'s line', left, right)
+# (each on his own flank line, the same way out on either side: with the old 4 m side offset the left man ended 3.7 m off the line to the
+#  target - in front of the fire team's rifles - and the right one 14 m)
+assert all(5. <= abs(p_[0]) <= 12. for p_ in left + right) and abs(abs(left[0][0]) - abs(right[0][0])) < 5., ('the two flanks are the same way out: 5-12 m off the line from CJ to the target', left, right)
 bound_ticks = tasks.count(HCB_TASK_BOUND)
 assert pair_both <= 0.12 * bound_ticks, ('one pair at a time: both pairs on the move in %d of %d looks' % (pair_both, bound_ticks))
 assert all(d2(pos(sc, a_), pos(sc, b_)) > 1.5 for a_ in team for b_ in team if a_ < b_), 'no two men on one spot'

@@ -135,6 +135,19 @@ for k in range(400):
 assert near_gap == 2, 'both come up to the gap together'
 assert two_in <= 1 and all(sc.peds[w]['pos'][1] > -9. for w in team), ('two come to the gap together: never both in it', two_in, waited)
 passed('A doorway, two men at it together (the commander and a bodyguard on their way to CJ): one goes through, the other waits short of it')
+# (the same on a way round: two men who start well off to one side of the gap come to it along the wall, on a way of the map - not straight)
+sc = Scene(); sc.walls = [(-20., -10., 0., -10.), (1., -10., 20., -10.)]
+team = [sc.our(x, y, SQ + k, weapon=M4) for k, (x, y) in enumerate(((-7., -12.), (-7.8, -13.)))]; sc.walk_posts = True
+g = sc.ped(0, 40, pedtype=GANG, weapon=AK, face=(0., -1.))
+sc.walk_posts = False; sc.step(15); sc.walk_posts = True
+two_in, waited = 0, 0
+for k in range(400):
+    if k % 9 == 0: sc.shot(g, (0., 0., 1.), dst=1)
+    sc.step(1)
+    two_in = max(two_in, sum(1 for w in team if in_gap(sc.peds[w]['pos'])))
+    waited += sum(1 for p in sc.posts.values() if p.why == HCB_WHY2_DOORWAY and p.act == HCB_ACT_HOLD)
+assert two_in <= 1 and waited > 0 and all(sc.peds[w]['pos'][1] > -9. for w in team), ('two come to the gap along the wall, one behind the other: never both in it, the second waits', two_in, waited)
+passed('A doorway come to along the wall (a way of the map, not a straight line): the second man waits short of it, never two in the gap')
 # (1.1: a doorway is walked through its middle - a way that comes to it at a slant is not pulled straight past it: the leg through the
 #  gap runs from the middle of the cell before it to the middle of the cell beyond, square to the wall, never a slant line by a jamb)
 sc = Scene(); sc.walls = [(-20., -10., 0., -10.), (1., -10., 20., -10.)]          # the same wall, the gap one metre wide at x 0..1
