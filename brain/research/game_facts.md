@@ -745,3 +745,64 @@ Checked on the player's libGTASA.so (DWARF + disassembly) and in the emulator on
 - The game has no arm-only "come here": its partial gestures are the gang hand signs (`CTaskComplexPlayHandSignalAnim`, GHANDS
   gsign*) and talk (GANGS prtial_gngtlkA-H); the always-loaded "ped" set has idle_taxi (a full-body hail). CopTraf_Come of the
   POLICE set is the traffic policeman's "come on".
+
+## P. 1.6: aim-walk - the gun task's own stepping (ControlGunMove)
+
+Checked on the player's libGTASA.so (symbols + disassembly with capstone; PLT targets resolved through `.rela.plt`), 17.11.2026.
+Checked at start-up by AIM_WORDS in `brain/game/brain.c` (49 instruction words, the GOT slot of the time step and the five animation
+names); nothing of it is called when one differs.
+
+| What | Address | Proof / notes |
+|---|---|---|
+| `CTaskSimpleUseGun::ControlGunMove(CVector2D*)` | 0x5dfc38 | a leaf, 35 instructions. `step = CTimer::ms_fTimeStep (GOT 0x84ce50 -> 0xbdc580) x 0.07 (0x710ae8)`; y first: `task+0x20` moves towards `vec[1]` (`ldr s1,[x1,#4]`) by at most `step`, then `task+0x1c` towards `vec[0]`; `strb #1 -> task+0x12`; returns 1. No check of anything - the caller must hold a real gun task |
+| `CTaskSimpleUseGun::ProcessPed(CPed*)` | 0x5dde2c | `ldrb w8,[x19,#0x11]` / `cbz` (0x5ddf84): NOT "in control" this frame -> `+0x13 = 0`, **the move vector zeroed** (`stur xzr,[x19,#0x1c]` 0x5de098), the countdown `+0x54` (set to 0xff by every controlled frame) goes down by one and at 0 the task ends itself; nothing else is done in such a frame. In control: the weapon info is fetched (`+0x48`), the animation started / fired, then `SetMoveAnim` (0x5deae8) - always for a weapon without the "aim with arm" flag (info `+0x18` bit 1), for a pistol only when `+0x12` is set or the ped ducks - and at the very end `+0x11 = 0` (0x5deb18). So "in control" (`ControlGun` 0x5dfb64 sets `+0x11`: `sturb w8,[x23,#-0x17]`, x23 = task+0x28) has to be renewed EVERY frame |
+| ... its facing test | 0x5de9a8-0x5dea28 | bearing of the target `atan2f(-dx, dy)` minus the ped's heading (`+0x6c4`), wrapped to +-pi; outside about -2.27 .. +2.01 rad (0x75ed60, 0x75ed5c; 0.70 narrower each side for a dead target) `+0x16 = 1` and there is no aiming this frame (AbortIK instead of AimGun). The task itself never writes the heading to take (`+0x6c8`) except for the pistol-whip (0x5de328) |
+| `CTaskSimpleUseGun::SetMoveAnim(CPed*)` | 0x5df684 | gets the five associations 0x31..0x35 (`RpAnimBlendClumpGetAssociation`). Ducking (`ped+0x587` bit 2, 0x5df714): no stepping at all - for commands 2..4 the duck task gets `ForceStopMove`, the vector and `+0x12` are cleared. Not ducking and `+0x12` set: if the last command (`+0x18`) is FIRE (2) and the weapon cannot fire on the move (info `+0x18` bit 5 clear) the length counts as 0; else `len = sqrt(x^2+y^2)`, `sum = |x|+|y|`. `sum < 0.1` (0x713514): Gun_stand is blended in (`BlendAnimation(clump, 0, 0x31, 8.0)`; for an aim-with-arm weapon the idle of his group and `SetMoveState(1)`), the four GunMove associations are stopped, vector cleared. Otherwise (weapon without "aim with arm"): `k = 1 - the blend of Gun_stand` (which this function itself fades out, 8 x step / 50 a frame), `wx = k * x / sum`, `wy = k * y / sum`; **x > 0: anim 0x35 gets blend wx (0x33 zeroed), x < 0: anim 0x33 gets -wx (0x35 zeroed); y < 0: anim 0x32 gets -wy (0x34 zeroed), y > 0: anim 0x34 gets wy (0x32 zeroed)**; each used one gets flag "playing" and speed `len x info+0x3c`. Aim-with-arm weapon: one of the four blended in whole (x > 0.75 -> 0x35, x < -0.75 -> 0x33, else y > 0 -> 0x34, else 0x32). At the end `+0x12 = 0` (0x5df8f4); with the last command AIM (1) and a weapon that cannot aim on the move (bit 4) the aim animation is blended out |
+| the animation names by id | 0x88b7c0 (`char *[]`) | index 0 `Walk_civi`, 3 `idle_stance`, ..., **0x31 `Gun_stand`, 0x32 `GunMove_FWD`, 0x33 `GunMove_L`, 0x34 `GunMove_BWD`, 0x35 `GunMove_R`**, 0x36 `Gun_2_Idle` (pointers into .rodata, relocated) |
+| `CTaskSimpleUseGun::StartAnim` | 0x5deb50 | command AIM (1) with a non-zero move vector and a weapon without bit 5: the aim animation is not started (he only steps). FIRE (2) and FIREBURST (3) start the fire animation whatever the vector |
+| `CTaskSimpleGunControl::ProcessPed(CPed*)` | 0x5e0474 | the game's AI user of the gun task. Every frame: `CPed::SetMoveState(ped, 1)` (0x5e04dc; SetMoveState 0x596cac is `str w1,[x0,#0x550]; ret`), makes / controls the CTaskSimpleUseGun in the attack slot (the same inline code as ControlGun: `+0x11 = 1`, the target, `+0x17` raised to the command), **turns the ped to the target: `ped+0x6c8 = atan2f(-dx, dy)`** (0x5e0acc), and when the target is nearer than sqrt(6) m (with FIREBURST as the last command only for a weapon with bit 5) - also in one aim-only branch that was not decoded further (w27) - and never for a ped whose `+0x586` bit 5 is set ("stay in the same place" by the flag order of gta-reversed, not checked here) runs ControlGunMove inline with the asked vector **(0, +1.0)** (`fmov s1,#1.0` 0x5e0b30 for y, `fmov s2,wzr` 0x5e0d2c for x; stores 0x5e0d30 / 0x5e0d60, `+0x12 = 1` 0x5e0d64) |
+| `CTaskManager::SetTask(task = 0, slot, bool)` | 0x64e084 | `cbz x20` 0x64e0a4 -> 0x64e128: the old task of the slot is deleted (vtable +8) and the slot set to 0 (0x64e138) - a main slot can be emptied with it |
+
+The convention, and how it is established:
+- **x (`+0x1c`) is to the man's right, y (`+0x20`) to his back, both in his own frame; length 1 is a full step.** y > 0 plays
+  GunMove_BWD and y < 0 GunMove_FWD, x > 0 GunMove_R and x < 0 GunMove_L - read from SetMoveAnim and the game's own name table.
+  The AI's use fixes the sign independently of the names: facing the target (it has just set his heading to the target's bearing)
+  it asks (0, +1) to get AWAY from a target that is too near - +y is backwards.
+- The frame is the ped's: the motion is the animations' own root motion, applied along the ped's matrix; nothing in these
+  functions reads a world direction. The mod therefore projects the world direction to the next point of his way on his matrix's
+  forward (`[ped+0x18]+0x10`, flat, normalised): `y = -(d . fwd)`, `x = d . right`, `right = (fwd.y, -fwd.x)`.
+- What the mod does every frame for an aim-walker, mirroring the AI: `ped+0x6c8 = bearing of his man`, `ped+0x550 = 1`,
+  `ControlGun(task, ped, his man, AIM or FIREBURST)`, `ControlGunMove(task, {x, y})`. It never asks FIRE (2).
+
+Not verified (no device here; the emulator runs ControlGunMove's real code and records the rest): that the GunMove animations
+move a guard whose main task slot is empty (his default task is whatever the game gave a script-made ped); how fast (`info+0x3c`
+per weapon); that a guard already crouched by the scripts is un-ducked (a ducking man is not stepped - the mod then walks him
+plainly); whether the default task of a script-made ped blends something over Gun_stand. The mod's watch covers the first: a man
+whose step is asked and who has not got 0.4 m on in 1.5 s of stepping (only the frames he steps count) gets the plain walk for 6 s.
+
+The standing guard (found here, mended in the same 1.6 - `gun_hold` in `brain/game/brain.c`). Until now `body_gun` called
+ControlGun once a look (about ten times a second). By the above the gun task then did its work only in the frames that follow a
+look - at 120 frames a second one frame in twelve; in the others ProcessPed returns at once (animations already started keep
+playing, but the fire moment is tested against that frame's slice of the animation only, 0x5de44c-0x5de470, so most would be
+missed - read from the code, not seen in a game). And nothing turned a standing guard to his man: the gun task aims within about
++-2 rad of his heading and never sets it, while the mod's `face_look` left a guard with his weapon on a man alone. What the code
+says the mod has to do, and now does every frame for a guard who holds its gun task with an order (AIM / FIREBURST) at a living man:
+- **ControlGun every frame** - exactly what the AI's CTaskSimpleGunControl does (its inline copy at 0x5e09f8-0x5e0a50 runs in every
+  ProcessPed).
+- **The heading: only `ped+0x6c8` is written.** `CPed::CalculateNewVelocity` 0x597518 reads it (`ldr s8,[x19,#0x6c8]` 0x597564) and
+  eases the current heading `+0x6c4` towards it (stores at 0x597594 / 0x597674 / 0x5976a8) - the only place besides
+  `CPed::UpdatePosition` and the car line-up utility that has both fields. The AI writes `+0x6c8` alone, so does the mod.
+- **No ControlGunMove for a standing man.** SetMoveAnim with `+0x12` clear (0x5df718 `ldrb` / 0x5df720 `cbz` -> 0x5df788) takes
+  the length as 0: Gun_stand is blended in, the four GunMove associations stopped, and the stored step cleared (0x5df8f0) - so a
+  step left over from an aim-walk is gone in the first standing frame, no drift.
+- **A ducking ped (`+0x587` bit 2): per-frame ControlGun is right for him too.** StartAnim (0x5deb50) takes his duck task
+  (`GetTaskDuck(1)`, null-checked) and for AIM / FIRE / FIREBURST blends, in the weapon's group, animation **0xe1 when he ducks and
+  the weapon info has `+0x19` bit 5** (0x5dece0-0x5dece8 -> 0x5dedc4), else 0xe0 - the crouched fire is the gun task's own
+  choice; for a reload 0xe3 instead of 0xe2 the same way (0x5dee64-0x5dee80). SetMoveAnim for a ducking ped only tells the duck
+  task `ForceStopMove` (commands 2..4) and clears the step. The AI's gun control has no "ducking" exit before it controls the gun
+  task or writes the heading - it only adds `ForceStopMove` when the task has finished (0x5e0c30). Not seen here: the animation
+  itself, and whether a weapon of the guards lacks that bit (then he fires with the standing animation while ducking).
+
+Gone from the mod with 1.6 (the facts of sections L and N stay true, the mod no longer uses them): `CTaskComplexGoToPointShooting`
+(0x633510, go-and-shoot), `IKChainManager_c::PointArm` / `AbortPointArm` and the mod's own `CWeapon::Fire` for a guard at a sprint;
+crash step 28 and `RunFireOff` with them. Crash step 33 = aim-walk (`AimWalkOff` in the settings file).

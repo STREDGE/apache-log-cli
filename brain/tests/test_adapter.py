@@ -53,9 +53,9 @@ VT_GOTO, VT_SHOOT, VT_ROPE = 0x839040 + 0x10, 0x839b98 + 0x10, 0x8381f8 + 0x10
 HC_MODE, HC_RECALL, CMD_PLAN = 0x48456A00 + 573, 0x48456A00 + 574, 7
 F_EV_CLEAR, F_SET_SEC, F_GUN_CTOR, F_GUN_CTL, F_RELOAD, ROPES_T = 0x64e734, 0x64e5c8, 0x5dd83c, 0x5dfb64, 0x700a2c, 0xbd3e50   # 1.1
 F_FIRE, F_FLASH = 0x700c64, 0x59bcb0   # CWeapon::Fire, CPed::DoGunFlash (1.4.1: the gunners' own weapon fire)
-F_POINT_ARM, F_ABORT_ARM, F_JUMP = 0x5d3b94, 0x5d3e0c, 0x647668      # 1.3: IKChainManager_c::PointArm / AbortPointArm, CTaskComplexJump ctor
+F_POINT_ARM, F_ABORT_ARM, F_JUMP = 0x5d3b94, 0x5d3e0c, 0x647668      # 1.3: IKChainManager_c::PointArm / AbortPointArm (1.6: the mod calls neither any more - recorders that must stay empty), CTaskComplexJump ctor
 VT_JUMP = 0x83a5d0 + 0x10
-VT_IK_MAN, VT_IK_ARM, TASK_POOL, IK_MAN = 0x8354b8 + 0x10, 0x835600 + 0x10, 0xbc3be8, 0xc98340   # 1.4.2: the IK task (secondary slot 5), an arm's chain, CPools::ms_pTaskPool, g_ikChainMan
+F_GUN_MOVE, TIME_STEP, ANIM_NAMES_T = 0x5dfc38, 0xbdc580, 0x88b7c0   # 1.6 aim-walk: CTaskSimpleUseGun::ControlGunMove (the game's own code runs), CTimer::ms_fTimeStep, the animation names by id
 F_DAMAGE, GOT_DAMAGE, PLT_DAMAGE, F_REGREF = 0x443b74, 0x83eba8, 0x21b5f0, 0x4f3b58   # 1.4.2: ComputeDamageResponse, its GOT slot and PLT stub; CEntity::RegisterReference
 # 2.0 beta 6: the commander's voice (the game's own CPed::Say runs to the point where it asks for the sound: LoadAndPlaySpeech) and his gesture
 F_LOAD_PLAY, AUDIO_VOLUMES, VT_SPEECH, ALL_SPEECH_OFF, CTX_NEXT_T = 0x4769ec, 0xc55b70, 0x82f640 + 0x10, 0xbab97c, 0xbab058
@@ -160,11 +160,12 @@ class Emu:
         self.ground = lambda x, y, z: (1, 0.)                                # flat ground at height 0 everywhere
         self.ev_clears, self.sec_tasks, self.gun_cmds, self.reloads, self.gun_fires, self.thread_runs = [], [], [], [], True, True
         self.arm_calls, self.arm_aborts, self.jumps = [], [], []          # 1.3
-        self.real_abort, self.damage_calls, self.damage_crash, self.on_screen = False, [], None, True   # 1.4.2: the game's own AbortPointArm runs; ComputeDamageResponse entries
+        self.gun_moves, self.move_crash, self.gun_round_at = [], None, {}  # 1.6
+        self.damage_calls, self.damage_crash = [], None                    # 1.4.2: ComputeDamageResponse entries
         for addr, fn in ((F_TASK_NEW, self.g_task_new), (F_GOTO, self.g_goto), (F_SHOOT, self.g_shoot), (F_SET_TASK, self.g_set_task), (F_GROUND, self.g_ground),
                          (F_EV_CLEAR, self.g_ev_clear), (F_SET_SEC, self.g_set_sec), (F_GUN_CTOR, self.g_gun_ctor), (F_GUN_CTL, self.g_gun_ctl), (F_RELOAD, self.g_reload),
                          (F_POINT_ARM, self.g_point_arm), (F_ABORT_ARM, self.g_abort_arm), (F_JUMP, self.g_jump), (F_REGREF, self.g_regref), (F_DAMAGE, self.g_damage),
-                         (F_NAMED_ANIM, self.g_named), (F_REQUEST_MODEL, self.g_request)):
+                         (F_NAMED_ANIM, self.g_named), (F_REQUEST_MODEL, self.g_request), (F_GUN_MOVE, self.g_gun_move)):
             uc.hook_add(UC_HOOK_CODE, fn, begin=GTA + addr, end=GTA + addr)
         # the virtual functions the mod calls on a task: its type (+0x28) and "can you stop now?" (+0x38)
         for vt, typ in ((VT_USE_GUN, 1017), (VT_KILL, 1000), (VT_GOTO, 903), (VT_SHOOT, 911), (VT_ROPE, 1407), (VT_JUMP, 211), (VT_NAMED, 401)):
@@ -201,8 +202,6 @@ class Emu:
         uc.mem_write(GTA + PED_POOL, struct.pack('<Q', WORLD)); uc.mem_write(GTA + VEH_POOL, struct.pack('<Q', WORLD + 0x100))
         uc.mem_write(GTA + RSGLOBAL + 8, struct.pack('<ii', W, H))
         uc.mem_write(GTA + TIME_MS, struct.pack('<I', 500000))
-        self.task_flags = self.alloc(64); uc.mem_write(self.task_flags, b'\x80' * 64)       # 1.4.2: the game's task pool (64 free places)
-        self.task_pool = self.alloc(0x20); uc.mem_write(self.task_pool, struct.pack('<QQi', self.alloc(0x10), self.task_flags, 64)); self.w64(GTA + TASK_POOL, self.task_pool)
         uc.mem_write(GTA + PLAYER_FOCUS, b'\0'); uc.mem_write(GTA + USER_PAUSE, b'\0\0'); uc.mem_write(GTA + CUTSCENE, b'\0'); uc.mem_write(GTA + MISSION_FLAG, struct.pack('<I', 0))
         self.wanted = self.alloc(0x40)
         # 2.0 beta 6: the game's animation sets (CAnimManager::ms_aAnimBlocks: name, in memory) and its audio event volumes (EVENTVOL.DAT)
@@ -483,7 +482,7 @@ class Emu:
         self.w64(t, GTA + VT_GOTO); self.w32(t + 0x18, ms); self.wf(t + 0x1c, *tg); self.wf(t + 0x28, rad, slow)
         self.new_tasks.append(dict(kind='goto', task=t, ms=ms, target=tg, radius=round(rad, 2), slow=round(slow, 2), flags=(uc.reg_read(X[3]) & 0xff, uc.reg_read(X[4]) & 0xff)))
         self._ret(uc, t)
-    def g_shoot(self, uc, *_):
+    def g_shoot(self, uc, *_):                                          # (CTaskComplexGoToPointShooting: 1.3's go-and-shoot - since 1.6 never made: the tests say so)
         t, ms, tp, ent = uc.reg_read(X[0]), uc.reg_read(X[1]) & 0xffffffff, uc.reg_read(X[2]), uc.reg_read(X[3])
         tg = struct.unpack('<3f', bytes(uc.mem_read(tp, 12)))
         self.w64(t, GTA + VT_SHOOT); self.w32(t + 0x18, ms); self.w64(t + 0x20, ent); self.wf(t + 0x34, *tg)
@@ -506,29 +505,25 @@ class Emu:
     def g_gun_ctl(self, uc, *_):
         t, ped, ent, cmd = uc.reg_read(X[0]), uc.reg_read(X[1]), uc.reg_read(X[2]), uc.reg_read(X[3]) & 0xff
         self.w64(t + 0x28, ent); uc.mem_write(t + 0x17, bytes([cmd])); self.gun_cmds.append((t, ped, ent, cmd))
-        if cmd == 3 and self.gun_fires:                               # the game fires: a round leaves his magazine
+        now = self.r32(GTA + TIME_MS)
+        if cmd == 3 and self.gun_fires and now - self.gun_round_at.get(ped, 0) >= 50:   # the game fires: a round leaves his magazine (1.6: at its own rate, 20 a second here - the mod now calls every frame)
             w = ped + 0x730 + struct.unpack('<b', bytes(uc.mem_read(ped + 0x8dc, 1)))[0] * 0x20
-            self.w32(w + 8, max(0, self.r32(w + 8) - 1))
+            self.w32(w + 8, max(0, self.r32(w + 8) - 1)); self.gun_round_at[ped] = now
         self._ret(uc, 1)
-    def g_point_arm(self, uc, *_):
-        pos = struct.unpack('<3f', bytes(uc.mem_read(uc.reg_read(X[6]), 12))) if uc.reg_read(X[6]) else None
-        arm, ped = uc.reg_read(X[2]) & 0xffffffff, uc.reg_read(X[3])
-        self.arm_calls.append(dict(self_=uc.reg_read(X[0]), name=self.cstr(uc.reg_read(X[1])), arm=arm, ped=ped, ent=uc.reg_read(X[4]),
-                                   bone=uc.reg_read(X[5]) & 0xffffffff, pos=pos, rate=round(fl(uc.reg_read(S[0])), 3), time=uc.reg_read(X[7]) & 0xffffffff, blend=round(fl(uc.reg_read(S[1])), 1)))
-        # (1.4.2: what the game's PointArm leaves behind for a man on the screen: his IK task in secondary slot 5, made when missing,
-        #  and the arm's chain in its slot arm + 1 - as 0x5d3cc8..0x5d3dc8 do it)
-        intel = self.r64(ped + 0x538); ik = self.r64(intel + 0x58)
-        if not self.on_screen:                                          # (off the screen the game's PointArm returns before it looks: 0x5d3bf4)
-            return self._ret(uc)
-        if not ik:
-            ik = self.alloc(0x38); uc.mem_write(ik, bytes(0x38)); self.w64(ik, GTA + VT_IK_MAN); self.w64(intel + 0x58, ik)
-        if not self.r64(ik + 0x10 + 8 * (arm + 1)):
-            ch = self.alloc(0x70); uc.mem_write(ch, bytes(0x70)); self.w64(ch, GTA + VT_IK_ARM); self.w32(ch + 0x10, 0xffffffff); self.w64(ik + 0x10 + 8 * (arm + 1), ch)
-        self._ret(uc)
+    def g_gun_move(self, uc, *_):
+        """CTaskSimpleUseGun::ControlGunMove(CVector2D *): written down, then the game's OWN code runs on (it stores the step in the task)"""
+        t = uc.reg_read(X[0]); v = struct.unpack('<2f', bytes(uc.mem_read(uc.reg_read(X[1]), 8)))
+        ped = next((c[1] for c in reversed(self.gun_cmds) if c[0] == t), 0)
+        self.gun_moves.append(dict(task=t, v=v, t=self.r32(GTA + TIME_MS), ped=ped, heading=self.rf(ped + 0x6c8) if ped else None, state=self.r32(ped + 0x550) if ped else None,
+                                   ctl=self.gun_cmds[-1] if self.gun_cmds else None, n_ctl=len(self.gun_cmds)))
+        if self.move_crash:                                             # (a fault in the game's gun-move code, delivered here: the crash handler runs, then the game's code goes on)
+            handler, info, ucx = self.move_crash; self.move_crash = None
+            uc.reg_write(X[0], 11); uc.reg_write(X[1], info); uc.reg_write(X[2], ucx)
+            uc.reg_write(UC_ARM64_REG_PC, handler)
+    def g_point_arm(self, uc, *_):                                      # (1.3's fire at a sprint called these two; since 1.6 nothing of the mod's does: the tests say so)
+        self.arm_calls.append(dict(arm=uc.reg_read(X[2]) & 0xffffffff, ped=uc.reg_read(X[3]))); self._ret(uc)
     def g_abort_arm(self, uc, *_):
-        self.arm_aborts.append((uc.reg_read(X[1]) & 0xffffffff, uc.reg_read(X[2])))
-        if not self.real_abort:                                         # (1.4.2: or the game's own code runs on, with what is in memory)
-            self._ret(uc)
+        self.arm_aborts.append((uc.reg_read(X[1]) & 0xffffffff, uc.reg_read(X[2]))); self._ret(uc)
     def g_regref(self, uc, *_): self._ret(uc)                           # (CEntity::RegisterReference: the game's reference lists are not laid out here)
     def g_damage(self, uc, *_):
         calc = uc.reg_read(X[0])
@@ -775,7 +770,7 @@ los_to_cj = [c for c in e.los_calls if abs(c[1][2] - 1.6) < .01 and abs(c[1][0])
 assert los_to_cj and all(c[2] in ([1, 1, 0, 1, 0, 0, 0], [1, 0, 0, 1, 0, 0, 0]) for c in e.los_calls) and all(c[2][1] == 1 for c in los_to_cj), e.los_calls[:3]   # (1.1: the map's own rays leave cars out)
 assert any(abs(c[0][0] - 4) < .01 and abs(c[1][0] - 20) < .01 for c in e.los_calls), 'the core\'s question "does our guard see the Balla" is answered with a real ray'
 e.los_calls.clear(); e.gunshot(driver, (0., 0.5, 1.)); e.frame(n=4)          # (1.3: the man at the wheel opens fire - now he is somebody to see)
-to_driver = [c for c in e.los_calls if abs(c[1][0] + 24) < 1.5]
+to_driver = [c for c in e.los_calls if abs(c[1][0] + 24) < 1.5 and abs(c[1][1] - 0.3) < 1.5 and c[1][2] > 1.0]   # (1.6: cover for CJ is asked about 23 m out too - those rays end at the ground; the man at the wheel is at chest height)
 assert to_driver and all(c[3] == rammer for c in to_driver) and all(c[3] == 0 for c in e.los_calls if c not in to_driver) and e.r64(GTA + IGNORE_ENTITY) == 0x5e17, 'a ray to the man at the wheel passes through his own car, every other ray ignores nothing, and the game\'s own value is put back'
 e.share(HC_POLICE, 1); e.share(HC_MISSION, 1); e.frame(n=1)
 s = replay_tool.replay(e.save())[2][-1]['snapshot']
@@ -1041,7 +1036,7 @@ e.w32(gang + 0x54c, 1)
 e.gunshot(gang, (0., 0.5, 1.)); until_round()
 e.polys.clear(); e.frame(n=1)
 assert not e.polys, 'nothing drawn'
-e2 = Emu(tweak=lambda e: e.fs.__setitem__('/storage/emulated/0/Android_unprotected/data/com.rockstargames.gtasa/configs/net.helicover.brain.ini', b'[Preferences]\nSettingsVersion = 15\nMarkers = 1\n'))
+e2 = Emu(tweak=lambda e: e.fs.__setitem__('/storage/emulated/0/Android_unprotected/data/com.rockstargames.gtasa/configs/net.helicover.brain.ini', b'[Preferences]\nSettingsVersion = 16\nMarkers = 1\n'))
 e2.load(); e2.frame(n=3)
 assert not e2.polys and e2.items == [], 'a settings file of an earlier version with the markers on: still nothing drawn, nothing in Mods Settings'
 passed('1.3: the markers are gone - nothing is drawn, even when the settings file of an earlier version says Markers = 1, and the brain puts nothing in Mods Settings')
@@ -1319,14 +1314,14 @@ passed('0.8 the game\'s own knowledge: CJ swimming (the game\'s water level aske
 e = Emu(tweak=lambda e_: e_.uc.mem_write(GTA + F_SAY, b'\0\0\0\0')); lg_ = e.load()
 assert "the commander's voice off (the code differs)" in lg_ and 'the brain is running' in lg_
 CFG_ = '/storage/emulated/0/Android_unprotected/data/com.rockstargames.gtasa/configs/net.helicover.brain.ini'
-e = Emu(); e.fs[CFG_] = b'[Preferences]\nSettingsVersion = 15\nMarkers = 0\nLastCrash = 22\nWaterOff = 1\n'; lg_ = e.load(); e.frame(n=3)
+e = Emu(); e.fs[CFG_] = b'[Preferences]\nSettingsVersion = 16\nMarkers = 0\nLastCrash = 22\nWaterOff = 1\n'; lg_ = e.load(); e.frame(n=3)
 assert 'water level off (the game crashed in it once)' in lg_ and e.water_calls == 0
 passed('0.8 safety: each of those parts is checked against the game\'s code at the start and left out when it differs; a part the game once crashed in (water level, voice) stays off from the next start on')
 # 1.5: a settings file of an older version (the player's after the crash in step 28: RunFireOff = 1, LastCrash = 28, the old numbers) is not read -
 # the new version mends what crashed; the file is written anew with this version's number and its own values
 e = Emu(); e.fs[CFG_] = b'[Preferences]\nLastCrash = 28\nRunFireOff = 1\nWaterOff = 1\n\n[Tactics]\nOuterPeaceM = 15\n'; lg_ = e.load(); e.frame(n=3)
 cfg_ = e.fs[CFG_].decode()
-assert 'written by an older version: not read' in lg_ and 'water level off' not in lg_ and e.water_calls > 0 and 'RunFireOff' not in cfg_ and 'SettingsVersion = 15' in cfg_ and 'OuterPeaceM = 21' in cfg_, (cfg_[:400], [l_ for l_ in lg_.splitlines() if 'settings' in l_])
+assert 'written by an older version: not read' in lg_ and 'water level off' not in lg_ and e.water_calls > 0 and 'RunFireOff' not in cfg_ and 'SettingsVersion = 16' in cfg_ and 'OuterPeaceM = 22' in cfg_, (cfg_[:400], [l_ for l_ in lg_.splitlines() if 'settings' in l_])
 passed('1.5: a settings file written by an older version (crash switches of crashes that version had, its built-in numbers) is not read - the new version starts with its own and writes the file anew, numbered')
 
 # ------------------------------------------------------------------ 2.0 beta 6: the commander's voice - heard
@@ -1385,11 +1380,11 @@ assert not e.lps_calls and re.search(r'- the game rests \w+ \(said by somebody a
 # safety: a table not where the code reads it - no voice; VoiceOff / a crash in it (step 21) - no voice from the next start on
 e = Emu(real_say=True, tweak=lambda e_: e_.w64(GTA + 0x851d88, GTA + 0x880c94)); lg_ = e.load()
 assert "the commander's voice off (the code differs)" in lg_ and 'the brain is running' in lg_
-e = Emu(); e.fs[CFG_] = b'[Preferences]\nSettingsVersion = 15\nVoiceOff = 1\n'; lg_ = e.load()
+e = Emu(); e.fs[CFG_] = b'[Preferences]\nSettingsVersion = 16\nVoiceOff = 1\n'; lg_ = e.load()
 s1 = e.ped(4, 2, pedtype=8, weapon=31); gang = e.ped(20, 0, pedtype=7, weapon=30, face=(-1., 0.)); e.share(HC_STATE + 71, e.handle(s1)); e.share(HC_HELLO, 0)
 e.frame(n=8); e.gunshot(gang, (0., 0.5, 1.)); e.frame(n=60, hud=False)
 assert "the commander's voice off (the game crashed in it once)" in lg_ and not e.say_calls
-e = Emu(); e.fs[CFG_] = b'[Preferences]\nSettingsVersion = 15\nMarkers = 0\nLastCrash = 21\n'; lg_ = e.load()
+e = Emu(); e.fs[CFG_] = b'[Preferences]\nSettingsVersion = 16\nMarkers = 0\nLastCrash = 21\n'; lg_ = e.load()
 assert b'VoiceOff = 1' in e.fs[CFG_], e.fs[CFG_]
 passed('2.0 beta 6, the voice: the soldier keeps his own army voice; the game\'s refusals (all speech off) and rests (the same line said by anybody within ~7 s) are counted and told in the log; a table not where the game\'s code reads it - no voice; VoiceOff and a crash in it (step 21) keep it off')
 
@@ -1445,12 +1440,12 @@ v = post(e, g1)
 assert 'the body: off (the code differs): the scripts walk the guards' in lg_ and v[1] in (1, 2, 3, 4) and not e.new_tasks and 'the brain is running' in lg_, (v, lg_[-300:])
 head, text, ticks = replay_tool.replay(e.save())
 assert ticks[-1]['snapshot'].body == 0 and all(t['match'] for t in ticks)
-e, (g1,), lg_ = detail_world(cfg=b'[Preferences]\nSettingsVersion = 15\nMarkers = 0\nLastCrash = 23\n')
+e, (g1,), lg_ = detail_world(cfg=b'[Preferences]\nSettingsVersion = 16\nMarkers = 0\nLastCrash = 23\n')
 v = post(e, g1)
 assert 'from now on the scripts walk the guards' in lg_ and not e.new_tasks and b'BodyOff = 1' in e.fs[CFG_] and v[1] != 5, (v, e.fs[CFG_])
-e, (g1,), lg_ = detail_world(cfg=b'[Preferences]\nSettingsVersion = 15\nMarkers = 0\nBodyOff = 1\n')
+e, (g1,), lg_ = detail_world(cfg=b'[Preferences]\nSettingsVersion = 16\nMarkers = 0\nBodyOff = 1\n')
 assert 'the body: off (the game crashed in it once)' in lg_ and post(e, g1)[1] != 5 and b'BodyOff = 1' in e.fs[CFG_]
-e, (g1,), lg_ = detail_world(cfg=b'[Preferences]\nSettingsVersion = 15\nMarkers = 0\nLastCrash = 24\n')
+e, (g1,), lg_ = detail_world(cfg=b'[Preferences]\nSettingsVersion = 16\nMarkers = 0\nLastCrash = 24\n')
 assert b'MapOff = 1' in e.fs[CFG_] and e.ground_calls == 0 and post(e, g1)[1] != 5, e.fs[CFG_]
 passed('1.0 the body, safety: every function is checked by its first words - when one differs the mod does not walk anybody and the scripts do it as before; a crash while giving a task (step 23) or in a ground question (step 24) turns that part off for good (BodyOff / MapOff in the settings file)')
 # the map: the ground cell by cell, what stands between cells, straight legs; a high place for the marksman
@@ -1492,11 +1487,11 @@ assert SUM in e.fs and b'guard farther than 8 m from his post while CJ stands' i
 passed('1.0 the mode: PROTECT / ASSAULT is read from the scripts\' shared value, "to me" is taken once and holds ten seconds; command 7 tells the scripts the mode, the squad\'s task, the marksman\'s roof and whether the mod walks the men; the log has a line for the squad, the body and the map every second and every guard\'s action, stage, reason and the game\'s own task types; mods/hcbrain_summary.txt keeps the session\'s numbers (far from post, stuck, sprint, changes of action)')
 
 # ------------------------------------------------------------------ 1.1: the mod's own gun task, magazines, the game AI kept off, ropes, the settings file
-def fight_world(gun=True, cfg=None, far=False):
-    e = Emu(gun=gun)
+def fight_world(gun=True, cfg=None, far=False, tweak=None, at=None):
+    e = Emu(gun=gun, tweak=tweak)
     if cfg: e.fs[CFG_] = cfg
     lg_ = e.load()
-    g1 = e.ped(9 if far else 1.5, 6 if far else -1., pedtype=8, weapon=31)
+    g1 = e.ped(*(at or ((9, 6) if far else (1.5, -1.))), pedtype=8, weapon=31)
     e.share(HC_STATE + 71, e.handle(g1)); e.share(HC_HELLO, 0); e.share(HC_MODE, 0); e.share(HC_RECALL, 0)
     e.frame(n=6, hud=False)
     gang = e.ped(18, 0, pedtype=7, weapon=30, face=(-1., 0.))
@@ -1542,121 +1537,265 @@ for k in range(30):
     e.frame(ms=50, hud=False); squad(e, g1)
 assert len(e.reloads) == 1 and e.reloads[0] == (g1 + 0x730, g1) and e.r32(g1 + 0x738) > 20, e.reloads
 passed('1.1 magazines: with 3 rounds left the guard takes the core\'s turn to reload - the mod calls the game\'s CWeapon::Reload for his weapon once and he fires on with a full magazine')
-# 1.3 fire on the move (the player: "nobody ever fired on the move - backing away, firing"; then: "the game does not fire at a
-# sprint? get out of the game's frame"). A guard on his way with an attacker within 35 m goes facing him: at a walk or a run the
-# game's go-and-shoot task (its point moved, not a new task); at a sprint a plain sprint and the mod's own fire - his arms on the
-# man by the game's own arm-pointing, his weapon fired by the game's weapon code, rounds out of his magazine; nothing with CJ
-# in the line. A man on his way never has the mod's gun task in his attack slot (1.2: it held him still).
-e, g1, gang, lg13 = fight_world(far=True)
-assert 'at a sprint the mod\'s own (arms on the man, his weapon fired)' in e.log() and '(its point moved, not a new task)' in e.log(), e.log()[-1200:]
-mgr = e.r64(g1 + 0x538) + 8
-clip0 = e.r32(g1 + 0x738)
-for k in range(30):
-    if k % 9 == 0: e.gunshot(gang, (0., 0.5, 1.))
-    e.frame(ms=50, hud=False); st_ = squad(e, g1); v = post(e, g1)
-kinds = [t['kind'] for t in e.new_tasks]
-assert e.r64(mgr + 0x28) == 0, 'nothing in his attack slot while he walks'
-sprinted = [t for t in e.new_tasks if t['kind'] == 'goto' and t['ms'] == 7]
-shot = [t for t in e.new_tasks if t['kind'] == 'shoot']
-assert sprinted or shot, kinds
-if sprinted:
-    arms = [c for c in e.arm_calls if c['ped'] == g1]
-    gp = e.pos(gang) if hasattr(e, 'pos') else None
-    assert arms and all(c['self_'] == GTA + 0xc98340 and c['ent'] == 0 and c['bone'] == 0xffffffff and c['blend'] == 100.0 for c in arms), arms[:2]
-    assert {c['arm'] for c in arms} == {0, 1}, 'an M4 is two-handed: both arms on him'
-    assert all(abs(c['pos'][0] - 18) < .5 and abs(c['pos'][1]) < .5 for c in arms), 'on the man (his chest)'
-    rounds = [c for c in e.fire_calls if c['ped'] == g1]
-    assert rounds and all(abs(c['target'][0] - 18) < 6 and abs(c['target'][1]) < 6 for c in rounds) and all(c['ik'] & 1 and c['acc'] == 100 for c in rounds), rounds[:2]
-    assert e.r32(g1 + 0x738) < clip0, 'the rounds came out of his magazine'
-    e.move(e.cj, 13, 3.2); n0 = len([c for c in e.fire_calls if c['ped'] == g1])        # CJ steps into his line
-    for k in range(6):
-        e.frame(ms=50, hud=False); squad(e, g1); post(e, g1)
-    assert len([c for c in e.fire_calls if c['ped'] == g1]) == n0, 'CJ in the line: not a round'
-    e.move(e.cj, 0, 0)
-    how = 'at a sprint: arms on him, %d rounds out of his magazine, none with CJ in the line' % len(rounds)
-else:
-    how = 'at a run: the game\'s go-and-shoot'
-e, g1, gang, _ = fight_world(gun=False, far=True)
-for k in range(20):
-    if k % 9 == 0: e.gunshot(gang, (0., 0.5, 1.))
-    e.frame(ms=50, hud=False); squad(e, g1); post(e, g1)
-sh = [t for t in e.new_tasks if t['kind'] == 'shoot']
-assert len(sh) <= 2, ('a go-and-shoot task at the same man is moved on, not made anew', [t['kind'] for t in e.new_tasks])
-passed('1.3 fire on the move: a guard on his way with an attacker near goes facing him - %s; a go-and-shoot task is moved on, not made anew; nothing ever in his attack slot while he walks' % how)
-# 1.4.2 the player's crash: signal 11, pc CTaskSimpleIKManager::GetTaskAtSlot+4, lr IKChainManager_c::AbortPointArm+0x2c, fault
-# address 0x18, inside the brain 28 (the end of a guard's sprint fire). The game's AbortPointArm takes the ped's IK task (CTaskManager
-# secondary slot 5) without looking whether it is there - and the game ends that task by itself once its chains are done, or never
-# makes it for a man off the screen. Here the game's OWN AbortPointArm runs on the emulated memory (GetTaskSecondary, GetTaskAtSlot,
-# CTaskSimpleIKChain::BlendOut are the real code): a call for a man without his IK task faults exactly as on the player's tablet.
-def sprint_world(tweak=None):
-    e, g1, gang, _ = fight_world(far=True); e.real_abort = True
-    if tweak: tweak(e, g1)
-    for k in range(30):
-        if k % 9 == 0: e.gunshot(gang, (0., 0.5, 1.))
-        e.frame(ms=50, hud=False); squad(e, g1); post(e, g1)
-        if [c for c in e.arm_calls if c['ped'] == g1] and k >= 8: break
+# 1.6 aim-walk (the player, from a recording: "they fire standing bolt upright, and on the move they stroll with the weapon down or run
+# sideways - I want them to move the way CJ does when he aims"). A guard on his way with an attacker within 35 m goes FACING him
+# (hcb_post.face): he keeps the mod's gun task, gets NO walk of the game's, and every frame the mod tells that gun task where to step
+# with the game's own CTaskSimpleUseGun::ControlGunMove - whose real code runs here and stores the step in the task (+0x1c to his
+# right, +0x20 to his back, +0x12 "asked this frame"). 1.3's ways are gone: no go-and-shoot task, no arm-pointing, no round fired by
+# the mod. What the emulator cannot show: the GunMove animations and the motion they give him.
+def xy(e, ped): return struct.unpack('<2f', bytes(e.uc.mem_read(e.r64(ped + 0x18) + 0x30, 8)))
+def turn(e, ped, face): e.wf(e.r64(ped + 0x18), face[1], -face[0], 0., 0., face[0], face[1], 0., 0.)     # (his matrix: right, forward)
+def step_of(e, task): return (e.rf(task + 0x1c), e.rf(task + 0x20), bytes(e.uc.mem_read(task + 0x12, 1))[0])
+def aim_world(face=None, looks=6, step=100., **kw):
+    e, g1, gang, lg_ = fight_world(far=True, **kw)
+    if face: turn(e, g1, face)
+    e.wf(GTA + TIME_STEP, step)                                       # (CTimer::ms_fTimeStep: 100 = the game's ControlGunMove takes the whole step at once)
+    aim_looks(e, g1, gang, looks)
+    return e, g1, gang, lg_
+def aim_looks(e, g1, gang, looks, ms=50, walk=0.):
+    v = None
+    for k in range(looks):
+        if k % 9 == 0 and gang: e.gunshot(gang, (0., 0.5, 1.))
+        e.frame(ms=ms, hud=False); squad(e, g1); v = post(e, g1)
+        if walk and v[1] == 5:                                        # (the emulator moves nobody: the test walks him towards his place)
+            (px, py), (tx, ty) = xy(e, g1), (fl(v[2]), fl(v[3])); d = math.dist((px, py), (tx, ty))
+            if d > 0.05: e.move(g1, px + (tx - px) / d * min(d, walk), py + (ty - py) / d * min(d, walk))
+    return v
+def his_post(e, g1):
+    head, text, ticks = replay_tool.replay(e.save())
+    assert all(t['match'] for t in ticks)
+    o = ticks[-1]['out']
+    return next(o.posts[i] for i in range(o.n_posts) if o.posts[i].who == e.handle(g1))
+e, g1, gang, lg_ = aim_world()
+assert "aim-walk (a guard on his way facing his man: weapon up, stepping by the game's own gun-move, firing): on" in lg_, [l_ for l_ in lg_.splitlines() if 'aim-walk' in l_]
+mgr = e.r64(g1 + 0x538) + 8; guns = [t for t in e.new_tasks if t['kind'] == 'gun']
+assert [t['kind'] for t in e.new_tasks] == ['gun'] and e.r64(mgr + 0x28) == guns[0]['task'] and e.r64(mgr + 24) == 0, ('the gun task in his attack slot, nothing in his main slot: no walk of the game\'s', e.new_tasks)
+assert not e.arm_calls and not [c for c in e.fire_calls if c['ped'] == g1], 'no arm-pointing and no round of the mod\'s own (1.3\'s fire at a sprint is gone)'
+mv = [m for m in e.gun_moves if m['task'] == guns[0]['task']]; n_all = len(e.gun_moves)
+po = his_post(e, g1)
+assert po.face == 1 and po.phase <= h.HCB_PH_MOVING, (po.face, po.phase, po.act)
+pos, to = xy(e, g1), (po.via.x, po.via.y); d_ = math.dist(pos, to); u = ((to[0] - pos[0]) / d_, (to[1] - pos[1]) / d_)
+assert d_ > 3, (pos, to)
+assert len(mv) >= 5 and len(mv) == n_all, ('every frame, on his gun task only', len(mv), n_all)
+assert all(b['t'] - a['t'] == 50 for a, b in zip(mv, mv[1:])), 'once a frame'
+# the step: he faces north (the test's default), the point is where the brain's way goes next - x = what lies to his right, y = to his back
+want = (u[0], -u[1])
+assert all(math.dist(m['v'], want) < 1e-3 for m in mv[-3:]), (mv[-1]['v'], want)
+assert abs(math.hypot(*mv[-1]['v']) - 1.) < 1e-3, 'a step of length 1'
+sx, sy, asked = step_of(e, guns[0]['task'])
+assert math.dist((sx, sy), want) < 1e-3 and asked == 1, ('stored by the game\'s own ControlGunMove: +0x1c, +0x20, +0x12', sx, sy, asked)
+# with it, every frame: the game's ControlGun on the same task (in control this frame - without it the game's ProcessPed zeroes the
+# step), fire allowed = FIREBURST at his man; the heading he is to take is the bearing of his man; his move state "still"
+gp = xy(e, gang)
+assert all(m['ctl'] == (guns[0]['task'], g1, gang, 3) and m['n_ctl'] > mv[i - 1]['n_ctl'] for i, m in enumerate(mv) if i), mv[-1]
+assert all(abs(m['heading'] - math.atan2(-(gp[0] - pos[0]), gp[1] - pos[1])) < 0.01 and m['state'] == 1 for m in mv), (mv[-1], math.atan2(-(gp[0] - pos[0]), gp[1] - pos[1]))
+clip = e.r32(g1 + 0x738); aim_looks(e, g1, gang, 3)
+assert e.r32(g1 + 0x738) < clip, 'rounds leave his magazine while he steps'
+# the same point seen by a man who faces it / has it at his back / to his right / to his left: forward, backward, right, left
+for name, face, want in (('ahead', u, (0., -1.)), ('behind', (-u[0], -u[1]), (0., 1.)), ('right', (-u[1], u[0]), (1., 0.)), ('left', (u[1], -u[0]), (-1., 0.))):
+    e2, g2, gang2, _ = aim_world(face=face)
+    t2 = [t for t in e2.new_tasks if t['kind'] == 'gun'][0]['task']
+    sx, sy, asked = step_of(e2, t2)
+    assert e2.gun_moves and math.dist(e2.gun_moves[-1]['v'], want) < 2e-3 and math.dist((sx, sy), want) < 2e-3 and asked == 1, (name, e2.gun_moves[-1:], sx, sy, asked)
+    assert math.dist(xy(e2, g2), pos) < 1e-6 and e2.r64(e2.r64(g2 + 0x538) + 8 + 24) == 0, name
+# the game's own pace: with the game's time step of one frame at 50 a second (1.0) each call moves the stored step 0.07 towards the asked one
+e2, g2, gang2, _ = aim_world(step=1., looks=4)
+t2 = [t for t in e2.new_tasks if t['kind'] == 'gun'][0]['task']; n2 = len(e2.gun_moves); sx, sy, asked = step_of(e2, t2)
+assert n2 >= 3 and abs(abs(sx) - 0.07 * n2) < 1e-4 and abs(abs(sy) - 0.07 * n2) < 1e-4 and sx * u[0] > 0 and sy * -u[1] > 0, (n2, sx, sy, u)
+passed('1.6 aim-walk: a guard on his way facing his man (hcb_post.face, a living target from the squad\'s order, a firearm) gets NO walk of the game\'s - nothing in his main slot - and keeps the mod\'s gun task; every frame the mod calls the game\'s ControlGun (FIREBURST at his man: fire allowed) and ControlGunMove on that task, sets the heading he is to take to his man\'s bearing and his move state to "still"; the game\'s OWN ControlGunMove runs and stores the step (+0x1c, +0x20, +0x12 = 1): a point ahead of him (0, -1), behind (0, +1), to his right (+1, 0), to his left (-1, 0), length 1; at the game\'s own time step 0.07 a call; rounds leave his magazine while he steps; no go-and-shoot task, no arm-pointing, no round fired by the mod itself')
+# fire not allowed (CJ steps into his line): the same task is told to AIM and he steps on; the man dies: a plain walk, the gun task off
+e, g1, gang, _ = aim_world()
+t1 = [t for t in e.new_tasks if t['kind'] == 'gun'][0]['task']; mgr = e.r64(g1 + 0x538) + 8
+e.move(e.cj, 13.5, 3.0); n0 = len(e.gun_moves); aim_looks(e, g1, 0, 4)
+late = e.gun_moves[n0 + 2:]
+assert late and all(m['ctl'][3] == 1 and m['ctl'][2] == gang and math.hypot(*m['v']) > 0.99 for m in late), ('CJ in the line: AIM, not FIREBURST - and he steps on', e.gun_moves[-2:])
+e.move(e.cj, 0, 0); aim_looks(e, g1, gang, 3)
+assert e.gun_moves[-1]['ctl'][3] == 3, 'CJ out of the line: fire again'
+# arrived: within 0.4 m of his place the step asked is nothing (0, 0) - and once the brain has him standing nothing is asked at all
+v = post(e, g1); at = (fl(v[2]), fl(v[3])); n0 = len(e.gun_moves)
+e.move(g1, at[0] + 0.25, at[1] + 0.2); e.frame(ms=50, n=3, hud=False)            # (three frames before the next look)
+near = e.gun_moves[n0:]
+assert len(near) == 3 and all(m['v'] == (0., 0.) for m in near) and step_of(e, t1) == (0., 0., 1), (near, step_of(e, t1))
+aim_looks(e, g1, gang, 12); n0 = len(e.gun_moves); v = post(e, g1); e.frame(ms=50, n=6, hud=False)
+assert v[1] == 0 and len(e.gun_moves) == n0 and e.r64(mgr + 24) == 0, ('at his place: the script has him again (0 = stay), no step is asked, no walk', v, len(e.gun_moves) - n0)
+# his man dies on the way: a plain walk (the game's go-to task), and the gun task is taken off him as off any man on his way
+e, g1, gang, _ = aim_world()
+t1 = [t for t in e.new_tasks if t['kind'] == 'gun'][0]['task']; mgr = e.r64(g1 + 0x538) + 8
+e.w32(gang + 0x54c, 55); aim_looks(e, g1, 0, 8); n0 = len(e.gun_moves); aim_looks(e, g1, 0, 4)
+assert [t['kind'] for t in e.new_tasks] == ['gun', 'goto'] and e.r64(mgr + 24) == e.new_tasks[1]['task'] and e.r64(mgr + 0x28) == 0 and len(e.gun_moves) == n0, ([t['kind'] for t in e.new_tasks], len(e.gun_moves) - n0)
+# a man on his way WITHOUT "face" (his man is 48 m off - the core has him face only a man within 35 m): the plain walk as before, never a step
+e, g1, gang, _ = fight_world(far=True, at=(-30., 0.)); e.wf(GTA + TIME_STEP, 100.); mgr = e.r64(g1 + 0x538) + 8
+aim_looks(e, g1, gang, 12)
+po = his_post(e, g1)
+assert po.face == 0 and po.phase <= h.HCB_PH_MOVING, (po.face, po.phase)
+assert [t['kind'] for t in e.new_tasks if t['kind'] != 'gun'] == ['goto'] and e.r64(mgr + 24) and e.r64(e.r64(mgr + 24)) == GTA + VT_GOTO and not e.gun_moves and e.r64(mgr + 0x28) == 0, ([t['kind'] for t in e.new_tasks], len(e.gun_moves))
+passed('1.6 aim-walk, the rest of the way: fire not allowed (CJ in his line) - the same task is told AIM and he steps on; within 0.4 m of his place the step asked is (0, 0); standing at his place nothing is asked and no walk is given; his man dead - the game\'s plain go-to task and the gun task taken off him; a man on his way without "face" walks plainly as before 1.6 (go-to task, no gun task, ControlGunMove never called)')
+# the watch: the step is asked and he does not get on - 1.5 s of stepping without 0.4 m got on in it, or a plain walk for 6 s, for this
+# man only; then aim-walk is tried again. Only what he gets on WHILE he steps counts: here the test carries him on in frames in which
+# he is not stepped (so the core sees a man who gets on), and the emulator moves nobody while he steps.
+def carried(e, g1, gang, cycles):
+    for k in range(cycles):
+        v = aim_looks(e, g1, gang, 3)
+        e.uc.mem_write(g1 + 0x587, b'\x04'); e.frame(ms=50, hud=False)          # (one frame not stepped: a ducking man is not)
+        (px, py), (tx, ty) = xy(e, g1), (fl(v[2]), fl(v[3])); d = math.dist((px, py), (tx, ty))
+        if v[1] == 5 and d > 1.5: e.move(g1, px + (tx - px) / d * 0.2, py + (ty - py) / d * 0.2)
+        e.uc.mem_write(g1 + 0x587, b'\x00')
+e, g1, gang, _ = aim_world(looks=4, at=(-9., 14.)); mgr = e.r64(g1 + 0x538) + 8
+FELL = 'did not get on (under 0.4 m in 1.5 s of stepping): a plain walk for 6 s'
+for k in range(12):
+    if FELL in e.log(): break
+    carried(e, g1, gang, 5)
+fell = [l_ for l_ in e.log().splitlines() if FELL in l_]
+assert len(fell) == 1 and 'aim-walk: guard1#' in fell[0], (fell, [m['t'] for m in e.gun_moves][::10], [t['kind'] for t in e.new_tasks])
+t_fall = round(float(fell[0][1:fell[0].index('s]')]) * 1000)
+stepped = sorted({m['t'] for m in e.gun_moves if m['t'] <= t_fall and math.hypot(*m['v']) > 0.5})
+assert 2000 <= len(stepped) * 50 <= 2600 and stepped[-1] - stepped[0] >= 2500, ('1.5 s between stepping frames (two of his three frames in four), 2.5 s and more on the clock', len(stepped), stepped[0], stepped[-1], t_fall)
+aim_looks(e, g1, gang, max(1, (t_fall + 5800 - e.r32(GTA + TIME_MS)) // 50), walk=0.02)     # (till 5.8 s after it: the plain walk)
+goto = [t for t in e.new_tasks if t['kind'] == 'goto']
+assert not [m for m in e.gun_moves if m['t'] > t_fall] and goto and e.r64(mgr + 24) == goto[-1]['task'] and e.r64(mgr + 0x28) == 0, ('no step asked for 6 s: the game\'s go-to task, the gun task off', len(goto))
+n0 = len(e.gun_moves); aim_looks(e, g1, gang, 30, walk=0.02)         # (aim-walk again - the walk is asked to stop and taken out of his main slot)
+assert len(e.gun_moves) > n0 + 10 and e.gun_moves[n0]['t'] >= t_fall + 6000 and (mgr, 0, 3) in e.set_tasks and [a_ for a_ in e.abort_calls if a_[0] == goto[-1]['task'] and a_[1] == g1], (len(e.gun_moves) - n0, e.set_tasks[-3:])
+e.frame(ms=100, n=35, hud=False); lg_ = e.log()                    # (the log is written out)
+assert re.search(r'aim-walk ON: frames [1-9]\d* \(\d+ s\) rounds on the move [1-9]\d* did not get on [1-9]', lg_), [l_ for l_ in lg_.splitlines() if 'aim-walk ON' in l_][-1:]
+e, g1, gang, _ = aim_world(looks=4)
+aim_looks(e, g1, gang, 50, walk=0.06)                                # (he gets on: 1.2 m a second)
+assert 'did not get on (under' not in e.log() and not [t for t in e.new_tasks if t['kind'] == 'goto'] and len(e.gun_moves) >= 45, ([t['kind'] for t in e.new_tasks], len(e.gun_moves))
+# the core's own "he is blocked - round it" (act SIDESTEP): a plain walk, never an aim-walk, even when the post still says "face"
+e, g1, gang, _ = aim_world(looks=4); mgr = e.r64(g1 + 0x538) + 8; side = 0
+for k in range(8):                                                   # (on the spot: the core notices)
+    aim_looks(e, g1, gang, 5); po = his_post(e, g1)
+    if po.act == h.HCB_ACT_SIDESTEP:
+        aim_looks(e, g1, 0, 1); n_ = len(e.gun_moves); e.frame(ms=50, n=2, hud=False); po = his_post(e, g1)
+        if po.act == h.HCB_ACT_SIDESTEP:
+            side += 1
+            assert len(e.gun_moves) == n_ and e.r64(mgr + 24) and e.r64(e.r64(mgr + 24)) == GTA + VT_GOTO, 'getting round something: the plain walk, no step asked'
+assert side, 'the core had him get round something'
+passed('1.6 aim-walk, the watch: a man whose step is asked and who has not got 0.4 m on in 1.5 s of stepping (what he is carried on in the frames between does not count) gets the plain walk for 6 s (the game\'s go-to task, the gun task off, no step asked, the log says who) and aim-walk again after that (the walk asked to stop and taken out of his main slot with the game\'s SetTask); a man who gets on is never touched; the core\'s "getting round something" (act SIDESTEP) is a plain walk, never an aim-walk; the second\'s log line counts frames, seconds, rounds on the move and men who did not get on')
+# care: never a task pointer of a man who is dead, in a car, on a rope / in the air, ducking, gone, or whose attack slot holds anything
+# but the gun task the mod gave him
+def no_step(what, frames=6):
+    e, g1, gang, _ = aim_world(); n0 = len(e.gun_moves); c0 = len(e.gun_cmds)
+    assert n0 >= 4
+    what(e, g1); e.frame(ms=50, n=frames, hud=False)
+    assert len(e.gun_moves) == n0 and len(e.gun_cmds) == c0, (len(e.gun_moves) - n0, len(e.gun_cmds) - c0)
     return e, g1, gang
-def quiet(e, n=16):                                                  # (no more post questions: his sprint fire ends 400 ms later)
-    for _ in range(n): e.frame(ms=50, hud=False)
-faults = []
-e, g1, gang = sprint_world()
-intel = e.r64(g1 + 0x538); ik = e.r64(intel + 0x58)
-assert [c for c in e.arm_calls if c['ped'] == g1] and ik and e.r64(ik) == GTA + VT_IK_MAN and e.r64(ik + 0x18) and e.r64(ik + 0x20), 'sprinting at his man: both arms on him, the IK task and two arm chains made by PointArm'
-# the crash, on the game's own code: AbortPointArm for a man whose IK task the game has ended
-e.uc.hook_add(UC_HOOK_MEM_READ_UNMAPPED, lambda uc, acc, addr, size, val, _: faults.append((addr, uc.reg_read(UC_ARM64_REG_PC) - GTA)) and False)
-e.w64(intel + 0x58, 0)
-try:
-    e.call(GTA + F_ABORT_ARM, x=(GTA + IK_MAN, 0, g1, 200)); crashed = False
-except UcError:
-    crashed = True
-assert crashed and faults == [(0x18, 0x5f6ff4)], faults
-# the mod: he runs off the screen (the game's PointArm makes nothing there) and the game ends his IK task; then his sprint fire ends
-e.on_screen = False; n0, na = len(e.arm_aborts), len(e.arm_calls)
-quiet(e)                                                             # (what 1.4 did here: AbortPointArm(0) and (1) -> the same fault)
-assert [c for c in e.arm_calls[na:] if c['ped'] == g1], 'PointArm was still asked while his sprint fire lasted (nothing made: off the screen)'
-assert len(e.arm_aborts) == n0 and faults == [(0x18, 0x5f6ff4)], ('the IK task is gone: the mod does not call AbortPointArm', e.arm_aborts[n0:], faults)
-# the IK task still there: the game's own AbortPointArm runs and blends his arms out
-e, g1, gang = sprint_world()
-ik = e.r64(e.r64(g1 + 0x538) + 0x58); chains = [e.r64(ik + 0x18), e.r64(ik + 0x20)]
-n0 = len(e.arm_aborts); quiet(e)
-ab = [a for a in e.arm_aborts[n0:] if a[1] == g1]
-assert sorted(a[0] for a in ab) == [0, 1] and all(e.r32(c + 0x68) == 1 for c in chains), (ab, [e.r32(c + 0x68) for c in chains])   # (m_isBlendingOut, set by the game's BlendOut)
-assert all(e.r32(GTA + TIME_MS) - 800 <= e.r32(c + 0x5c) - 200 <= e.r32(GTA + TIME_MS) for c in chains), 'blended out over 200 ms from the moment it was asked'
-# the IK task there but one arm's chain gone (that arm's blend-out has ended): only the other arm is asked
-e, g1, gang = sprint_world()
-ik = e.r64(e.r64(g1 + 0x538) + 0x58); e.w64(ik + 0x20, 0); e.on_screen = False     # (off the screen: PointArm does not make it again)
-n0 = len(e.arm_aborts); quiet(e)
-assert [a[0] for a in e.arm_aborts[n0:] if a[1] == g1] == [0]
-# deleted in the middle of his sprint fire: nothing of his is touched
-e, g1, gang = sprint_world()
-na, nb = len(e.arm_calls), len(e.arm_aborts)
-e.uc.mem_write(e.ped_flags + (g1 - e.ped_objs) // PED_STRIDE, b'\x80'); quiet(e)
-assert not [c for c in e.arm_calls[na:] if c['ped'] == g1] and not [a for a in e.arm_aborts[nb:] if a[1] == g1]
-# into a car: no arm-pointing while he sits there; his arms are lowered at the end only if the game still has them
-e, g1, gang = sprint_world()
-car = e.veh(9, 7); e.w64(g1 + 0x708, car); e.uc.mem_write(g1 + 0x585, b'\x01')
-e.w64(e.r64(g1 + 0x538) + 0x58, 0)                                  # (the game ends his IK task as he gets in)
-na, nb = len(e.arm_calls), len(e.arm_aborts)
-for k in range(4): e.frame(ms=50, hud=False); post(e, g1)
-quiet(e)
-assert not [c for c in e.arm_calls[na:] if c['ped'] == g1] and not [a for a in e.arm_aborts[nb:] if a[1] == g1]
-# dead: no arm-pointing at him (and the game's own AbortPointArm, if he still has the task, is safe)
-e, g1, gang = sprint_world()
-na = len(e.arm_calls); e.w32(g1 + 0x54c, 55); quiet(e)
-assert not [c for c in e.arm_calls[na:] if c['ped'] == g1]
-# PointArm would have to make his IK task and the game's task pool is full (its CTask::operator new gives 0 and PointArm does not
-# look): the arms are left alone; another kind of task in his IK slot: nothing of the mod's goes near it
-e, g1, gang = sprint_world(lambda e, g1: e.uc.mem_write(e.task_flags, bytes(64)))
-assert not [c for c in e.arm_calls if c['ped'] == g1] and e.r64(e.r64(g1 + 0x538) + 0x58) == 0, 'no room in the task pool: no PointArm'
-quiet(e, 80)
-assert re.search(r'sprint arms: pointed 0 lowered 0 left alone [1-9]', e.log()), [l_ for l_ in e.log().splitlines() if 'sprint arms' in l_][-2:]
-def foreign(e, g1):                                                  # (a task of another kind in his IK slot: a walk's table)
-    e.other = e.alloc(0x40); e.w64(e.other, GTA + VT_GOTO); e.w64(e.r64(g1 + 0x538) + 0x58, e.other)
-e, g1, gang = sprint_world(foreign)
-quiet(e)
-assert not [c for c in e.arm_calls if c['ped'] == g1] and not [a for a in e.arm_aborts if a[1] == g1] and e.r64(e.r64(g1 + 0x538) + 0x58) == e.other
-assert not faults[1:], faults
-passed('1.4.2 the player\'s crash (signal 11 in CTaskSimpleIKManager::GetTaskAtSlot+4, fault address 0x18, from AbortPointArm at the end of a guard\'s sprint fire): reproduced on the game\'s own code - AbortPointArm for a man whose IK task (secondary slot 5) the game has ended reads 0x18; the mod now reads the same fields first (ped +0x538, +0x58 the IK task with its table, +0x18 / +0x20 the arm chains): no IK task - no call; IK task and chains there - the game\'s own AbortPointArm runs and blends both arms out over 200 ms; one chain gone - only the other arm; the man deleted, in a car, dead - nothing; PointArm only when the game has his IK task or room in its task pool to make it; another kind of task in that slot - left alone')
+no_step(lambda e, g1: e.w32(g1 + 0x54c, 55))                         # dead
+def in_car(e, g1): car = e.veh(9, 7); e.w64(g1 + 0x708, car); e.uc.mem_write(g1 + 0x585, b'\x01')
+no_step(in_car)
+def on_rope(e, g1): rope = e.alloc(0x40); e.w64(rope, GTA + VT_ROPE); e.w64(e.r64(g1 + 0x538) + 8 + 24, rope)
+no_step(on_rope)
+no_step(lambda e, g1: e.uc.mem_write(g1 + 0x585, b'\x02'))           # in the air
+no_step(lambda e, g1: e.uc.mem_write(g1 + 0x587, b'\x04'))           # ducking: the game's gun task steps no ducking man
+no_step(lambda e, g1: e.uc.mem_write(e.ped_flags + (g1 - e.ped_objs) // PED_STRIDE, b'\x80'))   # deleted
+def foreign(e, g1): e.other = e.alloc(0x60); e.w64(e.other, GTA + VT_GOTO); e.w64(e.r64(g1 + 0x538) + 8 + 0x28, e.other)   # (a task of another kind in his attack slot)
+e, g1, gang = no_step(foreign)
+assert e.r64(e.r64(g1 + 0x538) + 8 + 0x28) == e.other
+no_step(lambda e, g1: e.w64(e.r64(g1 + 0x538) + 8 + 0x28, 0))        # the game has taken his gun task away
+e, g1, gang = no_step(lambda e, g1: e.w32(g1 + 0x730, 5), frames=2)   # a bat in his hands: no firearm - at the next look the plain walk
+aim_looks(e, g1, gang, 3)
+assert [t['kind'] for t in e.new_tasks][-1] == 'goto'
+# no gun task comes (the game's task pool is full when it is asked for): 0.6 s, then the plain walk - counted as refused
+e, g1, gang, _ = fight_world(far=True); e.wf(GTA + TIME_STEP, 100.); e.pool_full = True
+aim_looks(e, g1, gang, 16); e.pool_full = False; aim_looks(e, g1, gang, 6); e.frame(ms=100, n=12, hud=False)
+assert not e.gun_moves and [t['kind'] for t in e.new_tasks][:1] == ['goto'] and re.search(r'refused \(no gun task\) [1-9]', e.log()), ([t['kind'] for t in e.new_tasks], [l_ for l_ in e.log().splitlines() if 'aim-walk ON' in l_][-1:])
+passed('1.6 aim-walk, care: no ControlGun and no ControlGunMove for a man who is dead, in a car, on a rope, in the air, ducking, deleted, without a firearm, or whose attack slot is empty or holds a task that is not the gun task the mod gave him; when no gun task can be had in 0.6 s he walks plainly and it is counted')
+# safety: a word of the game's gun-move code differs / the animation names are not where they were / AimWalkOff / a crash in it (step 33):
+# off - a facing man walks plainly as a man without "face" (the go-to task, the gun task taken off while he walks), and the log says why
+def plain_instead(lg_, e, g1, gang, why):
+    assert why in lg_, [l_ for l_ in lg_.splitlines() if 'aim-walk' in l_]
+    aim_looks(e, g1, gang, 10); mgr = e.r64(g1 + 0x538) + 8
+    assert his_post(e, g1).face == 1 and not e.gun_moves and [t['kind'] for t in e.new_tasks if t['kind'] != 'gun'] == ['goto'] and e.r64(mgr + 0x28) == 0 and e.r64(mgr + 24), (why, [t['kind'] for t in e.new_tasks], len(e.gun_moves))
+    assert not e.arm_calls and not [c for c in e.fire_calls if c['ped'] == g1] and not [t for t in e.new_tasks if t['kind'] == 'shoot']
+for at_ in (F_GUN_MOVE + 0x10, F_GUN_MOVE + 0x84, 0x5df714, 0x5deae8, 0x5e0b30, 0x596cac, 0x64e0a4):
+    e, g1, gang, lg_ = fight_world(far=True, tweak=lambda e_: e_.uc.mem_write(GTA + at_, b'\x1f\x20\x03\xd5'))
+    plain_instead(lg_, e, g1, gang, "firing): off: he walks plainly, weapon down - the game's gun-move code differs")
+def names_swapped(e_):                                               # (GunMove_FWD and GunMove_BWD the other way round in the game's table)
+    a_, b_ = e_.r64(GTA + ANIM_NAMES_T + 0x32 * 8), e_.r64(GTA + ANIM_NAMES_T + 0x34 * 8); e_.w64(GTA + ANIM_NAMES_T + 0x32 * 8, b_); e_.w64(GTA + ANIM_NAMES_T + 0x34 * 8, a_)
+e, g1, gang, lg_ = fight_world(far=True, tweak=names_swapped)
+plain_instead(lg_, e, g1, gang, "firing): off: he walks plainly, weapon down - the game's animation table differs")
+e, g1, gang, lg_ = fight_world(far=True, cfg=b'[Preferences]\nSettingsVersion = 16\nAimWalkOff = 1\n')
+plain_instead(lg_, e, g1, gang, 'firing): off (the game crashed in it once, or the settings): he walks plainly, weapon down')
+assert b'AimWalkOff = 1' in e.fs[CFG_], e.fs[CFG_]
+e, g1, gang, lg_ = fight_world(far=True, cfg=b'[Preferences]\nSettingsVersion = 16\nMarkers = 0\nLastCrash = 33\n')
+plain_instead(lg_, e, g1, gang, 'the last game crashed while a guard stepped with his weapon up (aim-walk): from now on a guard on his way walks plainly, weapon down (AimWalkOff = 1)')
+assert b'AimWalkOff = 1' in e.fs[CFG_] and b'LastCrash' not in e.fs[CFG_], e.fs[CFG_]
+# the crash itself: a fault inside the game's ControlGunMove - written down as step 33, and the next game has aim-walk off
+e, g1, gang, _ = aim_world()
+acts = {a[0]: a[1] for a in e.sigactions if a[1]}
+info, ucx = e.alloc(128), e.alloc(1024)
+e.w64(info + 16, 0x20); e.w64(ucx + 440, GTA + F_GUN_MOVE + 0x1c); e.w64(ucx + 424, MODB + 0x100); e.w64(ucx + 432, ucx + 600); e.w64(ucx + 416, 0)
+e.move_crash = (acts[11][2], info, ucx)
+e.frame(ms=50, hud=False)
+cfg = e.fs[CFG_]
+assert 'inside the brain: 33 ' in e.log() and '33 aim-walk)' in e.log() and b'LastCrash = 33' in cfg and b'AimWalkOff = 1' in cfg, (e.log()[-600:], cfg[:200])
+e2 = Emu(gun=True); e2.fs.update({k: v for k, v in e.fs.items() if k.endswith(('hcbrain_log.txt', 'net.helicover.brain.ini'))}); lg2 = e2.load()
+assert 'the last game crashed while a guard stepped with his weapon up (aim-walk)' in lg2 and 'firing): off (the game crashed in it once, or the settings)' in lg2 and b'AimWalkOff = 1' in e2.fs[CFG_], lg2[-1500:]
+passed('1.6 aim-walk, safety: every instruction the mod relies on is checked at start (ControlGunMove, SetMoveAnim, ProcessPed, the AI\'s gun control, SetMoveState, SetTask with no task - 7 of them changed one by one here) and so are the names of animations 0x31-0x35 in the game\'s table; when one differs, with AimWalkOff = 1, or after a crash in it (step 33: LastCrash = 33 and AimWalkOff = 1 written by the crash recorder, read at the next start) a facing man walks plainly - the go-to task, the gun task taken off while he walks, no step asked - and the log says why')
+# 1.6 the standing guard (the player's recording: "they fire standing bolt upright" - and they fire little). The game's gun task works
+# only in a frame in which it was told "in control" (ControlGun), and nothing in it turns the man: the game's AI gun control does both
+# every frame. So does the mod now for every guard who holds its gun task with an order to aim or fire at a living man: every frame
+# ControlGun with the look's man and command (AIM or FIREBURST, never FIRE) and the heading he is to take = the man's bearing. No step
+# is asked (no ControlGunMove: the game then blends Gun_stand). A ducking guard just the same - the game picks his crouched fire itself.
+def stand_world(looks=12, **kw):
+    e, g1, gang, lg_ = fight_world(**kw)
+    for _ in range(looks): e.frame(ms=50, hud=False); squad(e, g1)
+    return e, g1, gang, lg_
+def bearing(e, a, b): (ax, ay), (bx, by) = xy(e, a), xy(e, b); return math.atan2(-(bx - ax), by - ay)
+e, g1, gang, lg_ = stand_world()
+t1 = [t for t in e.new_tasks if t['kind'] == 'gun'][0]['task']; mgr = e.r64(g1 + 0x538) + 8
+look = e.gun_cmds[-1]; n0 = len(e.gun_cmds); clip = e.r32(g1 + 0x738)
+assert look == (t1, g1, gang, 3)
+e.frame(ms=8, n=7, hud=False)                                        # (seven frames of a 120-a-second game between two looks)
+assert e.gun_cmds[n0:] == [look] * 7 and e.r32(g1 + 0x738) < clip, ('ControlGun every frame: the look\'s man and command', e.gun_cmds[n0:])
+assert abs(e.rf(g1 + 0x6c8) - bearing(e, g1, gang)) < 0.01 and e.rf(g1 + 0x6c4) == 0. and e.r32(g1 + 0x550) == 0, 'the heading he is to take is his man\'s bearing (the game eases his heading to it); his move state is left alone'
+assert not e.gun_moves and e.r64(mgr + 24) == 0 and step_of(e, t1) == (0., 0., 0), 'no step asked'
+# his man north, east, south, west of him: turned to him each time, the command the look's
+gx, gy = xy(e, g1); seen = set()
+for px, py in ((gx, gy + 14.), (gx + 14., gy), (gx, gy - 14.), (gx - 14., gy)):
+    e.move(gang, px, py)
+    for _ in range(8): e.frame(ms=50, hud=False); squad(e, g1)
+    look = e.gun_cmds[-1]; n0 = len(e.gun_cmds); e.wf(g1 + 0x6c8, 9.); e.frame(ms=8, n=3, hud=False)
+    want = math.atan2(-(px - gx), py - gy)
+    assert look[:3] == (t1, g1, gang) and look[3] in (1, 3) and e.gun_cmds[n0:] == [look] * 3 and abs(math.remainder(e.rf(g1 + 0x6c8) - want, 2 * math.pi)) < 0.01, ((px, py), look, e.gun_cmds[n0:], e.rf(g1 + 0x6c8), want)
+    seen.add(look[3])
+assert 1 in seen, seen                                               # (after his man has jumped the order holds his fire a moment: AIM)
+# a ducking guard (the outer men sit down behind cover and fire from there): driven just the same
+e.move(gang, 18, 0); e.uc.mem_write(g1 + 0x587, b'\x04')
+for _ in range(6): e.frame(ms=50, hud=False); squad(e, g1)
+look = e.gun_cmds[-1]; n0 = len(e.gun_cmds); e.frame(ms=8, n=4, hud=False)
+assert look[:3] == (t1, g1, gang) and look[3] in (1, 3) and e.gun_cmds[n0:] == [look] * 4 and abs(e.rf(g1 + 0x6c8) - bearing(e, g1, gang)) < 0.01 and not e.gun_moves
+# no look for 0.4 s (the scripts have stopped asking): nobody's order any more - not driven
+n0 = len(e.gun_cmds); e.frame(ms=50, n=12, hud=False)
+assert len(e.gun_cmds) - n0 == 7, len(e.gun_cmds) - n0
+e.frame(ms=100, n=35, hud=False)
+assert re.search(r"standing guards' gun tasks driven: frames [1-9]\d* \(\d+ s\) rounds [1-9]\d*", e.log()), [l_ for l_ in e.log().splitlines() if 'standing guards' in l_][-1:]
+passed('1.6 the standing guard: a guard who holds the mod\'s gun task with an order at a living man gets the game\'s ControlGun EVERY frame, not once a look - the look\'s man and command (FIREBURST, or AIM while the order holds his fire; never FIRE) - and the heading he is to take is set to his man\'s bearing (north, east, south, west of him); no step is asked and his main slot and move state are left alone; a ducking guard is driven the same; without a look for 0.4 s nothing is driven; the second\'s log line counts the frames and the rounds')
+# not touched: a guard with no man (his man is dead: the look tells the task to stop, the frames tell it nothing and do not turn him),
+# a guard who is dead, in a car, on a rope, deleted, whose gun task the game has taken or replaced, or with no firearm in his hands
+def untouched(what, looks=0):
+    e, g1, gang, _ = stand_world(); what(e, g1, gang)
+    for _ in range(looks): e.frame(ms=50, hud=False); squad(e, g1)
+    n0 = len(e.gun_cmds); e.wf(g1 + 0x6c8, 9.); e.frame(ms=8, n=6, hud=False)
+    assert len(e.gun_cmds) == n0 and e.rf(g1 + 0x6c8) == 9., (len(e.gun_cmds) - n0, e.rf(g1 + 0x6c8))
+    return e, g1, gang
+e, g1, gang = untouched(lambda e, g1, gang: e.w32(gang + 0x54c, 55), looks=8)
+assert e.gun_cmds[-1][2:] == (0, 6), e.gun_cmds[-1]
+untouched(lambda e, g1, gang: e.w32(gang + 0x54c, 55))               # (dead between two looks)
+untouched(lambda e, g1, gang: e.w32(g1 + 0x54c, 55))
+untouched(lambda e, g1, gang: in_car(e, g1))
+untouched(lambda e, g1, gang: on_rope(e, g1))
+untouched(lambda e, g1, gang: e.uc.mem_write(e.ped_flags + (g1 - e.ped_objs) // PED_STRIDE, b'\x80'))
+untouched(lambda e, g1, gang: foreign(e, g1))
+untouched(lambda e, g1, gang: e.w64(e.r64(g1 + 0x538) + 8 + 0x28, 0))
+untouched(lambda e, g1, gang: e.w32(g1 + 0x730, 5))
+# off (AimWalkOff, a crash in it - step 33, or the game's code differs): as before 1.6 - the command once a look, nothing in the frames
+for kw in (dict(cfg=b'[Preferences]\nSettingsVersion = 16\nAimWalkOff = 1\n'), dict(cfg=b'[Preferences]\nSettingsVersion = 16\nLastCrash = 33\n'), dict(tweak=lambda e_: e_.uc.mem_write(GTA + 0x5dece8, b'\x1f\x20\x03\xd5'))):
+    e, g1, gang, lg_ = stand_world(**kw)
+    assert 'firing): off' in lg_ or 'crashed while a guard stepped with his weapon up' in lg_, [l_ for l_ in lg_.splitlines() if 'aim-walk' in l_]
+    assert e.gun_cmds and e.gun_cmds[-1][3] == 3 and len(e.gun_cmds) <= 12, len(e.gun_cmds)
+    n0 = len(e.gun_cmds); e.wf(g1 + 0x6c8, 9.); e.frame(ms=8, n=6, hud=False)
+    assert len(e.gun_cmds) == n0 and e.rf(g1 + 0x6c8) == 9.
+passed('1.6 the standing guard, care and safety: nothing is told to the gun task in the frames, and nobody is turned, when his man is dead, when he himself is dead, in a car, on a rope or deleted, when his attack slot is empty or holds another task, or when he has no firearm in his hands; with AimWalkOff, after a crash in it (step 33) or when the game\'s code differs it is as before 1.6 - the command once a look')
 # the game AI kept off: the empty decision maker is put back, a flight in his event slot is removed, a walk is left alone
 e, (g1,), _ = detail_world()
 intel = e.r64(g1 + 0x538); e.w32(intel + 0x160, 5); post(e, g1)
@@ -1707,15 +1846,15 @@ e.frame(n=300, ms=100, hud=False)
 assert abs(e.rf(e.cj + 0x6ac) - 160.) < .01 and e.shared_value(HC_STATE + 578) == 2, ('up to HIS maximum, not past it, and "well again"', e.rf(e.cj + 0x6ac))
 passed('1.3 the medic aboard: CJ in our helicopter gets 5 health a second up to his own maximum (the game\'s +0x6b0 - 160 here), ours aboard are healed too, the scripts are told "healing" and "well again"; on foot nothing')
 # the settings file: every tactical number, checked
-e = Emu(); e.fs[CFG_] = b'[Preferences]\nSettingsVersion = 15\nMarkers = 0\n\n[Tactics]\nGatherM = 40\nRiflesPerTarget = 9\nCornerMs = abc\nPlaceFire = 0.55\n'; lg_ = e.load()
+e = Emu(); e.fs[CFG_] = b'[Preferences]\nSettingsVersion = 16\nMarkers = 0\n\n[Tactics]\nGatherM = 40\nRiflesPerTarget = 9\nCornerMs = abc\nPlaceFire = 0.55\n'; lg_ = e.load()
 assert 'tactical numbers from the settings file: 2 changed, 2 ignored' in lg_, [l_ for l_ in lg_.splitlines() if 'tactical' in l_]
 out_ = e.fs[CFG_].decode()
 assert '[Tactics]' in out_ and '\nGatherM = 40 ' in out_ and '\nPlaceFire = 0.55 ' in out_ and '\nRiflesPerTarget = 3 ' in out_ and '\nCornerMs = 800 ' in out_ and out_.count('\n') > 35, out_[:600]
 e2 = Emu(); e2.fs[CFG_] = e.fs[CFG_] + b''; lg2 = e2.load()
 assert 'tactical numbers from the settings file: 2 changed, 0 ignored' in lg2 and e2.fs[CFG_] == e.fs[CFG_], 'the file the mod wrote reads back the same'
-e3 = Emu(gun=True); e3.fs[CFG_] = b'[Preferences]\nSettingsVersion = 15\nMarkers = 0\nLastCrash = 26\n'; lg3 = e3.load()
+e3 = Emu(gun=True); e3.fs[CFG_] = b'[Preferences]\nSettingsVersion = 16\nMarkers = 0\nLastCrash = 26\n'; lg3 = e3.load()
 assert b'GunOff = 1' in e3.fs[CFG_] and 'the scripts fire the guards\' weapons from now on' in lg3
-e3 = Emu(gun=True); e3.fs[CFG_] = b'[Preferences]\nSettingsVersion = 15\nMarkers = 0\nMindOff = 1\nRopeOff = 1\nGunOff = 1\n'; lg3 = e3.load()
+e3 = Emu(gun=True); e3.fs[CFG_] = b'[Preferences]\nSettingsVersion = 16\nMarkers = 0\nMindOff = 1\nRopeOff = 1\nGunOff = 1\n'; lg3 = e3.load()
 assert 'the game AI kept off the guards: off in the settings; their weapons: the scripts (off in the settings); their ropes: the game\'s (off in the settings)' in lg3, lg3[-400:]
 passed('1.1 the settings file: every tactical number is written to configs/net.helicover.brain.ini ([Tactics], with what it means and its limits); a changed value is taken at the next start, one that is not a number or outside its limits is ignored and written back as the built-in one; MindOff / GunOff / RopeOff switch those parts off, and a crash inside one of them (steps 25-27) does it by itself')
 
@@ -1826,13 +1965,13 @@ e.frame(ms=100, n=40, hud=False)
 sc = [(int(a), int(b)) for a, b in re.findall(r'our hits scaled (\d+) \(head (\d+)\)', e.log())]
 assert sum(a for a, b in sc) == 1 + 1 + 1 + 1 + 9 and sum(b for a, b in sc) == 1, sc
 # the settings file: OurDamage (5..100), written back with what is in force; OurDamageOff
-e, lgd, g1, gn, foes, stranger = damage_world(b'[Preferences]\nSettingsVersion = 15\nOurDamage = 50\n')
+e, lgd, g1, gn, foes, stranger = damage_world(b'[Preferences]\nSettingsVersion = 16\nOurDamage = 50\n')
 assert 'our damage: 50 % ' in lgd and b'\nOurDamage = 50 ' in e.fs[CFG_] and hit(e, g1, foes[0])['lost'] == 20., lgd
-e, lgd, g1, gn, foes, stranger = damage_world(b'[Preferences]\nSettingsVersion = 15\nOurDamage = 3\n')
+e, lgd, g1, gn, foes, stranger = damage_world(b'[Preferences]\nSettingsVersion = 16\nOurDamage = 3\n')
 assert 'our damage: 25 % ' in lgd and 'OurDamage in the settings file was not a number from 5 to 100: ignored' in lgd and b'\nOurDamage = 25 ' in e.fs[CFG_], lgd
-e, lgd, g1, gn, foes, stranger = damage_world(b'[Preferences]\nSettingsVersion = 15\nOurDamage = 100\n')
+e, lgd, g1, gn, foes, stranger = damage_world(b'[Preferences]\nSettingsVersion = 16\nOurDamage = 100\n')
 assert "our damage: 100 % - the game's own, nothing changed" in lgd and 'brain: 3 of 3' in lgd and e.slot(GOT_DAMAGE) == GTA + F_DAMAGE and hit(e, g1, foes[0])['lost'] == 40., lgd
-e, lgd, g1, gn, foes, stranger = damage_world(b'[Preferences]\nSettingsVersion = 15\nOurDamageOff = 1\nOurDamage = 40\n')
+e, lgd, g1, gn, foes, stranger = damage_world(b'[Preferences]\nSettingsVersion = 16\nOurDamageOff = 1\nOurDamage = 40\n')
 assert 'our damage: off in the settings' in lgd and 'brain: 3 of 3' in lgd and e.slot(GOT_DAMAGE) == GTA + F_DAMAGE and hit(e, g1, foes[0])['lost'] == 40., lgd
 assert b'OurDamageOff = 1' in e.fs[CFG_] and b'\nOurDamage = 40 ' in e.fs[CFG_]
 # a crash while one of ours hits somebody (step 31): written down, and the next game leaves the game's damage alone
@@ -1923,12 +2062,56 @@ for k in range(40):
     for g in team: post(e, g); squad(e, g)
 assert len(e.anim_tasks) > n_, 'once the set is there he waves'
 # off: WaveOff / a crash in it (step 32) / the code differs - the scripts' own wave as before (+16 on his duty)
-for kw in (dict(cfg=b'[Preferences]\nSettingsVersion = 15\nWaveOff = 1\n'), dict(cfg=b'[Preferences]\nSettingsVersion = 15\nMarkers = 0\nLastCrash = 32\n'), dict(tweak=lambda e_: e_.uc.mem_write(GTA + F_NAMED_ANIM, b'\0\0\0\0'))):
+for kw in (dict(cfg=b'[Preferences]\nSettingsVersion = 16\nWaveOff = 1\n'), dict(cfg=b'[Preferences]\nSettingsVersion = 16\nMarkers = 0\nLastCrash = 32\n'), dict(tweak=lambda e_: e_.uc.mem_write(GTA + F_NAMED_ANIM, b'\0\0\0\0'))):
     e, team, rec, lg_ = lead_world(looks=60, **kw)
     assert "the commander's gesture: the scripts'" in lg_ or 'the commander\'s gesture: the scripts\' wave from now on' in lg_ or 'crashed in the commander\'s gesture' in lg_, lg_[-600:]
     assert not e.anim_tasks and any(r['v'][9] >= 16 for r in rec), [r['v'][9] for r in rec][-10:]
     if 'cfg' in kw: assert b'WaveOff = 1' in e.fs[CFG_], e.fs[CFG_]
 passed('2.0 beta 6, the gesture\'s safety: the POLICE set not in memory - the game is asked to stream it (RequestModel of the set, as REQUEST_ANIMATION does), no gesture and no fault until it is there; off in the settings, after a crash in it (step 32, WaveOff written) or when the game\'s code differs - the scripts\' own wave as before')
+# 1.6, the summary: the outer men's cover and places, the commander ahead of CJ - counted again here from the second-by-second lines of
+# the log (the same seconds: the summary is written every tenth), and what each guard's place is behind is in his line
+e, team, rec, lg_ = lead_world(looks=125)
+e.frame(ms=100, n=35, hud=False)
+sm = e.fs[SUM].decode(); lg_ = e.log()
+secs = int(re.search(r'^seconds: (\d+)', sm, re.M).group(1))
+num = r'(-?\d+\.\d)'
+blocks = [b for b in re.split(r'\n(?=\[\d+\.\d+s\] \[up )', lg_) if ' | post ' in b][:secs]
+assert secs == 10 and len(blocks) == secs, (secs, len(blocks))
+lo = dict(at=0, cov=0, js=0, j=0, ls=0, la=0); hi = dict(lo); was = {}
+def count(key, sure, maybe=False):
+    if sure: lo[key] += 1
+    if sure or maybe: hi[key] += 1
+for b in blocks:
+    cj = [float(x) for x in re.search(r'CJ \(%s %s %s\)' % (num, num, num), b).groups()]
+    protect, leads = 'squad: mode PROTECT' in b, re.search(r'LEADS CJ cover for CJ \(%s %s %s\)' % (num, num, num), b)
+    seen = {}
+    for m in re.finditer(r'^  (guard\d#\d+) hp \S+ \(%s %s %s\).*? \| post (\S+) \S+ \(%s %s %s\) (\d+\.\d)m \S+(?: crouch)? cover (open|wall|vehicle|corner)' % ((num,) * 6), b, re.M):
+        who, px, py, pz, job, ax, ay, az, d, cover = m.groups(); px, py, ax, ay, d = float(px), float(py), float(ax), float(ay), float(d)
+        if job in ('POINT', 'POINT2', 'REAR', 'REAR2') and protect:
+            count('at', d < 1.39, d < 1.61); count('cov', d < 1.39 and cover != 'open', d < 1.61 and cover != 'open')
+            if who in was:
+                j = math.dist((ax, ay), was[who]); count('js', True); count('j', j > 3.2, j > 2.8)
+            seen[who] = (ax, ay)
+        if job == 'LEAD' and leads:
+            c = [float(x) for x in leads.groups()]; mine, his = math.dist((px, py), c[:2]), math.dist(cj[:2], c[:2])
+            count('ls', True); count('la', mine < his - 0.2, mine < his + 0.2)
+    was = seen
+def line(pat):
+    m = re.search(pat, sm, re.M)
+    assert m, (pat, sm)
+    return [int(x) for x in m.groups()]
+a, n = line(r'^1\.6: an outer man \(of the four\) at his place behind cover: (?:\d+ %|-) \((\d+) of (\d+)\)   \[goal: 90 % or more\]$')
+assert lo['cov'] <= a <= hi['cov'] and lo['at'] <= n <= hi['at'] and n > 0, (a, n, lo, hi)
+j, js = line(r"^1\.6: an outer man's place jumped more than 3 m: (?:\d+\.\d|-) per man per minute \((\d+) in (\d+) man-seconds\)   \[goal: 2 or less\]$")
+assert lo['j'] <= j <= hi['j'] and js == lo['js'] and js > 0, (j, js, lo, hi)
+assert ('%.1f per man per minute' % (j * 60. / js)) in sm or ('%.1f per man per minute' % (int(j * 600. / js) / 10.)) in sm, (j, js)
+la, ls = line(r'^1\.6: the commander ahead of CJ while leading \(nearer the cover than CJ\): (?:\d+ %|-) \((\d+) of (\d+)\)$')
+assert lo['la'] <= la <= hi['la'] and ls == lo['ls'] and ls > 0, (la, ls, lo, hi)
+assert re.search(r"^1\.6: aim-walk \(a guard on his way facing his man: weapon up, stepping by the game's own gun-move, firing\): on, \d+ s in [1-9]\d* frames; rounds fired while stepping \d+; did not get on - a plain walk for 6 s \d+ times; refused \(no gun task of the mod's in 0\.6 s\) \d+; gun tasks taken off men on a plain walk \d+$", sm, re.M), [l_ for l_ in sm.splitlines() if 'aim-walk' in l_]
+assert re.search(r'^1\.6: a standing guard with his weapon on a man: his gun task told "in control" and he turned to the man every frame for \d+ s \([1-9]\d* frames\); rounds that left a standing guard\'s weapon \d+$', sm, re.M), [l_ for l_ in sm.splitlines() if 'standing guard' in l_]
+assert 'go-and-shoot' not in sm and 'rounds fired at a sprint' not in sm and 'go-and-shoot' not in lg_ and 'sprint arms' not in lg_
+assert re.search(r'facing-his-man AIM-WALK step -?\d\.\d -?\d\.\d \|', lg_), 'an aim-walker\'s line says so, with the step asked'
+passed('1.6 the summary and the log: "an outer man at his place behind cover" (%d of %d), "an outer man\'s place jumped more than 3 m" (%d in %d man-seconds) and "the commander ahead of CJ while leading" (%d of %d) agree with the same seconds counted again from the log\'s guard lines; every guard\'s line says what his place is behind (cover open / wall / vehicle / corner) and an aim-walker\'s line the step asked; the aim-walk line replaces the go-and-shoot / sprint-fire one' % (a, n, j, js, la, ls))
 
 text = '\n'.join(results) + '\nThe phone build on an emulated CPU with the real libGTASA.so and the real code of the CLEO library; the world in memory is laid out by the test. Not run in the game.\n'
 (h.OUT / 'brain_adapter_tests.txt').write_text(text)
