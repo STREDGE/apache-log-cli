@@ -243,7 +243,8 @@ typedef struct hcb_post {
     uint8_t sign;       /* 1.3: HCB_SIGN_*: a gesture to make where he stands (the commander waves CJ on) */
     uint8_t climb;      /* 1.3: 1 = he stands at a wall he can get up: the mod gives him the game's jump-and-climb */
     uint8_t face;       /* 1.3: 1 = he moves facing his fire target (go-and-shoot; backing away, sideways, at any pace) */
-    uint8_t reserved0;
+    uint8_t cover;      /* 1.6: what his place is behind, seen from CJ / the threat: 0 nothing (the open), 1 a wall or a step, 2 a vehicle,
+                           3 a corner. For the log and the summary */
 } hcb_post;
 #define HCB_SIGN_NONE 0
 #define HCB_SIGN_COME 1         /* "to me": the commander waves CJ on to the cover */
