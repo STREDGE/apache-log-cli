@@ -161,7 +161,7 @@ acts = []
 sc.cj['vel'] = [0., 1.4, 0.]                                # CJ strolls
 for k in range(100):
     sc.step(1); acts += [sc.posts[w].act for w in team]
-walk_share = sum(a in (HCB_ACT_WALK, HCB_ACT_FASTWALK, HCB_ACT_HOLD, HCB_ACT_OVERWATCH) for a in acts) / len(acts)
+walk_share = sum(a in (HCB_ACT_WALK, HCB_ACT_FASTWALK, HCB_ACT_HOLD, HCB_ACT_OVERWATCH, HCB_ACT_COVER) for a in acts) / len(acts)   # (1.5: an outer man down at his place counts as calm)
 assert walk_share > 0.85 and HCB_ACT_SPRINT not in acts, (walk_share, set(acts))
 acts = []
 sc.cj['vel'] = [0., 6.5, 0.]                                # CJ sprints
@@ -219,6 +219,23 @@ for k in range(250):
 p_ = sc.posts[team[0]]
 assert left == 0 and d2(sc.peds[team[0]]['pos'], (p_.at.x, p_.at.y)) > 5, ('a man on a roof 5 m up does not walk off its edge', left, p_.phase, p_.act)
 passed('Heights: a drop of 5 m is not a way - a man on a roof stays on it (his post on the ground is given up, he is not walked off the edge)')
+# (a drop the game WOULD let a man take - 3 m - and a ramp down 12 m away: the map knows both, from the terrace; the way is the ramp)
+def terrace(x, y):
+    if y <= 4.: return 3.0                                                 # CJ's terrace, its edge at y = 4
+    if 12. <= x <= 16. and y <= 16.: return 3.0 - (y - 4.) * 0.25          # a ramp down from it, 12 m east of CJ
+    return 0.
+sc = Scene(); sc.ground_fn = terrace; sc.cj['pos'] = [0., 0., 4.]; team = team_at(sc, ((-1., -3.),)); sc.peds[team[0]]['pos'][2] = 4.
+sc.step(100)                                                       # (the whole map is known: the terrace, the ramp, the ground below the edge)
+sc.cj['pos'] = [0., 10., 1.]                                       # CJ jumps down: the commander is to be at his side, 6 m below the edge
+way = hcb_py.nav_way(sc.brain, (0., 0., 4.), (0., 10., 1.), sc.time)
+drop, by_ramp, t_down = 0., False, None
+for k in range(400):
+    z0 = sc.peds[team[0]]['pos'][2]; sc.step(1); x, y, z = sc.peds[team[0]]['pos']
+    drop = max(drop, z0 - z); by_ramp |= 11.5 < x < 16.5 and 4. < y < 16.
+    if t_down is None and z < 1.5 and d2((x, y), sc.cj['pos']) < 3.: t_down = (k + 1) / 10.
+assert way and any(p[0] > 11. for p in way), ('the map\'s own way down from the terrace goes by the ramp, not off the edge', way)
+assert drop <= 1.6 and by_ramp and t_down is not None, ('he comes down by the ramp - no step down of more than 1.5 m - and is at CJ\'s side', drop, by_ramp, t_down, sc.peds[team[0]]['pos'])
+passed('Heights: a drop of 3 m (one the game would let a man take) is not walked off either - from a terrace with a ramp 12 m away the man comes down by the ramp (his largest step down %.1f m) and is at CJ\'s side below after %.0f s' % (drop, t_down))
 sc = Scene(); team = team_at(sc, ((3., -9.),)); ph = []
 for k in range(120):
     sc.step(1); ph.append((sc.posts[team[0]].phase, sc.posts[team[0]].act))

@@ -1191,7 +1191,7 @@ passed('"Area clear" is not called while a threat is left (an attacker who stopp
 # foot: the fire worker makes no rounds for him, whatever the brain's order for him says
 w,c,f=fire_world();w.step(c,f,n=3);g0=w.shared[b.PUB+3];w.attach.pop(g0);w.pos[g0]=[6.,6.,0.]
 npc=target(w,typ=7,skin=102);w.health[npc]=100000;w.weapons[npc]=30;w.damage.add((1,npc));w.step(c,f,n=30)
-assert w.brain.orders()[g0][:2]==(npc,1),'(the brain does give him the man)'
+assert w.brain.orders()[g0][0]==npc,'(the brain does give him the man - 1.5: a crewman fires in bursts with a breath, so not every look is "fire")'
 assert attacks(w) and not [x for x in attacks(w) if math.dist(x[1],[6.,6.,0.])<3.] and not [x for x in calls(w,0x667) if x[2][0]==g0] and not invariants(w),'no round and no aiming task from the fire worker for a crewman on foot'
 passed('A crewman out of his door gets no rounds from the fire worker (he is a guard on foot then); the men in the doors go on firing')
 # police: without stars nobody; with stars a policeman is fired at only once he has fired himself ("fire back"), and never with POLICE: NEVER FIRE

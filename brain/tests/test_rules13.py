@@ -103,6 +103,37 @@ for k in range(600):
 assert feet(sc, mk) > 2.0, ('he went up the ramp onto the terrace', pos(sc, mk))
 passed('No roof, but the brain\'s map knows ground 3 m above CJ 25 m off, with a ramp: the marksman walks up the ramp and watches from the terrace (up after %.1f s)' % (k / 10.))
 
+# 1.5 (the fifth 2.0 log: the "high ground" chosen 8 times was always a roof 4.7-12 m up with no way up on foot, and he stood "no route"
+# 61 of 107 looks): a high cell with no way to it is given up as soon as the way says so - he does not stand at the wall 20 s
+sc = Scene(); team = squad(sc); mk = team[7]
+def roof6(x, y):                                              # a flat roof 6 m up, and in front of it steps a man cannot walk (1.5 m each) - the map
+    if 18. <= x <= 30. and 8. <= y <= 20.: return 6.0       #  learns the roof over them, the way finds no way up
+    if 10. <= x < 18. and 8. <= y <= 20.: return 1.5 * int((x - 10.) / 2.)
+    return 0.
+sc.ground_fn = roof6
+first, held = None, 0
+for k in range(450):
+    sc.step(1)
+    a_ = sc.posts[mk].at
+    if a_.z > 5.:
+        held += 1
+        if first is None: first = (a_.x, a_.y)
+assert first is not None and held <= 100, ('a roof with no way up: given up within seconds, the whole roof, not cell after cell for ever', first, held)
+passed('1.5: a roof on the brain\'s map with no way up on foot (6 m, steps a man cannot walk): the marksman gives it up - the whole roof - as soon as his way says "no route" (%.1f s of 45 spent on it) instead of standing at the wall for 20 s' % (held / 10.))
+
+# 1.5: a shed the brain's map knows (2.5 m over his feet, no ramp - a step of 1.25 m in front of it): not "high ground" to walk to,
+# a roof to climb - he walks to it and climbs it (the game's own jump-and-climb)
+def shed(x, y):
+    if 20. <= x <= 24. and 10. <= y <= 14.: return 2.5
+    if 19. <= x < 20. and 10. <= y <= 14.: return 1.25
+    return 0.
+sc = Scene(); team = squad(sc); mk = team[7]; sc.ground_fn = shed
+for k in range(600):
+    sc.step(1)
+    if feet(sc, mk) > 2.0: break
+assert feet(sc, mk) > 2.0 and getattr(sc, 'climbs', 0) >= 1, ('he climbed the shed the map knows', pos(sc, mk), getattr(sc, 'climbs', 0))
+passed('1.5: a shed only the brain\'s map knows (2.5 m up, nothing to walk up): the marksman takes it for a roof to climb, walks to it and climbs it (up after %.1f s)' % (k / 10.))
+
 # ------------------------------------------------------------------ CJ goes away: 10 s beyond 60 m and he comes down (steps off the edge) and follows
 sc = Scene(); team = squad(sc); mk = team[7]
 sc.blocks = [(18., 8., 26., 16., 2.5)]
@@ -167,7 +198,31 @@ del sc.ours[mk]; del sc.peds[mk]                                   # (the squad 
 for k in range(10): o = sc.step(1)
 assert o.ow_ok == 1 and d2((o.ow_at.x, o.ow_at.y), (22., 12.)) < 0.1 and abs(o.heli_at.z - 19.) < 0.1, ('aboard: the helicopter is sent over the roof to put him on it', o.ow_ok, o.ow_at.x, o.ow_at.y)
 passed('A good roof 7 m up (CJ seen from it), no way to climb it and nothing to step on, the first drop over it having failed: the helicopter is sent over the marksman (12 m up), he waits where he stands; when it hangs there steady the rope may go up; once he is aboard it is sent over the roof to put him on it - a new try')
-# ... and in a fight, or with no helicopter, no pickup: the next place
+# 1.5 (the player: "the marksman is a cripple - he hardly ever gets up on a roof"): in a fight too - the helicopter picks him up and puts
+# him on the roof (only an evacuation keeps it for CJ)
+sc = Scene(); team = squad(sc, 7)
+heli = sc.veh(0., -40., z=30., cls=HCB_VC_HELI); sc.heli = heli
+sc.blocks = [(18., 8., 26., 16., 7.0)]
+sc.high = [(22., 12., 8.0, True)]
+for k in range(460): o = sc.step(1)
+mk = sc.our(-3., -6., SQ + 7, weapon=SNIPER); team.append(mk)
+g = sc.ped(-30., 25., pedtype=GANG, weapon=AK, face=(1., 0.))
+o = None; alerts = set()
+for k in range(120):
+    if k % 9 == 0: sc.shot(g, (0., 0., 1.), dst=1)
+    o = sc.step(1); alerts.add(o.alert)
+    if o.ow_ok == 2: break
+assert HCB_ALERT_COMBAT in alerts and o.ow_ok == 2 and d2((o.heli_at.x, o.heli_at.y), pos(sc, mk)) < 0.5, ('a fight on: the helicopter is sent over him all the same', o.ow_ok, alerts)
+mp = pos(sc, mk); sc.vehs[heli]['pos'] = [mp[0] + 1., mp[1], mp[2] + 12.]; sc.vehs[heli]['vel'] = [0., 0., 0.]
+sc.shot(g, (0., 0., 1.), dst=1); o = sc.step(2)
+assert o.ow_ok == 2 and o.ow_ready, 'it hangs over him steady: the rope may go up'
+del sc.ours[mk]; del sc.peds[mk]
+for k in range(10):
+    if k % 9 == 0: sc.shot(g, (0., 0., 1.), dst=1)
+    o = sc.step(1)
+assert o.ow_ok == 1 and d2((o.ow_at.x, o.ow_at.y), (22., 12.)) < 0.1, ('aboard, in the fight: the helicopter is sent over the roof to put him on it', o.ow_ok)
+passed('1.5: the same in a fight - the helicopter picks the marksman up and is sent over the roof to put him on it (before 1.5: only with all quiet)')
+# ... and with no helicopter, no pickup: the next place
 sc = Scene(); team = squad(sc); mk = team[7]
 sc.blocks = [(18., 8., 26., 16., 7.0)]; sc.high = [(22., 12., 8.0, True)]
 for k in range(60): o = sc.step(1); assert o.ow_ok != 2, 'no helicopter: no pickup'
@@ -183,7 +238,7 @@ for k in range(400):
 assert feet(sc, mk) > 2.0
 sc.recall = 1; sc.step(2); sc.recall = 0
 for k in range(150): sc.step(1)
-assert feet(sc, mk) < 0.5 and d2(pos(sc, mk), sc.cj['pos']) < 22., ('"to me": down and back in the detail round CJ', pos(sc, mk))
+assert feet(sc, mk) < 0.5 and d2(pos(sc, mk), sc.cj['pos']) < 30., ('"to me": down and back in the detail round CJ (1.5: his place 25 m out)', pos(sc, mk))
 passed('"To me" from the menu: the marksman comes down off the shed at once and back into the detail round CJ (no new high place for 20 s)')
 
 # ================================================================== fire (plan item A)
@@ -229,21 +284,27 @@ assert len(blind) >= 3 and min(gaps) >= 30, ('the gunners have no line for 3 s: 
 passed('The gunners all have a man and none has a line to him (houses in the way) for 3 s: the helicopter moves round the circle to the next spot (%d spots in 15 s, never sooner than 3 s apart); with a line it keeps its spot' % len(blind))
 
 # ------------------------------------------------------------------ one of ours in his line: he steps out of it (2.5 m, away from CJ) and fires
-sc = Scene(roe=HCB_ROE_ARMED); team = squad(sc, 5); sc.step(30)
-g = sc.ped(0., 30., pedtype=GANG, weapon=AK, face=(0., 1.))
-front = {w for w in team if sc.posts[w].job in (HCB_ROLE_POINT, HCB_ROLE_CLOSE)}
-sc.los_fn = lambda a, b_: a not in front                       # (the two in front have a wall in their way: the rear man is the one to fire)
-rear = [w for w in team if sc.posts[w].job == HCB_ROLE_REAR][0]
-friend = sc.our(-9.5, 0., HCB_ROLE_NONE)                       # one of ours standing in his line
-p0 = list(pos(sc, rear)); blocked_t, fired_t = None, None
-for k in range(60):
-    sc.step(1)
-    o = sc.orders.get(rear)
-    if o and o.hold == HCB_HOLD_FRIEND and blocked_t is None: blocked_t = k
-    if o and o.fire and fired_t is None: fired_t = k; p1 = list(pos(sc, rear))
-assert blocked_t is not None and fired_t is not None and 1.8 < d2(p1, p0) < 3.2, ('a man in his line: a step aside, then fire', blocked_t, fired_t, p0, pos(sc, rear))
-assert d2(p1, sc.cj['pos']) > d2(p0, sc.cj['pos']), 'the step is away from CJ'
-passed('One of ours in his line to the man he is to fire at (the second 2.0 log: "one of ours in the line" in one order of five, and the man stood): after 0.7 s he steps 2.5 m aside, away from CJ, and fires %.1f s after he was first held' % ((fired_t - blocked_t) / 10.))
+def step_out(on_place):
+    sc = Scene(roe=HCB_ROE_ARMED); team = squad(sc, 5); sc.step(100)        # (1.5: the outer men take their places once CJ has stood 4 s)
+    g = sc.ped(0., 30., pedtype=GANG, weapon=AK, face=(0., 1.))
+    front = {w for w in team if sc.posts[w].job in (HCB_ROLE_POINT, HCB_ROLE_CLOSE)}
+    sc.los_fn = lambda a, b_: a not in front                   # (the two in front have a wall in their way: the rear man is the one to fire)
+    rear = [w for w in team if sc.posts[w].job == HCB_ROLE_REAR][0]
+    if on_place: sc.peds[rear]['pos'] = [sc.posts[rear].at.x, sc.posts[rear].at.y, sc.peds[rear]['pos'][2]]   # (right on his place: he is told to stay - the step must be a move)
+    p0 = list(pos(sc, rear)); blocked_t, fired_t, p1 = None, None, None
+    gp_ = pos(sc, g)
+    sc.our(p0[0] + 0.3 * (gp_[0] - p0[0]), p0[1] + 0.3 * (gp_[1] - p0[1]), HCB_ROLE_NONE)   # one of ours standing in his line (1.5: wherever his place is)
+    for k in range(60):
+        sc.step(1)
+        o = sc.orders.get(rear)
+        if o and o.hold == HCB_HOLD_FRIEND and blocked_t is None: blocked_t = k
+        if o and o.fire and fired_t is None: fired_t = k; p1 = list(pos(sc, rear))
+    # (1.5: off his place by a metre - where a man the brain has walked there stands - the step is made from where he stands, not from the place)
+    assert blocked_t is not None and fired_t is not None and 1.8 < d2(p1, p0) < 3.2, ('a man in his line: a step aside, then fire', on_place, blocked_t, fired_t, p0, pos(sc, rear))
+    assert d2(p1, sc.cj['pos']) > d2(p0, sc.cj['pos']), 'the step is away from CJ'
+    return (fired_t - blocked_t) / 10.
+t_on, t_off = step_out(True), step_out(False)
+passed('One of ours in his line to the man he is to fire at (the second 2.0 log: "one of ours in the line" in one order of five, and the man stood): after 0.7 s he steps 2.5 m aside, away from CJ, and fires %.1f s after he was first held (1.5: the same from a metre off his place - %.1f s - the step is made from where he stands)' % (t_on, t_off))
 
 # ------------------------------------------------------------------ the three at CJ's side: CJ in the line - a step round him to his flank, still at his side
 sc = Scene(roe=HCB_ROE_ARMED); team = squad(sc); sc.step(30)
@@ -289,6 +350,38 @@ assert steady <= 6, ('CJ walks steadily round a square: a man changes his action
 busy, cj_n = pace_run(lambda k: [(0., 1.4, 0.), (0., 3.0, 0.), (0., 0., 0.), (0., 5.5, 0.)][(k // 25) % 4])
 assert busy <= 1.25 * cj_n, ('CJ changes his pace %d times a minute: a man follows each change once, no flicker in between' % cj_n, busy)
 passed('Pace without flicker: CJ walking round a square - a man changes his action %.1f times a minute (the second 2.0 log: 18.9); CJ changing pace %d times a minute - %.1f, once for each of CJ\'s changes and no more' % (steady, cj_n, busy))
+
+# ------------------------------------------------------------------ the arrival margin: CJ creeps on - a man on his way goes on to well inside "there"
+# (his place moves along at CJ's pace and he walks a little faster: stopping at the very edge of "there", he was HOLD and WALK in turns -
+#  a stop of one look every few steps. The detail crouches with a creeping CJ, so "walk on beside him" does not cover it)
+MOVING_ACTS = (HCB_ACT_WALK, HCB_ACT_FASTWALK, HCB_ACT_RUN, HCB_ACT_SPRINT)
+sc = Scene(); team = squad(sc); sc.step(20)
+sc.cj['flags'] |= HCB_PF_DUCKING                                 # (all quiet: CJ crouches and creeps at 1.2 m/s, round a square)
+hist = {}
+for k in range(400):
+    sc.cj['vel'] = [v * 1.2 / 1.4 for v in SQUARE[(k // 100) % 4]]
+    sc.step(1)
+    for w, p_ in sc.posts.items(): hist.setdefault(w, []).append(p_.act)
+blips = sum(1 for h in hist.values() for i in range(1, len(h) - 1) if h[i] not in MOVING_ACTS and h[i - 1] in MOVING_ACTS and h[i + 1] in MOVING_ACTS)
+creep = sum(1 for h in hist.values() for a_, b_ in zip(h, h[1:]) if a_ != b_) / len(team) / (400 / 600.)
+assert blips <= 2 and creep <= 60, ('creeping with CJ: no stops of a single look at the edge of "there" (about 470 in 40 s, 190 changes a minute a man, without the margin)', blips, creep)
+passed('CJ creeping on (crouched, 1.2 m/s, round a square): a man on his way goes on to well inside his place before he stops - %d stops of a single look in 40 s for the whole detail, %.0f changes of action a minute a man (without the margin: some 470 such stops, 190 changes a minute)' % (blips, creep))
+
+# ------------------------------------------------------------------ the pace band holds only the pace next to an edge: CJ breaks into a sprint - all go at once
+# (a man walking 6 m from his place when CJ sprints is to sprint: two paces up. "Near the edge at 5 m" keeps a pace only against the one next to it)
+sc = Scene(); team = squad(sc); sc.step(20)
+walked, looks = 0, 0
+for dx, dy in ((0., 1.), (1., 0.), (0., -1.)):
+    sc.cj['vel'] = [1.4 * dx, 1.4 * dy, 0.]; sc.step(100)       # 10 s of a walk with the detail round him ...
+    sc.cj['vel'] = [6.5 * dx, 6.5 * dy, 0.]                     # ... and he sprints off
+    for k in range(30):
+        sc.step(1)
+        for p_ in sc.posts.values():
+            if p_.phase == HCB_PH_MOVING:
+                looks += 1; walked += p_.act in (HCB_ACT_WALK, HCB_ACT_FASTWALK)
+    sc.cj['vel'] = [0., 0., 0.]; sc.step(60)
+assert looks > 500 and walked <= 3, ('CJ sprints: nobody on his way walks on (about 40 walking looks when every pace near an edge is held)', walked, looks)
+passed('CJ breaks from a walk into a sprint, three times: every man on his way is off at a run or a sprint at the next look (%d walking looks of %d) - the band at a pace edge holds only the pace next to it, a jump of two paces is made at once' % (walked, looks))
 
 # ------------------------------------------------------------------ beta 5: a shooter running round CJ (his places shift with every look): no back-and-forth at the place
 LOW6 = [(10., -13., 10., -9.), (10., 9., 10., 13.), (-6., -14., -6., -10.), (-6., 10., -6., 14.), (13., -5., 13., -3.), (13., 3., 13., 5.)]

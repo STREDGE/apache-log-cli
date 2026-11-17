@@ -109,7 +109,7 @@ passed('Contact with a pillar 3 m away: the commander tells CJ which way to go (
 # ------------------------------------------------------------------ too hot: a ring and the pickup call
 w2.health[1]=20;w2.messages.clear();steps(w2,V2,8)
 P2=posts(w2);lead_=w2.brain.out.lead
-D2_=sorted(math.dist(spot(p),w2.coords(1)[:2]) for p in P2.values());assert all(x<=5.1 for x in D2_[:-1]) and 7.5<=D2_[-1]<=12.5 and w2.messages.count('SQEVAC')==1,([spot(p) for p in P2.values()],w2.messages)   # (0.9: the commander and the bodyguards come in, the outer man holds 8-12 m off)
+D2_=sorted(math.dist(spot(p),w2.coords(1)[:2]) for p in P2.values());assert all(x<=5.1 for x in D2_[:-1]) and 12.5<=D2_[-1]<=19.5 and w2.messages.count('SQEVAC')==1,([spot(p) for p in P2.values()],w2.messages)   # (0.9: the commander and the bodyguards come in; 1.5: the outer man holds 14-19 m off, out of CJ's sight)
 steps(w2,V2,60);assert w2.messages.count('SQEVAC')==1
 passed('CJ badly hurt under fire: everybody comes in round him (within 5 m) and "too hot - call ROPE PICKUP", once (not again for 20 s)')
 w2.health[1]=100;w2.dead.add(h2);w2.messages.clear();w2.now+=30000;steps(w2,V2,6);w2.now+=30000;steps(w2,V2,6);w2.now+=30000;steps(w2,V2,6)
@@ -196,7 +196,16 @@ for _ in range(30):
 ups=[x for x in wh.calls if x[1]==0x83c and x[2][0]==mk2 and x[2][3]>0.5]
 assert mk2 not in wh.exists and ups and wh.shared[b.GROUND_PUB2+3]==-1 and t2H.v[19]==1,(mk2 in wh.exists,len(ups),t2H.v[19])
 assert any(x[1]==0x605 and x[2][0]==mk2 and x[2][1]=='ABSEIL' for x in wh.calls) and any(x[1]==0x574 and x[2]==[heliH,1] for x in wh.calls) and not wh.frozen.get(heliH),'the rope clip, the helicopter held while he climbs and let go when he is aboard'
+ropes0=len([x for x in wh.calls if x[1]==0x503 and x[2][1]==t2b.MODELS[3]])
+for _ in range(12): steps(wh,VH,1)                                   # (beta 6: the brain's answer about the pickup over his head still stands)
+assert len([x for x in wh.calls if x[1]==0x503 and x[2][1]==t2b.MODELS[3]])==ropes0 and wh.shared[b.GROUND_PUB2+3]==-1,'beta 6: no drop on the spot where he was picked up - only over a roof the brain chose (ow_ok 1)'
+wh.brain.plan_override={2:1,3:1,4:mp[0]+20,5:mp[1],6:mp[2]+6}
+for _ in range(12):
+ steps(wh,VH,1)
+ if [x for x in wh.calls if x[1]==0x503 and x[2][1]==t2b.MODELS[3]][ropes0:]:break
+assert [x for x in wh.calls if x[1]==0x503 and x[2][1]==t2b.MODELS[3]][ropes0:],'over the roof he goes down the rope'
 wh.brain.plan_override={}
+passed('2.0 beta 6: after the pickup no marksman goes down the rope where he was picked up (the fifth log: a new one hung under the helicopter over the same spot a second later) - only over a roof the brain chose')
 passed('2.0 beta 5 the marksman picked up: no way up to a good roof but the rope - the helicopter hangs over him, is held, he goes up its rope (the rope clip run backwards, lifted to the door in 1.5 s) and is aboard; then he waits for his roof as at the first drop')
 steps(w8,V8,20)
 P8=posts(w8);jobs8={P8[x].job for x in team8+extra if x in P8}
@@ -320,8 +329,8 @@ w.player=[30.,0.,0.];w.calls.clear();steps(w,V,12);assert not calls(w,0xe48) and
 passed('The brain mod gone in mid-game: the squad never runs the opcode and never fires (no "dumb" fallback: the posts are the brain\'s)')
 w,c,_=setup();summon(w,c);command=g['command'];command(w,c,3,ticks=5);w.car=[0.,0.,18.];w.speed=0
 ground=VM('Helicover_Ground',w);sq=VM('Helicover_Squad',w);w.health[1]=100;w.step(c,ground,sq,n=3);w.shared[b.ROPE_COMMAND]=1;w.step(c,ground,sq,n=6)
-rope=[w.shared[b.GROUND_PUB+i] for i in range(4)];w.now+=8000;w.calls.clear();w.step(c,ground,sq,n=6)
-assert w.shared[b.SQ_ROPE]==1 and all(len(orders(w,0x5d3,t))>0 for t in rope)
+rope=[w.shared[b.GROUND_PUB+i] for i in range(4)];w.now+=8000;w.calls.clear();w.step(c,ground,sq,n=20)   # (1.5: an outer man's place stands still now - his order is renewed after 1.5 s, not every look)
+assert w.shared[b.SQ_ROPE]==1 and all(len(orders(w,0x5d3,t))+len(orders(w,0x5f5,t))>0 for t in rope)   # (1.5: the outer man 20 m out may be sent by the game's path network)
 assert all(o[4] in (4,6,7) for t in rope for o in orders(w,0x5d3,t)) and w.shared[b.SQ_GROUP]==2
 passed('Rope evacuation guards are led by the squad while CJ walks to the rope')
 w,c,ground,sq,team=escort_world();V=(c,ground,sq)
@@ -336,7 +345,7 @@ door=list(w.coords(1));steps(w,V,3)
 w.interior=3;w.player=[2000.,2000.,1000.] if hasattr(w,'player') else None;w.pos[team[1]]=[door[0],door[1]-30.,0.];w.calls.clear();w.teleports.clear();w.now+=4100;steps(w,V,12)
 Pd=posts(w)
 assert not any(orders(w,op,t) for t in team for op in (0xa1,0x850)) and not w.teleports,'nobody follows CJ into the building or is teleported'
-assert Pd and all(math.dist(spot(p_),door[:2])<=16. for p_ in Pd.values()),('the posts are laid out round the door CJ went in by',[spot(p_) for p_ in Pd.values()],door)
+assert Pd and all(math.dist(spot(p_),door[:2])<=33. for p_ in Pd.values()),('the posts are laid out round the door CJ went in by (1.5: the outer men 15-33 m out)',[spot(p_) for p_ in Pd.values()],door)
 assert orders(w,0x5d3,team[1]) or orders(w,0x637,team[1]) or orders(w,0x5f5,team[1]),'the man who was away comes to his post at the door'
 w.interior=0;w.player=door
 passed('CJ inside a building: the detail holds the door he went in by - posts round it, nobody follows him inside or is teleported; the man who was away comes back to the door')
@@ -746,7 +755,7 @@ for t in team:w.pos[t]=[0.,-14.,0.]
 w.walk.clear();w.calls.clear();steps(w,V,4)
 assert w.shared[b.NATIVE]==1,'the squad worker has told both fours that the mod walks them'
 MOVES=(0x5d3,0x637,0x5f5,0x850,0x78f)
-steps(w,V,75);P_=posts(w)
+steps(w,V,110);P_=posts(w)   # (1.5: the outer men's places are 21 m out and they walk the last 4 m: 11 s, not 7.5)
 assert not [x for x in w.calls if x[1] in MOVES and x[2][0] in team],('no go-to, run-and-fire, path, follow or vault task from the scripts',[(hex(x[1]),x[2][0]) for x in w.calls if x[1] in MOVES and x[2][0] in team][:4])
 assert all(math.dist(w.pos[t][:2],spot(P_[t]))<1.5 for t in team),{t:(w.pos[t][:2],spot(P_[t])) for t in team}
 assert all(w.brain.walked.get(t,0)>5 for t in team) and all(w.shared[b.SQ_SLOT+k*b.SQ_SLOT_SIZE]!=1 for k in range(4))

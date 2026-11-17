@@ -32,6 +32,7 @@ def at(p):
 
 def fight(low=(), full=(), threats=((34., 0.),), tune=None, cj_fires=False, ticks=170):
     sc = Scene(); sc.low_walls = list(low); sc.walls = list(full)
+    sc.brain.cfg.outer_fight_m = 18.0          # (1.5: the weights are tested at the old 18 m ring - the geometry of these scenes)
     if tune: tune(sc.brain.cfg)
     team = [sc.our(x, y, SQ + k, weapon=M4) for k, (x, y) in enumerate(EIGHT)]
     sc.walk_posts = True; sc.step(20)
@@ -42,7 +43,13 @@ def fight(low=(), full=(), threats=((34., 0.),), tune=None, cj_fires=False, tick
             for g in gs: sc.shot(g, (0., 0., 1.), dst=1)
             if cj_fires: sc.shot(1, tuple(sc.peds[gs[0]]['pos']))
         sc.step(1)
-    return sc, team, gs, {JOB[p.job]: p for p in sc.posts.values()}
+    j = {JOB[p.job]: p for p in sc.posts.values()}
+    # (1.5: the quarters are dealt out by the least way, not by the man's number: "the point man" is the one in the quarter
+    #  ahead-left of the line to the threat - north-east here)
+    ne = [k for k in OUTER if j[k].at.x > 0 and j[k].at.y > 0]
+    if ne:
+        pm = j[ne[0]]; j[ne[0]] = j['point']; j['point'] = pm
+    return sc, team, gs, j
 
 
 def hidden(sc, frm, p, low_too=True):
@@ -100,7 +107,7 @@ passed('A place hidden from the shooter but with a wall between it and CJ is not
 
 # ------------------------------------------------------------------ he keeps a place: no moving for a little, no moving before 4 s
 sc, team, (g,), j = fight(low=LOW, ticks=170)
-kept = {k: at(j[k]) for k in OUTER}; moves = 0
+kept = {JOB[p.job]: at(p) for p in sc.posts.values()}; moves = 0
 for k in range(200):
     if k % 9 == 0: sc.shot(g, (0., 0., 1.), dst=1)
     if k == 20: sc.cj['pos'][0] += 1.5                               # CJ shifts a step: every value changes a little
@@ -123,13 +130,22 @@ crowded = hcb_py.place_value(*args, taken=[(p3[0] - _dy / _l * 2.0, p3[1] + _dx 
 assert abs((alone - crowded) - sc.brain.cfg.place_w_crowd) < 0.01, ('another of ours 2 m off: worth place_w_crowd less', alone, crowded)
 assert hcb_py.place_value(*args, taken=[(p3[0] + _dx / _l * 2.0, p3[1] + _dy / _l * 2.0, p3[2])]) < 0, '1.3: one of ours 2 m in front of him, in his line to the shooter: no place'
 assert hcb_py.place_value(sc.brain, p3, tuple(man), (p3[0] + _dx / _l * 5.0, p3[1] + _dy / _l * 5.0, cjp[2]), tuple(a_), p3, sc.time) < 0, '1.3: CJ in his line to the shooter: no place'
+# 1.5: CJ 2.3 m beside that line (5 m out): inside the corridor a NEW place needs (2.4 m + 2 cm a metre), outside the one a place he HOLDS
+#      goes with (2 m + 2 cm a metre) - no flapping between the two
+_cj23 = (p3[0] + _dx / _l * 5.0 - _dy / _l * 2.3, p3[1] + _dy / _l * 5.0 + _dx / _l * 2.3, cjp[2])
+assert hcb_py.place_value(sc.brain, p3, tuple(man), _cj23, tuple(a_), p3, sc.time) < 0 and hcb_py.place_value(sc.brain, p3, tuple(man), _cj23, tuple(a_), p3, sc.time, keep=1) >= 0, '1.5: a new place keeps 0.4 m more off the line of CJ than a place he holds'
 on_top = hcb_py.place_value(*args, taken=[(p3[0] + 0.8, p3[1], p3[2])])
 assert on_top < 0, 'and within 1.2 m of his place it is no place at all'
 dx, dy = p3[0] - cjp[0], p3[1] - cjp[1]; l_ = math.hypot(dx, dy)
 in_line = hcb_py.place_value(*args, cj_dir=(dx / l_, dy / l_, 0.), cj_fires=1)
 beside = hcb_py.place_value(*args, cj_dir=(-dy / l_, dx / l_, 0.), cj_fires=1)
 assert in_line < 0 and abs(beside - alone) < 0.01, ('in front of CJ\'s weapon it is no place; with CJ firing another way it is worth the same', in_line, beside)
-passed('What a place is worth, weight by weight: hidden from a second shooter +%.2f, another of ours within 3 m -%.2f (within 1.2 m - no place), in front of CJ\'s weapon while he fires - no place; 1.3: CJ or one of ours in his line to the shooter - no place (a place he holds is not dropped for it: the shooter shifting about moves nobody)' % (sc.brain.cfg.place_w_others, sc.brain.cfg.place_w_crowd))
+# 1.5 (the review): in peace a man's place hides him from a point 30 m beyond his own quarter - that point is no man, and the middle of his
+#      quarter lies right on the line CJ - point: the rules of the line of a fight would throw out the very place he is sent to
+_far = (cjp[0] + dx / l_ * (l_ + 30.0), cjp[1] + dy / l_ * (l_ + 30.0), cjp[2] + 0.6)
+assert hcb_py.place_value(sc.brain, p3, tuple(man), tuple(cjp), _far, p3, sc.time) < 0, 'the same point taken for a man: the line of the fight runs through the place'
+assert hcb_py.place_value(sc.brain, p3, tuple(man), tuple(cjp), _far, p3, sc.time, stand_in=1) >= 0, '1.5: the peace stand-in: the middle of his quarter is a place'
+passed('What a place is worth, weight by weight: hidden from a second shooter +%.2f, another of ours within 3 m -%.2f (within 1.2 m - no place), in front of CJ\'s weapon while he fires - no place; 1.3: CJ or one of ours in his line to the shooter - no place (1.5: a place he holds goes only when CJ comes within 1.5 m of that line, a new one needs 1.8 m - no flapping); in peace the point beyond his quarter is no man - the middle of his quarter is a place' % (sc.brain.cfg.place_w_others, sc.brain.cfg.place_w_crowd))
 
 text = '\n'.join(results) + '\nThe core only. Nothing here has run in the game.\n'
 (hcb_py.OUT / 'brain_places_tests.txt').write_text(text)

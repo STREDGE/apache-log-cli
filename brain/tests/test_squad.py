@@ -46,7 +46,8 @@ def pos(sc, who):
 
 # ================================================================== PROTECT
 # ------------------------------------------------------------------ a fight: exactly three at CJ; four out in cover that sees CJ and the shooter
-LOW = [(10., -13., 10., -9.), (10., 9., 10., 13.), (-6., -14., -6., -10.), (-6., 10., -6., 14.), (13., -5., 13., -3.), (13., 3., 13., 5.), (-9., -17., -9., -13.), (-9., 13., -9., 17.)]
+LOW = [(10., -13., 10., -9.), (10., 9., 10., 13.), (-6., -14., -6., -10.), (-6., 10., -6., 14.), (13., -5., 13., -3.), (13., 3., 13., 5.), (-9., -17., -9., -13.), (-9., 13., -9., 17.),
+       (15.5, 16., 15.5, 20.), (15.5, -20., 15.5, -16.), (-11., 17.5, -11., 21.), (-11., -21., -11., -17.5)]   # (1.5: cover out where the outer men are now)
 sc = Scene(); sc.low_walls = list(LOW); team = squad(sc); sc.step(30)
 g = sc.ped(34, 0, pedtype=GANG, weapon=AK, face=(-1., 0.))
 sc.step(2); sc.shot(g, (0., 0., 1.), dst=1)
@@ -68,12 +69,12 @@ assert sc.last_out.task == HCB_TASK_SHIELD and sc.last_out.umode == HCB_UMODE_PR
 assert set(near_hist) == {3}, ('exactly three stay at CJ', sorted(set(near_hist)))
 assert {JOB[sc.posts[w].job] for w in team if d2(pos(sc, w), sc.cj['pos']) < 4.5} == {'lead', 'close', 'close2'}
 outs = {n_: at(j[n_]) for n_ in ('point', 'point2', 'rear', 'rear2')}
-assert all(12 <= d2(p_, sc.cj['pos']) <= 28 for p_ in outs.values()), ('the four are 12-28 m out', outs)
+assert all(15 <= d2(p_, sc.cj['pos']) <= 35 for p_ in outs.values()), ('1.5: the four are 15-35 m out', outs)
 hidden = [n_ for n_, p_ in outs.items() if sc.blocked(pos(sc, g), p_)]
 assert len(hidden) >= 3, ('behind something a crouching man is hidden by', outs, hidden)
 share = sees_both / max(on_post, 1)
 assert on_post > 200 and share >= 0.8, ('on their posts they see CJ and the attacker', on_post, share)
-passed('PROTECT, a fight: exactly THREE at CJ the whole time (the commander and two bodyguards); the other four on posts 12-28 m out, %d of 4 behind low cover; standing there a man sees both CJ and the attacker %d %% of his time on the post' % (len(hidden), round(100 * share)))
+passed('PROTECT, a fight: exactly THREE at CJ the whole time (the commander and two bodyguards); the other four on posts 15-35 m out, %d of 4 behind low cover; standing there a man sees both CJ and the attacker %d %% of his time on the post' % (len(hidden), round(100 * share)))
 
 # ------------------------------------------------------------------ the marksman: a high place, the helicopter takes him there
 sc = Scene(); team = squad(sc, 7); sc.step(20)                     # seven on the ground: the marksman has not come down yet
@@ -110,6 +111,21 @@ for k in range(450): o = sc.step(1)
 assert not o.ow_ok, 'the helicopter never got there in 40 s: the squad gives up (he comes down with the others)'
 passed('No high place near, or the helicopter does not get there in 40 s: the squad does not wait - the marksman comes down with the others')
 
+# 1.5 (the review): in a fight the helicopter is sent to hang over a roof only for a marksman who really waits aboard - not for a dead one
+#      (he is "not on the ground" too): it keeps its firing spot
+sc = Scene(); team = squad(sc, 7); sc.step(20)
+heli = sc.veh(0., -30., cls=HCB_VC_HELI, z=30.); sc.heli = heli
+sc.high = [(22., 14., 9., True)]
+g = sc.ped(34, 0, pedtype=GANG, weapon=AK, face=(-1., 0.))
+sc.step(2); sc.shot(g, (0., 0., 1.), dst=1)
+ow_seen = 0
+for k in range(60):
+    if k % 12 == 0: sc.shot(g, (0., 0., 1.), dst=1)
+    o = sc.step(1)
+    ow_seen += bool(o.ow_ok)
+assert ow_seen == 0, ('1.5: a fight, nobody aboard waiting for a roof: the helicopter is not sent over one', ow_seen)
+passed('1.5: in a fight with no marksman waiting aboard (dead, or never picked up) the helicopter is not sent to hang over a roof - it keeps its firing spot')
+
 # ================================================================== ASSAULT
 def assault(target=(0., 70.), n=8, pedtype=CIV, weapon=0, walls=()):
     sc = Scene(); sc.low_walls = list(walls); team = squad(sc, n); sc.step(30)
@@ -125,17 +141,30 @@ assert sc.last_out.umode == HCB_UMODE_ASSAULT and sc.last_out.task == HCB_TASK_R
 assert sum(1 for w in team if d2(pos(sc, w), sc.cj['pos']) < 5.0) == 3, 'nobody has gone anywhere: a passer-by is not a target'
 passed('ASSAULT with nobody pointed out and no threat: the squad stays with CJ (task REGROUP), a passer-by 70 m off is not a target')
 
+# 1.5 (the review): only the commander and a bodyguard left - nobody to send: back with CJ, not an assault nobody makes
+sc, team, g = assault(n=2)
+sc.cj['target'] = g; sc.step(3); sc.cj['target'] = 0
+for k in range(40):
+    if k % 30 == 0: sc.cj['target'] = g
+    elif k % 30 == 3: sc.cj['target'] = 0
+    sc.step(1)
+assert sc.last_out.umode == HCB_UMODE_ASSAULT and sc.last_out.task == HCB_TASK_REGROUP, ('1.5: no outer man left: REGROUP', TASK[sc.last_out.task])
+assert all(d2(pos(sc, w), sc.cj['pos']) < 5.0 for w in team), 'and both stay at CJ'
+passed('1.5: ASSAULT with only the commander and a bodyguard left (nobody to send): the task is REGROUP at CJ, neither leaves him')
+
 # ------------------------------------------------------------------ CJ points a man out: approach, gather, bounds - by itself
 sc, team, g = assault()
 sc.cj['target'] = g; sc.step(3); sc.cj['target'] = 0
 tasks, first_pos_t, movers_max, pair_both = [], None, 0, 0
 front0 = None
+lead_far = 0.0
 for k in range(700):
     if k % 30 == 0: sc.cj['target'] = g
     elif k % 30 == 3: sc.cj['target'] = 0
     o = sc.step(1)
     tasks.append(o.task)
     j = by_job(sc)
+    if k >= 20: lead_far = max(lead_far, d2(pos(sc, j['lead'].who), sc.cj['pos']), d2(at(j['lead']), sc.cj['pos']))
     if o.task == HCB_TASK_BOUND:
         a1 = [j[n_] for n_ in ('point',) if n_ in j]; a2 = [j[n_] for n_ in ('point2',) if n_ in j]     # (1.3: the bodyguards stay with CJ)
         m1 = sum(1 for p in a1 if p.move); m2 = sum(1 for p in a2 if p.move)
@@ -152,15 +181,16 @@ body = [d2(pos(sc, j[n_].who), sc.cj['pos']) for n_ in ('close', 'close2')]
 assert max(ass) < 16 and min(ass) >= 7.5, ('the assault pair has closed to 9-14 m, nobody ran INTO the target', ass)
 assert all(20 <= d_ <= 52 for d_ in fire), ('the fire team stayed back, 30-46 m', fire)
 assert all(d_ < 4.0 for d_ in body), ('1.3: the two bodyguards never left CJ (the first 2.0 log: CJ died alone during an assault)', body)
+assert lead_far < 5.0, ('1.5 (the player: "only the bodyguards and the commander at my side"): the commander never goes with the assault', lead_far)
 left = [pos(sc, j[n_].who) for n_ in ('point',)]; right = [pos(sc, j[n_].who) for n_ in ('point2',)]
 assert all(p_[0] < -2 for p_ in left) and all(p_[0] > 2 for p_ in right), ('the pairs came in on the two flanks, not down the fire team\'s line', left, right)
 bound_ticks = tasks.count(HCB_TASK_BOUND)
 assert pair_both <= 0.12 * bound_ticks, ('one pair at a time: both pairs on the move in %d of %d looks' % (pair_both, bound_ticks))
 assert all(d2(pos(sc, a_), pos(sc, b_)) > 1.5 for a_ in team for b_ in team if a_ < b_), 'no two men on one spot'
 near_cj = sorted(JOB[sc.posts[w].job] for w in team if d2(pos(sc, w), sc.cj['pos']) < 6)
-assert d2(sc.cj['pos'], (0, 0)) < 0.1 and set(near_cj) >= {'close', 'close2'} and 'point' not in near_cj and 'point2' not in near_cj, ('CJ stood still: the squad went by itself - 1.3: with the two bodyguards (and the commander, CJ being 70 m from the squad) left at his side', near_cj)
+assert d2(sc.cj['pos'], (0, 0)) < 0.1 and set(near_cj) == {'lead', 'close', 'close2'}, ('CJ stood still: the squad went by itself - 1.3: with the two bodyguards at his side; 1.5 (the player: "only the bodyguards and the commander at my side"): the commander stays with him too', near_cj)
 t_first = first_pos_t
-passed('ASSAULT on a man CJ points out 70 m off: APPROACH -> GATHER -> BOUND by itself (CJ did not move); the assault four close in pairs on the two flanks to 9-14 m, one pair at a time (both moving in %d of %d looks), the fire team holds 30-46 m back; nobody on the same spot' % (pair_both, bound_ticks))
+passed('ASSAULT on a man CJ points out 70 m off: APPROACH -> GATHER -> BOUND by itself (CJ did not move; the commander and the two bodyguards stay at his side); the assault four close in pairs on the two flanks to 9-14 m, one pair at a time (both moving in %d of %d looks), the fire team holds 30-46 m back; nobody on the same spot' % (pair_both, bound_ticks))
 
 # ------------------------------------------------------------------ the measured criterion: from 60 m, the first place taken near the target
 sc, team, g = assault(target=(0., 60.), pedtype=GANG, weapon=AK)
@@ -189,7 +219,7 @@ assert order[:2] == [HCB_TASK_CONSOLIDATE, HCB_TASK_REGROUP], [TASK[t] for t in 
 assert 70 <= tasks.count(HCB_TASK_CONSOLIDATE) <= 90, 'eight seconds of all-round watch'
 assert all(d2(c_, gp) > 3.0 for c_ in cons), ('nobody stands ON the spot', cons)
 assert sc.last_out.umode == HCB_UMODE_ASSAULT, 'the mode is still ASSAULT: it waits for the next target'
-assert sum(1 for w in team if d2(pos(sc, w), sc.cj['pos']) < 5.0) == 3 and all(d2(pos(sc, w), sc.cj['pos']) < 30 for w in team), 'everybody is back with CJ, three at his side'
+assert sum(1 for w in team if d2(pos(sc, w), sc.cj['pos']) < 5.0) == 3 and all(d2(pos(sc, w), sc.cj['pos']) < 34 for w in team), 'everybody is back with CJ, three at his side (1.5: the outer men at their places 15-33 m out)'
 passed('The target is down: CONSOLIDATE - eight seconds of all-round watch beside the spot (nobody on it) - then REGROUP: back to CJ, three at his side again; the mode stays ASSAULT and waits for the next target')
 
 # ------------------------------------------------------------------ the target out of sight: to where it was last SEEN, not to where it is
@@ -217,7 +247,7 @@ sc.umode = HCB_UMODE_PROTECT
 o = sc.step(2)
 assert o.umode == HCB_UMODE_PROTECT and o.task == HCB_TASK_ESCORT and set(sc.posts) == ids, 'PROTECT at once, the same eight men'
 j = by_job(sc)
-assert d2(at(j['lead']), sc.cj['pos']) < 2 and all(d2(at(j[n_]), sc.cj['pos']) < 20 for n_ in j), 'every place is round CJ again - planned from where each man stands'
+assert d2(at(j['lead']), sc.cj['pos']) < 2 and all(d2(at(j[n_]), sc.cj['pos']) < 35 for n_ in j), 'every place is round CJ again - planned from where each man stands (1.5: the outer men 15-33 m out)'
 sc.step(200)
 assert sum(1 for w in team if d2(pos(sc, w), sc.cj['pos']) < 5.0) == 3
 sc.umode = HCB_UMODE_ASSAULT; sc.cj['target'] = g; sc.step(40)

@@ -108,10 +108,13 @@ API void hcb_init(hcb_brain *b, u32 seed) {
     b->cfg.car_floor = 700;
     b->cfg.react_min_ms = 150;
     b->cfg.react_max_ms = 350;
-    b->cfg.burst_min_ms = 600;
-    b->cfg.burst_max_ms = 1400;
-    b->cfg.pause_min_ms = 200;
-    b->cfg.pause_max_ms = 500;
+    /* (1.5, the player: "the guards kill too fast - a man dies in a fraction of a second"; the fifth 2.0 log: 8 of 12 kills were the door
+       gunners alone, 0.4 s from the first hit - a round every 0.16 s for 0.6-1.4 s with a breath of 0.2-0.5 s. Now a burst of three to
+       six rounds and a real breath between bursts; with the damage of ours at a quarter (the adapter) a man lasts seconds, not a blink) */
+    b->cfg.burst_min_ms = 400;
+    b->cfg.burst_max_ms = 900;
+    b->cfg.pause_min_ms = 700;
+    b->cfg.pause_max_ms = 1500;
     b->cfg.follow_ms = 3000;
     b->cfg.threat_hold_ms = 2000;
     b->cfg.ram_hold_ms = 1500;
@@ -125,7 +128,7 @@ API void hcb_init(hcb_brain *b, u32 seed) {
     b->cfg.scatter_per_ms = 0.02f;
     b->cfg.gunner_weapon = 1;
     b->cfg.cabin_skip_m = 1.5f;
-    b->cfg.outer_peace_m = 15; b->cfg.outer_fight_m = 18; b->cfg.cj_low_hp = 40;
+    b->cfg.outer_peace_m = 21; b->cfg.outer_fight_m = 23; b->cfg.cj_low_hp = 40;
     b->cfg.gather_m = 32; b->cfg.rush_m = 8; b->cfg.assault_near_m = 9; b->cfg.fire_first_ms = 2000; b->cfg.search_ms = 6000;
     b->cfg.target_keep_ms = 20000; b->cfg.consolidate_ms = 8000; b->cfg.withdraw_down = 3;
     b->cfg.ow_min_h = 4; b->cfg.ow_max_h = 35; b->cfg.ow_min_d = 12; b->cfg.ow_max_d = 70; b->cfg.ow_try_ms = 40000;
