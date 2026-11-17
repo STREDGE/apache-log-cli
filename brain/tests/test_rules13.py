@@ -291,6 +291,9 @@ def step_out(on_place):
     sc.los_fn = lambda a, b_: a not in front                   # (the two in front have a wall in their way: the rear man is the one to fire)
     rear = [w for w in team if sc.posts[w].job == HCB_ROLE_REAR][0]
     if on_place: sc.peds[rear]['pos'] = [sc.posts[rear].at.x, sc.posts[rear].at.y, sc.peds[rear]['pos'][2]]   # (right on his place: he is told to stay - the step must be a move)
+    if on_place not in (True, False):                          # (a metre off his place, to one side of the line to the man he is to fire at)
+        gx, gy = 0. - sc.posts[rear].at.x, 30. - sc.posts[rear].at.y; gl = math.hypot(gx, gy)
+        sc.peds[rear]['pos'] = [sc.posts[rear].at.x - gy / gl * on_place, sc.posts[rear].at.y + gx / gl * on_place, sc.peds[rear]['pos'][2]]
     p0 = list(pos(sc, rear)); blocked_t, fired_t, p1 = None, None, None
     gp_ = pos(sc, g)
     sc.our(p0[0] + 0.3 * (gp_[0] - p0[0]), p0[1] + 0.3 * (gp_[1] - p0[1]), HCB_ROLE_NONE)   # one of ours standing in his line (1.5: wherever his place is)
@@ -304,6 +307,7 @@ def step_out(on_place):
     assert d2(p1, sc.cj['pos']) > d2(p0, sc.cj['pos']), 'the step is away from CJ'
     return (fired_t - blocked_t) / 10.
 t_on, t_off = step_out(True), step_out(False)
+t_l, t_r = step_out(1.1), step_out(-1.1)
 passed('One of ours in his line to the man he is to fire at (the second 2.0 log: "one of ours in the line" in one order of five, and the man stood): after 0.7 s he steps 2.5 m aside, away from CJ, and fires %.1f s after he was first held (1.5: the same from a metre off his place - %.1f s - the step is made from where he stands)' % (t_on, t_off))
 
 # ------------------------------------------------------------------ the three at CJ's side: CJ in the line - a step round him to his flank, still at his side
@@ -319,6 +323,22 @@ for k in range(60):
         far = max(far, d2(pos(sc, w), sc.cj['pos']))
 assert before == 10 and after == 0 and far < 3.0, ('the commander and the second bodyguard behind CJ: CJ in their line, then out of it for good, never more than 3 m from him', before, after, far)
 passed('An armed man ahead and the commander and a bodyguard behind CJ, CJ in their line (1.2: they stood like that): after 0.7 s each steps round CJ to his flank, 1.7 m beside him and half a metre forward - CJ is out of their line from then on (whether they fire is the usual three-on-a-man and friends-in-line rules), never more than %.1f m from CJ' % far)
+# (1.6.1, the half-hour run: CJ stood by a wall, and the spot at his flank was beyond it - the bodyguard went round the wall and stood there,
+#  the wall between him and CJ. A spot the map has a wall before is not taken: the other flank)
+sc = Scene(roe=HCB_ROE_ARMED); sc.walls = [(1., -20., 1., 20.)]
+team = [sc.our(-abs(x) - 0.5, y, SQ + k, weapon=SNIPER if k == 7 else M4) for k, (x, y) in enumerate(EIGHT)]; sc.walk_posts = True; sc.step(40)
+g = sc.ped(0., 30., pedtype=GANG, weapon=AK, face=(0., 1.))
+in3 = [w for w in team if sc.posts[w].job in (HCB_ROLE_LEAD, HCB_ROLE_CLOSE, HCB_ROLE_CLOSE2)]
+beyond = after = far = 0
+for k in range(80):
+    sc.step(1)
+    for w in in3:
+        o = sc.orders.get(w)
+        beyond += sc.posts[w].at.x > 0.7 or pos(sc, w)[0] > 1.0
+        if o and o.target == g and o.hold == HCB_HOLD_CJ_IN_LINE: after += k >= 30
+        far = max(far, d2(pos(sc, w), sc.cj['pos']))
+assert beyond == 0 and far < 4.5, ('CJ a metre from a wall on his right, a gunman ahead: no flank spot beyond the wall, the three stay within 4.5 m of him', beyond, far)
+passed('The same with a wall a metre to CJ\'s right: nobody\'s flank spot is beyond it (1.6: 73 looks with a place there, one of the three 20 m from CJ on his way round the wall) - the three stay within %.1f m of him' % far)
 
 # ================================================================== movement (plan items V, I, K)
 # ------------------------------------------------------------------ no fight: nobody "waits his turn" - the turn to move is a firefight rule only

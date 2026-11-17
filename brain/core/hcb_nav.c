@@ -126,6 +126,20 @@ HID int hcb_nav_by_wall(const hcb_brain *b, hcb_vec at) {
     }
     return 0;
 }
+/* 1.6.1: how far the point is from the nearest edge of its own cell that has a wall on it (or a cell nobody can stand in beyond it);
+   9 when there is none. A man is 0.35 m thick: a place nearer than that to a wall is one he cannot stand on */
+HID float hcb_nav_clear(const hcb_brain *b, hcb_vec at) {
+    const nav *n = &b->nv;
+    int i = ci(n, at.x), j = cj_(n, at.y);
+    const navcell *a = cell((nav *)n, i, j), *w = cell((nav *)n, i - 1, j), *s = cell((nav *)n, i, j - 1), *e = cell((nav *)n, i + 1, j), *nn = cell((nav *)n, i, j + 1);
+    float fx = at.x - (float)(n->ox + i), fy = at.y - (float)(n->oy + j), d = 9.0f;
+    if (!n->ok || !a || a->st != 1) return 9.0f;
+    if (((a->fix & 1) || (e && e->st == 2)) && 1.0f - fx < d) d = 1.0f - fx;
+    if (((a->fix & 2) || (nn && nn->st == 2)) && 1.0f - fy < d) d = 1.0f - fy;
+    if (((w && w->st == 1 && (w->fix & 1)) || (w && w->st == 2)) && fx < d) d = fx;
+    if (((s && s->st == 1 && (s->fix & 2)) || (s && s->st == 2)) && fy < d) d = fy;
+    return d;
+}
 HID int hcb_nav_ground(const hcb_brain *b, hcb_vec at, float *z) {
     const nav *n = &b->nv;
     int i = ci(n, at.x), j = cj_(n, at.y);

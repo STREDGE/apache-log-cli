@@ -1,10 +1,23 @@
 HELICOVER 2.0 BETA 7 - support helicopter with an autonomous protective detail
-GTA San Andreas (Android, 64-bit), a CLEO mod + the Helicover Brain 1.6 mod. They only work together.
+GTA San Andreas (Android, 64-bit), a CLEO mod + the Helicover Brain 1.6.1 mod. They only work together.
 
 WHAT IT IS
 Call a support helicopter: it flies in from far away, follows CJ and covers him with four door
 gunners. Drop a four-man team on foot, get picked up by rope, fly to the map marker or Grove
 Street and get out there by landing or by rope.
+
+FIX: BRAIN 1.6.1 (Helicover is the same, 2.0 beta 7)
+If you already have beta 7 with brain 1.6, replace one file: libHelicoverBrain64.so (the CLEO files have not changed).
+After 1.6 was out I finished the full mutation check of the tests (every rule of the brain is broken in turn, and the
+tests must notice). It showed 11 rules without a reliable test; writing those tests found three faults of 1.6:
+- You jog (faster than a walk, slower than a sprint - about 3-4.5 m/s) and the outer men stay down at their places, 50-100 m
+  behind you: a place you had already left was not given up. Now it is given up at once and the man makes for the next
+  cover ahead. In the simulation at 2, 3, 3.5 and 4.2 m/s nobody is more than 40 m from you (1.6 at 4.2 m/s: all four).
+- You stand right at a wall: the place of the commander or a bodyguard came out on its far side and he went there, the wall
+  between him and you. Now such a place is taken on your side, and the step "out from behind you" is never made beyond a wall.
+- The step "deeper into the shadow" could take a place to 16 cm from the car the man hides behind - no room to stand. Now
+  never nearer than 30 cm.
+Checked like 1.6: the core tests, three half-hour runs of the simulation, the emulator with your libGTASA.so. Not in the game.
 
 NEW IN 2.0 BETA 7 (brain 1.6) - FROM YOUR BETA 6 LOG, SCREENSHOTS AND VIDEO
 IMPORTANT: replace EVERYTHING - the CLEO files and libHelicoverBrain64.so.

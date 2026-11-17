@@ -174,6 +174,9 @@ HID void hcb_agent_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                         float sg = sg0 * TRY[tr][0];
                         side.x = -to.y / l * sg; side.y = to.x / l * sg; side.z = 0;
                         spot = v_add(cjp_->pos, v_add(v_mul(side, TRY[tr][1]), v_mul(to, 0.5f / l))); spot.z = cjp_->pos.z;
+                        /* (1.6.1, the half-hour run: CJ stood by a wall and the spot at his side was beyond it - the bodyguard went round and
+                           stood with the wall between them. A spot the map has a wall before is no spot) */
+                        if (!hcb_nav_line(b, cjp_->pos, spot, now)) free_ = 0;
                         for (k2 = 0; k2 < out->n_posts && free_; k2++) {
                             const hcb_ped *o2 = k2 != i ? hcb_ped_of(s, out->posts[k2].who) : 0;
                             if (!o2) continue;

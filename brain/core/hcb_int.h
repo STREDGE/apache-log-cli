@@ -108,7 +108,7 @@ typedef struct detail {
     u32 heli_t;
     u8 heli_ok, heli_k, mode, leading, pose, pad_[3];
     u32 mode_since;
-    struct { hcb_vec post; float best; u32 since; u8 alt, stuck, hold_ok, pad; hcb_vec hold; u32 hold_id, hold_bad; float hold_score; u32 hold_at; u8 hold_fight, hold_cv, n_bad, bad_i; hcb_vec bad[3]; u32 bad_t[3]; u32 hold_dl; u8 wide_q, nudges, wq_r_[2]; u32 inv_since; } man[8];   /* each man's progress to his post; 0.6: an outer man's own post in a fight; 1.5: in peace too (hold_fight: which it was chosen for) */
+    struct { hcb_vec post; float best; u32 since; u8 alt, stuck, hold_ok, pad; hcb_vec hold; u32 hold_id, hold_bad; float hold_score; u32 hold_at; u8 hold_fight, hold_cv, n_bad, bad_i; hcb_vec bad[3]; u32 bad_t[3]; u32 hold_dl; u8 wide_q, nudges, mir, wq_r_; } man[8];   /* each man's progress to his post; 0.6: an outer man's own post in a fight; 1.5: in peace too (hold_fight: which it was chosen for) */
     /* 1.5 (beta 6): the outer men's quarters round CJ - who has which (by id), and the axis they were dealt out on */
     u32 q_id[5];
     hcb_vec q_axis;
@@ -120,8 +120,6 @@ typedef struct detail {
     u32 lead_t;             /* 1.6: since when he has waited there / been on his way back */
     u32 low_said;           /* 1.6: when "CJ is hurt" was last said */
     u32 stat[8];            /* 1.6, for the tests and the log: why outer men's places went - 0 no way to it, 1 no place any more (band, quarter, CJ not seen), 2 a covered one for an open one, 3 a better one, 4 the first / none held, 5 answer about it run out */
-    u32 still_since;        /* 1.5: since when CJ has stood (0 = he walks): in peace the outer men walk beside him, and take places once he stands */
-    u32 moved_at;           /* 1.5: when CJ last walked (over 1 m/s) */
     u16 say_seq;
     u8 cj_cover_ok, duty, last_say, say_dir;
     /* 0.4.2 (from the first whole-game log): the detail keeps its threat, its cover and its tongue */
@@ -263,6 +261,7 @@ HID hcb_vec hcb_nav_centre(const hcb_brain *b, hcb_vec at);
 HID int hcb_nav_seg(hcb_brain *b, hcb_out *out, hcb_vec a, hcb_vec c, u32 now);              /* 1 free, 0 blocked, -1 asked */
 HID void hcb_nav_block(hcb_brain *b, hcb_vec at, hcb_vec toward, u32 now, u32 ttl);
 HID int hcb_nav_wall_side(const hcb_brain *b, hcb_vec at, hcb_vec toward);   /* 1.6: 1 = this cell has a wall on the side `toward` is on */
+HID float hcb_nav_clear(const hcb_brain *b, hcb_vec at);   /* 1.6.1: metres to the nearest walled edge of the point's own cell (9 = none) */
 HID int hcb_nav_by_wall(const hcb_brain *b, hcb_vec at);   /* 1.6: 1 = a wall, a step or a drop right next to this cell */
 HID int hcb_nav_walls(const hcb_brain *b, hcb_vec c, float r, hcb_vec threat, hcb_vec *pts, int max);   /* cells behind a wall, seen from the threat */
 /* hcb_places.c (1.1): a firing place chosen by weights */
