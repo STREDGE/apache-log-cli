@@ -569,7 +569,7 @@ API void hcb_think(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         h = hcb_fnv(h, p->who); h = hcb_fnv(h, hcb_bits(p->at.x)); h = hcb_fnv(h, hcb_bits(p->at.y));
         h = hcb_fnv(h, ((u32)p->move << 24) | ((u32)p->crouch << 16) | ((u32)p->duty << 8) | p->job);
         h = hcb_fnv(h, hcb_bits(p->via.x)); h = hcb_fnv(h, hcb_bits(p->via.y)); h = hcb_fnv(h, ((u32)p->act << 16) | ((u32)p->phase << 8) | p->why);
-        h = hcb_fnv(h, hcb_bits(p->via2.x)); h = hcb_fnv(h, hcb_bits(p->via2.y)); h = hcb_fnv(h, ((u32)p->sign << 16) | ((u32)p->climb << 8) | p->face);
+        h = hcb_fnv(h, hcb_bits(p->via2.x)); h = hcb_fnv(h, hcb_bits(p->via2.y)); h = hcb_fnv(h, ((u32)p->cover << 24) | ((u32)p->sign << 16) | ((u32)p->climb << 8) | p->face);
     }
     h = hcb_fnv(h, ((u32)out->task << 24) | ((u32)out->umode << 16) | ((u32)out->n_ground_q << 8) | out->n_seg_q); h = hcb_fnv(h, out->target); h = hcb_fnv(h, out->n_path_q);
     h = hcb_fnv(h, ((u32)out->ow_ok << 8) | out->ow_ready);

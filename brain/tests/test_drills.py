@@ -101,7 +101,8 @@ passed('A blind corner under threat: the man stops short of it for %.1f s with h
 
 # ------------------------------------------------------------------ a doorway: one man at a time, nobody stands in it
 sc = Scene(); sc.walls = [(-20., -10., 0., -10.), (1., -10., 20., -10.)]              # a wall with a gap one metre wide
-team = [sc.our(x, -16., SQ + k, weapon=M4) for k, x in enumerate((-2., 0.5, 3.))]; sc.walk_posts = True
+team = [sc.our(x, -16., SQ + k, weapon=M4) for k, x in enumerate((-2., 0.5, 3.))]
+sc.walk_posts = False; sc.step(15); sc.walk_posts = True     # (1.6: a second and a half on the spot first - a doorway the map has not seen yet is no doorway to the brain)
 g = sc.ped(0, 40, pedtype=GANG, weapon=AK, face=(0., -1.))
 two_in, waited, stood_in, last_in, entered = 0, 0, 0, {}, {}
 def in_gap(p): return -0.3 <= p[0] <= 1.3 and -10.8 <= p[1] <= -9.2
@@ -123,13 +124,16 @@ passed('A doorway (a gap one metre wide) under threat: three men go through one 
 sc = Scene(); sc.walls = [(-20., -10., 0., -10.), (1., -10., 20., -10.)]
 team = [sc.our(x, -12.5, SQ + k, weapon=M4) for k, x in enumerate((-0.8, 1.8))]; sc.walk_posts = True
 g = sc.ped(0, 40, pedtype=GANG, weapon=AK, face=(0., -1.))
-two_in, waited = 0, 0
+sc.walk_posts = False; sc.step(15); sc.walk_posts = True     # (1.6: the map sees the gap first)
+two_in, waited, near_gap = 0, 0, 0
 for k in range(400):
     if k % 9 == 0: sc.shot(g, (0., 0., 1.), dst=1)
     sc.step(1)
     two_in = max(two_in, sum(1 for w in team if in_gap(sc.peds[w]['pos'])))
+    near_gap = max(near_gap, sum(1 for w in team if abs(sc.peds[w]['pos'][0] - 0.5) < 1.6 and -12.6 < sc.peds[w]['pos'][1] < -9.2))
     waited += sum(1 for p in sc.posts.values() if p.why == HCB_WHY2_DOORWAY and p.act == HCB_ACT_HOLD)
-assert two_in <= 1 and waited > 0 and all(sc.peds[w]['pos'][1] > -9. for w in team), ('two come to the gap together: one waits his turn', two_in, waited)
+assert near_gap == 2, 'both come up to the gap together'
+assert two_in <= 1 and all(sc.peds[w]['pos'][1] > -9. for w in team), ('two come to the gap together: never both in it', two_in, waited)
 passed('A doorway, two men at it together (the commander and a bodyguard on their way to CJ): one goes through, the other waits short of it')
 # (1.1: a doorway is walked through its middle - a way that comes to it at a slant is not pulled straight past it: the leg through the
 #  gap runs from the middle of the cell before it to the middle of the cell beyond, square to the wall, never a slant line by a jamb)

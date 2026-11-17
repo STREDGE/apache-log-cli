@@ -108,11 +108,17 @@ typedef struct detail {
     u32 heli_t;
     u8 heli_ok, heli_k, mode, leading, pose, pad_[3];
     u32 mode_since;
-    struct { hcb_vec post; float best; u32 since; u8 alt, stuck, hold_ok, pad; hcb_vec hold; u32 hold_id, hold_bad; float hold_score; u32 hold_at; u8 hold_fight, hr_[3]; } man[8];   /* each man's progress to his post; 0.6: an outer man's own post in a fight; 1.5: in peace too (hold_fight: which it was chosen for) */
+    struct { hcb_vec post; float best; u32 since; u8 alt, stuck, hold_ok, pad; hcb_vec hold; u32 hold_id, hold_bad; float hold_score; u32 hold_at; u8 hold_fight, hold_cv, n_bad, bad_i; hcb_vec bad[3]; u32 bad_t[3]; u32 hold_dl; u32 blind_since; } man[8];   /* each man's progress to his post; 0.6: an outer man's own post in a fight; 1.5: in peace too (hold_fight: which it was chosen for) */
     /* 1.5 (beta 6): the outer men's quarters round CJ - who has which (by id), and the axis they were dealt out on */
     u32 q_id[5];
     hcb_vec q_axis;
     u8 q_fight, q_r_[3];
+    /* 1.6: where cars drive (seen driven at speed): no place of an outer man on the roadway */
+    hcb_vec road[24], road_d[24];
+    u8 road_n, road_i, lead_st, lead_calls;   /* lead_st: LEAD_* (the commander's hops to the cover); calls made to a CJ who did not come */
+    hcb_vec lead_pt;        /* 1.6: the point of this hop */
+    u32 lead_t;             /* 1.6: since when he has waited there / been on his way back */
+    u32 low_said;           /* 1.6: when "CJ is hurt" was last said */
     u32 still_since;        /* 1.5: since when CJ has stood (0 = he walks): in peace the outer men walk beside him, and take places once he stands */
     u32 moved_at;           /* 1.5: when CJ last walked (over 1 m/s) */
     u16 say_seq;
@@ -187,6 +193,7 @@ typedef struct agent {
     u32 line_since;         /* 1.3: since when CJ or one of ours is in his line of fire while he stands */
     u32 step_until, step_at;    /* 1.3: a step out of the line: kept until then; when the last one began */
     hcb_vec step;           /* 1.3: ... the offset of that step */
+    u8 aimwalk, pace_prev, aw_r_[2];   /* pace_prev (1.6): the pace he had before his last change of pace */   /* 1.6: he is on a short move with his weapon on the man (kept from 7 m until 10) */
     hcb_vec step_from;      /* 1.5: ... from where he stood when it began (not his place: a man a metre off it stepped a metre short) */
     float flank;            /* 1.3 (beta 5): one of the three at CJ's side steps to CJ's flank instead: +1 / -1 which side, 0 none */
 } agent;
@@ -254,6 +261,7 @@ HID int hcb_nav_line(hcb_brain *b, hcb_vec a, hcb_vec c, u32 now);
 HID hcb_vec hcb_nav_centre(const hcb_brain *b, hcb_vec at);
 HID int hcb_nav_seg(hcb_brain *b, hcb_out *out, hcb_vec a, hcb_vec c, u32 now);              /* 1 free, 0 blocked, -1 asked */
 HID void hcb_nav_block(hcb_brain *b, hcb_vec at, hcb_vec toward, u32 now, u32 ttl);
+HID int hcb_nav_by_wall(const hcb_brain *b, hcb_vec at);   /* 1.6: 1 = a wall, a step or a drop right next to this cell */
 HID int hcb_nav_walls(const hcb_brain *b, hcb_vec c, float r, hcb_vec threat, hcb_vec *pts, int max);   /* cells behind a wall, seen from the threat */
 /* hcb_places.c (1.1): a firing place chosen by weights */
 typedef struct place_in {
@@ -268,6 +276,12 @@ typedef struct place_in {
     float cj_min, cj_max;   /* how near to CJ and how far from him it may be (0, 0 = does not matter) */
     float threat_min;       /* never nearer to the main threat than this (6 m at the least) */
     u8 n_other, n_taken, need_cj, cj_fires;   /* need_cj: CJ must be seen from it; cj_fires: nobody in CJ's line of fire */
+    /* 1.6 (the log of 1.5: four places in five were in the open, with cover known in the man's own quarter three times in four) */
+    hcb_vec q_dir;          /* wide: the middle of his quarter round CJ (unit, flat); a place lies within q_cos of it */
+    float q_cos;
+    hcb_vec veh[8];         /* wide: vehicles standing still near CJ - a spot behind each is a candidate */
+    hcb_vec bad[3];         /* places he could not get to lately: nothing within 3 m of one */
+    u8 wide, n_veh, n_bad, low_cj;   /* wide: candidates from the whole quarter, cover first; low_cj: `threat` is CJ's own eyes (peace) */
     u8 strict, keep, stand_in, pad;   /* stand_in (1.5): `threat` is no man but a point beyond the man's quarter (peace): no line-of-fight rules */   /* strict: 1 = only places everything is KNOWN about (the man holds a place already: no moving on a guess);
                                keep: 1.3 - the place he holds is valued (the line rules choose new places only: a shooter shifting about does not move him) */
 } place_in;

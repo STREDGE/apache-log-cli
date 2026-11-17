@@ -46,7 +46,7 @@ static int place_near(hcb_brain *b, hcb_out *out, const squad *q, int slot, hcb_
     float sc;
     int cv, k;
     zero(&in, sizeof in);
-    in.anchor = c0; in.man = man; in.cj = cjp; in.threat = T; in.reach = reach; in.threat_min = b->cfg.assault_near_m;
+    in.anchor = c0; in.man = man; in.cj = cjp; in.threat = T; in.reach = reach; in.threat_min = b->cfg.assault_near_m; in.q_cos = -1.0f;
     for (k = 0; k < 8 && in.n_taken < 8; k++) if (k != slot && q->apost_ok[k]) in.taken[in.n_taken++] = q->apost[k];
     if (!hcb_place_pick(b, out, &in, now, found, &sc, &cv)) return 0;
     found->z = c0.z;

@@ -283,7 +283,8 @@ HID void hcb_agent_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         else {
             int sg = d <= 14.0f ? hcb_nav_seg(b, out, feet, gfeet, now) : -1;      /* (1.3: far is "not known", not "blocked") */
             a->side_until = 0;
-            if (d < 2.5f || sg == 1) { p->via = p->at; a->n_path = 0; a->why = HCB_WHY2_DIRECT; a->off_map = 0; }
+            /* (1.6: near is not "free" when the map KNOWS a wall between - the commander stood 14 s at a wall his point was 2 m behind) */
+            if ((d < 2.5f && sg != 0) || sg == 1) { p->via = p->at; a->n_path = 0; a->why = HCB_WHY2_DIRECT; a->off_map = 0; }
             else {
                 int need = !a->n_path || now - a->plan_t > 2500 || d2(a->path[a->n_path - 1], p->at) > 2.0f;
                 if (need && plans < 2) {
@@ -358,6 +359,29 @@ HID void hcb_agent_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
              He stops 2 m short of it for corner_ms with his weapon on the way he is about to go, then goes on (once a corner);
            - a doorway (a cell with walls on both sides): one man at a time. Another of ours within 2.5 m of the one ahead of
              him and himself in such a cell or moving: he waits, 3 s at most. Nobody stops inside a doorway. */
+        /* (1.6: a doorway on a STRAIGHT way too - the commander on his way to the cover and a bodyguard on his way to CJ came to a gap side
+           by side, each "the straight way is free", and went through it together) */
+        if (hot && !a->n_path && !(a->side_until && now < a->side_until) && !force && d > 1.5f && !hcb_nav_narrow(b, me->pos)) {
+            hcb_vec dv = flat(v_sub(p->via, me->pos)), cpt = me->pos;
+            float lv = v_len(dv), st_;
+            int k, busy = 0, found_ = 0;
+            for (st_ = 1.0f; lv > 0.5f && st_ <= 3.0f && st_ < lv && !found_; st_ += 1.0f) { cpt = v_add(me->pos, v_mul(dv, st_ / lv)); found_ = hcb_nav_narrow(b, cpt); }
+            for (k = 0; found_ && k < out->n_posts; k++) {
+                const hcb_ped *o = k != i ? hcb_ped_of(s, out->posts[k].who) : 0;
+                float do_ = o ? d2(o->pos, cpt) : 99.0f, dme = d2(me->pos, cpt);
+                /* (the one nearer to it goes; side by side - the one who comes earlier in the list) */
+                if (o && do_ < 2.5f && (do_ < dme - 0.3f || (do_ < dme + 0.3f && k < i)) && (out->posts[k].phase == HCB_PH_MOVING || hcb_nav_narrow(b, o->pos))) busy = 1;
+            }
+            if (busy) {
+                if (!a->door_since) a->door_since = now ? now : 1;
+                if (now - a->door_since < 3000) {
+                    p->via = me->pos; p->move = 0;
+                    a->prog_since = now; a->prog_pos = me->pos;
+                    set_act(a, p, HCB_ACT_HOLD, HCB_PH_MOVING, HCB_WHY2_DOORWAY);
+                    continue;
+                }
+            } else a->door_since = 0;
+        }
         if (hot && a->n_path && !(a->side_until && now < a->side_until) && !force) {
             hcb_vec cpt = a->path[a->i_path];
             int narrow_here = hcb_nav_narrow(b, me->pos);
@@ -393,6 +417,8 @@ HID void hcb_agent_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                 } else a->door_since = 0;
             } else a->door_since = 0;
         }
+        /* (1.6: whatever was decided above - a man on his way never has the spot he stands on for his next point) */
+        if (d > 0.9f && d2(p->via, me->pos) < 0.3f) p->via = p->at;
         /* does it work? */
         /* (progress is his own movement - half a metre in 1.5 s - not the distance to a place that may itself be moving
            with CJ: a man walking beside a strolling CJ is not "stuck") */
@@ -460,9 +486,11 @@ HID void hcb_agent_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                 static const float EDGE[4] = {5.0f, 10.0f, 2.5f, 35.0f};
                 int k;
                 if (!urgent && (act == a->act + 1 || act + 1 == a->act)) for (k = 0; k < 4; k++) if (f_abs(d - EDGE[k]) < 1.5f) act = a->act;   /* (only the pace next to it: a walk at 23 m is not "near the edge" of a sprint) */
-                if (a->pace_since && now - a->pace_since < 1500 && f_abs(d - a->pace_d) < 3.0f && !(urgent && act > a->act)) act = a->act;   /* (danger: faster at once) */
+                /* (danger: faster at once - 1.6: but not straight back to the pace he has just left; the log of 1.5 had sprint-run-sprint
+                   579 times in nine minutes, a place that moves with CJ swinging across the edge) */
+                if (a->pace_since && now - a->pace_since < 2500 && f_abs(d - a->pace_d) < 3.0f && !(urgent && act > a->act && act != a->pace_prev)) act = a->act;
             }
-            if (act != a->act) { a->pace_since = now ? now : 1; a->pace_d = d; }
+            if (act != a->act) { a->pace_since = now ? now : 1; a->pace_d = d; a->pace_prev = a->act; }
             p->move = act == HCB_ACT_SPRINT ? 3 : act == HCB_ACT_RUN || act == HCB_ACT_SIDESTEP ? 2 : 1;
             set_act(a, p, act, HCB_PH_MOVING, 0);
             /* 1.3, fire on the move (the player: "nobody ever fired on the move - backing away from me, firing"): a man on his way
@@ -471,8 +499,17 @@ HID void hcb_agent_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
             {
                 const hcb_order *od = order_of(out, p->who);
                 const hcb_ped *tp = od && od->target ? hcb_ped_of(s, od->target) : 0;
+                /* 1.6 (the player's recording: "they fire standing bolt upright, and walk with the weapon down; I move with my sights
+                   up - forward, back, sideways - I want them to do that AND fire"): the short moves - out of cover and back, a step out
+                   of a line, closing up on CJ - are made the way CJ moves with his sights up: weapon on the man, at a walk (the mod
+                   steers the game's own aim-walk). Up to 4 m (kept until 6); a longer way is a rush with no fire, as a man really
+                   crosses open ground. */
                 if (tp && od->hold != HCB_HOLD_ROE && od->hold != HCB_HOLD_NO_TARGET && od->hold != HCB_HOLD_COVERING && od->hold != HCB_HOLD_FISTS
-                    && b->alert >= HCB_ALERT_COMBAT && d2(tp->pos, me->pos) < 35.0f) p->face = 1;
+                    && b->alert >= HCB_ALERT_COMBAT && d2(tp->pos, me->pos) < 35.0f && d < (a->aimwalk ? 6.0f : 4.0f) && act != HCB_ACT_SIDESTEP) {
+                    p->face = 1; a->aimwalk = 1;
+                    if (act != HCB_ACT_WALK) { act = HCB_ACT_WALK; a->pace_since = now ? now : 1; a->pace_d = d; }
+                    p->move = 1; set_act(a, p, act, HCB_PH_MOVING, 0);
+                } else a->aimwalk = 0;
             }
             /* 1.1: he stands where the brain's map does not reach (40 m from CJ and more) and has not got on by the straight way:
                the game's own path network takes him towards his place (move 4 - the script walks him by it, as before 2.0)
