@@ -243,8 +243,9 @@ typedef struct hcb_post {
     uint8_t sign;       /* 1.3: HCB_SIGN_*: a gesture to make where he stands (the commander waves CJ on) */
     uint8_t climb;      /* 1.3: 1 = he stands at a wall he can get up: the mod gives him the game's jump-and-climb */
     uint8_t face;       /* 1.3: 1 = he moves facing his fire target (go-and-shoot; backing away, sideways, at any pace) */
-    uint8_t cover;      /* 1.6: what his place is behind, seen from CJ / the threat: 0 nothing (the open), 1 a wall or a step, 2 a vehicle,
-                           3 a corner. For the log and the summary */
+    uint8_t cover;      /* 1.6: what his place is, seen from CJ (peace) / the threat (a fight): 0 the open, 1 behind low cover (down he is out
+                           of sight, up he sees and fires over it), 2 wholly behind a wall (out of sight and blind), 3 in sight, but right
+                           beside a wall. For the log and the summary */
 } hcb_post;
 #define HCB_SIGN_NONE 0
 #define HCB_SIGN_COME 1         /* "to me": the commander waves CJ on to the cover */
@@ -603,6 +604,7 @@ int hcb_nav_way(hcb_brain *b, hcb_vec from, hcb_vec to, hcb_vec *wp, int max, ui
    it now (nothing is asked), and a mark "nobody gets through here" on the map as a man who made no progress leaves it. cj_fires: bit 0 CJ
    fires along cj_dir; bit 1 (1.5) the place is one the man holds already (the looser rules for keeping a place); bit 2 (1.5) `threat` is
    no man but the peace stand-in beyond the man's quarter (no line-of-fight rules) */
+uint32_t hcb_detail_stat(const hcb_brain *b, int k);   /* 1.6, for tests: counters of why the outer men's places changed */
 float hcb_place_value(hcb_brain *b, hcb_vec anchor, hcb_vec man, hcb_vec cj, hcb_vec threat, const hcb_vec *others, int n_others,
                       const hcb_vec *taken, int n_taken, hcb_vec cj_dir, int cj_fires, hcb_vec at, uint32_t now);
 void hcb_nav_mark(hcb_brain *b, hcb_vec at, hcb_vec toward, uint32_t now, uint32_t ttl);

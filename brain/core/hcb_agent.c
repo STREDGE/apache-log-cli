@@ -190,6 +190,7 @@ HID void hcb_agent_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                    are taken within 1.5 m now, and a step from the place itself left him in the line) */
                 float z = p->at.z;
                 p->at = v_add(a->step_from, a->step); p->at.z = z; p->via = p->at; p->via2 = p->at; if (p->move == 0) p->move = 2;
+                if (d2(me->pos, p->at) < 1.2f) p->crouch = 1;                  /* (1.6: there - down again, as at his place) */
             }
             else { a->step_until = 0; a->flank = 0; }
         flank_done:;
@@ -208,7 +209,8 @@ HID void hcb_agent_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         inner = p->job == HCB_ROLE_LEAD || p->job == HCB_ROLE_CLOSE || p->job == HCB_ROLE_CLOSE2;
         fight = p->duty >= HCB_DUTY_SHIELD;
         urgent = p->act == HCB_ACT_SPRINT || p->duty == HCB_DUTY_SHIELD || p->duty == HCB_DUTY_RING || p->duty == HCB_DUTY_BOUND;
-        ra = inner ? 0.9f : 1.3f;
+        /* (1.6: behind cover he goes ALL the way - a man who stopped a metre short of the spot stood beside his cover, in plain sight) */
+        ra = inner ? 0.9f : p->cover == 1 || p->cover == 2 ? 0.3f : 1.3f;
         if (a->step_until && now < a->step_until) ra = 0.4f;           /* (a step out of the line is made all the way) */
         d = d2(me->pos, p->at);
         /* 1.3, a margin round "there" (a steady walk with CJ: his place moves along at CJ's pace, he walks at the same pace a step
@@ -477,7 +479,9 @@ HID void hcb_agent_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
             else if (urgent) act = d > (was_moving && a->act == HCB_ACT_SPRINT ? 3.0f : 5.5f) ? HCB_ACT_SPRINT : HCB_ACT_RUN;
             else if (fight) act = d > (was_moving && a->act >= HCB_ACT_RUN ? 2.0f : 3.5f) ? HCB_ACT_RUN : HCB_ACT_WALK;
             else if (cj_speed > 6.0f) act = d > 5.0f ? HCB_ACT_SPRINT : HCB_ACT_RUN;       /* (CJ sprints: nobody is left 30 m behind) */
-            else if (cj_speed > 2.2f) act = d > 12.0f ? HCB_ACT_SPRINT : d > 2.5f ? HCB_ACT_RUN : HCB_ACT_FASTWALK;
+            /* (1.6: one of the three sprints from 4 m behind, not from 12 - the log of 1.5: CJ ran 30 m and the bodyguards were 26-49 m
+               behind him at a run when he was killed) */
+            else if (cj_speed > 2.2f) act = d > (inner ? 4.0f : 12.0f) ? HCB_ACT_SPRINT : d > 2.5f ? HCB_ACT_RUN : HCB_ACT_FASTWALK;
             else if (inner) act = d > 4.0f ? HCB_ACT_RUN : d > 2.0f ? HCB_ACT_FASTWALK : HCB_ACT_WALK;   /* (a man of the three is never left behind) */
             else act = d > 35.0f ? HCB_ACT_SPRINT : d > 10.0f ? HCB_ACT_RUN : d > 5.0f ? HCB_ACT_FASTWALK : HCB_ACT_WALK;   /* (1.3: a sprint with no threat from 35 m, not 25 - the second 2.0 log: 12 %) */
             if (p->crouch && !fight && !urgent && !follow) act = HCB_ACT_WALK;   /* (1.5: down in peace - CJ creeps, or a man at his place - nobody runs) */
