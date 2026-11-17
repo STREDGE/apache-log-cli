@@ -705,7 +705,7 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                             cur = hcb_place_score(b, out, &in, dt->man[i].hold, now, 1, &c_);
                             in.cj_min = R - 6.0f; in.cj_max -= far_; in.keep = 0; in.q_cos = 0.64f;
                             if (cur < 0.0f) { hk = 0; dt->man[i].hold_ok = 0; dt->stat[1]++; was_hold = dt->man[i].hold; lost = 1; }
-                            else { dt->man[i].hold_score = cur; dt->man[i].hold_cv = (u8)c_; hk = c_ == 1 || c_ == 4 ? 1 : 2; dt->man[i].hold_ok = (u8)hk; }
+                            else { dt->man[i].hold_score = cur; dt->man[i].hold_cv = (u8)c_; hk = c_ == 1 ? 1 : 2; dt->man[i].hold_ok = (u8)hk; }
                             /* (deeper into the shadow of his cover: half a metre to either side of him, across the line of sight - hidden on one
                                side and in sight on the other, he sits at the very edge of it, and a step of CJ's or the last 30 cm of his own
                                way show him. The place moves 35 cm towards the hidden side, three times at most) */
@@ -721,7 +721,12 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                                     if (!k2_) hcb_cv_ask(b, out, a2_, Tq, now);
                                     if (k1_ && k2_ && (h1_ != 0) != (h2_ != 0)) {
                                         int to1 = h1_ && !x1_ && g1_, to2 = h2_ && !x2_ && g2_;
-                                        if (to1 || to2) { dt->man[i].hold = v_add(dt->man[i].hold, v_mul(to1 ? pv_ : v_mul(pv_, -1.0f), 0.7f)); dt->man[i].nudges++; }
+                                        if (to1 || to2) {
+                                            hcb_vec nh_ = v_add(dt->man[i].hold, v_mul(to1 ? pv_ : v_mul(pv_, -1.0f), 0.7f));
+                                            /* (never through or into the thing itself: the 35 cm must be free on the map) */
+                                            if (hcb_nav_line(b, dt->man[i].hold, nh_, now) && hcb_nav_inside(b, nh_)) dt->man[i].hold = nh_;
+                                            dt->man[i].nudges++;
+                                        }
                                     }
                                 }
                             }
@@ -730,16 +735,16 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                            the next guess taken - a man with a wall across his quarter changed places three times a second. The answers are
                            here within a look or two; until then he has his corner) */
                         in.strict = 1; in.held = (u8)(hk != 0);
-                        /* (a place behind cover is kept. One in the open, only beside a wall, or at the very END of his cover is given up for the
-                           middle of a cover once he has had it 2.5 s; an open one also for one place_better times better after place_keep_ms) */
+                        /* (a place behind cover is kept. One in the open, or only beside a wall, is given up for a covered one once he has had it
+                           2.5 s, and for one place_better times better after place_keep_ms) */
                         if (!(hk && dt->man[i].hold_cv == 1) && hcb_place_pick(b, out, &in, now, &found, &sc, &cvr)
                             && (!hk || (dist2d(found, dt->man[i].hold) > 1.0f
                                 && ((cvr == 1 && now - dt->man[i].hold_at >= 2500)
-                                    || (dt->man[i].hold_cv != 4 && sc > cur * b->cfg.place_better + 0.02f && now - dt->man[i].hold_at >= (u32)b->cfg.place_keep_ms))))) {
+                                    || (sc > cur * b->cfg.place_better + 0.02f && now - dt->man[i].hold_at >= (u32)b->cfg.place_keep_ms))))) {
                             found.z = cjp.z;
                             if (hk) dt->stat[cvr == 1 && dt->man[i].hold_cv != 1 ? 2 : 3]++; else dt->stat[4]++;
                             dt->man[i].wide_q = 0; dt->man[i].nudges = 0;
-                            dt->man[i].hold = found; dt->man[i].hold_ok = (u8)(cvr == 1 || cvr == 4 ? 1 : 2); dt->man[i].hold_cv = (u8)cvr; dt->man[i].hold_score = sc; dt->man[i].hold_at = now ? now : 1; dt->man[i].hold_bad = 0;
+                            dt->man[i].hold = found; dt->man[i].hold_ok = (u8)(cvr == 1 ? 1 : 2); dt->man[i].hold_cv = (u8)cvr; dt->man[i].hold_score = sc; dt->man[i].hold_at = now ? now : 1; dt->man[i].hold_bad = 0;
                             dt->man[i].hold_dl = now + 5000 + (u32)(dist2d(found, men[i]->pos) * 450.0f);
                             hk = dt->man[i].hold_ok;
                         } else if (!hk) {
@@ -748,7 +753,7 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                             in.q_cos = -0.2f; in.cj_min = 13.0f; in.anchor = v_add(cjp, v_mul(sd, 15.0f)); in.anchor.z = cjp.z; in.reach = 9.0f;
                             if (hcb_place_pick(b, out, &in, now, &found, &sc, &cvr)) {
                                 found.z = cjp.z; dt->stat[4]++;
-                                dt->man[i].hold = found; dt->man[i].hold_ok = (u8)(cvr == 1 || cvr == 4 ? 1 : 2); dt->man[i].hold_cv = (u8)cvr; dt->man[i].hold_score = sc; dt->man[i].hold_at = now ? now : 1; dt->man[i].hold_bad = 0;
+                                dt->man[i].hold = found; dt->man[i].hold_ok = (u8)(cvr == 1 ? 1 : 2); dt->man[i].hold_cv = (u8)cvr; dt->man[i].hold_score = sc; dt->man[i].hold_at = now ? now : 1; dt->man[i].hold_bad = 0;
                                 dt->man[i].hold_dl = now + 5000 + (u32)(dist2d(found, men[i]->pos) * 450.0f);
                                 dt->man[i].wide_q = 1; dt->man[i].nudges = 0;
                                 hk = dt->man[i].hold_ok;
@@ -770,7 +775,7 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                         dt->man[i].hold_dl = now + 5000 + (u32)(dist2d(c0, men[i]->pos) * 450.0f);
                     }
                     at = dt->man[i].hold;
-                    pcv = dt->man[i].hold_cv == 4 ? 1 : dt->man[i].hold_cv;      /* (the end of low cover is low cover to the log) */
+                    pcv = dt->man[i].hold_cv;
                     dm = dist2d(at, men[i]->pos);
                     crouch = dm < 1.5f;                                        /* (there: down, always - behind his cover) */
                     d_ = fight ? (dm < 1.5f ? HCB_DUTY_COVER : HCB_DUTY_BOUND) : duty;

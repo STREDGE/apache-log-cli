@@ -1,10 +1,52 @@
-HELICOVER 2.0 BETA 6 - support helicopter with an autonomous protective detail
-GTA San Andreas (Android, 64-bit), a CLEO mod + the Helicover Brain 1.5 mod. They only work together.
+HELICOVER 2.0 BETA 7 - support helicopter with an autonomous protective detail
+GTA San Andreas (Android, 64-bit), a CLEO mod + the Helicover Brain 1.6 mod. They only work together.
 
 WHAT IT IS
 Call a support helicopter: it flies in from far away, follows CJ and covers him with four door
 gunners. Drop a four-man team on foot, get picked up by rope, fly to the map marker or Grove
 Street and get out there by landing or by rope.
+
+NEW IN 2.0 BETA 7 (brain 1.6) - FROM YOUR BETA 6 LOG, SCREENSHOTS AND VIDEO
+IMPORTANT: replace EVERYTHING - the CLEO files and libHelicoverBrain64.so.
+The log (three games, 1371 seconds), both black boxes (2293 and 3288 looks, replayed bit for bit), 6 screenshots and
+a screen recording. What they showed and what was done:
+- Guards in the open. In the black boxes, 79 % of the places an outer man sat at were in the open (46 of 52 in a
+  fight), though three times in four the map knew cover in his own quarter: a place was looked for only within 7.5 m
+  of a computed point, and in peace cover hardly counted. Now it is looked for in his whole quarter: behind the walls
+  and fences the map knows, behind standing vehicles, at the game's own cover points. Cover outweighs everything
+  else; in peace a place is chosen so that YOU do not see the man while he is down, and he sees you when he stands up
+  (in a fight - so that the enemy does not see him). No cover - a place right beside a wall. The middle of a cover
+  beats its end; a place at the very edge of its shadow is moved in. The roadway (the mod remembers where cars drive)
+  is the last resort.
+- Running about. A man's place jumped more than 3 m almost every other second, so he was at it 38 % of the time and on
+  his feet in front of you the rest. Now a place behind cover is kept: until you have gone, while you can be seen
+  from it and while he can get to it. No "better" places. You walk - each stays down until you have gone on, then
+  makes for the next cover ahead; you run - they run with you. He goes all the way to his cover (he used to stop a
+  metre short of it).
+- The commander leads. His place while "leading" was "4 m from CJ towards the cover" - you stopped, he stopped; cover
+  for you was looked for only within 8 m. Now it is looked for up to 23 m and he goes there himself: 7 m ahead (or
+  straight to the cover when it is nearer), stops, turns to you, waves and waits up to 7 seconds. You come up - the
+  next leg. You do not - he walks back for you, calls again and sets off once more; after the second time he stays
+  with you. In peace, with you on your way, he walks ahead of you, not behind your shoulder.
+- Firing the way you do. From the recording: the guards fired standing bolt upright, and walked with the weapon down or
+  "ran sideways". Now the short moves in a fight (up to 4 m: out of cover, a step out of a line, closing up on you)
+  are made by the same function of the game you move with while aiming: the stance, the weapon on the target, steps
+  forward, back and sideways - and fire on the move. Long ways are a rush with no fire. The old "run sideways" and the
+  fire at a sprint are removed.
+  STANDING_SHOOTER
+- The bodyguards keep up. In the log you walked 30 seconds with 8 HP, "calm", the bodyguards 26-49 m behind. Now
+  under 30 HP both bodyguards close in on you though nobody shoots, and the commander says "stay with me"; behind a CJ
+  on his way one of the three sprints from 4 m behind, not from 12.
+- Stuck at a wall. A man "on his way" stood still 16-21 % of the time: places were chosen without asking whether he
+  could get there. Now a place he has not reached in the time the way takes is marked for 30 seconds and another is
+  taken; "near" no longer means "free" when the map knows a wall between; a wall right across his quarter - a place
+  in the next one.
+- The simulation. My tests said "in the open 3 %" and the game said 79 %: the simulated world was a field with four
+  walls. Now it is a street - long walls with gaps, fences, a raised level, cover in every direction, cars driving
+  through - and the numbers of your own summary are measured in it. SIM_NUMBERS
+- Summary: new lines - "an outer man at his place behind cover", "his place jumped", "the commander ahead while
+  leading", "aim-walk"; the guard's line in the log shows what he is behind.
+- The number of rifles on one target stays at 3: more rifles kill faster, and you asked for longer fights.
 
 NEW IN 2.0 BETA 6 (brain 1.5) - FROM YOUR BETA 5 LOG AND YOUR WORDS
 IMPORTANT: replace EVERYTHING - the CLEO files and libHelicoverBrain64.so.

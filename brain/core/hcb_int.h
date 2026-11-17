@@ -194,7 +194,7 @@ typedef struct agent {
     u32 line_since;         /* 1.3: since when CJ or one of ours is in his line of fire while he stands */
     u32 step_until, step_at;    /* 1.3: a step out of the line: kept until then; when the last one began */
     hcb_vec step;           /* 1.3: ... the offset of that step */
-    u8 aimwalk, pace_prev, aw_r_[2];   /* pace_prev (1.6): the pace he had before his last change of pace */   /* 1.6: he is on a short move with his weapon on the man (kept from 7 m until 10) */
+    u8 aimwalk, aw_r_[3];   /* 1.6: he is on a short move with his weapon on the man (kept from 7 m until 10) */
     hcb_vec step_from;      /* 1.5: ... from where he stood when it began (not his place: a man a metre off it stepped a metre short) */
     float flank;            /* 1.3 (beta 5): one of the three at CJ's side steps to CJ's flank instead: +1 / -1 which side, 0 none */
 } agent;

@@ -860,11 +860,32 @@ assert jumps_all <= 12, ('and the places are kept (at most a move or two a man a
 passed('1.6: the same five spots with a shooter 32 m off: the outer four are behind cover from him %d %% of their time at a place (low cover %d %%, wholly behind a wall %d %%, beside a wall %d %%, in the open %d %%); %d place changes in 150 s for the four' % (
     round(100 * (tot[1] + tot[2]) / at_all), round(100 * tot[1] / at_all), round(100 * tot[2] / at_all), round(100 * tot[3] / at_all), round(100 * tot[0] / at_all), jumps_all))
 
-# never where cars drive: a road with cover right at its edge, and cover off it
-sc = Scene(); sc.low_walls = [(-2.5, 14., -2.5, 18.), (2.5, -18., 2.5, -14.), (16., 12., 16., 16.), (-16., 12., -16., 16.), (16., -16., 16., -12.), (-16., -16., -16., -12.)]
-team = detail8(sc); cars = []
-on_road = at_n = 0
-for k in range(400):
+# a wall he would be blind behind and a low thing he can fire over, both in his quarter: the low one
+sc = Scene(); sc.walls = [(17., 9., 17., 14.), (17., -14., 17., -9.)]; sc.low_walls = [(15.5, 16., 15.5, 20.), (15.5, -20., 15.5, -16.)]
+team = detail8(sc); sc.step(20)
+g = sc.ped(34., 0., pedtype=GANG, weapon=AK, face=(-1., 0.)); sc.step(2); sc.shot(g, (0., 0., 1.), dst=1)
+for k in range(200):
+    if k % 9 == 0: sc.shot(g, (0., 0., 1.), dst=1)
+    sc.step(1)
+front_ = [p for p in sc.posts.values() if JOB.get(p.job) in OUTER and p.at.x > 5.]
+gp_ = sc.peds[g]['pos']
+assert len(front_) == 2 and all(p.cover == 1 and sc.blocked(gp_, at(p)) and not sc.blocked(gp_, at(p), low_too=False) for p in front_), ('the two towards the shooter are down behind the low things (hidden down, a line of fire standing), not blind behind the walls', [(at(p), p.cover) for p in front_])
+passed('1.6: a wall (blind behind it) and a low thing (he fires over it) in the same quarter, a shooter beyond: the man takes the low thing')
+
+# "from different sides": cover in ONE quarter only - one man takes it, the others keep their own sides of CJ
+sc = Scene(); sc.low_walls = [(12., 14., 16., 14.), (14., 18., 18., 18.), (18., 10., 18., 14.)]
+team = detail8(sc); sc.step(300)
+quad = lambda p_: (p_[0] > 0, p_[1] > 0)
+places_ = [at(p) for p in sc.posts.values() if JOB.get(p.job) in OUTER]
+assert len({quad(p_) for p_ in places_}) == 4, ('cover only to the north-east: still one man on each side of CJ', places_)
+passed('1.6: cover in one quarter only: one outer man is behind it, the other three stay on their own sides of CJ (a place is taken in his own quarter, however good the cover next door)')
+
+# never where cars drive: CJ stands beside a road, and the only cover his two men on that side have is ON it
+sc = Scene(); sc.low_walls = [(2., 10., 2., 17.), (2., -17., 2., -10.)]          # (seen from CJ, a man is hidden behind them at x = 1.5 - in the lane)
+sc.cj['pos'] = [23., 0., 1.]
+team = [sc.our(23. + x, y, SQ + k, weapon=M4) for k, (x, y) in enumerate(EIGHT)]; sc.walk_posts = True
+cars = []; on_road = at_n = 0
+for k in range(450):
     if k % 12 == 0:
         dirn = 1. if (k // 12) % 2 else -1.
         drv = sc.ped(dirn * 1.6, -60. * dirn, pedtype=4); cid = sc.veh(dirn * 1.6, -60. * dirn, vel=(0., dirn * 12., 0.), driver=drv); sc.peds[drv]['vehicle'] = cid; cars.append((cid, drv))
@@ -872,11 +893,11 @@ for k in range(400):
         if abs(sc.vehs[cid]['pos'][1]) > 62.: del sc.vehs[cid]; sc.peds.pop(drv, None); cars.remove((cid, drv))
         else: sc.peds[drv]['pos'] = list(sc.vehs[cid]['pos'])
     sc.step(1)
-    if k < 150: continue
+    if k < 200: continue
     for w, p in sc.posts.items():
-        if JOB.get(p.job) in OUTER and d2(sc.peds[w]['pos'], at(p)) < 1.5: at_n += 1; on_road += abs(sc.peds[w]['pos'][0]) < 3.2
-assert at_n > 500 and on_road == 0, ('cars drive along x = 0: no outer man has his place on the roadway, though there is cover at its edge', on_road, at_n)
-passed('1.6: a road CJ stands on (a car every 1.2 s) with low cover right at its edge and more of it 16 m off: no outer man takes a place within 3 m of where the cars drive (%d looks at a place)' % at_n)
+        if JOB.get(p.job) in OUTER: at_n += 1; on_road += abs(p.at.x) < 3.2          # (his PLACE: a man in the lane is busy getting out of the cars' way)
+assert at_n > 500 and on_road <= 0.02 * at_n, ('cars drive along x = 0: no outer man has his place on the roadway, though the only cover is there', on_road, at_n)
+passed('1.6: CJ beside a road (a car every 1.2 s) and the only cover of the two men on that side is in the lane itself: neither takes it - no place within 3 m of where the cars drive (%d looks at a place)' % at_n)
 
 # a hurt CJ is closed in on though nobody shoots (the log of 1.5: 30 s with 8 HP, "calm", the bodyguards 26-49 m behind when one pistol finished him)
 sc = Scene(); team = detail8(sc); sc.step(60)

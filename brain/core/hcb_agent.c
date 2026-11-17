@@ -490,11 +490,10 @@ HID void hcb_agent_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                 static const float EDGE[4] = {5.0f, 10.0f, 2.5f, 35.0f};
                 int k;
                 if (!urgent && (act == a->act + 1 || act + 1 == a->act)) for (k = 0; k < 4; k++) if (f_abs(d - EDGE[k]) < 1.5f) act = a->act;   /* (only the pace next to it: a walk at 23 m is not "near the edge" of a sprint) */
-                /* (danger: faster at once - 1.6: but not straight back to the pace he has just left; the log of 1.5 had sprint-run-sprint
-                   579 times in nine minutes, a place that moves with CJ swinging across the edge) */
-                if (a->pace_since && now - a->pace_since < 2500 && f_abs(d - a->pace_d) < 3.0f && !(urgent && act > a->act && act != a->pace_prev)) act = a->act;
+                /* (danger: faster at once. 1.6: a pace is kept 2.5 s, not 1.5) */
+                if (a->pace_since && now - a->pace_since < 2500 && f_abs(d - a->pace_d) < 3.0f && !(urgent && act > a->act)) act = a->act;
             }
-            if (act != a->act) { a->pace_since = now ? now : 1; a->pace_d = d; a->pace_prev = a->act; }
+            if (act != a->act) { a->pace_since = now ? now : 1; a->pace_d = d; }
             p->move = act == HCB_ACT_SPRINT ? 3 : act == HCB_ACT_RUN || act == HCB_ACT_SIDESTEP ? 2 : 1;
             set_act(a, p, act, HCB_PH_MOVING, 0);
             /* 1.3, fire on the move (the player: "nobody ever fired on the move - backing away from me, firing"): a man on his way
