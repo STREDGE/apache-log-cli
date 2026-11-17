@@ -33,7 +33,11 @@ a screen recording. What they showed and what was done:
   are made by the same function of the game you move with while aiming: the stance, the weapon on the target, steps
   forward, back and sideways - and fire on the move. Long ways are a rush with no fire. The old "run sideways" and the
   fire at a sprint are removed.
-  STANDING_SHOOTER
+- Standing bolt upright and firing little - the cause is found. The game's code shows that a standing guard's weapon
+  task only worked in the frames in which the mod had just "pushed" it - about one frame in twelve - and nothing
+  turned him to his man. Now the mod drives it every frame, the way the game does for its own shooters: he is turned
+  to his target, keeps his aim and fires in bursts; a man down behind cover does the same, down. The new summary has
+  a line "a standing guard with his weapon on a man ... rounds" - it will show whether the fire has gone up.
 - The bodyguards keep up. In the log you walked 30 seconds with 8 HP, "calm", the bodyguards 26-49 m behind. Now
   under 30 HP both bodyguards close in on you though nobody shoots, and the commander says "stay with me"; behind a CJ
   on his way one of the three sprints from 4 m behind, not from 12.
