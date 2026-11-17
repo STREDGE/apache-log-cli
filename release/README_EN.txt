@@ -47,7 +47,10 @@ a screen recording. What they showed and what was done:
   in the next one.
 - The simulation. My tests said "in the open 3 %" and the game said 79 %: the simulated world was a field with four
   walls. Now it is a street - long walls with gaps, fences, a raised level, cover in every direction, cars driving
-  through - and the numbers of your own summary are measured in it. SIM_NUMBERS
+  through - and the numbers of your own summary are measured in it. Three half-hour runs: an outer man is at his place behind cover
+  62-83 % of the time (in the open 5-14 %; 79 % in the game on beta 6), his place changes 4-6 times a minute counting
+  marches and fights (it was 25), he is on his feet while CJ stands 10-18 % (it was 54 %). With you just standing:
+  behind cover 82 %, a man who is down is out of your sight, no place changes.
 - Summary: new lines - "an outer man at his place behind cover", "his place jumped", "the commander ahead while
   leading", "aim-walk"; the guard's line in the log shows what he is behind.
 - The number of rifles on one target stays at 3: more rifles kill faster, and you asked for longer fights.
