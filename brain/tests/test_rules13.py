@@ -377,10 +377,11 @@ for dx, dy in ((0., 1.), (1., 0.), (0., -1.)):
     for k in range(30):
         sc.step(1)
         for p_ in sc.posts.values():
-            if p_.phase == HCB_PH_MOVING:
+            # (1.6: an outer man on the last metres into his cover finishes them at the pace he has - counted from 6 m off his place)
+            if p_.phase == HCB_PH_MOVING and d2(pos(sc, p_.who), (p_.at.x, p_.at.y)) > 6.0:
                 looks += 1; walked += p_.act in (HCB_ACT_WALK, HCB_ACT_FASTWALK)
     sc.cj['vel'] = [0., 0., 0.]; sc.step(60)
-assert looks > 500 and walked <= 3, ('CJ sprints: nobody on his way walks on (about 40 walking looks when every pace near an edge is held)', walked, looks)
+assert looks > 300 and walked <= 3, ('CJ sprints: nobody on his way walks on (about 40 walking looks when every pace near an edge is held)', walked, looks)
 passed('CJ breaks from a walk into a sprint, three times: every man on his way is off at a run or a sprint at the next look (%d walking looks of %d) - the band at a pace edge holds only the pace next to it, a jump of two paces is made at once' % (walked, looks))
 
 # ------------------------------------------------------------------ beta 5: a shooter running round CJ (his places shift with every look): no back-and-forth at the place
@@ -456,7 +457,7 @@ sc = Scene(); team = squad(sc); sc.step(20)
 moving_calm = sum(1 for k in range(30) if sc.step(1) is not None for p_ in sc.posts.values() if p_.move and p_.face)
 g = sc.ped(18., 6., pedtype=GANG, weapon=AK, face=(-1., 0.))
 sc.step(2); sc.shot(g, (0., 0., 1.), dst=1)
-faced, moved, back = 0, 0, 0
+faced, moved, back, near, near_faced, far_faced, not_walk = 0, 0, 0, 0, 0, 0, 0
 sc.cj['vel'] = [-3.0, 0., 0.]
 for k in range(80):
     if k % 8 == 0: sc.shot(g, (sc.cj['pos'][0], sc.cj['pos'][1], 1.), dst=1)
@@ -464,12 +465,17 @@ for k in range(80):
     for w, p_ in sc.posts.items():
         if p_.move and w in sc.orders and sc.orders[w].target == g and d2(pos(sc, w), sc.peds[g]['pos']) < 33.:
             moved += 1; faced += p_.face
+            d_ = d2(pos(sc, w), (p_.at.x, p_.at.y))
+            near += d_ < 3.5; near_faced += p_.face and d_ < 3.5; far_faced += p_.face and d_ > 6.5; not_walk += p_.face and p_.move != 1
             gx, gy = sc.peds[g]['pos'][0] - pos(sc, w)[0], sc.peds[g]['pos'][1] - pos(sc, w)[1]
             vx, vy = p_.via.x - pos(sc, w)[0], p_.via.y - pos(sc, w)[1]
             back += p_.face and gx * vx + gy * vy < 0
 assert moving_calm == 0, 'no enemy: nobody walks "facing" anybody'
-assert moved > 50 and faced / moved > 0.9 and back > 20, ('on the move with the attacker within 35 m: facing him - and backing away from him', moved, faced, back)
-passed('CJ moves off under fire: of the men on the move who have the attacker within 33 m for their man %d %% go facing him (the mod makes it go-and-shoot: weapon on him, feet where they go), %d looks of them backing away from him; with no enemy nobody does' % (round(100 * faced / moved), back))
+# (1.6, the player's recording - "move the way I do with my sights up, and fire": a short move, up to 4 m (kept until 6), is made at a walk with
+#  the weapon on the man - the mod steers the game's aim-walk; a longer way is a rush, weapon down)
+assert moved > 50 and near > 30 and near_faced / near > 0.9 and back > 20, ('a short move with the attacker within 35 m: facing him - and backing away from him', moved, near, near_faced, back)
+assert far_faced == 0 and not_walk == 0, ('a long way is a rush, not an aim-walk; and an aim-walk is a walk', far_faced, not_walk)
+passed('CJ moves off under fire: of the men on a short move (within 3.5 m of their place) who have the attacker for their man %d %% go facing him at a walk (the mod makes it the aim-walk CJ himself does: weapon on him, feet where they go), %d looks of them backing away from him; from more than 6.5 m off it is a rush; with no enemy nobody does' % (round(100 * near_faced / near), back))
 
 # ================================================================== cars and tokens (plan items B, M, I)
 # ------------------------------------------------------------------ a passer-by's car runs down a guard standing in the road: an accident, not an attack

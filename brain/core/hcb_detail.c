@@ -19,11 +19,16 @@
  */
 #include "hcb_int.h"
 
-#define CJ_RINGS 5
-static const float CJ_RADII[CJ_RINGS] = {0.0f, 2.5f, 4.0f, 6.0f, 8.0f};   /* 0: where CJ stands - already hidden, he stays */
+/* (1.6, the player: "the commander only follows me, he does not lead" - with cover looked for within 8 m there was nowhere to lead to) */
+#define CJ_RINGS 8
+static const float CJ_RADII[CJ_RINGS] = {0.0f, 2.5f, 4.0f, 6.0f, 8.0f, 12.0f, 17.0f, 23.0f};   /* 0: where CJ stands - already hidden, he stays */
 /* twelve directions, the first one straight away from the threat, then alternately either side of it */
 static const float DIR_C[12] = {1.0f, 0.866025f, 0.866025f, 0.5f, 0.5f, 0.0f, 0.0f, -0.5f, -0.5f, -0.866025f, -0.866025f, -1.0f};
 static const float DIR_S[12] = {0.0f, 0.5f, -0.5f, 0.866025f, -0.866025f, 1.0f, -1.0f, 0.866025f, -0.866025f, 0.5f, -0.5f, 0.0f};
+#define LEAD_NONE 0     /* 1.6: the commander's hops to CJ's cover */
+#define LEAD_GO 1
+#define LEAD_WAIT 2
+#define LEAD_BACK 3
 #define COVER_KEEP_MS 6000      /* an answer about a spot is good this long */
 #define COVER_PENDING_MS 800    /* a question not answered after this is asked again */
 #define SAY_COVER_MS 6000       /* "into cover" is repeated this often while CJ is not there */
@@ -51,12 +56,15 @@ static u8 rel_dir(const hcb_ped *cj, hcb_vec at) {
 
 /* ------------------------------------------------------------------ what is known about spots */
 static cover *cv_find(hcb_brain *b, hcb_vec at, hcb_vec from, float slack) {
+    /* (1.6: of several entries that fit, the one answered last - a question asked from a point a metre off made a second entry, the
+       answer went to that one, and the first one found here said "not known" for ever: a man's own place could never be valued) */
     int i;
+    cover *best = 0;
     for (i = 0; i < HCB_MAX_COVERS; i++) {
         cover *c = &b->cv[i];
-        if (c->used && dist2d(c->at, at) < 0.35f * slack && v_dist(c->from, from) < 3.5f * slack) return c;
+        if (c->used && dist2d(c->at, at) < 0.35f * slack && v_dist(c->from, from) < 3.5f * slack && (!best || c->answered > best->answered)) best = c;
     }
-    return 0;
+    return best;
 }
 static cover *cv_slot(hcb_brain *b) {
     int i, old = 0;
@@ -461,7 +469,7 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         /* (0.4.2: a threat that moves - a car - does not throw the spot away: it is asked about again and kept meanwhile;
            a spot known exposed or left far behind is kept one more second while a better one is looked for) */
         int st = dt->cj_cover_ok ? cv_state(b, dt->cj_cover, T, now, 0) : -1;
-        int near_ = dt->cj_cover_ok && dist2d(dt->cj_cover, cjp) <= 14.0f;
+        int near_ = dt->cj_cover_ok && dist2d(dt->cj_cover, cjp) <= 30.0f;
         if (near_ && st == 1) dt->cover_bad_since = 0;
         else if (near_ && st == -1) cv_ask(b, out, dt->cj_cover, T, now);
         else {
@@ -495,6 +503,8 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         int fight = duty >= HCB_DUTY_COVER, ring = duty == HCB_DUTY_RING, n_out = 0, turn, escort;
         hcb_vec ahead = fight || duty == HCB_DUTY_WATCH ? u : f, side = right_of(ahead), away = cjp;
         float cs = cj_speed > 2.2f ? cj_speed : 3.0f;
+        int hurt = !fight && cj->health > 0.0f && cj->health < 30.0f && !cj->vehicle && !indoor;
+        if (hurt && say == HCB_SAY_NONE && (!dt->low_said || now - dt->low_said > 45000)) { say = HCB_SAY_FOLLOW_ME; dt->low_said = now ? now : 1; }
         if (ring) {
             static const float FAR[3] = {8.0f, 12.0f, 16.0f};
             if (!find_cover(b, out, cjp, u, T, FAR, 3, -0.3f, now, &away, 0)) away = v_sub(cjp, v_mul(u, 15.0f));
@@ -502,6 +512,17 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         }
         for (i = 0; i < n; i++) if (job[i] == HCB_ROLE_POINT || job[i] == HCB_ROLE_POINT2 || job[i] == HCB_ROLE_REAR || job[i] == HCB_ROLE_REAR2 || job[i] == HCB_ROLE_MARKSMAN) n_out++;
         turn = n_out ? (int)(b->ticks % (u32)n_out) : 0;            /* one outer man looks for a post in a look: the questions are few */
+        /* 1.6: where cars drive - every car seen driven at speed leaves a mark (its place and its way); no outer man's place within
+           3 m of the line through one */
+        for (i = 0; i < (int)s->n_vehs && i < HCB_MAX_VEHS; i++) {
+            const hcb_veh *v_ = &s->vehs[i];
+            int j_, known_ = 0;
+            if (v_->cls != HCB_VC_CAR || !v_->driver || v_len(flat(v_->vel)) < 4.0f || dist2d(v_->pos, cjp) > 60.0f) continue;
+            for (j_ = 0; j_ < dt->road_n && j_ < 24; j_++) if (dist2d(dt->road[j_], v_->pos) < 6.0f) known_ = 1;
+            if (known_) continue;
+            j_ = dt->road_n < 24 ? dt->road_n++ : (dt->road_i++ % 24);
+            dt->road[j_] = v_->pos; dt->road_d[j_] = unit2(v_->vel, f);
+        }
         if (!ring) deal_quarters(dt, cjp, ahead, side, fight ? b->cfg.outer_fight_m : b->cfg.outer_peace_m, fight, men, ids, job, n);
         /* (1.5: CJ on his way in peace - the outer men walk beside him in their quarters, as a detail's outer ring does with a moving
            principal; he has stood 4 s - each takes a place in his quarter and gets down; for a short stop they halt where they are.
@@ -511,7 +532,7 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         dt->lead_near = 0; dt->lead_wave = 0;
         for (i = 0, k = 0; i < n; i++) {
             hcb_vec at = cjp, lk = look;
-            int crouch = 0, mv, d_ = duty, sign = HCB_SIGN_NONE;
+            int crouch = 0, mv, d_ = duty, sign = HCB_SIGN_NONE, pcv = 0;
             if (job[i] == HCB_ROLE_LEAD) {
                 /* the commander: at CJ's side, a step towards the cover (or the way out) - CJ goes where he goes */
                 /* 1.3 (the player: "why does the commander not lead me to cover - he just stands in front of me and talks"): his place
@@ -520,28 +541,46 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                    waves; CJ has not come a step nearer in 10 s - he goes back to CJ and the detail covers him where he is */
                 hcb_vec dest = ring ? away : dt->cj_cover;
                 int lead_on = fight && (ring || (dt->cj_cover_ok && !cj_in));
-                if (lead_on) {
-                    float cj_to = dist2d(cjp, dest);
-                    if (!dt->lead_since || dist2d(dt->lead_to, dest) > 3.0f) { dt->lead_to = dest; dt->lead_since = now ? now : 1; dt->lead_best = cj_to; dt->lead_prog_t = now ? now : 1; dt->lead_gave_up = 0; }
-                    if (cj_to < dt->lead_best - 0.7f) { dt->lead_best = cj_to; dt->lead_prog_t = now ? now : 1; }
-                    if (!dt->lead_gave_up && now - dt->lead_prog_t > 10000) dt->lead_gave_up = now ? now : 1;
-                    if (dt->lead_gave_up) lead_on = 0;
-                }
+                /* 1.6 (the log of 1.5: his place was "4 m from CJ towards the cover" - CJ stopped, he stopped; 38 leads of 5 s each, the
+                   cover 2-9 m off). Now he LEADS: he goes ahead by himself, a hop of 7 m at a time (the cover itself when it is nearer),
+                   stops there, turns, waves and waits for CJ up to 7 s. CJ comes up - the next hop. CJ does not come - he walks back
+                   to him, calls him again and sets off once more; a second time without CJ - he stays with him (until the cover is
+                   another one) and the detail covers CJ where he stands. */
+                if (lead_on && (!dt->lead_since || dist2d(dt->lead_to, dest) > 3.0f)) { dt->lead_to = dest; dt->lead_since = now ? now : 1; dt->lead_gave_up = 0; dt->lead_st = LEAD_NONE; dt->lead_calls = 0; }
+                if (lead_on && dt->lead_gave_up) lead_on = 0;
+                if (!lead_on) dt->lead_st = LEAD_NONE;
                 if (lead_on) {
                     hcb_vec me_ = men[i]->pos, edge = ring ? dest : v_add(v_sub(dest, v_mul(u, 0.9f)), v_mul(pr, -1.1f));
-                    hcb_vec dir = unit2(v_sub(edge, cjp), v_mul(u, -1.0f));
                     float me_cj = dist2d(me_, cjp), cj_edge = dist2d(cjp, edge);
-                    /* (he keeps 4 m ahead of CJ on the way there - the cover itself when it is that near) */
-                    at = cj_edge <= 4.0f ? edge : v_add(cjp, v_mul(dir, 4.0f));
-                    at.z = cj_edge <= 4.0f ? edge.z : cjp.z;
-                    /* CJ does not come: standing at his point, he turns to CJ and waves him on */
-                    if (dist2d(me_, at) < 1.5f && cj_speed < 0.8f && dist2d(cjp, dest) > 2.0f) sign = HCB_SIGN_COME;
-                    if (sign) { lk = cjp; lk.z += 0.8f; dt->lead_wave = 1; }
-                    dt->leading = 1; out->leading = (u8)(me_cj <= 8.0f); dt->lead_near = (u8)(me_cj <= 6.0f);
-                    d_ = ring ? HCB_DUTY_RING : HCB_DUTY_SHIELD;
+                    hcb_vec dir = unit2(v_sub(edge, cjp), v_mul(u, -1.0f));
+#define HOP() do { dt->lead_pt = cj_edge <= 8.5f ? edge : v_add(cjp, v_mul(dir, 7.0f)); dt->lead_pt.z = cj_edge <= 8.5f ? edge.z : cjp.z; dt->lead_st = LEAD_GO; dt->lead_t = now ? now : 1; } while (0)
+                    if (dt->lead_st == LEAD_NONE) HOP();
+                    /* (CJ has gone his own way: the hop is laid out again from where he is) */
+                    if (dt->lead_st != LEAD_BACK && dist2d(cjp, dt->lead_pt) > 13.0f) HOP();
+                    if (dt->lead_st == LEAD_GO && dist2d(me_, dt->lead_pt) < 1.5f) { dt->lead_st = LEAD_WAIT; dt->lead_t = now ? now : 1; }
+                    if (dt->lead_st == LEAD_GO && now - dt->lead_t > 9000) { dt->lead_st = LEAD_WAIT; dt->lead_t = now ? now : 1; dt->lead_pt = me_; }   /* (he cannot get to it: he waits where he is) */
+                    if (dt->lead_st == LEAD_WAIT) {
+                        if (dist2d(cjp, dt->lead_pt) < 3.5f) { dt->lead_calls = 0; if (dist2d(dt->lead_pt, edge) > 1.5f) HOP(); }   /* CJ has come up: on */
+                        else if (now - dt->lead_t > 7000) {
+                            if (++dt->lead_calls >= 2) { dt->lead_gave_up = now ? now : 1; dt->lead_st = LEAD_NONE; }
+                            else { dt->lead_st = LEAD_BACK; dt->lead_t = now ? now : 1; }
+                        }
+                    }
+                    if (dt->lead_st == LEAD_BACK && (me_cj < 2.6f || now - dt->lead_t > 8000)) HOP();   /* back at CJ's side: "with me" again, and off */
+#undef HOP
+                    if (dt->lead_st == LEAD_NONE) { at = v_add(v_sub(cjp, v_mul(u, 0.5f)), v_mul(pr, -1.3f)); d_ = HCB_DUTY_SHIELD; dt->leading = 0; }
+                    else {
+                        at = dt->lead_st == LEAD_BACK ? v_add(cjp, v_mul(dir, 1.6f)) : dt->lead_pt;
+                        if (dt->lead_st == LEAD_BACK) at.z = cjp.z;
+                        /* standing at his point with CJ not there yet: he turns to CJ and waves him on */
+                        if (dt->lead_st == LEAD_WAIT && dist2d(cjp, dt->lead_pt) >= 3.5f) { sign = HCB_SIGN_COME; lk = cjp; lk.z += 0.8f; dt->lead_wave = 1; }
+                        dt->leading = 1; out->leading = (u8)(me_cj <= 11.0f); dt->lead_near = (u8)(me_cj <= 9.0f);
+                        d_ = ring ? HCB_DUTY_RING : HCB_DUTY_SHIELD;
+                    }
                 } else if (fight && cj_in) { at = v_sub(dt->cj_cover, v_mul(u, 1.3f)); crouch = 1; d_ = HCB_DUTY_COVER; dt->leading = 0; }   /* (1.5: right behind CJ, 1.3 m - the bodyguards are a metre to each side; 0.9 m from one of them before) */
                 else if (fight) { at = v_add(v_sub(cjp, v_mul(u, 0.5f)), v_mul(pr, -1.3f)); d_ = HCB_DUTY_SHIELD; dt->leading = 0; }
-                else { at = at_off(cjp, f, -0.8f, r, 1.2f); lk = duty == HCB_DUTY_WATCH ? T : at_off(cjp, f, 10, r, 6); dt->leading = 0; }   /* (1.0: at CJ's right shoulder, a step behind) */
+                /* (1.6: with CJ on his way he walks ahead of him at his right - in the log of 1.5 he was behind CJ 22 times of 24) */
+                else { at = at_off(cjp, f, cj_speed > 1.0f ? 2.6f : -0.8f, r, 1.2f); lk = duty == HCB_DUTY_WATCH ? T : at_off(cjp, f, 10, r, 6); dt->leading = 0; }   /* (1.0: at CJ's right shoulder, a step behind) */
                 mv = pace(dist2d(at, men[i]->pos), fight ? cs : cj_speed);
             } else if (job[i] == HCB_ROLE_CLOSE || job[i] == HCB_ROLE_CLOSE2) {
                 /* the bodyguards: their bodies between CJ and the threat; in peace a pace behind him, never in his way */
@@ -555,9 +594,14 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                    the right shoulder that is 360 degrees in three sectors) */
                 else at = w == 0 ? at_off(cjp, f, 3.5f, r, -1.8f) : at_off(cjp, f, -2.2f, r, -1.6f);
                 if (!fight && duty != HCB_DUTY_WATCH) lk = w == 0 ? at_off(cjp, f, 14, r, -8) : at_off(cjp, f, -14, r, -3);
+                /* 1.6 (the log of 1.5: CJ walked 30 s with 8 HP, "calm" - the bodyguards 26-49 m behind when one pistol finished him):
+                   a hurt CJ is closed in on though nobody shoots - a metre ahead of him on his left and a metre behind */
+                if (hurt) at = w == 0 ? at_off(cjp, f, 1.1f, r, -1.0f) : at_off(cjp, f, -1.1f, r, -0.9f);
                 if (n == 1 && !fight) at = at_off(cjp, f, -1.3f, r, 1.1f);
-                d_ = fight ? (ring ? HCB_DUTY_RING : HCB_DUTY_SHIELD) : duty;
+                d_ = fight ? (ring ? HCB_DUTY_RING : HCB_DUTY_SHIELD) : hurt ? HCB_DUTY_WATCH : duty;
                 mv = pace(dist2d(at, men[i]->pos), fight ? cs : cj_speed);
+                /* (1.6: a bodyguard left behind by a CJ on the run sprints - at a run he never caught him up) */
+                if ((hurt || cj_speed > 4.0f) && dist2d(at, men[i]->pos) > 2.5f) mv = 3;
             } else {
                 /* 1.5 (beta 6), the outer four and the marksman. The player after the fifth 2.0 log: "only the commander and the two
                    bodyguards at my side; the others so that I hardly notice them - all of them in cover, down, firing from there,
@@ -578,12 +622,9 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                 R = ring ? 14.0f + 1.5f * (float)(c > 3 ? 3 : c) : (fight ? b->cfg.outer_fight_m : b->cfg.outer_peace_m) + (c == 4 ? 4.0f : 0.0f);
                 sd = unit2(v_add(v_mul(ahead, CORNER[qd][0]), v_mul(side, CORNER[qd][1])), ahead);
                 /* (1.0: a man whose place could not be reached is given the next one round CJ - 30 degrees on, then the other way) */
-                if (s->body && i < MAXD && !fight && hcb_agent_failed(b, ids[i], now)) { hcb_agent_forgive(b, ids[i]); if (dt->man[i].alt < 250) dt->man[i].alt++; dt->man[i].hold_ok = 0; }
                 off0 = v_mul(sd, R);
-                /* (1.5, the review: only 30 degrees either way - a turn of 90 degrees and more took the anchor out of his quarter, and every
-                   place near it was dropped on the next look) */
-                if (s->body && i < MAXD && dt->man[i].alt) off0 = rot(off0, dt->man[i].alt % 3);
-                if (!ring && cj_speed > 1.2f && !indoor) { hcb_vec cv_ = unit2(cj->vel, f); float lead_ = cj_speed * 3.0f; off0 = v_add(off0, v_mul(cv_, lead_ > 9.0f ? 9.0f : lead_)); }
+                /* (CJ on his way: the next cover is looked for ahead of him - 3 s of his way, 14 m at most) */
+                if (!ring && cj_speed > 1.2f && !indoor) { hcb_vec cv_ = unit2(cj->vel, f); float lead_ = cj_speed * 3.0f; off0 = v_add(off0, v_mul(cv_, lead_ > 14.0f ? 14.0f : lead_)); }
                 c0 = v_add(cjp, off0);
                 c0.z = cjp.z;
                 if (up) {
@@ -592,37 +633,60 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                     if (!fight) lk = duty == HCB_DUTY_WATCH ? T : at_off(cjp, f, 25, r, 0);
                     if (i < MAXD) dt->man[i].hold_ok = 0;
                 } else
-                if (!ring && i < MAXD && (fight || (s->body && !escort))) {   /* (the scripts' body: places in a fight only, as before 1.5) */
-                    int hk;
+                /* (a CJ on the run, in peace: no cover to cover - they run with him in their quarters, or they are left 40 m behind) */
+                if (!ring && i < MAXD && (fight || (s->body && cj_speed <= 4.5f))) {
+                    /* 1.6. The log of 1.5: of the places an outer man sat at, four in five were in the open (in a fight 46 of 52) -
+                       with cover known in his own quarter three times in four; and his place jumped more than 3 m in four seconds of
+                       ten, so that he was on his feet 62 % of the time. The player: "I do not want to see a soul - heads and barrels
+                       behind cover, from different sides". So:
+                       - what his place hides him from is CJ's own eyes in peace (the threat in a fight): down behind a low thing he
+                         is out of CJ's sight, standing up he sees CJ over it;
+                       - it is looked for in his whole quarter, 15-34 m from CJ - behind the walls the map knows, behind standing
+                         vehicles, at the game's own cover points - and cover outweighs everything else; next best right beside a
+                         wall; never where cars drive;
+                       - a place behind cover is KEPT: until CJ has left its band, it has turned to the wrong side of him, CJ cannot be
+                         seen from it or he cannot get to it. No going over to a "better" one;
+                       - with CJ on his way there is no walking beside him in the open: each keeps his cover until CJ has gone on, then
+                         makes for the next one ahead - cover to cover. */
+                    int hk, low_cj = !(fight || watch_q), failed, j_, lost = 0;
+                    hcb_vec was_hold = cjp;
                     float dm;
-                    /* what his place is to hide him from: the threat in a fight (and a suspect for the front two); in peace the far side
-                       of his own quarter - a point 30 m beyond his place, on a 4 m grid so that a step of CJ's does not ask everything
-                       again */
-                    if (fight || watch_q) Tq = T;
-                    else { Tq = v_add(cjp, v_mul(sd, R + 30.0f)); Tq.x = (float)fl_i(Tq.x * 0.25f) * 4.0f + 2.0f; Tq.y = (float)fl_i(Tq.y * 0.25f) * 4.0f + 2.0f; Tq.z = cjp.z + 0.6f; }
-                    if (dt->man[i].hold_id != ids[i]) { dt->man[i].hold_id = ids[i]; dt->man[i].hold_ok = 0; dt->man[i].hold_bad = 0; dt->man[i].alt = 0; dt->man[i].hold_fight = (u8)fight; }
-                    if (dt->man[i].hold_fight != (u8)fight) { dt->man[i].hold_fight = (u8)fight; dt->man[i].hold_at = 0; }   /* (a fight has begun or ended: valued again at once) */
+                    if (!low_cj) Tq = T;
+                    /* (CJ's eyes: where he stands - while he walks, the middle of the 3 m square he is in, so that every step of his does
+                       not ask everything again) */
+                    else if (cj_speed < 0.5f) { Tq = cjp; Tq.z = cjp.z + 0.5f; }
+                    else { Tq = cjp; Tq.x = (float)fl_i(Tq.x / 3.0f) * 3.0f + 1.5f; Tq.y = (float)fl_i(Tq.y / 3.0f) * 3.0f + 1.5f; Tq.z = cjp.z + 0.5f; }
+                    if (dt->man[i].hold_id != ids[i]) { dt->man[i].hold_id = ids[i]; dt->man[i].hold_ok = 0; dt->man[i].hold_bad = 0; dt->man[i].alt = 0; dt->man[i].hold_fight = (u8)fight; dt->man[i].n_bad = 0; dt->man[i].hold_cv = 0; }
+                    if (dt->man[i].hold_fight != (u8)fight) { dt->man[i].hold_fight = (u8)fight; dt->man[i].hold_at = 0; dt->man[i].hold_cv = 0; }   /* (a fight has begun or ended: valued again at once) */
+                    for (j_ = 0; j_ < dt->man[i].n_bad; j_++) if (now - dt->man[i].bad_t[j_] > 30000) { dt->man[i].bad[j_] = dt->man[i].bad[dt->man[i].n_bad - 1]; dt->man[i].bad_t[j_] = dt->man[i].bad_t[dt->man[i].n_bad - 1]; dt->man[i].n_bad--; j_--; }
                     hk = dt->man[i].hold_ok;
-                    /* (a place is his only while it lies in his quarter: the axis has turned, or the quarters were dealt out again - a new one) */
-                    if (hk && dist2d(dt->man[i].hold, cjp) > 1.0f && v_dot(unit2(v_sub(dt->man[i].hold, cjp), sd), sd) < 0.34f) { hk = 0; dt->man[i].hold_ok = 0; }
-                    if (fight && hcb_agent_failed(b, ids[i], now)) {
-                        hk = 0; dt->man[i].hold_ok = 0; hcb_agent_forgive(b, ids[i]);
-                        if (dt->man[i].alt < 250) dt->man[i].alt++;
-                        c0 = v_add(cjp, rot(v_mul(sd, R), dt->man[i].alt % 3)); c0.z = cjp.z;
-                    }   /* 1.0: he cannot get there - another place */
-                    /* 1.1: the place is chosen by weights (hcb_places.c) among everything near his anchor: cover a crouching man
-                       is hidden behind and a standing one fires over, hidden from the other threats too, a good range, near him,
-                       not on top of another of ours, CJ seen from it. He keeps it until another is place_better times better
-                       and place_keep_ms have passed, or it has become no place at all. (0.7 still holds: with nothing known
-                       yet he takes the anchor as it is NOW and keeps it like any other place.) */
+                    /* (he cannot get to it - the map says so, or he is still not there well past the time the way takes: marked for 30 s, another one) */
+                    failed = hcb_agent_failed(b, ids[i], now);
+                    if (hk && !failed && dist2d(dt->man[i].hold, men[i]->pos) > 2.5f && dt->man[i].hold_dl && now > dt->man[i].hold_dl) failed = 1;
+                    if (failed) {
+                        hcb_agent_forgive(b, ids[i]);
+                        if (hk) {
+                            int w_ = dt->man[i].n_bad < 3 ? dt->man[i].n_bad++ : (dt->man[i].bad_i++ % 3);
+                            dt->man[i].bad[w_] = dt->man[i].hold; dt->man[i].bad_t[w_] = now ? now : 1;
+                            hk = 0; dt->man[i].hold_ok = 0; dt->stat[0]++;
+                        }
+                    }
                     if (k == turn || !hk) {
                         place_in in;
                         hcb_vec found;
                         float sc = 0, cur = -1.0f;
-                        int cvr = 0, j_;
+                        int cvr = 0;
                         zero(&in, sizeof in);
-                        in.anchor = c0; in.man = men[i]->pos; in.cj = cjp; in.threat = Tq; in.reach = 7.5f; in.stand_in = (u8)!(fight || watch_q);
-                        in.cj_min = R - 8.0f > 10.0f ? R - 8.0f : 10.0f; in.cj_max = R + 12.0f; in.need_cj = 1;
+                        in.anchor = c0; in.man = men[i]->pos; in.cj = cjp; in.threat = Tq; in.reach = 7.5f; in.stand_in = (u8)low_cj; in.low_cj = (u8)low_cj; in.wide = (u8)(s->body != 0);   /* (the scripts' body - the fallback when the mod's own is off - keeps the search of 1.5: near his corner) */
+                        in.q_dir = sd; in.q_cos = 0.64f;   /* (a new place within 50 degrees of his quarter's middle; one he has is kept to 70) */
+                        in.cj_min = R - 6.0f; in.cj_max = R + 13.0f; in.need_cj = 1;
+                        for (j_ = 0; j_ < (int)s->n_vehs && j_ < HCB_MAX_VEHS && in.n_veh < 8; j_++) {
+                            const hcb_veh *v_ = &s->vehs[j_];
+                            float dv_ = dist2d(v_->pos, cjp);
+                            if (v_->cls == HCB_VC_HELI || v_->id == s->heli || v_len(v_->vel) > 0.5f || dv_ < 9.0f || dv_ > R + 15.0f || v_dot(unit2(v_sub(v_->pos, cjp), sd), sd) < 0.2f) continue;
+                            in.veh[in.n_veh++] = v_->pos;
+                        }
+                        for (j_ = 0; j_ < dt->man[i].n_bad && j_ < 3; j_++) in.bad[in.n_bad++] = dt->man[i].bad[j_];
                         for (j_ = 0; fight && j_ < HCB_MAX_TRACKS && in.n_other < 2; j_++) {
                             const track *t_ = &b->tr[j_];
                             if (t_->used && !t_->friendly && t_->cls >= HCB_CLS_THREAT && t_->last.id != dt->threat_id && !(t_->last.flags & HCB_PF_DEAD) && dist2d(t_->last.pos, T) > 4.0f) in.other[in.n_other++] = t_->last.pos;
@@ -633,28 +697,93 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                             int c_, h_, x_, g_;
                             /* (the answer about his own place has run out and is being asked again: nothing is decided on a guess) */
                             if (!hcb_cv_raw(b, dt->man[i].hold, Tq, now, &h_, &x_, &g_)) { hcb_cv_ask(b, out, dt->man[i].hold, Tq, now); goto place_done; }
-                            in.cj_min -= 2.0f; in.cj_max += 4.0f; in.keep = 1;   /* (the place he holds is not lost for a step of CJ's) */
+                            /* (the place he holds is not lost for a step of CJ's, nor for a turn of the axis: until it is behind CJ's far side) */
+                            /* (... and not kept so long that a CJ on the run leaves him 40 m behind - the second death in the log of 1.5) */
+                            float far_ = cj_speed > 2.5f ? 0.0f : 4.0f;
+                            in.cj_min -= 1.0f; in.cj_max += far_; in.keep = 1; in.q_cos = dt->man[i].wide_q ? -0.3f : fight ? 0.34f : 0.2f;
+                            if (dt->man[i].wide_q) in.cj_min = 12.0f;
                             cur = hcb_place_score(b, out, &in, dt->man[i].hold, now, 1, &c_);
-                            in.cj_min += 2.0f; in.cj_max -= 4.0f; in.keep = 0;
-                            if (cur < 0.0f) { hk = 0; dt->man[i].hold_ok = 0; }
-                            else { dt->man[i].hold_score = cur; hk = c_ ? 1 : 2; dt->man[i].hold_ok = (u8)hk; }
+                            in.cj_min = R - 6.0f; in.cj_max -= far_; in.keep = 0; in.q_cos = 0.64f;
+                            if (cur < 0.0f) { hk = 0; dt->man[i].hold_ok = 0; dt->stat[1]++; was_hold = dt->man[i].hold; lost = 1; }
+                            else { dt->man[i].hold_score = cur; dt->man[i].hold_cv = (u8)c_; hk = c_ == 1 ? 1 : 2; dt->man[i].hold_ok = (u8)hk; }
+                            /* (deeper into the shadow of his cover: half a metre to either side of him, across the line of sight - hidden on one
+                               side and in sight on the other, he sits at the very edge of it, and a step of CJ's or the last 30 cm of his own
+                               way show him. The place moves 35 cm towards the hidden side, three times at most) */
+                            if (hk == 1 && dt->man[i].nudges < 3) {
+                                hcb_vec tv_ = flat(v_sub(Tq, dt->man[i].hold)), pv_, a1_, a2_;
+                                float tl_ = v_len(tv_);
+                                int h1_, x1_, g1_, h2_, x2_, g2_, k1_, k2_;
+                                if (tl_ > 1.0f) {
+                                    pv_.x = -tv_.y / tl_ * 0.5f; pv_.y = tv_.x / tl_ * 0.5f; pv_.z = 0;
+                                    a1_ = v_add(dt->man[i].hold, pv_); a2_ = v_sub(dt->man[i].hold, pv_);
+                                    k1_ = hcb_cv_raw(b, a1_, Tq, now, &h1_, &x1_, &g1_); k2_ = hcb_cv_raw(b, a2_, Tq, now, &h2_, &x2_, &g2_);
+                                    if (!k1_) hcb_cv_ask(b, out, a1_, Tq, now);
+                                    if (!k2_) hcb_cv_ask(b, out, a2_, Tq, now);
+                                    if (k1_ && k2_ && (h1_ != 0) != (h2_ != 0)) {
+                                        int to1 = h1_ && !x1_ && g1_, to2 = h2_ && !x2_ && g2_;
+                                        if (to1 || to2) {
+                                            hcb_vec nh_ = v_add(dt->man[i].hold, v_mul(to1 ? pv_ : v_mul(pv_, -1.0f), 0.7f));
+                                            /* (never through or into the thing itself: the 35 cm must be free on the map) */
+                                            if (hcb_nav_line(b, dt->man[i].hold, nh_, now) && hcb_nav_inside(b, nh_)) dt->man[i].hold = nh_;
+                                            dt->man[i].nudges++;
+                                        }
+                                    }
+                                }
+                            }
                         }
-                        in.strict = hk != 0;
-                        if (hcb_place_pick(b, out, &in, now, &found, &sc, &cvr)
-                            && (!hk || (sc > cur * b->cfg.place_better + 0.02f && now - dt->man[i].hold_at >= (u32)b->cfg.place_keep_ms && dist2d(found, dt->man[i].hold) > 1.0f))) {
+                        /* (only places everything is KNOWN about: taken on a guess, a place was dropped at the next look when the answer came, and
+                           the next guess taken - a man with a wall across his quarter changed places three times a second. The answers are
+                           here within a look or two; until then he has his corner) */
+                        in.strict = (u8)(s->body ? 1 : hk != 0); in.held = (u8)(hk != 0);
+                        /* (a place behind cover is kept. Any other is given up for low cover once he has had it 2.5 s; one in the open also for a
+                           place at a wall, after 6 s with no cover found. Never open for open "20 % better": with the whole quarter to choose
+                           from, the place nearest the man won as he walked, and his place moved under him five times in twelve seconds) */
+                        if (!(hk && dt->man[i].hold_cv == 1) && hcb_place_pick(b, out, &in, now, &found, &sc, &cvr)
+                            && (!hk || (dist2d(found, dt->man[i].hold) > 1.0f
+                                && ((cvr == 1 && now - dt->man[i].hold_at >= 2500)
+                                    || (dt->man[i].hold_cv == 0 && cvr != 0 && now - dt->man[i].hold_at >= 6000)
+                                    || (!s->body && sc > cur * b->cfg.place_better + 0.02f && now - dt->man[i].hold_at >= (u32)b->cfg.place_keep_ms))))) {
                             found.z = cjp.z;
-                            dt->man[i].hold = found; dt->man[i].hold_ok = (u8)(cvr ? 1 : 2); dt->man[i].hold_score = sc; dt->man[i].hold_at = now ? now : 1; dt->man[i].hold_bad = 0;
+                            if (hk) dt->stat[cvr == 1 ? 2 : 3]++; else dt->stat[4]++;
+                            dt->man[i].wide_q = 0; dt->man[i].nudges = 0;
+                            dt->man[i].hold = found; dt->man[i].hold_ok = (u8)(cvr == 1 ? 1 : 2); dt->man[i].hold_cv = (u8)cvr; dt->man[i].hold_score = sc; dt->man[i].hold_at = now ? now : 1; dt->man[i].hold_bad = 0;
+                            dt->man[i].hold_dl = now + 5000 + (u32)(dist2d(found, men[i]->pos) * 450.0f);
                             hk = dt->man[i].hold_ok;
+                        } else if (!hk && s->body) {
+                            /* (nothing in his quarter that CJ can be seen from - a long wall right across it: the quarters next to his, and
+                               nearer in, down to 13 m) */
+                            in.q_cos = -0.2f; in.cj_min = 13.0f; in.anchor = v_add(cjp, v_mul(sd, 15.0f)); in.anchor.z = cjp.z; in.reach = 9.0f;
+                            if (hcb_place_pick(b, out, &in, now, &found, &sc, &cvr)) {
+                                found.z = cjp.z; dt->stat[4]++;
+                                dt->man[i].hold = found; dt->man[i].hold_ok = (u8)(cvr == 1 ? 1 : 2); dt->man[i].hold_cv = (u8)cvr; dt->man[i].hold_score = sc; dt->man[i].hold_at = now ? now : 1; dt->man[i].hold_bad = 0;
+                                dt->man[i].hold_dl = now + 5000 + (u32)(dist2d(found, men[i]->pos) * 450.0f);
+                                dt->man[i].wide_q = 1; dt->man[i].nudges = 0;
+                                hk = dt->man[i].hold_ok;
+                            }
                         }
                     }
                 place_done:
-                    if (!hk) { dt->man[i].hold = c0; dt->man[i].hold_ok = 2; dt->man[i].hold_bad = 0; dt->man[i].hold_score = 0; dt->man[i].hold_at = now ? now : 1; hk = 2; }
+                    /* (his place is no place any more and nothing known is there to take yet - the answers are on their way: he stays where
+                       he is for up to 1.5 s instead of setting off for his corner and turning round a second later) */
+                    if (!hk && lost && (!dt->man[i].inv_since || now - dt->man[i].inv_since < 1500)) {
+                        if (!dt->man[i].inv_since) dt->man[i].inv_since = now ? now : 1;
+                        dt->man[i].hold = was_hold; dt->man[i].hold_ok = 2; hk = 2;
+                    } else if (hk) dt->man[i].inv_since = 0;
+                    if (!hk) {
+                        dt->man[i].inv_since = 0;
+                        /* (still nothing: his corner, pulled in to where CJ can be seen from) */
+                        if (reachable(b, out, cjp, c0, now, &dt->man[i].pad).x != c0.x) { c0 = v_add(cjp, v_mul(v_sub(c0, cjp), 0.62f)); c0.z = cjp.z; }   /* (to 13-14 m, not to CJ's side) */
+                        dt->man[i].hold = c0; dt->man[i].hold_ok = 2; dt->man[i].hold_cv = 0; dt->man[i].hold_bad = 0; dt->man[i].hold_score = 0; dt->man[i].hold_at = now ? now : 1; hk = 2;
+                        dt->man[i].hold_dl = now + 5000 + (u32)(dist2d(c0, men[i]->pos) * 450.0f);
+                    }
                     at = dt->man[i].hold;
+                    pcv = dt->man[i].hold_cv;
                     dm = dist2d(at, men[i]->pos);
-                    if (dm < 1.5f && s->body) dt->man[i].alt = 0;              /* (there: the next failure starts from his quarter's middle again) */
-                    crouch = dm < 1.5f && (fight || cj_speed < 2.5f);         /* (there: down - in peace too, while CJ is not on the run) */
-                    d_ = fight ? (dm < 1.5f ? HCB_DUTY_COVER : HCB_DUTY_BOUND) : duty;
-                    mv = fight ? pace(dm, 3) : dm < 0.9f ? 0 : dm < 4.0f ? 1 : dm > 35.0f ? 3 : 2;   /* (in peace a run at most: no sprinting about) */
+                    crouch = dm < (s->body ? 1.5f : 3.0f);                     /* (there: down, always - behind his cover; the scripts' body stops up to 3 m short) */
+                    d_ = fight ? (crouch ? HCB_DUTY_COVER : HCB_DUTY_BOUND) : duty;
+                    /* (in peace a run from cover to cover; a sprint only to keep up with a CJ on the run, or from far off) */
+                    mv = fight ? pace(dm, 3) : dm < 0.9f ? 0 : cj_speed > 4.5f ? 3 : dm < 4.0f ? 1 : dm > 30.0f ? 3 : 2;
+                    if (mv == 0 && dm >= 0.28f && (pcv == 1 || pcv == 2)) mv = 1;   /* (to the very spot behind his cover) */
                     if (!fight) lk = watch_q ? T : v_add(at, v_mul(sd, 30.0f));                    /* outwards: his quarter */
                 } else {
                     if (i < MAXD) dt->man[i].hold_ok = 0;
@@ -695,6 +824,7 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
                 at = reachable(b, out, cjp, at, now, &dt->man[i].pad);
             POST(i, at, mv, crouch, d_, lk);
             out->posts[out->n_posts - 1].sign = (u8)sign;
+            out->posts[out->n_posts - 1].cover = (u8)pcv;
         }
         if (fight && !ring) {
             /* nobody of the outer men stands where CJ would be in his line of fire: such a post steps 2.5 m aside */
@@ -876,3 +1006,5 @@ HID void hcb_detail_plan(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
     if (say != HCB_SAY_NONE) { dt->say_seq++; dt->last_say = say; dt->say_dir = say_dir; dt->said_at = now ? now : 1; }
     out->say = say; out->say_dir = dt->say_dir; out->say_seq = dt->say_seq;
 }
+/* 1.6, for the tests: why the outer men's places went (see detail.stat) */
+API uint32_t hcb_detail_stat(const hcb_brain *b, int k) { return k >= 0 && k < 8 ? b->dt.stat[k] : 0; }

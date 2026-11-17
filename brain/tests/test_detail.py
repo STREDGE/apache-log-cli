@@ -235,13 +235,15 @@ for _ in range(150):                                       # (1.1: the places ar
     if _ % 9 == 0 and _: sc.shot(g, (0., 0., 1.), dst=1)
     sc.step(1)
 j = by_job(sc); cjp = sc.cj['pos']
-assert d2(at(j['lead']), cjp) < 2.0, ('the commander stays at CJ\'s side', at(j['lead']))
+# (1.6: there is cover for CJ within 23 m now - the commander goes ahead to it, a hop of 7 m, and waits there waving; this CJ does not come:
+#  after two calls he is back at CJ's side for good)
+assert d2(at(j['lead']), cjp) < 9.0, ('the commander is at CJ\'s side, or a hop ahead of him on the way to the cover', at(j['lead']))
 assert all(d2(at(j[k]), cjp) < 2.0 and at(j[k])[0] > cjp[0] for k in BODY) and d2(at(j['close']), (1.4, 0)) < 0.3, ('three bodies between CJ and the shooter', [at(j[k]) for k in BODY])
 outs = {k: at(j[k]) for k in OUTER}
 assert all(15 <= d2(p_, cjp) <= 35 for p_ in outs.values()), ('1.5: the four are out of sight, 15-35 m from CJ - not in a heap round him', outs)
 hidden = [k for k, p_ in outs.items() if sc.blocked(sc.peds[g]['pos'][:2], p_)]
 assert len(hidden) >= 3, ('behind something solid (a crouching man there is hidden from the shooter)', outs, hidden)
-assert all(not sc.blocked(cjp[:2], p_) for k, p_ in outs.items() if k in hidden), 'and CJ\'s ground is in sight from each post'
+assert all(not sc.blocked(cjp[:2], p_, low_too=False) for k, p_ in outs.items() if k in hidden), 'and CJ\'s ground is in sight from each post (1.6: for a man who stands up there - down he may be out of CJ\'s sight too)'
 fwd = sorted(outs.values(), key=lambda p_: -p_[0])
 assert fwd[0][0] > 0 and fwd[1][0] > 0 and fwd[0][1] * fwd[1][1] < 0 and fwd[2][1] * fwd[3][1] < 0 and fwd[2][0] < min(fwd[0][0], fwd[1][0]), ('a quarter each: two forward left and right, two back left and right', outs)
 there = [k for k in OUTER if d2(sc.peds[j[k].who]['pos'], outs[k]) < 1.5]
@@ -262,7 +264,7 @@ j = by_job(sc)
 assert all(j[k].duty == HCB_DUTY_BOUND and not j[k].crouch and (j[k].move in (2, 3) or j[k].why == HCB_WHY2_WAIT_TURN) for k in OUTER if d2(sc.peds[j[k].who]['pos'], at(j[k])) > 3), [(k, j[k].duty, j[k].move, j[k].why) for k in OUTER]   # (1.1: no more than three on the move - the fourth waits his turn)
 sc.step(60); sc.cj['pos'] = [0., 60., 1.]; sc.step(60)
 j = by_job(sc)
-assert all(d2(at(j[k]), sc.cj['pos']) <= 35 for k in OUTER) and all(d2(at(j[k]), sc.cj['pos']) < 2.2 for k in BODY + ('lead',)), 'CJ has moved 60 m: everybody\'s place is with him again'
+assert all(d2(at(j[k]), sc.cj['pos']) <= 41 for k in OUTER) and all(d2(at(j[k]), sc.cj['pos']) < 2.2 for k in BODY) and d2(at(j['lead']), sc.cj['pos']) < 9.0, 'CJ has moved 60 m: everybody\'s place is with him again (1.6: the commander at his side or a hop ahead on the way to cover)'
 passed('On the way to a post a man runs upright; when CJ has moved far the outer men take new posts near him and the inner four are at his side')
 
 # rotation: a badly hurt outer man changes places with the fittest bodyguard
@@ -298,8 +300,9 @@ lead_p = sc.posts[o.lead]
 assert o.duty == HCB_DUTY_RING and o.mode == HCB_MODE_PULLOUT, o.duty
 dists = sorted(d2(at(p), sc.cj['pos']) for p in sc.posts.values())
 # 0.9 (fifth log: six men of eight stood within 2-6 m of CJ): commander and bodyguards at his side; 1.5: the outer men 14-19 m off (out of sight)
-assert all(x <= 5.1 for x in dists[:-1]) and 13.5 <= dists[-1] <= 19.5, dists
-assert o.leading and d2(at(lead_p), sc.cj['pos']) <= 4.1 and at(lead_p)[0] < sc.cj['pos'][0], ('the commander goes ahead of CJ (1.3: 4 m at most), away from the shooter: he takes CJ out', at(lead_p))
+# (1.6: the commander leads by hops - 7 m ahead of CJ, where he stops, waves and waits for him)
+assert all(x <= 5.1 for x in dists[:-2]) and dists[-2] <= 8.6 and 13.5 <= dists[-1] <= 19.5, dists
+assert o.leading and 3.0 <= d2(at(lead_p), sc.cj['pos']) <= 8.6 and at(lead_p)[0] < sc.cj['pos'][0], ('the commander goes ahead of CJ (1.6: a hop of 7 m), away from the shooter: he takes CJ out', at(lead_p))
 evac = [s_ for s_ in sc.said if s_[1] == HCB_SAY_EVAC]
 sc.step(60)
 assert len(evac) == 1 and len([s_ for s_ in sc.said if s_[1] == HCB_SAY_EVAC]) == 1, 'said once, then not again for 20 s'
@@ -342,28 +345,52 @@ passed('CJ in a vehicle: the detail gives no posts on foot (the scripts take the
 sc, team, g = contact(walls=[(-3., -2.5, -3., 2.5)])
 sc.step(4)
 lp = sc.posts[sc.last_out.lead]
-assert sc.last_out.leading and d2(at(lp), sc.cj['pos']) > 2.0 and d2(at(lp), sc.cj['pos']) <= 4.1 and at(lp)[0] < sc.cj['pos'][0] - 1.5, ('the commander goes ahead of CJ towards the cover (west)', at(lp))
+assert sc.last_out.leading and d2(at(lp), sc.cj['pos']) > 2.0 and d2(at(lp), sc.cj['pos']) <= 8.6 and at(lp)[0] < sc.cj['pos'][0] - 1.5, ('the commander goes ahead of CJ towards the cover (west; 1.6: to the cover itself when it is within a hop)', at(lp))
 for k in range(12):                                        # CJ goes with him (the cover is 4 m west)
     sc.cj['pos'][0] -= 0.25; sc.cj['vel'] = [-2.5, 0., 0.]
     sc.step(1)
     lp = sc.posts[sc.last_out.lead]
-    if sc.last_out.leading: assert d2(at(lp), sc.cj['pos']) <= 4.1 and at(lp)[0] <= sc.cj['pos'][0] + 0.1, ('he stays ahead of CJ, on the way to the cover, all the way', at(lp), sc.cj['pos'])
+    if sc.last_out.leading: assert d2(at(lp), sc.cj['pos']) <= 8.6 and at(lp)[0] <= sc.cj['pos'][0] + 0.1, ('he stays ahead of CJ, on the way to the cover, all the way', at(lp), sc.cj['pos'])
 sc.cj['vel'] = [0., 0., 0.]
 sc.cj['pos'] = [sc.last_out.cover_at.x, sc.last_out.cover_at.y, 1.]
 sc.step(20)
 assert not sc.last_out.leading and sc.posts[sc.last_out.lead].crouch and d2(at(sc.posts[sc.last_out.lead]), sc.cj['pos']) < 2.0, 'there: he crouches next to CJ'
 sc, team, g = contact(walls=[(-3., -2.5, -3., 2.5)])
-waved, said, far = 0, [], 0
-for k in range(140):                                       # CJ stays where he is
+waved, said, far, backs, at_pt = 0, [], 0, 0, 0
+was_back = False
+for k in range(300):                                       # CJ stays where he is
     sc.step(1)
     lp = sc.posts[sc.last_out.lead]
     waved += lp.sign == HCB_SIGN_COME
     far = max(far, d2(at(lp), sc.cj['pos']))
+    at_pt += lp.sign == HCB_SIGN_COME and d2(sc.peds[sc.last_out.lead]['pos'], at(lp)) < 1.6
+    back = sc.last_out.leading and d2(at(lp), sc.cj['pos']) < 2.0
+    backs += back and not was_back; was_back = back
 said = [s_ for s_ in sc.said if s_[1] in (HCB_SAY_TAKE_COVER, HCB_SAY_COVER_DIR)]
-assert waved >= 10 and far <= 4.1, ('CJ does not come: the commander waits at his point, turned to CJ, and waves him on', waved, far)
+# (1.6, the log of 1.5 - "he only follows me, he stops when I stop": his point is the cover's edge (a hop of 7 m when it is further), NOT a place
+#  4 m from CJ; he walks to it with CJ standing still, waits there 7 s waving, comes back for CJ once, goes again, and then stays with CJ)
+assert waved >= 60 and at_pt >= 60 and far <= 8.6, ('CJ does not come: the commander stands at his point by the cover, turned to CJ, and waves him on', waved, at_pt, far)
+assert backs == 1, ('he comes back for CJ once and sets off again', backs)
 assert len(said) <= 2, ('"follow me" is said once for a cover, not every 6 s', said)
-assert d2(at(sc.posts[sc.last_out.lead]), sc.cj['pos']) <= 2.0 and sc.posts[sc.last_out.lead].sign == HCB_SIGN_NONE, 'after 10 s without a step of CJ\'s he is back at CJ\'s side, covering him where he is'
-passed('1.3: under fire the commander goes to the cover himself, 4 m ahead of CJ, all the way; CJ there - he crouches next to him; CJ stays - he waits at his point, turned to CJ, and waves him on ("follow me" said once), and after 10 s he comes back to CJ\'s side')
+assert d2(at(sc.posts[sc.last_out.lead]), sc.cj['pos']) <= 2.0 and sc.posts[sc.last_out.lead].sign == HCB_SIGN_NONE and not sc.last_out.leading, 'two calls without a step of CJ\'s: he is back at CJ\'s side, covering him where he is'
+passed('1.6: under fire the commander goes to the cover himself and waits there for CJ (he does not stop when CJ stops): CJ comes - he crouches next to him; CJ stays - he waves him on from his point for 7 s (%d looks), walks back for him once, goes again, and after the second call stays at CJ\'s side ("follow me" said once)' % at_pt)
+
+# 1.6: a cover a long way off (18 m; before 1.6 nothing was looked for beyond 8 m): hop by hop, each time waiting for CJ
+sc, team, g = contact(walls=[(-18., -3., -18., 3.)])
+hops, last_pt = [], None
+for k in range(400):
+    sc.step(1)
+    o = sc.last_out
+    if not o.leading: 
+        if hops and d2(sc.cj['pos'], (o.cover_at.x, o.cover_at.y)) < 2.4: break
+        continue
+    lp = sc.posts[o.lead]
+    if lp.sign == HCB_SIGN_COME and d2(sc.peds[o.lead]['pos'], at(lp)) < 1.6:    # he stands at his point and waves: CJ walks up to him
+        if last_pt is None or d2(at(lp), last_pt) > 2.0: hops.append(at(lp)); last_pt = at(lp)
+        sc.cj['pos'] = [at(lp)[0] + 1.0, at(lp)[1], 1.]
+assert o.cover_ok or hops, 'a cover 18 m off is found'
+assert len(hops) >= 2 and all(hops[i_ + 1][0] < hops[i_][0] - 3.0 for i_ in range(len(hops) - 1)) and hops[-1][0] < -14.0, ('hop by hop to the cover 18 m west, each hop 7 m at most ahead of where CJ was', hops)
+passed('1.6: a cover 18 m from CJ: the commander takes him there in %d hops - 7 m ahead, wait and wave, CJ comes up, the next hop - to the wall' % len(hops))
 
 sc, team, g = contact(walls=[(-3., -2.5, -3., 2.5)])
 sc.step(10)
@@ -529,22 +556,34 @@ front = [k for k in OUTER if at(j[k])[1] < -3]
 assert len(front) >= 2, ('two of them in the quarters towards the shooter (south)', {k: at(j[k]) for k in OUTER})
 passed('1.5: a shooter appears behind CJ - the four quarters turn round to him, each man going the least way and round CJ, not across his ground (the nearest anybody came: %.0f m); down at the new places, two of them towards the shooter' % closest)
 
-# CJ walks: the outer men walk beside him in their quarters (no stopping in cover every few metres); he stands 4 s - they take places and get down
-sc = Scene(); team = detail8(sc); sc.step(120)
-sc.cj['vel'] = [0., 1.4, 0.]
-acts = {k: [] for k in OUTER}; downs = 0; near = 0
-for k_ in range(150):
-    sc.step(1); j = by_job(sc)
-    for k in OUTER:
-        acts[k].append(j[k].act); downs += j[k].crouch
-        near += d2(sc.peds[j[k].who]['pos'], sc.cj['pos']) < 12.
-changes = sum(sum(1 for a, b_ in zip(v, v[1:]) if a != b_) for v in acts.values()) / 4. / 1.5     # (a minute is 600 looks; this is 150)
-assert downs == 0 and near == 0, ('while CJ walks nobody of the four gets down, nobody comes within 12 m of him', downs, near)
-assert changes <= 6, ('a steady walk beside CJ: at most 6 changes of action a minute', changes)
+# 1.6 (the log of 1.5: an outer man was on his feet 62 % of the time, in the open; his place jumped more than 3 m in four seconds of ten):
+# CJ walks - nobody walks beside him in the open: each stays down at his place until CJ has gone on, then makes for the next one ahead.
+# CJ runs - they run with him (nobody is left 40 m behind). He stands - they are down.
+def walk_with(speed, secs=15):
+    sc = Scene(); team = detail8(sc); sc.step(120)
+    sc.cj['vel'] = [0., speed, 0.]
+    acts = {k: [] for k in OUTER}; downs = near = far = n_ = jumps = 0; last = {}
+    for k_ in range(secs * 10):
+        sc.step(1); j = by_job(sc)
+        for k in OUTER:
+            dd = d2(sc.peds[j[k].who]['pos'], sc.cj['pos'])
+            acts[k].append(j[k].act); downs += j[k].crouch; near += dd < 12.; far += dd > 40.; n_ += 1
+            jumps += k in last and d2(last[k], at(j[k])) > 3.; last[k] = at(j[k])
+    changes = sum(sum(1 for a, b_ in zip(v, v[1:]) if a != b_) for v in acts.values()) / 4. / (secs / 60.)
+    return sc, downs / n_, near / n_, far / n_, jumps / 4. / (secs / 60.), changes
+sc, down_w, near_w, far_w, jumps_w, changes = walk_with(1.4)
+assert down_w >= 0.6 and near_w <= 0.02 and far_w == 0, ('CJ walks: the four are down at their places most of the time, nobody within 12 m of him, nobody left behind', down_w, near_w, far_w)
+assert jumps_w <= 9 and changes <= 20, ('a new place only when CJ has gone on (about every 12 m of his way); a move is up - run - walk - down: at most 20 changes of action a minute', jumps_w, changes)
 sc.cj['vel'] = [0., 0., 0.]; sc.step(100); j = by_job(sc)
 there = [k for k in OUTER if d2(sc.peds[j[k].who]['pos'], at(j[k])) < 1.5]
 assert len(there) >= 3 and all(j[k].crouch for k in there), ('CJ has stood 10 s: down at their places', there)
-passed('1.5: CJ walks - the outer four walk beside him in their quarters (%.1f changes of action a minute, nobody down, nobody within 12 m); he stands - after 4 s each takes a place in his quarter and gets down' % changes)
+kept = {k: at(j[k]) for k in OUTER}; moved_ = 0
+for k_ in range(200):
+    sc.step(1); j = by_job(sc); moved_ += sum(d2(at(j[k]), kept[k]) > 3. for k in OUTER); kept = {k: at(j[k]) for k in OUTER}
+assert moved_ <= 1, ('CJ stands 20 s more: the places are kept (the log of 1.5: a place jumped in 23 % of such seconds)', moved_)
+_, down_r, near_r, far_r, _, _ = walk_with(6.5, 8)
+assert far_r == 0 and near_r <= 0.02, ('CJ on the run: they run with him - nobody left 40 m behind, nobody within 12 m', far_r, near_r)
+passed('1.6: CJ walks - the outer four go from place to place, down %d %% of the time (a new place %.0f times a minute a man, %.1f changes of action, nobody within 12 m); he stands - down, and in 20 s no place moves; he runs - they run with him, nobody left behind' % (round(100 * down_w), jumps_w, changes))
 
 # the quarters are dealt out with the way past CJ counted: here the least way puts the man at (-17, 1) across CJ's ground to the
 # north-east quarter - he takes the north-west one, and the man at (-20, 6) the north-east one (his way stays 12 m off CJ)
@@ -763,12 +802,116 @@ for name in ('point', 'point2', 'rear', 'rear2'):
     sc.stuck_men = {m_}
     sc.step(60)
     a0 = math.atan2(sc.posts[m_].at.y, sc.posts[m_].at.x)
+    a0 = (math.floor(a0 / (math.pi / 2)) + 0.5) * (math.pi / 2)             # (the middle of the quarter his first place lies in: 45, 135, 225 or 315 degrees)
     for k in range(900):
         sc.step(1)
         p = sc.posts[m_]
         worst = max(worst, abs((math.atan2(p.at.y, p.at.x) - a0 + math.pi) % (2 * math.pi) - math.pi) * 180 / math.pi)
-assert worst < 40.0, ('1.5: the places he is given stay in his quarter', worst)
-passed('1.5: an outer man who cannot get to his place for 90 s is given others in his own quarter only (at most %.0f degrees round CJ from the first)' % worst)
+assert worst < 72.0, ('1.5: the places he is given stay in his quarter (within 70 degrees of its middle)', worst)
+passed('1.5: an outer man who cannot get to his place for 90 s is given others in his own quarter only (at most %.0f degrees from its middle; 1.6: the place he could not get to is not offered again for 30 s)' % worst)
+
+# ================================================================== 1.6: "not a soul in the open - heads and barrels behind cover"
+# (the log of 1.5, both black boxes replayed: of the places an outer man sat at, 79 % were in the open - in a fight 46 of 52 - with cover known
+#  in his own quarter three times in four; his place jumped more than 3 m in 23 % of the seconds CJ stood still)
+import soak_30min as so
+def street(spot, shooter=None, secs=40):
+    sc = Scene(); sc.walls = list(so.WALLS); sc.low_walls = list(so.LOW); sc.blocks = list(so.BLOCKS)
+    sc.cj['pos'] = [spot[0], spot[1], 1.]
+    team = [sc.our(spot[0] + x, spot[1] + y, SQ + k, weapon=M4) for k, (x, y) in enumerate(so.EIGHT)]; sc.walk_posts = True
+    g = sc.ped(spot[0] + shooter[0], spot[1] + shooter[1], pedtype=GANG, weapon=AK) if shooter else 0
+    last, jumps, kinds, feet, n_, seen_down, blind_up = {}, 0, {0: 0, 1: 0, 2: 0, 3: 0}, 0, 0, 0, 0
+    on_spot = [0]
+    for k in range(secs * 10):
+        if g and k % 15 == 0: sc.shot(g, (spot[0], spot[1], 1.), dst=1)
+        sc.step(1)
+        if k < 100: continue                               # (10 s to get there)
+        for w, p in sc.posts.items():
+            if JOB.get(p.job) not in OUTER: continue
+            me = sc.peds[w]['pos']; n_ += 1
+            if d2(me, at(p)) < 1.5:
+                kinds[p.cover] += 1
+                if not g and d2(me, at(p)) < 0.7:                                    # (on the very spot)
+                    on_spot[0] += 1
+                    seen_down += not sc.blocked(sc.cj['pos'], me)                    # (down at his place: can CJ see him?)
+                    blind_up += sc.blocked(sc.cj['pos'], me, low_too=False)          # (standing up there: can he see CJ?)
+            else: feet += 1
+            jumps += w in last and d2(last[w], at(p)) > 3.; last[w] = at(p)
+    return jumps, kinds, feet / n_, seen_down, blind_up, sum(kinds.values()), on_spot[0]
+SPOTS = ((0., 0.), (20., -20.), (-30., 30.), (35., 10.), (-10., -25.))
+tot = {0: 0, 1: 0, 2: 0, 3: 0}; jumps_all = seen_all = blind_all = at_all = spot_all = 0; feet_worst = 0.
+for sp in SPOTS:
+    jumps, kinds, feet, seen_down, blind_up, at_n, spot_n = street(sp)
+    for k_ in tot: tot[k_] += kinds[k_]
+    jumps_all += jumps; seen_all += seen_down; blind_all += blind_up; at_all += at_n; feet_worst = max(feet_worst, feet); spot_all += spot_n
+assert jumps_all <= 1, ('CJ stands 30 s at five spots of a street: no outer man\'s place moves', jumps_all)
+assert tot[1] / at_all >= 0.8 and tot[0] / at_all <= 0.1, ('at his place an outer man is behind low cover (seen from CJ)', tot)
+assert spot_all / at_all >= 0.75 and seen_all / spot_all <= 0.2 and blind_all / spot_all <= 0.05, ('on the very spot, down, CJ does not see him; standing up he sees CJ', seen_all, blind_all, spot_all, at_all)
+assert feet_worst <= 0.2, ('and they are at their places, not on their feet', feet_worst)
+passed('1.6: CJ stands 30 s at five spots of a street (walls, fences, a raised level, things to get down behind): the outer four are behind low cover %d %% of their time at a place (in the open %d %%), out of CJ\'s sight while down in %d %% of it and able to see him standing up in %d %%; no place moved (%d jumps in 150 s)' % (
+    round(100 * tot[1] / at_all), round(100 * tot[0] / at_all), round(100 - 100 * seen_all / spot_all), round(100 - 100 * blind_all / spot_all), jumps_all))
+
+tot = {0: 0, 1: 0, 2: 0, 3: 0}; jumps_all = at_all = 0
+for sp in SPOTS:
+    jumps, kinds, feet, _, _, at_n, _ = street(sp, shooter=(30., 12.))
+    for k_ in tot: tot[k_] += kinds[k_]
+    jumps_all += jumps; at_all += at_n
+assert (tot[1] + tot[2]) / at_all >= 0.7 and tot[0] / at_all <= 0.12, ('in a fight: behind cover from the shooter (low cover, or wholly behind a wall)', tot)
+assert jumps_all <= 12, ('and the places are kept (at most a move or two a man at the worst spot)', jumps_all)
+passed('1.6: the same five spots with a shooter 32 m off: the outer four are behind cover from him %d %% of their time at a place (low cover %d %%, wholly behind a wall %d %%, beside a wall %d %%, in the open %d %%); %d place changes in 150 s for the four' % (
+    round(100 * (tot[1] + tot[2]) / at_all), round(100 * tot[1] / at_all), round(100 * tot[2] / at_all), round(100 * tot[3] / at_all), round(100 * tot[0] / at_all), jumps_all))
+
+# a wall he would be blind behind and a low thing he can fire over, both in his quarter: the low one
+sc = Scene(); sc.walls = [(17., 9., 17., 14.), (17., -14., 17., -9.)]; sc.low_walls = [(15.5, 16., 15.5, 20.), (15.5, -20., 15.5, -16.)]
+team = detail8(sc); sc.step(20)
+g = sc.ped(34., 0., pedtype=GANG, weapon=AK, face=(-1., 0.)); sc.step(2); sc.shot(g, (0., 0., 1.), dst=1)
+for k in range(200):
+    if k % 9 == 0: sc.shot(g, (0., 0., 1.), dst=1)
+    sc.step(1)
+front_ = [p for p in sc.posts.values() if JOB.get(p.job) in OUTER and p.at.x > 5.]
+gp_ = sc.peds[g]['pos']
+assert len(front_) == 2 and all(p.cover == 1 and sc.blocked(gp_, at(p)) and not sc.blocked(gp_, at(p), low_too=False) for p in front_), ('the two towards the shooter are down behind the low things (hidden down, a line of fire standing), not blind behind the walls', [(at(p), p.cover) for p in front_])
+passed('1.6: a wall (blind behind it) and a low thing (he fires over it) in the same quarter, a shooter beyond: the man takes the low thing')
+
+# "from different sides": cover in ONE quarter only - one man takes it, the others keep their own sides of CJ
+sc = Scene(); sc.low_walls = [(12., 14., 16., 14.), (14., 18., 18., 18.), (18., 10., 18., 14.)]
+team = detail8(sc); sc.step(300)
+quad = lambda p_: (p_[0] > 0, p_[1] > 0)
+places_ = [at(p) for p in sc.posts.values() if JOB.get(p.job) in OUTER]
+assert len({quad(p_) for p_ in places_}) == 4, ('cover only to the north-east: still one man on each side of CJ', places_)
+passed('1.6: cover in one quarter only: one outer man is behind it, the other three stay on their own sides of CJ (a place is taken in his own quarter, however good the cover next door)')
+
+# never where cars drive: CJ stands beside a road, and the only cover his two men on that side have is ON it
+sc = Scene(); sc.low_walls = [(2., 10., 2., 17.), (2., -17., 2., -10.)]          # (seen from CJ, a man is hidden behind them at x = 1.5 - in the lane)
+sc.cj['pos'] = [23., 0., 1.]
+team = [sc.our(23. + x, y, SQ + k, weapon=M4) for k, (x, y) in enumerate(EIGHT)]; sc.walk_posts = True
+cars = []; on_road = at_n = 0
+for k in range(450):
+    if k % 12 == 0:
+        dirn = 1. if (k // 12) % 2 else -1.
+        drv = sc.ped(dirn * 1.6, -60. * dirn, pedtype=4); cid = sc.veh(dirn * 1.6, -60. * dirn, vel=(0., dirn * 12., 0.), driver=drv); sc.peds[drv]['vehicle'] = cid; cars.append((cid, drv))
+    for cid, drv in list(cars):
+        if abs(sc.vehs[cid]['pos'][1]) > 62.: del sc.vehs[cid]; sc.peds.pop(drv, None); cars.remove((cid, drv))
+        else: sc.peds[drv]['pos'] = list(sc.vehs[cid]['pos'])
+    sc.step(1)
+    if k < 200: continue
+    for w, p in sc.posts.items():
+        if JOB.get(p.job) in OUTER: at_n += 1; on_road += abs(p.at.x) < 3.2          # (his PLACE: a man in the lane is busy getting out of the cars' way)
+assert at_n > 500 and on_road <= 0.02 * at_n, ('cars drive along x = 0: no outer man has his place on the roadway, though the only cover is there', on_road, at_n)
+passed('1.6: CJ beside a road (a car every 1.2 s) and the only cover of the two men on that side is in the lane itself: neither takes it - no place within 3 m of where the cars drive (%d looks at a place)' % at_n)
+
+# a hurt CJ is closed in on though nobody shoots (the log of 1.5: 30 s with 8 HP, "calm", the bodyguards 26-49 m behind when one pistol finished him)
+sc = Scene(); team = detail8(sc); sc.step(60)
+sc.cj['health'] = 8.
+sc.step(40); j = by_job(sc)
+assert all(d2(sc.peds[j[k].who]['pos'], sc.cj['pos']) < 2.2 for k in BODY), ('both bodyguards within 2 m of a hurt CJ', [d2(sc.peds[j[k].who]['pos'], sc.cj['pos']) for k in BODY])
+assert sum(1 for s_ in sc.said if s_[1] == HCB_SAY_FOLLOW_ME) == 1, ('"CJ, stay with me" said once', sc.said)
+sc.cj['vel'] = [0., 4.0, 0.]; close_n = looks_ = 0                 # ... and he runs for it (4 m/s; a guard's sprint is 5.5 here)
+for k in range(60):
+    sc.step(1); j = by_job(sc)
+    if k >= 15:
+        for b_ in BODY: looks_ += 1; close_n += d2(sc.peds[j[b_].who]['pos'], sc.cj['pos']) < 6.0
+assert close_n / looks_ >= 0.9, ('he runs: they keep up with him, never left behind', close_n, looks_, [j[k].act for k in BODY])
+passed('1.6: CJ at 8 HP with nobody shooting: both bodyguards close in to within 2 m, the commander says "stay with me" once; he runs - they keep up, sprinting from 4 m behind (within 6 m of him in %d %% of the looks)' % round(100 * close_n / looks_))
 
 text = '\n'.join(results) + '\nThe core only. Nothing here has run in the game.\n'
 (hcb_py.OUT / 'brain_detail_tests.txt').write_text(text)

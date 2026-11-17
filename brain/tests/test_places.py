@@ -147,6 +147,18 @@ assert hcb_py.place_value(sc.brain, p3, tuple(man), tuple(cjp), _far, p3, sc.tim
 assert hcb_py.place_value(sc.brain, p3, tuple(man), tuple(cjp), _far, p3, sc.time, stand_in=1) >= 0, '1.5: the peace stand-in: the middle of his quarter is a place'
 passed('What a place is worth, weight by weight: hidden from a second shooter +%.2f, another of ours within 3 m -%.2f (within 1.2 m - no place), in front of CJ\'s weapon while he fires - no place; 1.3: CJ or one of ours in his line to the shooter - no place (1.5: a place he holds goes only when CJ comes within 1.5 m of that line, a new one needs 1.8 m - no flapping); in peace the point beyond his quarter is no man - the middle of his quarter is a place' % (sc.brain.cfg.place_w_others, sc.brain.cfg.place_w_crowd))
 
+# ------------------------------------------------------------------ 1.6: never where cars drive
+# (a car seen driven at speed leaves a mark - its place and its way; a place within 3 m of the line through a mark is worth a hundredth)
+sc = Scene(); team = [sc.our(20. + x, y, SQ + k, weapon=M4) for k, (x, y) in enumerate(((1.2, -0.8), (-1.8, 3.5), (-9., 11.), (-1.6, -2.2), (-12., -8.)))]
+sc.cj['pos'] = [20., 0., 1.]
+drv = sc.ped(1.6, -30., pedtype=4); car = sc.veh(1.6, -30., vel=(0., 12., 0.), driver=drv); sc.peds[drv]['vehicle'] = car
+sc.step(30)                                                # (it drives north along x = 1.6)
+cjp_ = tuple(sc.cj['pos']); eye_ = (cjp_[0], cjp_[1], cjp_[2] + 0.5)
+val = lambda x_: hcb_py.place_value(sc.brain, (x_, 8., 1.), (5., 8., 1.), cjp_, eye_, (x_, 8., 1.), sc.time, stand_in=1, wide=1)
+lane, off = val(1.0), val(8.0)
+assert off > 0 and 0 <= lane < off * 0.05, ('a place in the lane is worth next to nothing beside one 6 m off it', lane, off)
+passed('1.6: a car has driven along a line: a place within 3 m of that line is worth %.4f against %.2f for the same place 7 m off it - taken only when there is nothing else' % (lane, off))
+
 text = '\n'.join(results) + '\nThe core only. Nothing here has run in the game.\n'
 (hcb_py.OUT / 'brain_places_tests.txt').write_text(text)
 print(text)

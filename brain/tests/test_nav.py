@@ -166,8 +166,8 @@ assert walk_share > 0.85 and HCB_ACT_SPRINT not in acts, (walk_share, set(acts))
 acts = []
 sc.cj['vel'] = [0., 6.5, 0.]                                # CJ sprints
 for k in range(60):
-    sc.step(1); acts += [sc.posts[w].act for w in team]
-assert sum(a in (HCB_ACT_RUN, HCB_ACT_SPRINT) for a in acts) / len(acts) > 0.8
+    sc.step(1); acts += [sc.posts[w].act for w in team if sc.posts[w].act not in (HCB_ACT_COVER, HCB_ACT_OVERWATCH)]   # (1.6: an outer man keeps his cover until CJ has gone on - then he sprints after him)
+assert len(acts) > 250 and sum(a in (HCB_ACT_RUN, HCB_ACT_SPRINT) for a in acts) / len(acts) > 0.8, (len(acts), sum(a in (HCB_ACT_RUN, HCB_ACT_SPRINT) for a in acts))
 sc.cj['vel'] = [0., 0., 0.]
 sc.step(150)
 assert all(sc.posts[w].move == 0 for w in team), 'he stops: they stop'

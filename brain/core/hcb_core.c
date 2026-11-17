@@ -128,7 +128,7 @@ API void hcb_init(hcb_brain *b, u32 seed) {
     b->cfg.scatter_per_ms = 0.02f;
     b->cfg.gunner_weapon = 1;
     b->cfg.cabin_skip_m = 1.5f;
-    b->cfg.outer_peace_m = 21; b->cfg.outer_fight_m = 23; b->cfg.cj_low_hp = 40;
+    b->cfg.outer_peace_m = 22; b->cfg.outer_fight_m = 23; b->cfg.cj_low_hp = 40;
     b->cfg.gather_m = 32; b->cfg.rush_m = 8; b->cfg.assault_near_m = 9; b->cfg.fire_first_ms = 2000; b->cfg.search_ms = 6000;
     b->cfg.target_keep_ms = 20000; b->cfg.consolidate_ms = 8000; b->cfg.withdraw_down = 3;
     b->cfg.ow_min_h = 4; b->cfg.ow_max_h = 35; b->cfg.ow_min_d = 12; b->cfg.ow_max_d = 70; b->cfg.ow_try_ms = 40000;
@@ -569,7 +569,7 @@ API void hcb_think(hcb_brain *b, const hcb_snapshot *s, hcb_out *out) {
         h = hcb_fnv(h, p->who); h = hcb_fnv(h, hcb_bits(p->at.x)); h = hcb_fnv(h, hcb_bits(p->at.y));
         h = hcb_fnv(h, ((u32)p->move << 24) | ((u32)p->crouch << 16) | ((u32)p->duty << 8) | p->job);
         h = hcb_fnv(h, hcb_bits(p->via.x)); h = hcb_fnv(h, hcb_bits(p->via.y)); h = hcb_fnv(h, ((u32)p->act << 16) | ((u32)p->phase << 8) | p->why);
-        h = hcb_fnv(h, hcb_bits(p->via2.x)); h = hcb_fnv(h, hcb_bits(p->via2.y)); h = hcb_fnv(h, ((u32)p->sign << 16) | ((u32)p->climb << 8) | p->face);
+        h = hcb_fnv(h, hcb_bits(p->via2.x)); h = hcb_fnv(h, hcb_bits(p->via2.y)); h = hcb_fnv(h, ((u32)p->cover << 24) | ((u32)p->sign << 16) | ((u32)p->climb << 8) | p->face);
     }
     h = hcb_fnv(h, ((u32)out->task << 24) | ((u32)out->umode << 16) | ((u32)out->n_ground_q << 8) | out->n_seg_q); h = hcb_fnv(h, out->target); h = hcb_fnv(h, out->n_path_q);
     h = hcb_fnv(h, ((u32)out->ow_ok << 8) | out->ow_ready);

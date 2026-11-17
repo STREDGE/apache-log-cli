@@ -23,18 +23,23 @@
  */
 #include "hcb_int.h"
 
-#define PL_MAX 20
+#define PL_MAX 48
 static hcb_vec flat(hcb_vec v) { v.z = 0; return v; }
 static float d2(hcb_vec a, hcb_vec b) { return v_len(flat(v_sub(a, b))); }
 
 HID float hcb_place_score(hcb_brain *b, hcb_out *out, const place_in *in, hcb_vec at, u32 now, int ask, int *cover) {
     const hcb_cfg *c = &b->cfg;
     float sc = 0, dT = d2(at, in->threat), dcj = d2(at, in->cj), dman = d2(at, in->man), z, t;
-    int hid = 0, hi = 0, gr = 1, k, known, room = out->n_probe_q < HCB_MAX_PROBES;
+    int hid = 0, hi = 0, gr = 1, k, known, room = out->n_probe_q < HCB_MAX_PROBES, on_road = 0;
     hcb_vec a2 = flat(at), cj2 = flat(in->cj), th2 = flat(in->threat);
 
     *cover = 0;
     if (dT < 6.0f || dT < in->threat_min) return -1.0f;
+    if (in->q_cos > -0.99f && (in->q_dir.x != 0.0f || in->q_dir.y != 0.0f) && dcj > 1.0f) {   /* 1.6: his own quarter round CJ */
+        hcb_vec rel = v_sub(a2, cj2);
+        if ((rel.x * in->q_dir.x + rel.y * in->q_dir.y) / dcj < in->q_cos) return -1.0f;
+    }
+    for (k = 0; k < in->n_bad && k < 3; k++) if (d2(at, in->bad[k]) < 3.0f) return -1.0f;   /* 1.6: he could not get there */
     if (in->cj_max > 0.0f && (dcj > in->cj_max || dcj < in->cj_min)) return -1.0f;
     if (in->cj_fires) {                                                  /* nobody in front of CJ's weapon */
         hcb_vec rel = v_sub(a2, cj2);
@@ -65,7 +70,31 @@ HID float hcb_place_score(hcb_brain *b, hcb_out *out, const place_in *in, hcb_ve
         if (!gr) return -1.0f;
         if (hid && !hi) { sc += c->place_w_fire; *cover = 1; }
         else if (!hid) sc += c->place_w_open;
-        else sc += 0.05f;
+        else { sc += 0.05f; *cover = 2; }                               /* (wholly behind a wall: safe, out of sight - and blind) */
+    }
+    /* 1.6 (the player: "not a soul in the open - heads and barrels over cover"): with the whole quarter to choose from, cover counts for
+       more than everything else together; next best a place right beside a wall, a fence or a step; and never where cars drive */
+    if (in->wide) {
+        if (*cover == 1) {
+            /* (with the weight as shipped, 0.4: one whole point for the middle of the thing - cover on both sides of him too - and about
+               half of it for its end, where a step to the side, his or CJ's, brings him into sight) */
+            hcb_vec tv = flat(v_sub(in->threat, at)), pv;
+            float tl = v_len(tv);
+            int sides = 0;
+            /* (the cells next to his along the thing - whichever way it runs - have it between them and the threat too) */
+            (void)tl;
+            pv.x = 1; pv.y = 0; pv.z = 0; sides = hcb_nav_wall_side(b, v_add(at, pv), in->threat) + hcb_nav_wall_side(b, v_sub(at, pv), in->threat);
+            pv.x = 0; pv.y = 1; sides += hcb_nav_wall_side(b, v_add(at, pv), in->threat) + hcb_nav_wall_side(b, v_sub(at, pv), in->threat);
+            if (sides > 2) sides = 2;
+            if (!hcb_nav_wall_side(b, at, in->threat)) sides = 0;        /* (not right at the thing - behind a car, or metres back in its shadow: the same as its end) */
+            sc += c->place_w_fire * 2.5f * (sides == 2 ? 1.0f : sides == 1 ? 0.6f : 0.45f);
+        }
+        else if (*cover == 2) sc += c->place_w_fire * 0.6f;              /* (out of everybody's sight at least) */
+        else if (hcb_nav_by_wall(b, at)) { sc += c->place_w_fire * 0.9f; *cover = 3; }
+        for (k = 0; k < b->dt.road_n && k < 24; k++) {
+            hcb_vec r0 = flat(v_sub(b->dt.road[k], v_mul(b->dt.road_d[k], 12.0f))), r1 = flat(v_add(b->dt.road[k], v_mul(b->dt.road_d[k], 12.0f)));
+            if (seg_dist(a2, r0, r1, &t) < 3.2f) { on_road = 1; if (*cover == 3) *cover = 0; break; }   /* (the last resort: any place off the road is better) */
+        }
     }
     if (in->n_other) {
         int h2, x2, g2, hidden = 0;
@@ -88,15 +117,17 @@ HID float hcb_place_score(hcb_brain *b, hcb_out *out, const place_in *in, hcb_ve
         hcb_vec eye = in->cj;
         int h2, x2, g2;
         eye.z += 0.4f;
-        if (hcb_cv_raw(b, at, eye, now, &h2, &x2, &g2)) { if (h2) return -1.0f; }
+        /* (1.6: seen by a man who stands up there - down behind a low thing he is out of CJ's sight, and that is wanted) */
+        if (in->low_cj) { if (known && hi) return -1.0f; }
+        else if (hcb_cv_raw(b, at, eye, now, &h2, &x2, &g2)) { if (in->wide ? x2 : h2) return -1.0f; if (in->wide && h2 && *cover != 1) sc += 0.2f; }
         else { if (ask && known && out->n_probe_q < HCB_MAX_PROBES - 1) hcb_cv_ask(b, out, at, eye, now); if (in->strict) return -1.0f; }
     }
-    return sc;
+    return on_road ? sc * 0.01f : sc;                                   /* (1.6: whatever it is worth otherwise) */
 }
 
 HID int hcb_place_pick(hcb_brain *b, hcb_out *out, const place_in *in, u32 now, hcb_vec *found, float *score, int *cover) {
     static const float C6[6] = {1.0f, 0.5f, -0.5f, -1.0f, -0.5f, 0.5f}, S6[6] = {0.0f, 0.866025f, 0.866025f, 0.0f, -0.866025f, -0.866025f};
-    hcb_vec cand[PL_MAX], away = flat(v_sub(in->anchor, in->threat)), wl[6], tmp[AG_PATH];
+    hcb_vec cand[PL_MAX], away = flat(v_sub(in->anchor, in->threat)), wl[10], tmp[AG_PATH];
     float sc[PL_MAX], l = v_len(away), reach = in->reach > 1.0f ? in->reach : 7.5f;
     int cv[PL_MAX], n = 0, i, k, r, tries, best;
 
@@ -109,9 +140,30 @@ HID int hcb_place_pick(hcb_brain *b, hcb_out *out, const place_in *in, u32 now, 
         if (d2(at, in->anchor) > reach + 3.0f) continue;
         ADD(at); k++;
     }
-    k = hcb_nav_walls(b, in->anchor, reach, in->threat, wl, 6);          /* behind the walls the map knows */
+    k = hcb_nav_walls(b, in->anchor, reach, in->threat, wl, in->wide ? 8 : 6);   /* behind the walls the map knows */
     for (i = 0; i < k; i++) ADD(wl[i]);
-    for (r = 1; r <= 3 && n < PL_MAX; r++)                               /* rings round the corner */
+    if (in->wide) {
+        /* 1.6: the whole quarter - the walls the map knows round three more points of it, and the far side of every standing vehicle */
+        hcb_vec qd = in->q_dir, qs, c2;
+        float rc = d2(in->anchor, in->cj);
+        int w_;
+        qs.x = -qd.y; qs.y = qd.x; qs.z = 0;
+        for (w_ = 0; w_ < 5; w_++) {
+            static const float AL[5] = {0.82f, 0.82f, 0.70f, 0.55f, 0.55f}, SI[5] = {0.55f, -0.55f, 0.0f, 0.85f, -0.85f};
+            c2 = v_add(in->cj, v_add(v_mul(qd, rc * AL[w_]), v_mul(qs, rc * SI[w_])));
+            c2.z = in->anchor.z;
+            k = hcb_nav_walls(b, c2, 8.0f, in->threat, wl, 7);
+            for (i = 0; i < k; i++) ADD(wl[i]);
+        }
+        for (i = 0; i < in->n_veh && i < 8; i++) {
+            hcb_vec dv = flat(v_sub(in->veh[i], in->threat));
+            float lv = v_len(dv);
+            if (lv < 3.0f) continue;
+            c2 = v_add(in->veh[i], v_mul(dv, 2.3f / lv)); c2.z = in->veh[i].z;
+            ADD(c2);
+        }
+    }
+    for (r = in->wide ? 2 : 1; r <= 3 && n < PL_MAX; r++)                /* rings round the corner (wide: two - the walls come first) */
         for (i = 0; i < 6 && n < PL_MAX; i++) {
             hcb_vec at = in->anchor;
             float rad = reach * (float)r / 3.0f;
@@ -131,7 +183,7 @@ HID int hcb_place_pick(hcb_brain *b, hcb_out *out, const place_in *in, u32 now, 
                left alone by a man who holds one) */
             u32 key = 0x80000000u | (((u32)(int)(in->man.x * 0.5f) * 7919u) ^ ((u32)(int)(in->man.y * 0.5f) * 104729u) ^ ((u32)(int)cand[best].x * 31u) ^ ((u32)(int)cand[best].y * 1009u));
             int r_ = hcb_path_ask(b, out, key, in->man, cand[best], tmp, AG_PATH, now);
-            if (r_ == 0 || (r_ == -2 && in->strict)) { sc[best] = -1.0f; continue; }
+            if (r_ == 0 || (r_ == -2 && in->held)) { sc[best] = -1.0f; continue; }   /* (1.6: `held`, not `strict` - a man with no place takes it on trust) */
         }
         hcb_place_score(b, out, in, cand[best], now, 2, &cv[best]);       /* (and the middle of that way is asked about) */
         *found = cand[best]; *score = sc[best]; *cover = cv[best];
@@ -149,6 +201,8 @@ API float hcb_place_value(hcb_brain *b, hcb_vec anchor, hcb_vec man, hcb_vec cj,
     in.anchor = anchor; in.man = man; in.cj = cj; in.threat = threat; in.reach = 7.5f; in.cj_dir = cj_dir; in.cj_fires = (u8)((cj_fires & 1) != 0);
     in.keep = (u8)((cj_fires & 2) != 0);                               /* (1.5: bit 1 - the place is one he holds) */
     in.stand_in = (u8)((cj_fires & 4) != 0);                           /* (1.5: bit 2 - `threat` is the peace stand-in beyond his quarter) */
+    in.wide = (u8)((cj_fires & 8) != 0);                               /* (1.6: bit 3 - valued the way an outer man's place is) */
+    in.q_cos = -1.0f;
     for (k = 0; k < n_others && k < 2; k++) in.other[in.n_other++] = others[k];
     for (k = 0; k < n_taken && k < 8; k++) in.taken[in.n_taken++] = taken[k];
     return hcb_place_score(b, &none, &in, at, now, 0, &cover);

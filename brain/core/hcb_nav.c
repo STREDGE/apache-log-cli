@@ -96,6 +96,36 @@ HID int hcb_nav_walls(const hcb_brain *b, hcb_vec c, float r, hcb_vec threat, hc
     }
     return got;
 }
+/* 1.6: has the cell at `at` a wall on the side `toward` lies on (the test hcb_nav_walls makes)? */
+HID int hcb_nav_wall_side(const hcb_brain *b, hcb_vec at, hcb_vec toward) {
+    const nav *n = &b->nv;
+    int i = ci(n, at.x), j = cj_(n, at.y);
+    const navcell *a = cell((nav *)n, i, j), *w;
+    float dx, dy;
+    if (!n->ok || !a || a->st != 1) return 0;
+    dx = toward.x - ((float)(n->ox + i) + 0.5f); dy = toward.y - ((float)(n->oy + j) + 0.5f);
+    if (dx > 1.0f && (a->fix & 1)) return 1;
+    if (dy > 1.0f && (a->fix & 2)) return 1;
+    if (dx < -1.0f && (w = cell((nav *)n, i - 1, j)) && (w->fix & 1)) return 1;
+    if (dy < -1.0f && (w = cell((nav *)n, i, j - 1)) && (w->fix & 2)) return 1;
+    return 0;
+}
+/* 1.6: something to be beside - a wall, a fence, a step up or a drop - at this cell or one of the eight round it */
+HID int hcb_nav_by_wall(const hcb_brain *b, hcb_vec at) {
+    const nav *n = &b->nv;
+    int i0 = ci(n, at.x), j0 = cj_(n, at.y), i, j;
+    const navcell *me = cell((nav *)n, i0, j0);
+    if (!n->ok || !me || me->st != 1) return 0;
+    for (j = j0 - 1; j <= j0 + 1; j++) for (i = i0 - 1; i <= i0 + 1; i++) {
+        const navcell *a = cell((nav *)n, i, j);
+        if (!a) continue;
+        if (a->st == 2) return 1;
+        if (a->st != 1) continue;
+        if (a->fix & 3) return 1;
+        if (a->z - me->z > 0.7f || me->z - a->z > 0.7f) return 1;
+    }
+    return 0;
+}
 HID int hcb_nav_ground(const hcb_brain *b, hcb_vec at, float *z) {
     const nav *n = &b->nv;
     int i = ci(n, at.x), j = cj_(n, at.y);
